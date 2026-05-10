@@ -15,12 +15,12 @@ Todos los proveedores se gestionan a través de **Supabase Auth**.
 
 Los roles se almacenan en la tabla `profiles.role` y se validan mediante RLS y middleware.
 
-| Rol (enum) | Descripción | Acceso a |
-|---|---|---|
-| `user` | Cliente final de la app móvil | App Móvil |
-| `taquillero` | Empleado de sucursal de cooperativa | Panel Cooperativas (operaciones diarias) |
-| `admin_cooperativa` | Administrador de una cooperativa | Panel Cooperativas (gestión completa) |
-| `super_admin` | Equipo interno de EnBus | Panel Super Admin |
+| Rol (enum)          | Descripción                         | Acceso a                                 |
+| ------------------- | ----------------------------------- | ---------------------------------------- |
+| `user`              | Cliente final de la app móvil       | App Móvil                                |
+| `taquillero`        | Empleado de sucursal de cooperativa | Panel Cooperativas (operaciones diarias) |
+| `admin_cooperativa` | Administrador de una cooperativa    | Panel Cooperativas (gestión completa)    |
+| `super_admin`       | Equipo interno de EnBus             | Panel Super Admin                        |
 
 ## 3. Flujos de Registro y Onboarding
 
@@ -34,7 +34,9 @@ Los roles se almacenan en la tabla `profiles.role` y se validan mediante RLS y m
 3. **Opción B — Google Sign-In**:
    - Autenticación OAuth via Google.
    - Si es su primera vez, se le pide completar datos obligatorios faltantes: teléfono y cédula/RIF.
-4. Se crea un registro en `profiles` con `role = 'user'`.
+4. Al completar el registro, Supabase Auth crea el row en `auth.users`. Un **trigger de base de datos** (`on_auth_user_created`) crea automáticamente el registro en `profiles` con `role = 'user'` usando los datos de `raw_user_meta_data`. Ver `Database_Schema_Spec.md` §4.1.
+5. **Requisito del frontend**: El formulario de registro **debe** enviar `nombre_completo`, `telefono` y `cedula_rif` dentro del objeto `options.data` de `supabase.auth.signUp()`. Si falta alguno, el trigger fallará y el registro se revertirá.
+6. **Google Sign-In**: Tras la autenticación OAuth, si es primera vez, el frontend **debe** presentar un formulario de datos obligatorios (teléfono, cédula/RIF) y actualizar `auth.updateUser({ data: { ... } })` **antes** de que el trigger se dispare. Alternativamente, el frontend puede crear el perfil manualmente vía una Edge Function de onboarding.
 
 ### 3.2 Taquillero / Empleado (Panel Cooperativas)
 

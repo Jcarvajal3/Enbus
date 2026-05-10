@@ -1,0 +1,114 @@
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/preflight.css" layer(base);
+@import "tailwindcss/utilities.css";
+
+/* App Móvil: Sistema de Diseño - EnBus (Maia Neutral Preset) */
+@layer theme {
+  @theme {
+    /* Custom fonts (Design System §2.3) */
+    --font-heading: 'Lora-Bold';
+    --font-heading-semi: 'Lora-SemiBold';
+
+    /* Text Custom line heights for React Native CSS fix */
+    --text-xs--line-height: 1.3333;
+    --text-sm--line-height: 1.4286;
+    --text-base--line-height: 1.5;
+    --text-lg--line-height: 1.5556;
+    --text-xl--line-height: 1.4;
+    --text-2xl--line-height: 1.3333;
+    --text-3xl--line-height: 1.2;
+
+    /* Border Radius */
+    --radius: 0.875rem;
+    --radius-card: 0.875rem;    /* 14px */
+    --radius-button: 0.625rem;  /* 10px */
+    --radius-input: 0.625rem;   /* 10px */
+
+    /* ShadCN Colors for NativeWind OKLCH */
+    --color-background: var(--background);
+    --color-foreground: var(--foreground);
+    --color-card: var(--card);
+    --color-card-foreground: var(--card-foreground);
+    --color-popover: var(--popover);
+    --color-popover-foreground: var(--popover-foreground);
+    --color-primary: var(--primary);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-secondary: var(--secondary);
+    --color-secondary-foreground: var(--secondary-foreground);
+    --color-muted: var(--muted);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-accent: var(--accent);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-destructive: var(--destructive);
+    --color-border: var(--border);
+    --color-input: var(--input);
+    --color-ring: var(--ring);
+
+    /* Opacity Fallback Colors (NativeWind v4 color-mix fix) */
+    --color-primary-light: #fdf5d3; /* Soft primary for bgs */
+    --color-success-light: #dcfce7;
+    --color-warning-light: #fef3c7;
+    --color-info-light: #dbeafe;
+    --color-destructive-light: #fee2e2;
+
+    /* Semantic Colors */
+    --color-success: #22c55e;
+    --color-warning: #f59e0b;
+    --color-info: #3b82f6;
+    --color-star: #fbbf24;
+  }
+}
+
+@layer base {
+  html {
+    color-scheme: light;
+  }
+}
+
+:root {
+  /* Maia Theme (Light) */
+  --background: #ffffff;
+  --foreground: #171717;
+  --card: #ffffff;
+  --card-foreground: #171717;
+  --popover: #ffffff;
+  --popover-foreground: #171717;
+
+  /* Primary: Dorado/Amber */
+  --primary: #e2b714;
+  --primary-foreground: #6b4a1a;
+
+  --secondary: #f4f4f5;
+  --secondary-foreground: #262626;
+
+  --muted: #f4f4f5;
+  --muted-foreground: #737373;
+
+  --accent: #f4f4f5;
+  --accent-foreground: #262626;
+
+  --destructive: #dc2626;
+  --border: #d4d4d8;
+  --input: #d4d4d8;
+  --ring: #a1a1aa;
+}
+
+
+
+@media android {
+  :root {
+    --font-fallback-mono: monospace;
+    --font-fallback-rounded: normal;
+    --font-fallback-serif: serif;
+    --font-fallback-sans: normal;
+  }
+}
+
+@media ios {
+  :root {
+    --font-fallback-mono: ui-monospace;
+    --font-fallback-serif: ui-serif;
+    --font-fallback-sans: system-ui;
+    --font-fallback-rounded: ui-rounded;
+  }
+}

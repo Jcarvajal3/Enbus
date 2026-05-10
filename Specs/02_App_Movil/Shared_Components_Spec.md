@@ -74,14 +74,31 @@ Utilizado en `<SearchForm />`, Wizard de Encomiendas (pasos 1 y 2), y Calculador
 | Tab Boletos → Viajar → Buscar | Resultados de búsqueda de boletos |
 | Detalle Envío (estado PENDIENTE_DE_ESCANEO) | Lista corta de próximas salidas |
 
+### Arquitectura
+El componente `<ResultsList />` es un **componente de presentación puro** (dumb component). No realiza fetch de datos internamente. La pantalla padre es responsable de obtener los datos de Supabase y pasarlos pre-transformados.
+
 ### Props
 | Prop | Tipo | Descripción |
 |---|---|---|
-| `mode` | `'boletos' \| 'encomiendas'` | Qué tipo de card renderizar |
-| `origen` | `{ estado, ciudad }` | Filtro de origen |
-| `destino` | `{ estado, ciudad }` | Filtro de destino |
-| `fecha` | `Date?` | Solo para boletos |
-| `compact` | `boolean` | Si `true`, muestra versión compacta (para detalle envío) |
+| `data` | `ResultItem[]` | Array de resultados pre-transformados por la pantalla padre |
+| `onSelect` | `(item: ResultItem) => void` | Callback al seleccionar un resultado. La pantalla padre decide la navegación (ej: navegar a `/viajes/[id]` para boletos, o al Wizard para encomiendas). |
+
+### ResultItem (Interface)
+```typescript
+interface ResultItem {
+  id: string;                    // viaje_id
+  cooperativa_nombre: string;
+  cooperativa_logo_url?: string;
+  calificacion_promedio?: number;
+  hora_salida: string;           // ISO timestamp
+  hora_llegada_est: string;      // ISO timestamp
+  duracion_min: number;
+  asientos_disponibles?: number; // Solo modo boletos
+  precio?: number;               // Solo modo boletos
+  origen: string;                // "Ciudad, Estado"
+  destino: string;               // "Ciudad, Estado"
+}
+```
 
 ### Herramientas del Listado
 | Herramienta | Descripción |
@@ -114,7 +131,7 @@ Utilizado en `<SearchForm />`, Wizard de Encomiendas (pasos 1 y 2), y Calculador
 ### Acción al seleccionar un item
 | Modo | Acción |
 |---|---|
-| `boletos` | Navega a **Detalle Viaje + Selector de Asientos** |
+| `boletos` | Navega a **Detalle Viaje + Selector de Asientos** (`/viajes/[id]`) ⏳ Pendiente |
 | `encomiendas` | Navega al **Wizard de Encomiendas** con Paso 1 pre-llenado (origen, destino, cooperativa) |
 
 ---

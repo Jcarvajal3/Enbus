@@ -1,145 +1,140 @@
 # App Móvil: Sistema de Diseño
 
 ## 1. Filosofía
-La app debe mantener un diseño **premium, elegante y consistente** entre la app móvil y el ecosistema web. Se utiliza el preset shadcn/ui `b38BG2CiQ` (estilo **Maia**, base **Neutral**) como fuente de verdad para los tokens de diseño. Los componentes web usan shadcn/ui directamente; los componentes móviles usan **React Native Reusables** + **NativeWind** (Tailwind CSS para React Native) portando los mismos tokens.
+La app debe mantener el **mejor diseño UI del mundo**: un aspecto **ultramoderno, premium, limpio y vibrante**. Nos enfocamos en una estética luminosa, con un uso magistral de los espacios en blanco, jerarquías tipográficas claras y acentos visuales dorados.
+
+Se utiliza el preset shadcn/ui `b38BG2CiQ` (estilo **Maia**, base **Neutral**) como ancla para los tokens de diseño, **estrictamente en modo claro (Light Mode Only)**. Se elimina cualquier soporte o referencia al modo oscuro para mantener la frescura y la estética diáfana que caracteriza a las apps financieras o utilitarias de primer nivel en la actualidad.
 
 > **Preset Code**: `b38BG2CiQ`
-> **Estilo**: Maia (Radix)
-> **Base de Color**: Neutral
-> **Aplicar en Web**: `npx shadcn@latest apply --preset b38BG2CiQ`
+> **Estilo**: Maia (Radix) adaptado para UI Premium
+> **Base de Color**: Neutral Modificada (Fondos ultra claros grisáceos con tarjetas blancas puras)
+> **Modo**: ☀️ Light Mode Only
 
 ## 2. Tipografía
-- **Fuente principal**: **Lora** (Google Fonts, Serif).
-- **Fallback Web**: `Georgia, "Times New Roman", serif`.
-- **Fallback Móvil**: System default (San Francisco en iOS, Roboto en Android).
 
-| Uso | Peso | Tamaño |
+### 2.1 Estrategia Tipográfica
+La combinación de una tipografía serif clásica con una sans-serif geométrica moderna es el secreto de esta UI premium.
+
+- **Fuente de Títulos y Cifras (KPIs)**: **Lora** (Google Fonts, Serif) — Aporta elegancia, autoridad y un toque editorial premium. Se usa en títulos de sección, subtítulos, y números/montos de gran escala (ej. $420,000).
+- **Fuente de Cuerpo y UI**: **Outfit** (Google Fonts, Sans-Serif) — Aporta un aspecto moderno, limpio, geométrico y altamente legible. Se usa en párrafos, labels, botones, inputs y metadatos complementarios.
+- **Fallback Web**: Lora -> `Georgia, serif`, Outfit -> `system-ui, sans-serif`.
+
+### 2.2 Implementación en Expo (Paso a Paso)
+
+#### Paso 1: Dependencias
+```bash
+npx expo install expo-font @expo-google-fonts/lora @expo-google-fonts/outfit expo-splash-screen
+```
+
+#### Paso 2: Cargar fuentes en Root Layout (`app/_layout.tsx`)
+```tsx
+import { useFonts, Lora_600SemiBold, Lora_700Bold } from '@expo-google-fonts/lora';
+import { Outfit_400Regular, Outfit_500Medium, Outfit_600SemiBold } from '@expo-google-fonts/outfit';
+import * as SplashScreen from 'expo-splash-screen';
+import { useEffect } from 'react';
+
+SplashScreen.preventAutoHideAsync();
+
+export default function RootLayout() {
+  const [fontsLoaded, fontError] = useFonts({
+    'Lora-SemiBold': Lora_600SemiBold,
+    'Lora-Bold': Lora_700Bold,
+    'Outfit-Regular': Outfit_400Regular,
+    'Outfit-Medium': Outfit_500Medium,
+    'Outfit-SemiBold': Outfit_600SemiBold,
+  });
+
+  useEffect(() => {
+    if (fontsLoaded || fontError) {
+      SplashScreen.hideAsync();
+    }
+  }, [fontsLoaded, fontError]);
+
+  if (!fontsLoaded && !fontError) return null;
+
+  // ... resto del layout
+}
+```
+
+#### Paso 3: Configurar NativeWind / Tailwind (`tailwind.config.js`)
+```js
+module.exports = {
+  theme: {
+    extend: {
+      fontFamily: {
+        sans: ['Outfit-Regular', 'sans-serif'], // Por defecto para la UI
+        medium: ['Outfit-Medium', 'sans-serif'],
+        semibold: ['Outfit-SemiBold', 'sans-serif'],
+        heading: ['Lora-Bold', 'serif'],
+        'heading-semi': ['Lora-SemiBold', 'serif'],
+      },
+    },
+  },
+};
+```
+
+### 2.3 Tabla de Uso y Jerarquía
+
+| Elemento | Fuente | Peso | Tamaño (Mobile) | Clase Tailwind |
+|---|---|---|---|---|
+| Grandes Cifras (Ej. $420,000) | **Lora** | Bold (700) | `36px` a `48px` | `font-heading text-4xl` / `text-5xl` |
+| Títulos de sección | **Lora** | Bold (700) | `20px` a `28px` | `font-heading text-xl` / `text-2xl` |
+| Subtítulos / Títulos de Card | **Lora** | Semi-Bold (600) | `16px` a `18px` | `font-heading-semi text-base` / `text-lg` |
+| Etiquetas de Categoría (Ej. RETIREMENT)| **Outfit** | Medium (500) | `11px` - `12px` | `font-medium text-[11px] tracking-widest uppercase text-muted-foreground` |
+| Cuerpo de texto principal | **Outfit** | Regular (400) | `14px` - `16px` | `text-base` |
+| Texto secundario / Descriptivo | **Outfit** | Regular (400)| `13px` - `14px` | `text-sm text-muted-foreground` |
+| Botones primarios (CTAs) | **Outfit** | Semi-Bold (600)| `16px` | `font-semibold text-base` |
+| Inputs / Placeholders | **Outfit** | Regular (400)| `15px` - `16px` | `text-base placeholder:text-muted-foreground` |
+
+### 2.4 Reglas Estrictas Tipográficas
+- **Lora** debe emplearse *exclusivamente* para encabezados de página, títulos de tarjetas y montos/estadísticas heroicas (el contenido principal con el que el usuario reacciona primero).
+- **Outfit** se utiliza para toda la interfaz visual y datos secundarios donde la claridad minuciosa es primordial.
+- **NUNCA** mezclar la fuente Serif con los inputs, labels de inputs o botones.
+
+## 3. Paleta de Colores y Contrastes
+
+La aplicación está diseñada para funcionar **solo en Modo Claro (Light Mode)**. Cualquier indicativo de variante dark debe descartarse.
+
+| Token | HEX Aprox. | Definición Visual y Uso |
 |---|---|---|
-| Títulos de sección | Bold (700) | 24px |
-| Subtítulos | Semi-Bold (600) | 18px |
-| Cuerpo de texto | Regular (400) | 16px |
-| Labels y captions | Medium (500) | 14px |
-| Texto pequeño | Regular (400) | 12px |
+| `--background` | `#F8F9FA` | Gris ultra-claro y neutral. El lienzo sobre el que todo descansa. Da aire al diseño. |
+| `--foreground` | `#111827` | Texto principal. Es un gris oscuro profundo, para no abrumar como el negro absoluto. |
+| `--card` | `#FFFFFF` | Blanco puro absoluto. Crea un contraste visual inmediato con el fondo, acentuando los componentes. |
+| `--card-foreground` | `#111827` | Texto o contenido sobre las superficies blancas. |
+| `--primary` | `#FFC107` / `#FBBF24` | **Amarillo Premium / Dorado Brillante**. Para las acciones imperativas (Botones _Save Threshold_, barras de progreso). |
+| `--primary-foreground` | `#452000` | Texto cálido tostado, garantizando alto contraste y legibilidad impecable sobre los botones amarillos. |
+| `--secondary` | `#F3F4F6` | Para áreas interactivas secundarias. |
+| `--muted` | `#F1F5F9` | Color utilizado para el 'track' pasivo de los sliders, progress bars, o inputs con fondos sutiles. |
+| `--muted-foreground`| `#6B7280` | Gris ceniza fundamental para reducir la carga cognitiva en subtítulos descriptivos ("_Set the minimum balance..._"). |
+| `--border` | `#E5E7EB` | Bordes ligeros que dividen elementos sin aportar ruido. |
 
-## 3. Paleta de Colores (Tokens CSS)
+## 4. Espaciado y Layout (Airy Design)
+Un diseño de alta gama exige espacio para "respirar".
+- **Paddings de Tarjetas (Cards)**: Dejar atrás estrecheces. Usar paddings confortables: `p-6` a `p-8` en contenedores amplios; las sub-tarjetas usan mínimo `p-5`.
+- **Gap entre secciones**: Incrementar a `gap-6` o `gap-8`.
+- **Breathing Heights**: Incremento del salto de línea entre títulos y sus textos de descripción usando por ejemplo `mt-1.5` o `gap-2`.
+- **Botones y CTAs**: Separarlos del resto del componente visual con un margen de seguridad (`mt-6` a `mt-8`).
 
-Todas las variables usan **OKLCH** como formato nativo (estándar de shadcn v2). Para compatibility con NativeWind, se proveen equivalentes HEX aproximados.
+## 5. Geometría: Bordes y Sombras
+- **Card Border Radius (Radios Amplios)**: Abandonar esquinas duras. El `--radius` general global evoluciona a proporciones orgánicas. Usar `rounded-3xl` (`20px - 24px`) para los grandes contenedores (Cards).
+- **Botones & Progress Bars**: Estilo 'Pill' (píldoras). Deberán llevar un `rounded-full` para que sus esquinas conformen un semicírculo perfecto.
+- **Inputs**: Textareas e inputs mantienen una curvatura balanceada (ej. `rounded-xl` o `rounded-2xl` - 12px a 16px).
+- **Shadows Premium**: Rehusar sombras cerradas y duras. Adoptar una sombra sumamente suave, prolongada e indirecta.
+  - Equivalente Tailwind: `shadow-xl shadow-black-[0.03]` o custom `box-shadow: 0 8px 30px rgba(0, 0, 0, 0.04);`.
+- **Stroke**: Aplicar delineados apenas perceptibles (`border border-slate-100`) para separar las tarjetas blancas del fondo.
 
-### Modo Claro (`:root`)
-| Token | OKLCH | HEX Aprox. | Uso |
-|---|---|---|---|
-| `--background` | `oklch(1 0 0)` | `#FFFFFF` | Fondo principal |
-| `--foreground` | `oklch(0.145 0 0)` | `#171717` | Texto principal |
-| `--card` | `oklch(1 0 0)` | `#FFFFFF` | Fondo de cards |
-| `--card-foreground` | `oklch(0.145 0 0)` | `#171717` | Texto en cards |
-| `--popover` | `oklch(1 0 0)` | `#FFFFFF` | Fondo de popovers |
-| `--popover-foreground` | `oklch(0.145 0 0)` | `#171717` | Texto en popovers |
-| `--primary` | `oklch(0.852 0.199 91.936)` | `#E2B714` | CTA principal, acentos dorados |
-| `--primary-foreground` | `oklch(0.421 0.095 57.708)` | `#6B4A1A` | Texto sobre primary (marrón oscuro) |
-| `--secondary` | `oklch(0.967 0.001 286.375)` | `#F5F5F5` | Fondos secundarios |
-| `--secondary-foreground` | `oklch(0.21 0.006 285.885)` | `#262626` | Texto sobre secondary |
-| `--muted` | `oklch(0.97 0 0)` | `#F5F5F5` | Fondos atenuados |
-| `--muted-foreground` | `oklch(0.556 0 0)` | `#737373` | Texto secundario/placeholder |
-| `--accent` | `oklch(0.97 0 0)` | `#F5F5F5` | Fondos de elemento activo |
-| `--accent-foreground` | `oklch(0.205 0 0)` | `#262626` | Texto en acento |
-| `--destructive` | `oklch(0.577 0.245 27.325)` | `#DC2626` | Errores, cancelaciones, alertas |
-| `--border` | `oklch(0.922 0 0)` | `#E5E5E5` | Bordes generales |
-| `--input` | `oklch(0.922 0 0)` | `#E5E5E5` | Bordes de inputs |
-| `--ring` | `oklch(0.708 0 0)` | `#A3A3A3` | Anillo de focus |
+## 6. Detalles por Componente
+- **Barras de Progreso**: Altas y dominantes (`h-3` o `h-4`). Totalmente redondeadas (`rounded-full`). Se percibe la base (`bg-muted`) y el relleno destacado (`bg-primary`).
+- **Listas de Transacciones**: Cada ítem en la lista tiene su icono envuelto de modo individual dentro de una burbuja sutil (background `bg-muted` o `bg-secondary` puramente circular `rounded-full` de `40px` o `w-10 h-10`). Esto ordena visualmente la métrica.
+- **Botones Pequeños ("New Goal")**: Tienen estilo un badge, son transparentes o blancos, con un sutil borde gris (`variant="outline"`), texto en Outfit medio y curvatura `rounded-full`.
+- **Input Textareas ("Notes")**: No usan caja fuerte con borde oscuro; optan por fondos sutiles con borde casi transparente y padding generoso.
 
-### Modo Oscuro (`.dark`)
-| Token | OKLCH | HEX Aprox. | Uso |
-|---|---|---|---|
-| `--background` | `oklch(0.145 0 0)` | `#171717` | Fondo principal |
-| `--foreground` | `oklch(0.985 0 0)` | `#FAFAFA` | Texto principal |
-| `--card` | `oklch(0.205 0 0)` | `#262626` | Fondo de cards |
-| `--card-foreground` | `oklch(0.985 0 0)` | `#FAFAFA` | Texto en cards |
-| `--popover` | `oklch(0.205 0 0)` | `#262626` | Fondo de popovers |
-| `--popover-foreground` | `oklch(0.985 0 0)` | `#FAFAFA` | Texto en popovers |
-| `--primary` | `oklch(0.795 0.184 86.047)` | `#D4A017` | CTA principal (dorado atenuado) |
-| `--primary-foreground` | `oklch(0.421 0.095 57.708)` | `#6B4A1A` | Texto sobre primary |
-| `--secondary` | `oklch(0.274 0.006 286.033)` | `#333333` | Fondos secundarios |
-| `--secondary-foreground` | `oklch(0.985 0 0)` | `#FAFAFA` | Texto sobre secondary |
-| `--muted` | `oklch(0.269 0 0)` | `#333333` | Fondos atenuados |
-| `--muted-foreground` | `oklch(0.708 0 0)` | `#A3A3A3` | Texto secundario |
-| `--accent` | `oklch(0.269 0 0)` | `#333333` | Fondos de elemento activo |
-| `--accent-foreground` | `oklch(0.985 0 0)` | `#FAFAFA` | Texto sobre acento |
-| `--destructive` | `oklch(0.704 0.191 22.216)` | `#EF4444` | Errores, alertas |
-| `--border` | `oklch(1 0 0 / 10%)` | `rgba(255,255,255,0.1)` | Bordes translúcidos |
-| `--input` | `oklch(1 0 0 / 15%)` | `rgba(255,255,255,0.15)` | Bordes de inputs |
-| `--ring` | `oklch(0.556 0 0)` | `#737373` | Anillo de focus |
+## 7. Jerarquías Textuales (El "Wow" Factor)
+La magia del diseño se basa en **extremos de tamaño y peso**. Es indispensable acentuar el rango dinámico del contenido:
+1. **Micro-Labels**: Usado para categorización, ej._"RETIREMENT"_. Usa letras de escaso tamaño, todas en mayúsculas y espaciado acentuado entre cada letra (`uppercase tracking-widest text-muted-foreground font-medium text-[11px]`).
+2. **Hero Numbers**: Números dominantes, impactantes. Usa Lora en su mayor exponente sin temer al espacio que puedan abarcar (`text-5xl font-heading`).
+3. **Descriptors**: Textos secundarios grises ("_65% achieved_"). Siempre contrapuestos por el texto numérico en el otro extremo usando un sistema flex/space-between.
+4. **Interacción**: Todas estas jerarquías funcionan en un fondo blanco inmaculado.
 
-### Colores Semánticos Adicionales (Custom)
-Estos tokens **no son parte del preset** pero se extienden en el CSS global para estados de negocio:
-
-| Token | HEX | Uso |
-|---|---|---|
-| `--success` | `#22C55E` | Estados positivos (PAGADA, ENTREGADA) |
-| `--warning` | `#F59E0B` | Estados de precaución (POR_PAGAR, alertas amarillas) |
-| `--info` | `#3B82F6` | Estados informativos (EN_TRANSITO) |
-| `--star` | `#FBBF24` | Calificaciones por estrellas |
-
-## 4. Espaciado
-Sistema de 4px base (consistente con Tailwind):
-| Token | Valor | Tailwind |
-|---|---|---|
-| `xs` | 4px | `p-1` / `gap-1` |
-| `sm` | 8px | `p-2` / `gap-2` |
-| `md` | 16px | `p-4` / `gap-4` |
-| `lg` | 24px | `p-6` / `gap-6` |
-| `xl` | 32px | `p-8` / `gap-8` |
-| `2xl` | 48px | `p-12` / `gap-12` |
-
-## 5. Bordes y Sombras
-- **Border radius (global `--radius`)**: `0.875rem` (14px) — Preset Maia.
-- **Border radius (cards)**: `--radius` (14px)
-- **Border radius (botones)**: `calc(var(--radius) - 4px)` (10px)
-- **Border radius (inputs)**: `calc(var(--radius) - 4px)` (10px)
-- **Border radius (profile icon)**: 50% (circular)
-- **Sombra de cards**: `0 1px 3px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06)`
-
-## 6. Componentes Base
-Todos derivados de React Native Reusables (puerto de shadcn/ui):
-- Button (variantes: default, destructive, outline, secondary, ghost, link)
-- Input
-- Select / Dropdown
-- Card (CardHeader / CardTitle / CardDescription / CardContent / CardFooter)
-- Badge (variantes: default, secondary, destructive, outline)
-- Profile Icon (inicial del nombre en círculo)
-- Dialog / Modal (siempre con DialogTitle)
-- Tabs (TabsList / TabsTrigger / TabsContent)
-- Switch / Toggle
-- Separator
-- Alert
-- Skeleton (shimmer loading)
-- Spinner
-
-> **Regla shadcn**: Usar siempre tokens semánticos (`bg-primary`, `text-muted-foreground`, etc.). Nunca valores crudos como `bg-blue-500`. Ver reglas completas en la skill `shadcn`.
-
-## 7. Animaciones
-- **Transiciones de pantalla**: slide horizontal (stack), slide vertical (modales).
-- **Micro-animaciones**: fade-in al cargar listas, scale al presionar botones.
-- **StatusTimeline**: pulse animation en el estado activo.
-- **QR Code**: fade-in con escala suave al renderizarse.
-- **Skeleton loaders**: shimmer effect mientras cargan datos.
-
-## 8. Iconografía
-- Librería: **Phosphor Icons** (`@phosphor-icons/react` / `phosphor-react-native`).
-- Tamaño en bottom tabs: 24px.
-- Tamaño en header: 20px.
-- Tamaño en listas/cards: 16px.
-- En botones usar `data-icon="inline-start"` o `data-icon="inline-end"`, sin clases de tamaño en el ícono.
-
-## 9. Referencia Rápida: Preset → Proyecto
-
-| Aspecto | Valor |
-|---|---|
-| **Preset Code** | `b38BG2CiQ` |
-| **Estilo** | Maia (Radix) |
-| **Color Base** | Neutral |
-| **Primary** | Dorado/Amber (`#E2B714`) |
-| **Fuente** | Lora (Serif) |
-| **Radius** | 0.875rem (14px) |
-| **Iconos** | Phosphor Icons |
-| **Comando Init** | `npx shadcn@latest init --preset b38BG2CiQ` |
-| **Comando Apply** | `npx shadcn@latest apply --preset b38BG2CiQ` |
+---
+**Nota Final**: Esta directiva impulsa la interfaz móvil fuera de un "MVP funcional" para ser un referente de diseño ("Producto de Clase Mundial"). Se precisa precisión píxel-a-píxel en el uso de los márgenes y las dos familias tipográficas introducidas para materializar la experiencia.

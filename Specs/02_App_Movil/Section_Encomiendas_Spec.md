@@ -97,11 +97,14 @@ El remitente ingresa datos del destinatario y describe el paquete en un solo pas
 | Teléfono (con código país) | TEXT | Sí |
 
 **Detalles del Paquete**:
-| Campo | Tipo | Obligatorio |
-|---|---|---|
-| Descripción del contenido | TEXT | Sí |
-| Peso estimado (kg) | NUMBER | No (opcional) |
-| Valor declarado ($) | NUMBER | No (opcional, para seguro) |
+| Campo | Tipo | Obligatorio | Estado Impl. |
+|---|---|---|---|
+| Descripción del contenido | TEXT | Sí | ⏳ **Pendiente** — Actualmente hardcoded: `'Caja genérica (Wizard App)'`. Requiere campo de texto libre en el formulario. |
+| Peso estimado (kg) | NUMBER | No (opcional) | ⏳ **Pendiente** — Actualmente hardcoded: `1`. Requiere input numérico. |
+| Valor declarado ($) | NUMBER | No (opcional, para seguro) | ⏳ **Pendiente** — No implementado. |
+
+> [!WARNING]
+> El implementador debe reemplazar los valores hardcoded por campos reales del formulario antes de considerar el wizard como funcional. Los valores fijos impiden que el taquillero tenga información útil sobre el contenido real del paquete.
 
 - Si el usuario ingresa peso, se muestra el **costo estimado** usando la fórmula de la Edge Function `calculadora-publica`.
 - **Alert informativa** (visible siempre, no bloqueante): "⚠️ Límites referenciales: Peso máximo 25 kg. Dimensiones máximas 50 × 50 × 50 cm. Paquetes fuera de estos límites pueden ser rechazados en taquilla."

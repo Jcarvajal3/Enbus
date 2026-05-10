@@ -84,5 +84,6 @@ Al abrir el detalle de una encomienda `POR_PAGAR`:
 ## 5. Vinculación con DB
 - **Lee**: `encomiendas` (filtradas por `cooperativa_id`), `tarifas`, `rutas`.
 - **Actualiza**: `encomiendas` (estado, peso, costo, foto).
-- **Inserta**: `pagos`, `encomienda_estado_historial`.
+- **Inserta**: `pagos`.
+- **Trigger indirecto**: Al actualizar `encomiendas.estado`, el trigger `log_estado_encomienda` inserta automáticamente en `encomienda_estado_historial`.
 - **Realtime**: Suscripción a `encomiendas` y `pagos` de la cooperativa.

@@ -14,6 +14,7 @@ Pantalla con **todos** los boletos del usuario (activos, usados, expirados, canc
 ### 3.2 Botón Inferior Fijo
 - Botón de ancho completo anclado en la zona inferior: **"Viajar"**.
 - Diseño: color primario, tipografía bold, ícono de bus.
+- Ícono exacto (Phosphor): `<Bus weight="fill" />` (`phosphor-react-native`). Posición: `data-icon="inline-start"`.
 
 ### 3.3 Detalle de Boleto (`/boletos/{codigo_boleto}`)
 
@@ -87,7 +88,7 @@ Al seleccionar un viaje del listado, navega a la pantalla de **Detalle del Viaje
 Al confirmar asiento(s), navega a `<PaymentFlow />` (ver `Shared_Components_Spec.md`§7).
 
 Flujo:
-1. Se crea el boleto con estado `RESERVADO` y `reserva_expira_at = now() + 15min`.
+1. Se crea el boleto con estado `RESERVADO` y `reserva_expira_at = now() + 30min`.
 2. Se bloquean los asientos seleccionados.
 3. Se muestran los métodos de pago de la cooperativa.
 4. El usuario paga externamente y confirma en la app (referencia, fecha, banco emisor).

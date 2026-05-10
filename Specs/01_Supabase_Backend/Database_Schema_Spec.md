@@ -3,6 +3,42 @@
 ## 1. Objetivo
 Definir la estructura relacional completa que sirve como cerebro del Ecosistema EnBus. Todas las tablas, columnas, relaciones, enums e índices se documentan aquí como fuente canonical.
 
+## 1.1 Directrices de Implementación
+
+### Estrategia de Migraciones
+Usar **migraciones separadas** siguiendo la convención estándar de Supabase CLI (`supabase migration new`). Cada migración es un archivo SQL numerado en `supabase/migrations/`. Orden recomendado:
+
+1. `001_enums.sql` — Todos los `CREATE TYPE ... AS ENUM`.
+2. `002_tables.sql` — Todas las tablas con columnas, PKs, FKs y defaults.
+3. `003_indexes.sql` — Índices secundarios.
+4. `004_views.sql` — Vistas (`v_proximos_viajes`, `v_encomiendas_activas`, etc.).
+5. `005_functions.sql` — Funciones helper reutilizables (`is_member_of()`, `get_cooperativa_id()`, etc.).
+6. `006_triggers.sql` — Triggers (BEFORE/AFTER INSERT/UPDATE/DELETE).
+7. `007_rls.sql` — Políticas RLS (ver `RLS_Policies_Spec.md`).
+8. `008_cron.sql` — Jobs `pg_cron` (ver sección §4).
+9. `009_storage.sql` — Buckets y políticas de Storage.
+10. `010_seed.sql` — Datos iniciales (tarifa default, super_admin, etc.).
+
+> **Regla**: Cada migración debe ser **idempotente** cuando sea posible (usar `IF NOT EXISTS`, `CREATE OR REPLACE`). Los cambios futuros se agregan como migraciones nuevas, nunca se editan migraciones ya aplicadas.
+
+### Extensiones de PostgreSQL Requeridas
+```sql
+CREATE EXTENSION IF NOT EXISTS pg_cron;      -- CRON jobs en DB
+CREATE EXTENSION IF NOT EXISTS pgcrypto;     -- gen_random_uuid()
+```
+
+### CRON Jobs (pg_cron)
+Los CRON jobs descritos en este spec y en `Edge_Functions_Spec.md` se implementan **directamente en la base de datos con `pg_cron`**, ejecutando SQL puro. No invocan Edge Functions.
+
+**Justificación**: Los 3 CRON jobs del sistema (`auto_expirar_reserva`, `auto_devolver_encomienda`, `alerta_amarilla_72h`) son operaciones SQL simples (UPDATE con WHERE). Ejecutarlos directamente en la DB es más fiable, más rápido y evita latencia de red o cold starts de Edge Functions.
+
+| Job | Schedule | SQL |
+|---|---|---|
+| `auto_expirar_reserva` | `* * * * *` (cada 1 min) | `UPDATE boletos SET estado = 'EXPIRADO' WHERE estado = 'RESERVADO' AND reserva_expira_at < now();` |
+| `auto_devolver_encomienda` | `0 0 * * *` (diario a medianoche) | `UPDATE encomiendas SET estado = 'DEVUELTA' WHERE estado = 'EN_OFICINA_DESTINO' AND updated_at < now() - interval '7 days';` + INSERT en `pending_notifications` |
+| `alerta_amarilla_72h` | `0 * * * *` (cada hora) | `INSERT INTO incidencias (...) SELECT ... FROM encomiendas WHERE estado = 'EN_TRANSITO' AND updated_at < now() - interval '72 hours' AND id NOT IN (SELECT encomienda_id FROM incidencias WHERE tipo = 'ALERTA_AMARILLA');` |
+
+> **Nota**: El job `auto_devolver_encomienda` además debe disparar el trigger `log_estado_encomienda` para registrar el historial. Como es un UPDATE directo, el trigger existente en `encomiendas` lo captura automáticamente. Para las notificaciones Push que requiere, el job inserta un registro en una cola `pending_notifications` que una Edge Function procesa periódicamente, o se usa `pg_net` para llamar al endpoint de notificación.
 ## 2. Enums de Base de Datos
 
 ```sql
@@ -424,14 +460,64 @@ CREATE TYPE estado_viaje AS ENUM (
 | Trigger | Tabla | Evento | Acción |
 |---|---|---|---|
 | `update_updated_at` | Múltiples | BEFORE UPDATE | Set `updated_at = now()` |
-| `log_estado_encomienda` | `encomiendas` | AFTER UPDATE on `estado` | Inserta en `encomienda_estado_historial` |
+| `validar_transicion_encomienda` | `encomiendas` | BEFORE UPDATE on `estado` | Valida que la transición `OLD.estado → NEW.estado` esté en la lista de transiciones permitidas (ver `State_Machines_Spec.md §1.3`). Si la transición no es válida, lanza excepción y rechaza el UPDATE. |
+| `validar_transicion_boleto` | `boletos` | BEFORE UPDATE on `estado` | Valida que la transición `OLD.estado → NEW.estado` esté en la lista de transiciones permitidas (ver `State_Machines_Spec.md §2.3`). Si la transición no es válida, lanza excepción y rechaza el UPDATE. |
+| `on_auth_user_created` | `auth.users` | AFTER INSERT | Ejecuta `handle_new_user()`: crea registro en `profiles` usando `raw_user_meta_data` (nombre, teléfono, cédula). `SECURITY DEFINER`. Ver §4.1. |
+| `log_estado_encomienda` | `encomiendas` | AFTER UPDATE on `estado` | Inserta en `encomienda_estado_historial` (`SECURITY DEFINER`) |
 | `generar_tracking_id` | `encomiendas` | BEFORE INSERT | Genera `EB-YYMMDD-XXXXX` auto |
 | `generar_pin_retiro` | `encomiendas` | AFTER UPDATE to `EN_RECEPCION` | Genera PIN **único** aleatorio de 4 dígitos (verifica unicidad antes de asignar, reintenta si hay colisión). El PIN es inmutable tras su creación. |
 | `calcular_calificacion` | `calificaciones` | AFTER INSERT/UPDATE/DELETE | Recalcula promedio en `cooperativas` |
 | `actualizar_asientos` | `boletos` | AFTER INSERT/UPDATE/DELETE | Actualiza `viajes.asientos_disponibles` |
 | `auto_expirar_reserva` | `boletos` | CRON (cada 1 min) | Expira reservas donde `reserva_expira_at < now()` |
-| `auto_devolver_encomienda` | `encomiendas` | CRON (diario) | Marca DEVUELTA si EN_OFICINA_DESTINO > 5 días hábiles |
+| `auto_devolver_encomienda` | `encomiendas` | CRON (diario, medianoche) | Marca DEVUELTA si EN_OFICINA_DESTINO > 7 días naturales |
 | `alerta_amarilla_72h` | `encomiendas` | CRON (cada 1 hora) | Crea incidencia si EN_TRANSITO > 72 horas |
+
+### 4.1 Función `handle_new_user()` (Crítica)
+
+Esta función es el **puente obligatorio** entre `auth.users` y `public.profiles`. Sin ella, los usuarios recién registrados no pueden operar en el sistema (RLS los bloquea).
+
+```sql
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS trigger AS $$
+BEGIN
+  INSERT INTO public.profiles (id, role, nombre_completo, telefono, cedula_rif)
+  VALUES (
+    NEW.id,
+    'user',
+    NEW.raw_user_meta_data->>'nombre_completo',
+    NEW.raw_user_meta_data->>'telefono',
+    NEW.raw_user_meta_data->>'cedula_rif'
+  );
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+```
+
+**Reglas estrictas**:
+- **No se usan fallbacks aleatorios**. Si `raw_user_meta_data` no contiene los campos obligatorios (nombre, teléfono, cédula), el INSERT falla y la transacción de registro se revierte. Esto fuerza al frontend a enviar siempre los datos completos.
+- La función usa `SECURITY DEFINER` para poder escribir en `profiles` sin depender de RLS.
+- Solo aplica `role = 'user'`. Los roles `taquillero`, `admin_cooperativa` y `super_admin` se crean mediante funciones de invitación independientes que asignan el rol y `cooperativa_id` correctos.
+
+**Trigger**:
+```sql
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+```
+
+**Rescate de usuarios huérfanos** (ejecutar una sola vez en migración):
+```sql
+INSERT INTO public.profiles (id, role, nombre_completo, telefono, cedula_rif)
+SELECT 
+  u.id, 
+  'user', 
+  COALESCE(u.raw_user_meta_data->>'nombre_completo', u.email),
+  COALESCE(u.raw_user_meta_data->>'telefono', 'PENDIENTE'),
+  COALESCE(u.raw_user_meta_data->>'cedula_rif', 'PENDIENTE')
+FROM auth.users u
+WHERE NOT EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = u.id);
+```
+> Los usuarios rescatados con datos `PENDIENTE` deberán completar su perfil al iniciar sesión (el frontend debe detectar esto y forzar el flujo de onboarding).
 
 ## 5. Vistas (Views)
 

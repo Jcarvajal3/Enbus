@@ -1,0 +1,355 @@
+"use client";
+
+import { useEffect, useState, useCallback, useMemo } from "react";
+import { PageHeader } from "@/components/page-header";
+import { StatusBadge } from "@/components/status-badge";
+import { Spinner } from "@/components/ui/spinner";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useUser } from "@/hooks/use-user";
+import { createClient } from "@/lib/supabase/client";
+import { toast } from "sonner";
+import { Ticket, Users } from "@phosphor-icons/react";
+import type { Boleto } from "@/lib/types/boletos";
+import { VentaFlow } from "@/components/boletos/venta-flow";
+import { ScanInput } from "@/components/scan-input";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { confirmarEmbarque } from "./actions";
+import { PasajerosViajeSheet } from "@/components/boletos/pasajeros-viaje-sheet";
+
+type BoletoRow = Boleto & {
+  comprador?: { nombre_completo: string } | null;
+};
+
+export default function TaquillaBoletosPage() {
+  const { user } = useUser();
+  const cooperativaId = user.cooperativa_id;
+  const supabase = useMemo(() => createClient(), []);
+  
+  const [boletos, setBoletos] = useState<BoletoRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  
+  // Filters
+  const [filtroEstado, setFiltroEstado] = useState<string>("todos");
+  const [filtroFecha, setFiltroFecha] = useState<string>("");
+
+  const [showVentaFlow, setShowVentaFlow] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [boletoConfirmacion, setBoletoConfirmacion] = useState<any>(null);
+  const [isConfirming, setIsConfirming] = useState(false);
+  
+  const [pasajerosSheetViaje, setPasajerosSheetViaje] = useState<{ id: string, ruta: string, fecha: string } | null>(null);
+
+  const fetchBoletos = useCallback(async () => {
+    setLoading(true);
+    try {
+      let query = supabase
+        .from("boletos")
+        .select(`
+          id, codigo_boleto, asiento, precio, estado, created_at,
+          pasajero_nombre, pasajero_cedula,
+          comprador:profiles!comprador_id(nombre_completo),
+          viaje:viajes!viaje_id(
+            id,
+            fecha_hora_salida,
+            ruta:rutas!ruta_id(ciudad_origen, estado_origen, ciudad_destino, estado_destino)
+          )
+        `)
+        .eq("cooperativa_id", cooperativaId)
+        .order("created_at", { ascending: false })
+        .limit(50);
+        
+      if (filtroEstado !== "todos") {
+        query = query.eq("estado", filtroEstado);
+      }
+      
+      if (filtroFecha) {
+        // Create range for the entire day
+        const startDate = new Date(filtroFecha);
+        const endDate = new Date(filtroFecha);
+        endDate.setDate(endDate.getDate() + 1);
+        
+        query = query
+          .gte("created_at", startDate.toISOString())
+          .lt("created_at", endDate.toISOString());
+      }
+      
+      const { data, error } = await query;
+      
+      if (error) throw error;
+      setBoletos(data as unknown as BoletoRow[]);
+    } catch (err) {
+      toast.error("Error al cargar los boletos");
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  }, [supabase, cooperativaId, filtroEstado, filtroFecha]);
+
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    fetchBoletos();
+  }, [fetchBoletos]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const handleBoletoFound = (boleto: any) => {
+    if (boleto.estado === "PAGADO") {
+      setBoletoConfirmacion(boleto);
+    } else if (boleto.estado === "USADO") {
+      toast.warning("Este boleto ya fue usado");
+    } else {
+      toast.error("Boleto inválido");
+    }
+  };
+
+  const handleConfirmarEmbarque = async () => {
+    if (!boletoConfirmacion) return;
+    setIsConfirming(true);
+    try {
+      const res = await confirmarEmbarque(boletoConfirmacion.id);
+      if (res.success) {
+        toast.success("Embarque confirmado exitosamente");
+        setBoletoConfirmacion(null);
+        fetchBoletos();
+      } else {
+        toast.error(res.error || "Error al confirmar embarque");
+      }
+    } catch {
+      toast.error("Error al procesar el embarque");
+    } finally {
+      setIsConfirming(false);
+    }
+  };
+
+  const formatMoney = (amount: number) => {
+    return new Intl.NumberFormat("es-VE", {
+      style: "currency",
+      currency: "VES",
+    }).format(amount);
+  };
+
+  const formatDate = (dateString: string) => {
+    try {
+      return new Intl.DateTimeFormat("es-VE", { 
+        day: "2-digit", 
+        month: "short",
+        hour: "numeric",
+        minute: "numeric",
+        hour12: true
+      }).format(new Date(dateString));
+    } catch {
+      return dateString;
+    }
+  };
+
+  return (
+    <div className="space-y-6 flex flex-col h-full animate-in fade-in duration-300">
+      <PageHeader 
+        title="Taquilla de Boletos" 
+        description="Venta y control de boletos"
+      >
+        <Button onClick={() => setShowVentaFlow(true)}>
+          <Ticket className="w-4 h-4 mr-2" />
+          Vender Boleto
+        </Button>
+      </PageHeader>
+      
+      <ScanInput 
+        onBoletoFound={handleBoletoFound}
+        cooperativaId={cooperativaId}
+        mode="boletos"
+        disabled={showVentaFlow || !!boletoConfirmacion}
+      />
+      
+      <div className="flex flex-col sm:flex-row gap-4 items-end">
+        <div className="space-y-1.5 w-full sm:w-[200px]">
+          <label className="text-sm font-medium text-muted-foreground">Filtrar por Estado</label>
+          <Select value={filtroEstado} onValueChange={setFiltroEstado}>
+            <SelectTrigger>
+              <SelectValue placeholder="Estado" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todos">Todos</SelectItem>
+              <SelectItem value="PAGADO">PAGADO</SelectItem>
+              <SelectItem value="USADO">USADO</SelectItem>
+              <SelectItem value="CANCELADO">CANCELADO</SelectItem>
+              <SelectItem value="RESERVADO">RESERVADO</SelectItem>
+              <SelectItem value="EXPIRADO">EXPIRADO</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-1.5 w-full sm:w-[200px]">
+          <label className="text-sm font-medium text-muted-foreground">Filtrar por Fecha</label>
+          <Input 
+            type="date" 
+            value={filtroFecha}
+            onChange={(e) => setFiltroFecha(e.target.value)}
+          />
+        </div>
+        
+        {(filtroEstado !== "todos" || filtroFecha) && (
+          <Button 
+            variant="ghost" 
+            onClick={() => {
+              setFiltroEstado("todos");
+              setFiltroFecha("");
+            }}
+          >
+            Limpiar filtros
+          </Button>
+        )}
+      </div>
+      
+      <div className="flex-1 space-y-4">
+        <div className="rounded-md border bg-card">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Código</TableHead>
+                <TableHead>Viaje</TableHead>
+                <TableHead>Pasajero</TableHead>
+                <TableHead>Asiento</TableHead>
+                <TableHead>Estado</TableHead>
+                <TableHead className="text-right">Precio</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {loading ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="h-32 text-center">
+                    <div className="flex items-center justify-center">
+                      <Spinner size="md" />
+                      <span className="ml-3 text-muted-foreground font-medium">Cargando boletos...</span>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ) : boletos.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="h-32 text-center text-muted-foreground">
+                    No se encontraron boletos con estos filtros.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                boletos.map((boleto) => {
+                  const origen = boleto.viaje?.ruta?.ciudad_origen || "";
+                  const destino = boleto.viaje?.ruta?.ciudad_destino || "";
+                  const rutaString = origen && destino ? `${origen} → ${destino}` : "Ruta desconocida";
+                  const fechaSalida = boleto.viaje?.fecha_hora_salida ? formatDate(boleto.viaje.fecha_hora_salida) : "";
+                  
+                  const nombrePasajero = boleto.comprador?.nombre_completo || boleto.pasajero_nombre || "Desconocido";
+
+                  return (
+                    <TableRow key={boleto.id} className="hover:bg-muted/50 transition-colors">
+                      <TableCell className="font-mono font-medium text-primary">
+                        {boleto.codigo_boleto}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-col">
+                          <span className="font-medium">{rutaString}</span>
+                          <span className="text-xs text-muted-foreground mb-1">{fechaSalida}</span>
+                          {boleto.viaje?.id && (
+                            <button 
+                              className="text-xs text-primary hover:underline text-left inline-flex items-center"
+                              onClick={() => setPasajerosSheetViaje({ id: boleto.viaje!.id, ruta: rutaString, fecha: fechaSalida })}
+                            >
+                              <Users className="w-3 h-3 mr-1" />
+                              Ver pasajeros
+                            </button>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-col">
+                          <span>{nombrePasajero}</span>
+                          {boleto.pasajero_cedula && (
+                            <span className="text-xs text-muted-foreground">{boleto.pasajero_cedula}</span>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <span className="font-medium bg-muted px-2 py-1 rounded-md text-xs">
+                          {boleto.asiento}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <StatusBadge status={boleto.estado} />
+                      </TableCell>
+                      <TableCell className="text-right font-medium">
+                        {formatMoney(boleto.precio)}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      </div>
+
+      <VentaFlow 
+        isOpen={showVentaFlow} 
+        onClose={() => {
+          setShowVentaFlow(false);
+          fetchBoletos(); // Refresh table when flow closes
+        }} 
+      />
+
+      <Dialog open={!!boletoConfirmacion} onOpenChange={(open) => !open && setBoletoConfirmacion(null)}>
+        <DialogContent className="border-green-500/20 bg-green-50/50 dark:bg-green-950/20">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-green-600 dark:text-green-500">
+              <span className="text-xl">✅</span> Boleto Válido
+            </DialogTitle>
+          </DialogHeader>
+          
+          {boletoConfirmacion && (
+            <div className="space-y-4 py-4">
+              <div className="grid grid-cols-2 gap-y-4 gap-x-2 text-sm">
+                <div>
+                  <span className="text-muted-foreground block text-xs">Asiento</span>
+                  <span className="font-medium text-lg">{boletoConfirmacion.asiento}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground block text-xs">Pasajero</span>
+                  <span className="font-medium">{boletoConfirmacion.comprador?.nombre_completo || boletoConfirmacion.pasajero_nombre || "Desconocido"}</span>
+                </div>
+                <div className="col-span-2">
+                  <span className="text-muted-foreground block text-xs">Ruta</span>
+                  <span className="font-medium">
+                    {boletoConfirmacion.viaje?.ruta?.ciudad_origen} → {boletoConfirmacion.viaje?.ruta?.ciudad_destino}
+                  </span>
+                </div>
+                <div className="col-span-2">
+                  <span className="text-muted-foreground block text-xs">Código</span>
+                  <span className="font-mono font-medium">{boletoConfirmacion.codigo_boleto}</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button variant="outline" onClick={() => setBoletoConfirmacion(null)} disabled={isConfirming}>
+              Cancelar
+            </Button>
+            <Button onClick={handleConfirmarEmbarque} disabled={isConfirming} className="bg-green-600 hover:bg-green-700 text-white border-transparent">
+              {isConfirming && <Spinner className="mr-2 h-4 w-4" />}
+              Confirmar Embarque
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <PasajerosViajeSheet
+        isOpen={!!pasajerosSheetViaje}
+        onClose={() => setPasajerosSheetViaje(null)}
+        viajeId={pasajerosSheetViaje?.id || null}
+        rutaString={pasajerosSheetViaje?.ruta || ""}
+        fechaSalida={pasajerosSheetViaje?.fecha || ""}
+      />
+    </div>
+  );
+}

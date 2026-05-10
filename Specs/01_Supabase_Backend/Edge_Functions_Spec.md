@@ -57,23 +57,51 @@ Catálogo de funciones serverless en TypeScript ejecutadas en Supabase Edge Func
 - **Lógica**: Calcula costo estimado usando la tarifa activa y la duración estimada de la ruta más corta disponible. Valida que `peso_kg` no exceda 25 kg.
 - **Rate Limit**: 60 requests por IP por minuto.
 - **Output**: `{ costo_estimado, peso_max_kg, dimensiones_max_referencia: '50x50x50cm', disclaimer: "Precio aproximado, sujeto a pesaje en taquilla" }`
-
-### 2.7 `procesar-devolucion-automatica`
-- **Trigger**: CRON job diario.
+### 2.7 `procesar-notificaciones-pendientes`
+- **Trigger**: CRON job cada 1 minuto (invocado via `pg_cron` + `pg_net`).
 - **Lógica**:
-  1. Busca encomiendas en estado `EN_OFICINA_DESTINO` con más de 5 días hábiles.
-  2. Cambia estado a `DEVUELTA`.
-  3. Notifica al remitente (Push).
-- **Output**: `{ procesadas: number }`
+  1. Lee registros pendientes de la tabla `pending_notifications` (insertados por triggers/CRON de DB).
+  2. Para cada registro, invoca `enviar-whatsapp` o `enviar-push` según el canal indicado.
+  3. Marca el registro como procesado o fallido.
+- **Output**: `{ procesadas: number, fallidas: number }`
+- **Nota**: Los CRON jobs de negocio (`auto_expirar_reserva`, `auto_devolver_encomienda`, `alerta_amarilla_72h`) ejecutan SQL puro directamente en `pg_cron` (ver `Database_Schema_Spec.md` §1.1). **No son Edge Functions**. Esta función solo se encarga de la cola de notificaciones derivada de esos jobs.
 
-### 2.8 `alerta-amarilla`
-- **Trigger**: CRON job cada hora.
-- **Lógica**:
-  1. Busca encomiendas en estado `EN_TRANSITO` con más de 72 horas.
-  2. Crea registro en tabla `incidencias` con tipo `ALERTA_AMARILLA`.
-- **Output**: `{ alertas_creadas: number }`
+## 3. Rate Limiting
 
-## 3. Seguridad
-- Todas las funciones (excepto `track-and-trace` y `calculadora-publica`) requieren un JWT válido de Supabase Auth.
+### 3.1 Estrategia
+Los endpoints públicos (`track-and-trace` y `calculadora-publica`) usan **rate limiting en memoria** con un `Map<string, { count, timestamp }>` dentro de la Edge Function (Deno Deploy).
+
+**Justificación**: Las Edge Functions de Supabase corren en Deno Deploy. Un `Map` en memoria es suficiente porque:
+- El volumen esperado en V1 no justifica Redis.
+- Cada instancia de Edge Function mantiene su propio Map, lo cual es aceptable (el rate limit será "por instancia", no global exacto, pero sigue protegiendo contra abuso).
+- Si el tráfico crece significativamente en V2+, se puede migrar a Upstash Redis sin cambiar la interfaz.
+
+### 3.2 Límites Aplicados
+
+| Endpoint | Límite | Ventana |
+|---|---|---|
+| `track-and-trace` | 30 requests | 1 minuto por IP |
+| `calculadora-publica` | 60 requests | 1 minuto por IP |
+
+### 3.3 Implementación Referencia
+```typescript
+const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+
+function checkRateLimit(ip: string, maxRequests: number, windowMs: number): boolean {
+  const now = Date.now();
+  const entry = rateLimitMap.get(ip);
+  if (!entry || now > entry.resetAt) {
+    rateLimitMap.set(ip, { count: 1, resetAt: now + windowMs });
+    return true;
+  }
+  if (entry.count >= maxRequests) return false;
+  entry.count++;
+  return true;
+}
+```
+
+## 4. Seguridad
+- Todas las funciones (excepto `track-and-trace`, `calculadora-publica` y `procesar-notificaciones-pendientes`) requieren un JWT válido de Supabase Auth.
 - Las funciones validan el rol del usuario antes de ejecutar (ej: `calcular-costo-encomienda` requiere `taquillero` o `admin_cooperativa`).
-- Los endpoints públicos están protegidos por rate-limiting.
+- Los endpoints públicos están protegidos por rate-limiting en memoria (ver §3).
+- `procesar-notificaciones-pendientes` se invoca internamente via `pg_net` con un `service_role` key, nunca expuesta al público.
