@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Spinner } from "@/components/ui/spinner";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
-import { CheckCircle, Money, LockKey, Warning, User, IdentificationCard, Phone, Package, Scale, CurrencyDollar } from "@phosphor-icons/react";
+import { CheckCircle, Money, LockKey, Warning, User, IdentificationCard, Phone, Package, Scales, CurrencyDollar } from "@phosphor-icons/react";
 import { PinInput } from "./pin-input";
 import { confirmarEntrega } from "@/app/cooperativas/(panel)/entrega/actions";
 import { procesarPago } from "@/app/cooperativas/(panel)/taquilla/encomiendas/actions";
