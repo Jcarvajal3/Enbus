@@ -7,7 +7,7 @@ import { WifiHigh, WifiSlash } from "@phosphor-icons/react";
 // Constants — no magic numbers
 // ─────────────────────────────────────────────────────────────────────────────
 
-const POLL_INTERVAL_MS = 10_000;
+const POLL_INTERVAL_MS = 30_000;        // ← was 10s, 30s is plenty
 const PROBE_TIMEOUT_MS = 5_000;
 const RESTORED_BANNER_TTL_MS = 5_000;
 
@@ -28,8 +28,16 @@ export function useConnectivity(): ConnectivityState {
   // Track previous online state in a ref so the probe callback is always
   // reading the latest value without adding it to the dependency array.
   const onlineRef = useRef(true);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const probe = useCallback(async () => {
+    // Fast-path: if browser says offline, skip the network probe
+    if (!navigator.onLine) {
+      onlineRef.current = false;
+      setOnline(false);
+      return;
+    }
+
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     if (!supabaseUrl) return;
 
@@ -62,17 +70,36 @@ export function useConnectivity(): ConnectivityState {
       setOnline(false);
     };
 
+    // Pause polling when tab is hidden to save CPU/battery
+    const handleVisibility = () => {
+      if (document.hidden) {
+        // Tab hidden — stop polling
+        if (intervalRef.current) {
+          clearInterval(intervalRef.current);
+          intervalRef.current = null;
+        }
+      } else {
+        // Tab visible — probe immediately + resume polling
+        probe();
+        if (!intervalRef.current) {
+          intervalRef.current = setInterval(probe, POLL_INTERVAL_MS);
+        }
+      }
+    };
+
     window.addEventListener("online", handleOnline);
     window.addEventListener("offline", handleOffline);
+    document.addEventListener("visibilitychange", handleVisibility);
 
     // Run immediately + start polling
     probe();
-    const interval = setInterval(probe, POLL_INTERVAL_MS);
+    intervalRef.current = setInterval(probe, POLL_INTERVAL_MS);
 
     return () => {
-      clearInterval(interval);
+      if (intervalRef.current) clearInterval(intervalRef.current);
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
+      document.removeEventListener("visibilitychange", handleVisibility);
     };
   }, [probe]);
 

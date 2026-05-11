@@ -1,10 +1,13 @@
 import React, { useState } from 'react';
-import { View, Text, Pressable, TextInput, ScrollView } from '@/tw';
-import { Modal } from 'react-native';
-import { CheckCircle, CreditCard, Bank, CalendarBlank, X } from 'phosphor-react-native';
+import { View, Text, Pressable, ScrollView } from '@/tw';
+import { TextInput, Modal, Alert } from 'react-native';
+import { CheckCircle, CreditCard, Bank, X } from 'phosphor-react-native';
 import { Spinner } from '@/src/components/Spinner';
+import { supabase } from '@/src/utils/supabase';
+import { useAuth } from '@/src/contexts/AuthContext';
 
-// Lista de bancos de Venezuela
+// ─── Bancos de Venezuela ──────────────────────────────────────────────────────
+
 const BANCOS_VE = [
   'Banco de Venezuela', 'Bancamiga', 'Banesco', 'BBVA Provincial',
   'Mercantil', 'BNC', 'Banco Exterior', 'Bicentenario',
@@ -15,17 +18,42 @@ const BANCOS_VE = [
   'Otras', 'Zelle', 'PayPal',
 ];
 
+// ─── Types ────────────────────────────────────────────────────────────────────
+
 type FlowStep = 'metodos' | 'formulario' | 'enviado';
 type MetodoPago = 'PAGO_MOVIL' | 'TRANSFERENCIA' | 'EFECTIVO' | 'ZELLE';
+
+// Mapeo al tipo_pago esperado por la tabla `pagos` del Panel
+const TIPO_PAGO_MAP: Record<MetodoPago, 'DIGITAL' | 'EFECTIVO'> = {
+  PAGO_MOVIL: 'DIGITAL',
+  TRANSFERENCIA: 'DIGITAL',
+  ZELLE: 'DIGITAL',
+  EFECTIVO: 'EFECTIVO',
+};
 
 interface PaymentFlowProps {
   monto: number;
   cooperativa_id?: string;
   concepto?: string;
-  onPaymentSuccess?: () => void;
+  /** UUID de la encomienda a vincular con el pago (opcional) */
+  encomienda_id?: string;
+  /** UUID(s) de boleto(s) a vincular con el pago (opcional) */
+  boleto_ids?: string[];
+  onPaymentSuccess?: (pagoId?: string, pagoPayload?: Record<string, unknown>) => void;
 }
 
-export function PaymentFlow({ monto, concepto, onPaymentSuccess }: PaymentFlowProps) {
+// ─── Component ────────────────────────────────────────────────────────────────
+
+export function PaymentFlow({
+  monto,
+  cooperativa_id,
+  concepto,
+  encomienda_id,
+  boleto_ids,
+  onPaymentSuccess,
+}: PaymentFlowProps) {
+  const { user } = useAuth();
+
   const [step, setStep] = useState<FlowStep>('metodos');
   const [metodo, setMetodo] = useState<MetodoPago | null>(null);
   const [referencia, setReferencia] = useState('');
@@ -33,6 +61,8 @@ export function PaymentFlow({ monto, concepto, onPaymentSuccess }: PaymentFlowPr
   const [banco, setBanco] = useState('');
   const [isBancoModalVisible, setIsBancoModalVisible] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [pagoId, setPagoId] = useState<string | undefined>(undefined);
+  const [currentPayload, setCurrentPayload] = useState<Record<string, unknown> | undefined>(undefined);
 
   const inputClass = 'bg-background border border-input px-4 h-12 rounded-[10px] text-base text-foreground';
 
@@ -43,34 +73,103 @@ export function PaymentFlow({ monto, concepto, onPaymentSuccess }: PaymentFlowPr
     { id: 'EFECTIVO', label: 'Efectivo en Taquilla', desc: 'Pagas al entregar el paquete' },
   ];
 
+  // ── Validación ─────────────────────────────────────────────────────────────
+  // El efectivo no requiere referencia/banco/fecha — solo confirmación
+  const isEfectivo = metodo === 'EFECTIVO';
+  const isFormValid = isEfectivo
+    ? true
+    : referencia.trim().length >= 4 && fecha.trim().length >= 6 && banco.trim().length > 0;
+
+  // ── Submit ──────────────────────────────────────────────────────────────────
   const handleSubmitPago = async () => {
-    if (!referencia.trim() || !fecha.trim() || !banco.trim()) return;
+    if (!isFormValid || !metodo || !user) return;
     setIsSubmitting(true);
-    // Simulamos la llamada al backend. En producción: supabase.from('pagos').insert(...)
-    await new Promise(r => setTimeout(r, 1200));
-    setIsSubmitting(false);
-    setStep('enviado');
+
+    try {
+      // ── Construir el registro de pago (alineado al esquema real de `pagos`) ─
+      const pagoPayload: Record<string, unknown> = {
+        pagador_id: user.id,
+        monto,
+        tipo_pago: TIPO_PAGO_MAP[metodo],
+        metodo_pago_cliente: metodo, // columna adicional para detalle de canal
+        verificado: false, // La cooperativa lo verifica en su Panel
+      };
+
+      if (cooperativa_id) pagoPayload.cooperativa_id = cooperativa_id;
+      if (encomienda_id) pagoPayload.encomienda_id = encomienda_id;
+
+      if (!isEfectivo) {
+        pagoPayload.numero_referencia = referencia.trim();
+        pagoPayload.fecha_transaccion = fecha.trim();
+        pagoPayload.banco_emisor = banco;
+      }
+
+      setCurrentPayload(pagoPayload);
+
+      // ── Insertar en `pagos` solo si tenemos un ID válido (encomienda o boleto ya creado) ─
+      // Si no hay ninguno, el padre creará los boletos y luego el pago usando el payload.
+      if (encomienda_id || (boleto_ids && boleto_ids.length > 0)) {
+        const { data: pago, error: pagoError } = await supabase
+          .from('pagos')
+          .insert(pagoPayload)
+          .select('id')
+          .single();
+
+        if (pagoError) throw pagoError;
+
+        // Si hay boletos vinculados (previamente creados), actualizamos su estado
+        // (Nota: la app actualmente delega la creación de boletos al padre, por lo que esto
+        // se ejecutará mayormente en flujos futuros o de encomiendas)
+        if (boleto_ids && boleto_ids.length > 0 && pago?.id) {
+          // El esquema de boletos no tiene pago_id, así que no podemos hacer el update en boletos.
+          // El diseño asume que boletos se crean después y se asigna el boleto_id al pago.
+        }
+
+        setPagoId(pago?.id);
+      }
+
+      setStep('enviado');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Error desconocido';
+      console.error('[PaymentFlow] Error al registrar pago:', msg);
+      Alert.alert(
+        'Error al enviar comprobante',
+        `No se pudo registrar el pago. Inténtalo de nuevo.\n\n${msg}`
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const isFormValid = referencia.trim().length >= 4 && fecha.trim().length >= 6 && banco.trim().length > 0;
-
+  // ── Paso: Enviado ───────────────────────────────────────────────────────────
   if (step === 'enviado') {
     return (
       <View className="bg-card rounded-[14px] p-8 border border-border items-center">
         <View className="size-20 bg-success/20 rounded-full items-center justify-center mb-4">
           <CheckCircle weight="fill" color="#16a34a" size={40} />
         </View>
-        <Text className="font-heading text-xl text-foreground text-center mb-2">Pago Enviado</Text>
+        <Text className="font-heading text-xl text-foreground text-center mb-2">Comprobante Enviado</Text>
         <Text className="text-sm text-muted-foreground text-center mb-6 leading-5">
           La cooperativa verificará tu pago. Cuando sea confirmado, tu transacción será procesada.
         </Text>
-        <View className="bg-secondary rounded-[10px] px-4 py-3 w-full mb-6">
-          <Text className="text-xs text-muted-foreground font-bold mb-1">Referencia</Text>
-          <Text className="text-sm font-black text-foreground">{referencia}</Text>
-        </View>
+
+        {!isEfectivo && referencia ? (
+          <View className="bg-secondary rounded-[10px] px-4 py-3 w-full mb-6">
+            <Text className="text-xs text-muted-foreground font-bold mb-1">Referencia registrada</Text>
+            <Text className="text-sm font-black text-foreground">{referencia}</Text>
+          </View>
+        ) : null}
+
+        {isEfectivo && (
+          <View className="bg-warning/10 rounded-[10px] px-4 py-3 w-full mb-6 border border-warning/20">
+            <Text className="text-xs text-warning font-bold mb-1">Pago en efectivo</Text>
+            <Text className="text-sm text-foreground">Presenta este código al llegar a taquilla para completar tu pago.</Text>
+          </View>
+        )}
+
         {onPaymentSuccess && (
           <Pressable
-            onPress={onPaymentSuccess}
+            onPress={() => onPaymentSuccess(pagoId, currentPayload)}
             className="bg-primary h-12 rounded-[10px] items-center justify-center w-full"
           >
             <Text className="text-primary-foreground font-bold">Continuar</Text>
@@ -80,17 +179,20 @@ export function PaymentFlow({ monto, concepto, onPaymentSuccess }: PaymentFlowPr
     );
   }
 
+  // ── Paso: Formulario de comprobante ────────────────────────────────────────
   if (step === 'formulario') {
     return (
       <View className="bg-card rounded-[14px] p-6 border border-border">
-        {/* Encabezado */}
+        {/* Volver */}
         <Pressable onPress={() => setStep('metodos')} className="flex-row items-center mb-6 gap-2">
           <X color="#a3a3a3" size={16} weight="bold" />
           <Text className="text-sm text-muted-foreground">Volver</Text>
         </Pressable>
 
         <Text className="font-heading text-lg text-foreground mb-1">Confirmar Pago</Text>
-        <Text className="text-sm text-muted-foreground mb-6">Método: {metodos.find(m => m.id === metodo)?.label}</Text>
+        <Text className="text-sm text-muted-foreground mb-6">
+          Método: {metodos.find(m => m.id === metodo)?.label}
+        </Text>
 
         {/* Monto */}
         <View className="bg-primary/10 rounded-[10px] px-4 py-3 mb-6 border border-primary/20 items-center">
@@ -99,68 +201,85 @@ export function PaymentFlow({ monto, concepto, onPaymentSuccess }: PaymentFlowPr
           {concepto && <Text className="text-xs text-muted-foreground mt-1">{concepto}</Text>}
         </View>
 
-        {/* Formulario */}
-        <View className="gap-4">
-          {/* Número de referencia */}
-          <View>
-            <Text className="text-sm font-medium text-foreground mb-2">Número de Referencia</Text>
-            <TextInput
-              className={inputClass}
-              placeholder="Ej: 0000123456789"
-              placeholderTextColor="#a3a3a3"
-              keyboardType="number-pad"
-              value={referencia}
-              onChangeText={setReferencia}
-            />
+        {/* Efectivo: solo confirmación */}
+        {isEfectivo ? (
+          <View className="bg-warning/10 border border-warning/30 rounded-[10px] p-4 mb-6">
+            <Text className="text-sm text-foreground font-bold mb-1">Pago en Taquilla</Text>
+            <Text className="text-sm text-muted-foreground leading-5">
+              Al seleccionar esta opción, quedará registrado como pago pendiente.
+              Deberás presentarte en taquilla para completarlo.
+            </Text>
           </View>
+        ) : (
+          /* Digital: referencia + fecha + banco */
+          <View className="gap-4">
+            <View>
+              <Text className="text-sm font-medium text-foreground mb-2">Número de Referencia</Text>
+              <TextInput
+                className={inputClass}
+                placeholder="Ej: 0000123456789"
+                placeholderTextColor="#a3a3a3"
+                keyboardType="number-pad"
+                value={referencia}
+                onChangeText={setReferencia}
+              />
+            </View>
 
-          {/* Fecha */}
-          <View>
-            <Text className="text-sm font-medium text-foreground mb-2">Fecha de Transacción</Text>
-            <TextInput
-              className={inputClass}
-              placeholder="DD/MM/AAAA"
-              placeholderTextColor="#a3a3a3"
-              keyboardType="number-pad"
-              value={fecha}
-              onChangeText={setFecha}
-            />
+            <View>
+              <Text className="text-sm font-medium text-foreground mb-2">Fecha de Transacción</Text>
+              <TextInput
+                className={inputClass}
+                placeholder="DD/MM/AAAA"
+                placeholderTextColor="#a3a3a3"
+                keyboardType="number-pad"
+                value={fecha}
+                onChangeText={setFecha}
+              />
+            </View>
+
+            <View>
+              <Text className="text-sm font-medium text-foreground mb-2">Banco Emisor</Text>
+              <Pressable
+                onPress={() => setIsBancoModalVisible(true)}
+                className="bg-background border border-input h-12 rounded-[10px] px-4 flex-row justify-between items-center"
+              >
+                <Text className={banco ? 'text-base text-foreground' : 'text-base text-muted-foreground'}>
+                  {banco || 'Seleccionar banco...'}
+                </Text>
+                <Bank color="#a3a3a3" size={20} weight="bold" />
+              </Pressable>
+            </View>
           </View>
+        )}
 
-          {/* Banco Emisor */}
-          <View>
-            <Text className="text-sm font-medium text-foreground mb-2">Banco Emisor</Text>
-            <Pressable
-              onPress={() => setIsBancoModalVisible(true)}
-              className="bg-background border border-input h-12 rounded-[10px] px-4 flex-row justify-between items-center"
-            >
-              <Text className={banco ? 'text-base text-foreground' : 'text-base text-muted-foreground'}>
-                {banco || 'Seleccionar banco...'}
-              </Text>
-              <Bank color="#a3a3a3" size={20} weight="bold" />
-            </Pressable>
-          </View>
-        </View>
-
-        {/* Botón */}
+        {/* Botón de envío */}
         <Pressable
           onPress={handleSubmitPago}
           disabled={!isFormValid || isSubmitting}
           className={`h-12 rounded-[10px] items-center justify-center mt-6 ${isFormValid ? 'bg-primary' : 'bg-primary/40'}`}
         >
-          {isSubmitting ? <Spinner /> : (
-            <Text className={`font-bold ${isFormValid ? 'text-primary-foreground' : 'text-primary-foreground/50'}`}>
-              Enviar Comprobante
-            </Text>
-          )}
+          {isSubmitting
+            ? <Spinner />
+            : <Text className={`font-bold ${isFormValid ? 'text-primary-foreground' : 'text-primary-foreground/50'}`}>
+                {isEfectivo ? 'Registrar Pago en Efectivo' : 'Enviar Comprobante'}
+              </Text>
+          }
         </Pressable>
 
-        {/* Modal Banco */}
-        <Modal visible={isBancoModalVisible} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setIsBancoModalVisible(false)}>
+        {/* Modal de selección de banco */}
+        <Modal
+          visible={isBancoModalVisible}
+          animationType="slide"
+          presentationStyle="pageSheet"
+          onRequestClose={() => setIsBancoModalVisible(false)}
+        >
           <View className="flex-1 bg-background pt-6">
             <View className="flex-row justify-between items-center px-6 pb-4 border-b border-border">
               <Text className="text-xl font-heading text-foreground">Banco Emisor</Text>
-              <Pressable onPress={() => setIsBancoModalVisible(false)} className="size-10 bg-secondary rounded-full items-center justify-center">
+              <Pressable
+                onPress={() => setIsBancoModalVisible(false)}
+                className="size-10 bg-secondary rounded-full items-center justify-center"
+              >
                 <X color="#171717" weight="bold" size={20} />
               </Pressable>
             </View>
@@ -184,7 +303,7 @@ export function PaymentFlow({ monto, concepto, onPaymentSuccess }: PaymentFlowPr
     );
   }
 
-  // Paso 1: Selección de método de pago
+  // ── Paso 1: Selección de método ─────────────────────────────────────────────
   return (
     <View className="bg-card rounded-[14px] p-6 border border-border">
       <Text className="font-heading text-lg text-foreground mb-1">Método de Pago</Text>

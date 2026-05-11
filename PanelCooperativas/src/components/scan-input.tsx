@@ -43,11 +43,16 @@ export function ScanInput({
     
     try {
       if (mode === "encomiendas") {
+        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(code);
+        const orCondition = isUUID 
+          ? `id.eq.${code},tracking_id.eq.${code},qr_data.eq.${code}`
+          : `tracking_id.eq.${code},qr_data.eq.${code}`;
+
         const { data, error } = await supabase
           .from("encomiendas")
           .select("*")
           .eq("cooperativa_id", cooperativaId)
-          .or(`tracking_id.eq.${code},qr_data.eq.${code}`)
+          .or(orCondition)
           .single();
           
         if (error || !data) {
@@ -63,8 +68,8 @@ export function ScanInput({
             comprador:profiles!comprador_id(nombre_completo),
             viaje:viajes!viaje_id(ruta:rutas(ciudad_origen, ciudad_destino))
           `)
-          .eq("qr_embarque_data", code)
           .eq("cooperativa_id", cooperativaId)
+          .or(`qr_embarque_data.eq.${code},codigo_boleto.eq.${code}`)
           .single();
 
         if (error || !data) {

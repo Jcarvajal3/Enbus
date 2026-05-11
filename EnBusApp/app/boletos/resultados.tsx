@@ -10,7 +10,7 @@ import { supabase } from '@/src/utils/supabase';
 export default function ResultadosBusquedaScreen() {
   const router = useRouter();
   const { origen, destino, fecha } = useLocalSearchParams();
-  
+
   const [loading, setLoading] = useState(true);
   const [resultados, setResultados] = useState<any[]>([]);
 
@@ -29,10 +29,13 @@ export default function ResultadosBusquedaScreen() {
             rutas!inner ( ciudad_origen, ciudad_destino, duracion_estimada_min, precio_pasaje ),
             cooperativas ( nombre )
           `)
-          .eq('estado', 'PROGRAMADO');
+          .eq('estado', 'PROGRAMADO')
+          .gt('asientos_disponibles', 0)   // ocultar viajes sin capacidad
+          .order('fecha_hora_salida', { ascending: true })
+          .limit(50);
 
         if (error) throw error;
-        
+
         // Transformar data para adaptarla al ResultsList
         const items = (data || []).map(viaje => {
           const dateObj = new Date(viaje.fecha_hora_salida);
@@ -62,7 +65,7 @@ export default function ResultadosBusquedaScreen() {
       <View className="px-6 pt-4 pb-4 bg-background shadow-sm border-b border-border/50">
         <View className="flex-row items-center mb-4">
           <Pressable onPress={() => router.back()} className="w-10 h-10 bg-secondary rounded-full flex items-center justify-center mr-4">
-             <CaretLeft weight="bold" color="#171717" size={24} />
+            <CaretLeft weight="bold" color="#171717" size={24} />
           </Pressable>
           <Text className="font-heading text-xl text-foreground">Selecciona tu Viaje</Text>
         </View>
@@ -79,11 +82,11 @@ export default function ResultadosBusquedaScreen() {
             <ActivityIndicator size="large" color="#6b4a1a" />
           </View>
         ) : (
-          <ResultsList 
-            data={resultados} 
+          <ResultsList
+            data={resultados}
             onSelect={(id) => {
               router.push({ pathname: '/viajes/[id]' as any, params: { id } });
-            }} 
+            }}
           />
         )}
       </View>

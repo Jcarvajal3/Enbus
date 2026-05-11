@@ -1,4 +1,5 @@
 import { SafeAreaView } from '@/tw';
+import { useState, useCallback } from 'react';
 import { ScrollView, View, Text, Pressable } from '@/tw';
 import { useAuth } from '@/src/contexts/AuthContext';
 import { useRealtime } from '@/src/hooks/useRealtime';
@@ -7,23 +8,39 @@ import { TransactionCard } from '@/src/components/TransactionCard';
 import { Bell, UserCircle } from 'phosphor-react-native';
 import { useRouter } from 'expo-router';
 import { Spinner } from '@/src/components/Spinner';
+import { useFocusEffect } from '@react-navigation/native';
+import { formatDate } from '@/src/utils/formatters';
 
 export default function HomeScreen() {
   const { user } = useAuth();
   const router = useRouter();
 
-  // En el futuro, reemplazaremos esto con Vistas o RLS puras
-  // Por propósitos de la Fase 4 de UI, usaremos la tabla directo filtrando el `sender_id`
+  // ── Controlled: suscripciones SOLO activas cuando esta tab tiene foco ──────
+  // Esto evita que 2 WebSockets permanezcan abiertos mientras el usuario está
+  // en Encomiendas o Boletos, ahorrando batería y conexión de datos.
+  const [isFocused, setIsFocused] = useState(true);
+
+  useFocusEffect(
+    useCallback(() => {
+      setIsFocused(true);
+      return () => setIsFocused(false); // teardown al perder foco
+    }, [])
+  );
+
   const { data: encomiendas, loading: loadingEnvios } = useRealtime<any>(
     'encomiendas',
     'sender_id',
-    user?.id
+    user?.id,
+    '*',
+    { enabled: isFocused && !!user?.id, limit: 10 }
   );
 
   const { data: boletos, loading: loadingBoletos } = useRealtime<any>(
     'boletos',
     'comprador_id',
-    user?.id
+    user?.id,
+    '*, viajes(*, rutas(ciudad_origen, ciudad_destino))',
+    { enabled: isFocused && !!user?.id, limit: 10 }
   );
 
   return (
@@ -88,7 +105,7 @@ export default function HomeScreen() {
                       id={enc.tracking_id || enc.id}
                       estado={enc.estado}
                       titulo={enc.estado === 'ENTREGADA' ? 'Entregado a destinatario' : 'En camino hacia destino'}
-                      subtitulo={new Date(enc.created_at).toLocaleDateString()}
+                      subtitulo={formatDate(enc.created_at)}
                       onPress={() => router.push({
                         pathname: '/encomiendas/enviar/[id]',
                         params: { id: enc.id }
@@ -115,13 +132,13 @@ export default function HomeScreen() {
                     <TransactionCard
                       key={bol.id}
                       type="boleto"
-                      id={bol.codigo || bol.id}
+                      id={bol.codigo_boleto || bol.id}
                       estado={bol.estado}
-                      titulo="Viaje Interurbano"
-                      subtitulo={new Date(bol.created_at).toLocaleDateString()}
+                      titulo={`${bol.viajes?.rutas?.ciudad_origen || 'Origen'} → ${bol.viajes?.rutas?.ciudad_destino || 'Destino'}`}
+                      subtitulo={formatDate(bol.created_at)}
                       onPress={() => router.push({
                         pathname: '/boletos/[id]',
-                        params: { id: bol.codigo || bol.id }
+                        params: { id: bol.codigo_boleto || bol.id }
                       })}
                     />
                   ))}

@@ -2,7 +2,7 @@ import "./global.css";
 import { Stack, useRouter, useSegments } from "expo-router";
 import { AuthProvider, useAuth } from "@/src/contexts/AuthContext";
 import { useEffect } from "react";
-import { View } from "@/tw";
+import { View, Text } from "@/tw";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { useFonts, Lora_600SemiBold, Lora_700Bold } from '@expo-google-fonts/lora';
 import * as SplashScreen from 'expo-splash-screen';
@@ -11,7 +11,7 @@ import { StatusBar } from 'expo-status-bar';
 SplashScreen.preventAutoHideAsync();
 
 function RootLayoutNav() {
-  const { session, initialized } = useAuth();
+  const { session, initialized, isOffline } = useAuth();
   const segments = useSegments();
   const router = useRouter();
 
@@ -37,12 +37,27 @@ function RootLayoutNav() {
   }
 
   return (
-    <Stack screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="(auth)" options={{ headerShown: false, animation: 'fade' }} />
-      <Stack.Screen name="(tabs)" options={{ headerShown: false, animation: 'fade' }} />
-      <Stack.Screen name="perfil" options={{ headerShown: false }} />
-      <Stack.Screen name="notificaciones" options={{ headerShown: false }} />
-    </Stack>
+    <>
+      {/* Banner offline — no bloquea la UI, solo informa */}
+      {isOffline && (
+        <View style={{
+          backgroundColor: '#f59e0b',
+          paddingVertical: 6,
+          paddingHorizontal: 16,
+          alignItems: 'center',
+        }}>
+          <Text style={{ color: '#1c1917', fontSize: 12, fontWeight: '700' }}>
+            Sin conexión — mostrando datos guardados
+          </Text>
+        </View>
+      )}
+      <Stack screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="(auth)" options={{ headerShown: false, animation: 'fade' }} />
+        <Stack.Screen name="(tabs)" options={{ headerShown: false, animation: 'fade' }} />
+        <Stack.Screen name="perfil" options={{ headerShown: false }} />
+        <Stack.Screen name="notificaciones" options={{ headerShown: false }} />
+      </Stack>
+    </>
   );
 }
 

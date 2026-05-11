@@ -1,5 +1,7 @@
 "use client";
 
+import { currencyFormatterVES, dateFormatterDayMonthTime12h } from "@/lib/utils";
+
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge } from "@/components/status-badge";
@@ -16,11 +18,12 @@ import type { Boleto } from "@/lib/types/boletos";
 import { VentaFlow } from "@/components/boletos/venta-flow";
 import { ScanInput } from "@/components/scan-input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { confirmarEmbarque } from "./actions";
+import { confirmarEmbarque, verificarPagoBoleto } from "./actions";
 import { PasajerosViajeSheet } from "@/components/boletos/pasajeros-viaje-sheet";
 
 type BoletoRow = Boleto & {
   comprador?: { nombre_completo: string } | null;
+  pagos?: any[];
 };
 
 export default function TaquillaBoletosPage() {
@@ -40,6 +43,9 @@ export default function TaquillaBoletosPage() {
   const [boletoConfirmacion, setBoletoConfirmacion] = useState<any>(null);
   const [isConfirming, setIsConfirming] = useState(false);
   
+  const [pagoVerification, setPagoVerification] = useState<{ boleto: any, pago: any } | null>(null);
+  const [isVerifyingPago, setIsVerifyingPago] = useState(false);
+
   const [pasajerosSheetViaje, setPasajerosSheetViaje] = useState<{ id: string, ruta: string, fecha: string } | null>(null);
 
   const fetchBoletos = useCallback(async () => {
@@ -55,7 +61,8 @@ export default function TaquillaBoletosPage() {
             id,
             fecha_hora_salida,
             ruta:rutas!ruta_id(ciudad_origen, estado_origen, ciudad_destino, estado_destino)
-          )
+          ),
+          pagos:pagos!boleto_id(id, monto, tipo_pago, banco_emisor, numero_referencia, fecha_transaccion, verificado)
         `)
         .eq("cooperativa_id", cooperativaId)
         .order("created_at", { ascending: false })
@@ -124,22 +131,32 @@ export default function TaquillaBoletosPage() {
     }
   };
 
+  const handleConfirmarPago = async () => {
+    if (!pagoVerification) return;
+    setIsVerifyingPago(true);
+    try {
+      const res = await verificarPagoBoleto(pagoVerification.boleto.id, pagoVerification.pago.id);
+      if (res.success) {
+        toast.success("Pago verificado exitosamente. Boleto activo.");
+        setPagoVerification(null);
+        fetchBoletos();
+      } else {
+        toast.error(res.error || "Error al verificar pago");
+      }
+    } catch {
+      toast.error("Error al procesar la verificación");
+    } finally {
+      setIsVerifyingPago(false);
+    }
+  };
+
   const formatMoney = (amount: number) => {
-    return new Intl.NumberFormat("es-VE", {
-      style: "currency",
-      currency: "VES",
-    }).format(amount);
+    return currencyFormatterVES.format(amount);
   };
 
   const formatDate = (dateString: string) => {
     try {
-      return new Intl.DateTimeFormat("es-VE", { 
-        day: "2-digit", 
-        month: "short",
-        hour: "numeric",
-        minute: "numeric",
-        hour12: true
-      }).format(new Date(dateString));
+      return dateFormatterDayMonthTime12h.format(new Date(dateString));
     } catch {
       return dateString;
     }
@@ -276,7 +293,19 @@ export default function TaquillaBoletosPage() {
                         </span>
                       </TableCell>
                       <TableCell>
-                        <StatusBadge status={boleto.estado} />
+                        <div className="flex flex-col gap-2 items-start">
+                          <StatusBadge status={boleto.estado} />
+                          {boleto.estado === "RESERVADO" && boleto.pagos?.[0] && !boleto.pagos[0].verificado && (
+                            <Button 
+                              size="sm" 
+                              variant="outline" 
+                              className="h-7 text-xs border-primary/50 text-primary hover:bg-primary/10" 
+                              onClick={() => setPagoVerification({ boleto, pago: boleto.pagos![0] })}
+                            >
+                              Validar Pago
+                            </Button>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell className="text-right font-medium">
                         {formatMoney(boleto.precio)}
@@ -350,6 +379,66 @@ export default function TaquillaBoletosPage() {
         rutaString={pasajerosSheetViaje?.ruta || ""}
         fechaSalida={pasajerosSheetViaje?.fecha || ""}
       />
+
+      {/* DIÁLOGO DE VERIFICACIÓN DE PAGO */}
+      <Dialog open={!!pagoVerification} onOpenChange={(open) => !open && setPagoVerification(null)}>
+        <DialogContent className="border-primary/20">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              Validar Pago de Boleto
+            </DialogTitle>
+          </DialogHeader>
+          
+          {pagoVerification && (
+            <div className="space-y-4 py-4">
+              <div className="rounded-xl border bg-card p-4 space-y-3">
+                <div className="flex justify-between items-center border-b pb-2">
+                  <span className="text-muted-foreground text-sm font-bold">Monto Declarado</span>
+                  <span className="font-heading text-xl text-primary">{formatMoney(pagoVerification.pago.monto)}</span>
+                </div>
+                <div className="grid grid-cols-2 gap-4 pt-2">
+                  <div>
+                    <span className="block text-xs text-muted-foreground mb-1 uppercase font-bold">Método</span>
+                    <span className="font-medium">{pagoVerification.pago.tipo_pago}</span>
+                  </div>
+                  <div>
+                    <span className="block text-xs text-muted-foreground mb-1 uppercase font-bold">Banco</span>
+                    <span className="font-medium">{pagoVerification.pago.banco_emisor || "N/A"}</span>
+                  </div>
+                  <div className="col-span-2">
+                    <span className="block text-xs text-muted-foreground mb-1 uppercase font-bold">Referencia</span>
+                    <span className="font-mono text-lg bg-secondary/50 px-2 py-1 rounded inline-block">
+                      {pagoVerification.pago.numero_referencia || "N/A"}
+                    </span>
+                  </div>
+                  <div className="col-span-2">
+                    <span className="block text-xs text-muted-foreground mb-1 uppercase font-bold">Fecha / Hora</span>
+                    <span className="font-medium text-sm">
+                      {pagoVerification.pago.fecha_transaccion ? formatDate(pagoVerification.pago.fecha_transaccion) : "N/A"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-warning/10 p-3 rounded-lg border border-warning/20">
+                <p className="text-sm text-warning font-medium">
+                  Al aprobar este pago, el boleto cambiará a estado PAGADO y se generará el código QR de abordaje para el pasajero.
+                </p>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button variant="outline" onClick={() => setPagoVerification(null)} disabled={isVerifyingPago}>
+              Cancelar
+            </Button>
+            <Button onClick={handleConfirmarPago} disabled={isVerifyingPago}>
+              {isVerifyingPago && <Spinner className="mr-2 h-4 w-4" />}
+              Aprobar Pago
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

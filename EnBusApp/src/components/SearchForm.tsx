@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { formatDate, dateFull } from '@/src/utils/formatters';
 import { View, Text, Pressable } from '@/tw';
 import { Platform } from 'react-native';
 import { LocationSelector } from './LocationSelector';
@@ -115,7 +116,7 @@ export function SearchForm({
           <View className="flex-row border-t border-border/50 py-5 items-center justify-between">
             <Pressable className="flex-1" onPress={() => setShowDatePicker(true)}>
               <Text className="text-base font-bold text-foreground">
-                {fecha.toLocaleDateString('es-VE', { weekday: 'short', day: 'numeric', month: 'short' })}
+              {formatDate(fecha.toISOString(), dateFull)}
               </Text>
             </Pressable>
             

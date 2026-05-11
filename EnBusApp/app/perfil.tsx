@@ -1,25 +1,19 @@
-import { StyleSheet } from 'react-native';
-import { SafeAreaView, ScrollView, View, Text, Pressable } from '@/tw';
+import { SafeAreaView, ScrollView, View, Text, Pressable, useCSSVariable } from '@/tw';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/src/contexts/AuthContext';
 import { supabase } from '@/src/utils/supabase';
 import { CaretLeft, UserCircle, SignOut, Phone, EnvelopeSimple, IdentificationCard } from 'phosphor-react-native';
 
-const C = {
-  bg: '#ffffff',
-  border: '#e5e5e5',
-  secondary: '#f4f4f5',
-  foreground: '#171717',
-  muted: '#737373',
-  primary: '#e2b714',
-  primaryFg: '#6b4a1a',
-  destructive: '#dc2626',
-  radius: 14,
-};
-
 export default function PerfilScreen() {
   const router = useRouter();
-  const { user, session } = useAuth();
+  const { user } = useAuth();
+
+  // ── Colores para los íconos (phosphor no soporta className) ──────────────
+  // useCSSVariable lee los tokens de global.css — se mantiene sincronizado con el tema
+  const mutedColor = useCSSVariable('--muted-foreground') as string || '#737373';
+  const primaryColor = useCSSVariable('--primary') as string || '#e2b714';
+  const destructiveColor = useCSSVariable('--destructive') as string || '#dc2626';
+  const foregroundColor = useCSSVariable('--foreground') as string || '#171717';
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -36,126 +30,74 @@ export default function PerfilScreen() {
       <ScrollView contentContainerClassName="pb-32">
 
         {/* Header */}
-        <View style={s.header}>
-          <Pressable onPress={() => router.back()} style={s.backBtn}>
-            <CaretLeft weight="bold" color={C.foreground} size={22} />
+        <View className="flex-row items-center px-6 py-4 border-b border-border gap-4">
+          <Pressable
+            onPress={() => router.back()}
+            className="size-10 bg-secondary rounded-full items-center justify-center"
+          >
+            <CaretLeft weight="bold" color={foregroundColor} size={22} />
           </Pressable>
           <Text className="font-heading text-xl text-foreground">Mi Perfil</Text>
         </View>
 
         {/* Avatar + Name */}
-        <View style={s.avatarSection}>
-          <View style={s.avatarCircle}>
-            <UserCircle weight="fill" color={C.primary} size={72} />
+        <View className="items-center py-8">
+          <View className="size-[88px] rounded-full bg-primary/10 items-center justify-center mb-3">
+            <UserCircle weight="fill" color={primaryColor} size={72} />
           </View>
-          <Text style={s.displayName}>{displayName}</Text>
-          <Text style={s.emailLabel}>{email}</Text>
+          <Text className="text-[22px] font-bold text-foreground mb-1">{displayName}</Text>
+          <Text className="text-sm text-muted-foreground">{email}</Text>
         </View>
 
         {/* Info Card */}
-        <View style={s.card}>
-          <Text style={s.cardTitle}>Información de contacto</Text>
+        <View className="mx-6 bg-card border border-border rounded-[14px] p-5">
+          <Text className="text-xs font-bold text-muted-foreground uppercase tracking-[0.8px] mb-4">
+            Información de contacto
+          </Text>
 
-          <View style={s.infoRow}>
-            <EnvelopeSimple color={C.muted} size={18} weight="bold" />
-            <View style={{ marginLeft: 12, flex: 1 }}>
-              <Text style={s.infoLabel}>Correo</Text>
-              <Text style={s.infoValue}>{email}</Text>
+          {/* Correo */}
+          <View className="flex-row items-center py-3.5">
+            <EnvelopeSimple color={mutedColor} size={18} weight="bold" />
+            <View className="ml-3 flex-1">
+              <Text className="text-[11px] font-semibold text-muted-foreground mb-0.5">Correo</Text>
+              <Text className="text-[15px] font-semibold text-foreground">{email}</Text>
             </View>
           </View>
 
-          <View style={[s.infoRow, s.infoRowBorder]}>
-            <Phone color={C.muted} size={18} weight="bold" />
-            <View style={{ marginLeft: 12, flex: 1 }}>
-              <Text style={s.infoLabel}>Teléfono</Text>
-              <Text style={s.infoValue}>{telefono}</Text>
+          {/* Teléfono */}
+          <View className="flex-row items-center py-3.5 border-t border-border">
+            <Phone color={mutedColor} size={18} weight="bold" />
+            <View className="ml-3 flex-1">
+              <Text className="text-[11px] font-semibold text-muted-foreground mb-0.5">Teléfono</Text>
+              <Text className="text-[15px] font-semibold text-foreground">{telefono}</Text>
             </View>
           </View>
 
-          <View style={[s.infoRow, s.infoRowBorder]}>
-            <IdentificationCard color={C.muted} size={18} weight="bold" />
-            <View style={{ marginLeft: 12, flex: 1 }}>
-              <Text style={s.infoLabel}>Cédula / RIF</Text>
-              <Text style={s.infoValue}>{cedula}</Text>
+          {/* Cédula */}
+          <View className="flex-row items-center py-3.5 border-t border-border">
+            <IdentificationCard color={mutedColor} size={18} weight="bold" />
+            <View className="ml-3 flex-1">
+              <Text className="text-[11px] font-semibold text-muted-foreground mb-0.5">Cédula / RIF</Text>
+              <Text className="text-[15px] font-semibold text-foreground">{cedula}</Text>
             </View>
           </View>
         </View>
 
         {/* Logout */}
-        <View style={{ paddingHorizontal: 24, marginTop: 12 }}>
-          <Pressable style={s.logoutBtn} onPress={handleLogout}>
-            <SignOut color={C.destructive} size={20} weight="bold" />
-            <Text style={s.logoutText}>Cerrar Sesión</Text>
+        <View className="px-6 mt-3">
+          <Pressable
+            onPress={handleLogout}
+            className="flex-row items-center justify-center h-[52px] rounded-full border border-destructive/30 bg-destructive/5 gap-2.5"
+          >
+            <SignOut color={destructiveColor} size={20} weight="bold" />
+            <Text className="text-[15px] font-bold text-destructive">Cerrar Sesión</Text>
           </Pressable>
         </View>
 
         {/* Version */}
-        <Text style={s.version}>EnBus App v1.0.0</Text>
+        <Text className="text-center text-muted-foreground text-xs mt-8">EnBus App v1.0.0</Text>
 
       </ScrollView>
     </SafeAreaView>
   );
 }
-
-const s = StyleSheet.create({
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingTop: 16,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: C.border,
-    gap: 16,
-  },
-  backBtn: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: C.secondary,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  avatarSection: {
-    alignItems: 'center',
-    paddingVertical: 32,
-  },
-  avatarCircle: {
-    width: 88, height: 88, borderRadius: 44,
-    backgroundColor: '#fdf5d3',
-    alignItems: 'center', justifyContent: 'center',
-    marginBottom: 12,
-  },
-  displayName: {
-    fontSize: 22, fontWeight: '700',
-    color: C.foreground, marginBottom: 4,
-  },
-  emailLabel: { fontSize: 14, color: C.muted },
-  card: {
-    marginHorizontal: 24,
-    backgroundColor: C.bg,
-    borderWidth: 1, borderColor: C.border,
-    borderRadius: C.radius, padding: 20,
-  },
-  cardTitle: {
-    fontSize: 12, fontWeight: '700',
-    color: C.muted, textTransform: 'uppercase',
-    letterSpacing: 0.8, marginBottom: 16,
-  },
-  infoRow: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingVertical: 14,
-  },
-  infoRowBorder: { borderTopWidth: 1, borderTopColor: C.border },
-  infoLabel: { fontSize: 11, color: C.muted, fontWeight: '600', marginBottom: 2 },
-  infoValue: { fontSize: 15, color: C.foreground, fontWeight: '600' },
-  logoutBtn: {
-    flexDirection: 'row', alignItems: 'center',
-    justifyContent: 'center',
-    height: 52, borderRadius: 26,
-    borderWidth: 1.5, borderColor: '#fee2e2',
-    backgroundColor: '#fff5f5', gap: 10,
-  },
-  logoutText: { fontSize: 15, fontWeight: '700', color: C.destructive },
-  version: {
-    textAlign: 'center', color: C.muted,
-    fontSize: 12, marginTop: 32,
-  },
-});

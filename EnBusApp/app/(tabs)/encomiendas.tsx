@@ -6,28 +6,36 @@ import { useEncomiendas } from '@/src/hooks/useEncomiendas';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { TransactionCard } from '@/src/components/TransactionCard';
-import { ActivityIndicator } from 'react-native';
 import { Plus } from 'phosphor-react-native';
 import { Spinner } from '@/src/components/Spinner';
+import { formatDate } from '@/src/utils/formatters';
 
 export default function EncomiendasScreen() {
   const { user } = useAuth();
   const router = useRouter();
   const [tab, setTab] = useState<'recibir' | 'enviar'>('recibir');
 
-  const { data: todasLasEncomiendas, loading, refetch } = useEncomiendas(user?.id);
+  // ── Pausa la suscripción cuando esta tab no está activa ───────────────────
+  // IMPORTANTE: ya no usamos useFocusEffect para llamar refetch() manualmente.
+  // El hook mismo se reconecta cuando enabled pasa de false a true, lo que
+  // también dispara un nuevo fetch — eliminando el doble-fetch previo.
+  const [isFocused, setIsFocused] = useState(true);
 
-  // Refetch automático cada vez que esta tab recibe foco (ej: al volver de crear un envío)
   useFocusEffect(
     useCallback(() => {
-      if (user?.id) refetch();
-    }, [user?.id, refetch])
+      setIsFocused(true);
+      return () => setIsFocused(false);
+    }, [])
   );
 
-  // Categorización local basada en el rol del usuario frente a c/u
+  const { data: todasLasEncomiendas, loading } = useEncomiendas(user?.id, {
+    enabled: isFocused && !!user?.id,
+    limit: 30,
+  });
+
+  // Filtrado local según el rol del usuario en cada registro
   const historial = (todasLasEncomiendas || []).filter((enc: any) => {
     if (tab === 'enviar') return enc.sender_id === user?.id;
-    // Verificación positiva: soy el destinatario registrado
     return enc.receiver_user_id === user?.id;
   });
 
@@ -71,7 +79,7 @@ export default function EncomiendasScreen() {
                   id={enc.tracking_id || enc.id}
                   estado={enc.estado}
                   titulo={tab === 'enviar' ? 'Envío Regular' : 'Paquete Entrante'}
-                  subtitulo={new Date(enc.created_at).toLocaleDateString()}
+                  subtitulo={formatDate(enc.created_at)}
                   onPress={() => router.push({
                     pathname: tab === 'enviar'
                       ? '/encomiendas/enviar/[id]' as any

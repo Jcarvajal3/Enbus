@@ -99,3 +99,63 @@ export async function confirmarEmbarque(boletoId: string) {
     return { success: false, error: "Error interno en el servidor" };
   }
 }
+
+export async function verificarPagoBoleto(boletoId: string, pagoId: string) {
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { success: false, error: "No autorizado" };
+
+    // Update pago
+    const { error: pagoError } = await supabase.from("pagos")
+      .update({
+        verificado: true,
+        verificado_por: user.id,
+        verificado_at: new Date().toISOString()
+      })
+      .eq("id", pagoId);
+
+    if (pagoError) return { success: false, error: pagoError.message };
+
+    // Get the boleto to know the comprador and viaje
+    const { data: boleto } = await supabase.from("boletos")
+      .select("codigo_boleto, comprador_id, viaje_id")
+      .eq("id", boletoId)
+      .single();
+    
+    if (boleto?.comprador_id && boleto?.viaje_id) {
+      // Find all boletos bought by this user for this trip in RESERVADO state
+      const { data: boletosToUpdate } = await supabase
+        .from("boletos")
+        .select("id, codigo_boleto")
+        .eq("viaje_id", boleto.viaje_id)
+        .eq("comprador_id", boleto.comprador_id)
+        .eq("estado", "RESERVADO");
+
+      if (boletosToUpdate && boletosToUpdate.length > 0) {
+        for (const b of boletosToUpdate) {
+          await supabase.from("boletos")
+            .update({ 
+              estado: "PAGADO", 
+              qr_embarque_data: `PASS-${b.codigo_boleto || b.id}`
+            })
+            .eq("id", b.id);
+        }
+      }
+    } else {
+      // Fallback if no comprador_id (shouldn't happen for app purchases, but just in case)
+      await supabase.from("boletos")
+        .update({ 
+          estado: "PAGADO", 
+          qr_embarque_data: `PASS-${boleto?.codigo_boleto || boletoId}`
+        })
+        .eq("id", boletoId);
+    }
+
+    revalidatePath("/cooperativas/taquilla/boletos");
+    return { success: true };
+  } catch (error) {
+    console.error(error);
+    return { success: false, error: "Error interno en el servidor" };
+  }
+}

@@ -1,5 +1,7 @@
 "use client";
 
+import { dateFormatterDayMonthTime } from "@/lib/utils";
+
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { PageHeader } from "@/components/page-header";
 import { ScanInput } from "@/components/scan-input";
@@ -97,12 +99,7 @@ export default function RecepcionDestinoPage() {
   const formatDate = (dateString?: string) => {
     if (!dateString) return "N/A";
     try {
-      return new Intl.DateTimeFormat("es-VE", {
-        day: "2-digit",
-        month: "short",
-        hour: "numeric",
-        minute: "numeric",
-      }).format(new Date(dateString));
+      return dateFormatterDayMonthTime.format(new Date(dateString));
     } catch {
       return dateString;
     }

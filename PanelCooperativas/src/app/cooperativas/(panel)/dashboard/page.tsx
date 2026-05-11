@@ -1,31 +1,49 @@
 import { createClient } from "@/lib/supabase/server";
 import { getUserProfile } from "@/lib/supabase/cached";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, dateFormatterDayMonth, dateFormatterShort } from "@/lib/utils";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Package, TruckTrailer, Ticket, CurrencyDollar } from "@phosphor-icons/react/dist/ssr";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { StatusBadge } from "@/components/status-badge";
-import { ActivityChart } from "@/components/activity-chart";
+import { Skeleton } from "@/components/ui/skeleton";
+import dynamic from "next/dynamic";
+
+// Lazy-load recharts-based chart — ~280KB saved from initial bundle
+const ActivityChart = dynamic(
+  () => import("@/components/activity-chart").then((m) => ({ default: m.ActivityChart })),
+  {
+    loading: () => (
+      <Card className="col-span-1 lg:col-span-2">
+        <CardHeader>
+          <CardTitle>Actividad</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Skeleton className="h-[250px] w-full" />
+        </CardContent>
+      </Card>
+    ),
+  }
+);
 
 function getVenezuelaDayRange(date: Date) {
   const tzOffset = -4 * 60; // Venezuela is UTC-4
-  
+
   // Convert current time to Venezuela time
   const veTime = new Date(date.getTime() + (date.getTimezoneOffset() + tzOffset) * 60000);
-  
+
   // Set to start of day (00:00:00)
   const startOfDay = new Date(veTime);
   startOfDay.setHours(0, 0, 0, 0);
-  
+
   // Set to end of day (23:59:59.999)
   const endOfDay = new Date(veTime);
   endOfDay.setHours(23, 59, 59, 999);
-  
+
   // Convert back to UTC for database queries
   const startUTC = new Date(startOfDay.getTime() - (date.getTimezoneOffset() + tzOffset) * 60000);
   const endUTC = new Date(endOfDay.getTime() - (date.getTimezoneOffset() + tzOffset) * 60000);
-  
+
   return { start: startUTC.toISOString(), end: endUTC.toISOString() };
 }
 
@@ -97,51 +115,51 @@ export default async function DashboardPage() {
     // Admin-only data: chart + comisiones (en paralelo entre sí)
     userRole === "admin_cooperativa"
       ? (async () => {
-          const last7Days = Array.from({ length: 7 }).map((_, i) => {
-            const d = new Date(now);
-            d.setDate(d.getDate() - (6 - i));
-            return d;
-          });
+        const last7Days = Array.from({ length: 7 }).map((_, i) => {
+          const d = new Date(now);
+          d.setDate(d.getDate() - (6 - i));
+          return d;
+        });
 
-          const [chartResults, comisionesResult] = await Promise.all([
-            // 7 days of chart data — all 14 queries fire in parallel
-            Promise.all(
-              last7Days.map(async (date) => {
-                const { start, end } = getVenezuelaDayRange(date);
-                const [encRes, bolRes] = await Promise.all([
-                  supabase
-                    .from("encomiendas")
-                    .select("id", { count: "exact", head: true })
-                    .eq("cooperativa_id", cooperativaId)
-                    .gte("created_at", start)
-                    .lte("created_at", end),
-                  supabase
-                    .from("boletos")
-                    .select("id", { count: "exact", head: true })
-                    .eq("cooperativa_id", cooperativaId)
-                    .eq("estado", "PAGADO")
-                    .gte("created_at", start)
-                    .lte("created_at", end),
-                ]);
-                return {
-                  date: new Intl.DateTimeFormat("es-VE", { day: "2-digit", month: "2-digit" }).format(date),
-                  encomiendas: encRes.count || 0,
-                  boletos: bolRes.count || 0,
-                };
-              })
-            ),
-            // Comisiones pendientes
-            supabase
-              .from("comisiones_ciclo")
-              .select("monto_comision, periodo_inicio, periodo_fin, pagado")
-              .eq("cooperativa_id", cooperativaId)
-              .eq("pagado", false)
-              .order("periodo_inicio", { ascending: false })
-              .limit(1),
-          ]);
+        const [chartResults, comisionesResult] = await Promise.all([
+          // 7 days of chart data — all 14 queries fire in parallel
+          Promise.all(
+            last7Days.map(async (date) => {
+              const { start, end } = getVenezuelaDayRange(date);
+              const [encRes, bolRes] = await Promise.all([
+                supabase
+                  .from("encomiendas")
+                  .select("id", { count: "exact", head: true })
+                  .eq("cooperativa_id", cooperativaId)
+                  .gte("created_at", start)
+                  .lte("created_at", end),
+                supabase
+                  .from("boletos")
+                  .select("id", { count: "exact", head: true })
+                  .eq("cooperativa_id", cooperativaId)
+                  .eq("estado", "PAGADO")
+                  .gte("created_at", start)
+                  .lte("created_at", end),
+              ]);
+              return {
+                date: dateFormatterDayMonth.format(date),
+                encomiendas: encRes.count || 0,
+                boletos: bolRes.count || 0,
+              };
+            })
+          ),
+          // Comisiones pendientes
+          supabase
+            .from("comisiones_ciclo")
+            .select("monto_comision, periodo_inicio, periodo_fin, pagado")
+            .eq("cooperativa_id", cooperativaId)
+            .eq("pagado", false)
+            .order("periodo_inicio", { ascending: false })
+            .limit(1),
+        ]);
 
-          return { chartData: chartResults, comisiones: comisionesResult.data };
-        })()
+        return { chartData: chartResults, comisiones: comisionesResult.data };
+      })()
       : Promise.resolve(null),
   ]);
 
@@ -157,7 +175,7 @@ export default async function DashboardPage() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader title="Dashboard" description="Resumen de actividad de hoy" />
-      
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -169,7 +187,7 @@ export default async function DashboardPage() {
             <p className="text-xs text-muted-foreground">Hoy</p>
           </CardContent>
         </Card>
-        
+
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Encomiendas Despachadas</CardTitle>
@@ -207,7 +225,7 @@ export default async function DashboardPage() {
       {userRole === "admin_cooperativa" && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <ActivityChart data={chartData} />
-          
+
           <Card className="col-span-1 flex flex-col justify-center">
             <CardHeader>
               <CardTitle>Comisiones Pendientes</CardTitle>
@@ -219,7 +237,7 @@ export default async function DashboardPage() {
                     {formatCurrency(Number(comisionPendiente.monto_comision))}
                   </div>
                   <p className="text-sm text-muted-foreground mt-2">
-                    Periodo: {new Intl.DateTimeFormat("es-VE", { dateStyle: "short" }).format(new Date(comisionPendiente.periodo_inicio))} — {new Intl.DateTimeFormat("es-VE", { dateStyle: "short" }).format(new Date(comisionPendiente.periodo_fin))}
+                    Periodo: {dateFormatterShort.format(new Date(comisionPendiente.periodo_inicio))} — {dateFormatterShort.format(new Date(comisionPendiente.periodo_fin))}
                   </p>
                 </>
               ) : (
@@ -264,7 +282,7 @@ export default async function DashboardPage() {
                         <StatusBadge status={enc.estado} />
                       </TableCell>
                       <TableCell>
-                        {new Intl.DateTimeFormat("es-VE", { dateStyle: "short", timeStyle: "short" }).format(new Date(enc.created_at))}
+                        {dateFormatterShort.format(new Date(enc.created_at))}
                       </TableCell>
                     </TableRow>
                   ))

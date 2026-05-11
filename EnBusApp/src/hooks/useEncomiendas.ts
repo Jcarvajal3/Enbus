@@ -1,10 +1,29 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/src/utils/supabase';
 
-// N-01: Hook especializado para encomiendas con lógica "OR"
-export function useEncomiendas(userId?: string) {
+type WithId = { id: string };
+
+interface UseEncomiendasOptions {
+  /**
+   * When false, tears down the subscription and stops fetching.
+   * Use with useFocusEffect to save battery when the screen isn't visible.
+   */
+  enabled?: boolean;
+  limit?: number;
+}
+
+/**
+ * Specialized hook for encomiendas that supports OR-filter (sender + receiver)
+ * and focus-aware pause/resume lifecycle.
+ */
+export function useEncomiendas(
+  userId?: string,
+  { enabled = true, limit = 30 }: UseEncomiendasOptions = {}
+) {
   const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const setDataRef = useRef(setData);
+  setDataRef.current = setData;
 
   const fetchData = useCallback(async () => {
     if (!userId) {
@@ -12,12 +31,12 @@ export function useEncomiendas(userId?: string) {
       return;
     }
     setLoading(true);
-    // Soporta "Para Mí" (receiver) o "Enviados" (sender)
     const { data: result, error } = await supabase
       .from('encomiendas')
       .select('*')
       .or(`sender_id.eq.${userId},receiver_user_id.eq.${userId}`)
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .limit(limit);
 
     if (error) {
       console.error('Error fetching encomiendas:', error.message);
@@ -25,42 +44,49 @@ export function useEncomiendas(userId?: string) {
       setData(result);
     }
     setLoading(false);
-  }, [userId]);
+  }, [userId, limit]);
 
   useEffect(() => {
-    let isMounted = true;
-    if (!userId) {
+    // Guard: disabled or no user yet
+    if (!enabled || !userId) {
       setLoading(false);
       return;
     }
 
-    fetchData();
+    let isMounted = true;
 
-    // Suscripción Realtime (El backend filtrará mediante RLS o recibiremos todo y lo manejamos)
-    const channelName = `realtime:encomiendas:${Math.random().toString(36).substring(7)}`;
-    const channel = supabase.channel(channelName);
-    
-    channel
+    const run = async () => {
+      await fetchData();
+    };
+    run();
+
+    // Deterministic channel name — avoids channel proliferation from Math.random()
+    const channelName = `rt:encomiendas:user:${userId}`;
+
+    const channel = supabase
+      .channel(channelName)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'encomiendas' },
         (payload) => {
           if (!isMounted) return;
-          
-          setData((current) => {
+
+          setDataRef.current((current) => {
             if (payload.eventType === 'INSERT') {
-              // Validar si pertenece a este usuario (por si RLS no filtra el broadcast)
               const newRec = payload.new as any;
+              // Guard: only add if this record belongs to the current user
               if (newRec.sender_id === userId || newRec.receiver_user_id === userId) {
                 return [newRec, ...current];
               }
               return current;
             }
             if (payload.eventType === 'UPDATE') {
-              return current.map(item => item.id === payload.new.id ? payload.new : item);
+              return current.map((item) =>
+                item.id === payload.new.id ? payload.new : item
+              );
             }
             if (payload.eventType === 'DELETE') {
-              return current.filter(item => item.id !== payload.old.id);
+              return current.filter((item) => item.id !== payload.old.id);
             }
             return current;
           });
@@ -70,9 +96,10 @@ export function useEncomiendas(userId?: string) {
 
     return () => {
       isMounted = false;
-      channel.unsubscribe();
+      supabase.removeChannel(channel);
     };
-  }, [userId, fetchData]);
+  // fetchData is stable (useCallback), re-run only on enabled/userId change
+  }, [enabled, userId, fetchData]);
 
   return { data, loading, setData, refetch: fetchData };
 }

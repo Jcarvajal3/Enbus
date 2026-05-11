@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import jsQR from "jsqr";
 import { Camera, X, ScanSmiley } from "@phosphor-icons/react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -44,9 +43,15 @@ export function CameraQRScanner({ onScan, open, onOpenChange }: CameraQRScannerP
     setScanning(false);
 
     let active = true;
+    // Lazy-loaded jsQR instance
+    let jsQRFn: typeof import("jsqr").default | null = null;
 
     async function start() {
       try {
+        // Lazy-load jsQR (~100KB) only when camera opens
+        const jsQRModule = await import("jsqr");
+        jsQRFn = jsQRModule.default;
+
         const stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: "environment" },
         });
@@ -76,7 +81,7 @@ export function CameraQRScanner({ onScan, open, onOpenChange }: CameraQRScannerP
     function scanLoop() {
       const video = videoRef.current;
       const canvas = canvasRef.current;
-      if (!video || !canvas || !active) return;
+      if (!video || !canvas || !active || !jsQRFn) return;
 
       const ctx = canvas.getContext("2d", { willReadFrequently: true });
       if (!ctx) return;
@@ -86,7 +91,7 @@ export function CameraQRScanner({ onScan, open, onOpenChange }: CameraQRScannerP
         canvas.height = video.videoHeight;
         ctx.drawImage(video, 0, 0);
         const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const code = jsQR(imageData.data, canvas.width, canvas.height, {
+        const code = jsQRFn(imageData.data, canvas.width, canvas.height, {
           inversionAttempts: "dontInvert",
         });
 

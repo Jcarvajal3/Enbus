@@ -26,10 +26,10 @@ export function ResultsList({ data, onSelect }: ResultsListProps) {
 
   return (
     <ScrollView contentContainerClassName="py-4">
-      {data.map((item, index) => (
-        <Pressable 
-          key={index} 
-          onPress={() => onSelect(item)}
+      {data.map((item) => (
+        <Pressable
+          key={item.id}
+          onPress={() => onSelect(item.id)}
           className="bg-card border border-border p-4 mb-4 rounded-[14px]"
         >
           {/* Timeline miniatura */}

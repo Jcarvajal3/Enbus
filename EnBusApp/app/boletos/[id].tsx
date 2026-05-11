@@ -6,9 +6,13 @@ import { CaretLeft, Clock } from 'phosphor-react-native';
 import { QRCodeViewer } from '@/src/components/QRCodeViewer';
 import { Spinner } from '@/src/components/Spinner';
 import { supabase } from '@/src/utils/supabase';
+import { formatDate, dateFull, timeOnly } from '@/src/utils/formatters';
 
 export default function DetalleBoletoScreen() {
-  const { id } = useLocalSearchParams();
+  // useLocalSearchParams puede retornar string | string[]; normalizamos a string
+  // para evitar fallos en .or(`id.eq.${id},...`) si el parámetro llegara como array.
+  const params = useLocalSearchParams<{ id: string }>();
+  const id = Array.isArray(params.id) ? params.id[0] : params.id;
   const router = useRouter();
 
   const [boleto, setBoleto] = useState<any>(null);
@@ -20,17 +24,36 @@ export default function DetalleBoletoScreen() {
       if (!id) return;
       try {
         setLoading(true);
-        // id puede ser el UUID o el codigo_boleto. Buscamos por ambos.
-        const { data, error } = await supabase
+        // id puede ser el UUID o el codigo_boleto. 
+        // Si usamos .or() e intentamos comparar un codigo de texto contra la columna UUID "id", Postgres arrojará error.
+        // Verificamos si es UUID con Regex para consultar la columna correcta:
+        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id);
+        
+        let query = supabase
           .from('boletos')
           .select(`
-            *,
-            viajes (*, rutas (*)),
-            cooperativas (*),
-            profiles (*)
-          `)
-          .or(`id.eq.${id},codigo_boleto.eq.${id}`)
-          .single();
+            id,
+            codigo_boleto,
+            asiento,
+            precio,
+            estado,
+            viajes (
+              fecha_hora_salida,
+              numero_unidad,
+              nombre_chofer,
+              rutas ( ciudad_origen, ciudad_destino, duracion_estimada_min )
+            ),
+            cooperativas ( nombre ),
+            profiles ( nombre_completo, cedula_rif )
+          `);
+
+        if (isUUID) {
+          query = query.eq('id', id);
+        } else {
+          query = query.eq('codigo_boleto', id);
+        }
+
+        const { data, error } = await query.single();
 
         if (error) {
           throw error;
@@ -73,10 +96,10 @@ export default function DetalleBoletoScreen() {
   const cooperativa = boleto.cooperativas;
   const pasajero = boleto.profiles;
   const fechaSalida = new Date(boleto.viajes?.fecha_hora_salida);
-  
+
   const horasDuration = Math.floor((ruta?.duracion_estimada_min || 0) / 60);
   const minDuration = (ruta?.duracion_estimada_min || 0) % 60;
-  
+
   // Fake Acronimos
   const acronym = (city: string) => city ? city.substring(0, 3).toUpperCase() : 'UNK';
 
@@ -143,8 +166,8 @@ export default function DetalleBoletoScreen() {
             </View>
             <View className="w-1/2 mb-4 pr-2">
               <Text className="text-xs text-muted-foreground font-bold uppercase mb-1">Fecha de Salida</Text>
-              <Text className="text-sm text-foreground font-black">{fechaSalida.toLocaleDateString('es-VE')}</Text>
-              <Text className="text-xs text-muted-foreground">{fechaSalida.toLocaleTimeString('es-VE', {hour: '2-digit', minute: '2-digit'})}</Text>
+              <Text className="text-sm text-foreground font-black">{formatDate(boleto.viajes?.fecha_hora_salida, dateFull)}</Text>
+              <Text className="text-xs text-muted-foreground">{formatDate(boleto.viajes?.fecha_hora_salida, timeOnly)}</Text>
             </View>
             <View className="w-1/2 mb-4 pl-2">
               <Text className="text-xs text-muted-foreground font-bold uppercase mb-1">Asiento</Text>
@@ -162,10 +185,29 @@ export default function DetalleBoletoScreen() {
 
           {/* QR Integrado */}
           <View className="p-6 items-center bg-secondary/30">
-            <Text className="text-xs text-muted-foreground font-bold mb-4 uppercase text-center w-3/4">
-              Pase oficial de abordaje. Escanee antes de subir.
-            </Text>
-            <QRCodeViewer data={`PASS-${boleto.codigo_boleto}`} size={160} autoMaxBrightness={false} />
+            {boleto.estado === 'PAGADO' ? (
+              <>
+                <Text className="text-xs text-muted-foreground font-bold mb-4 uppercase text-center w-3/4">
+                  Pase oficial de abordaje. Escanee antes de subir.
+                </Text>
+                <QRCodeViewer data={`PASS-${boleto.codigo_boleto}`} size={160} autoMaxBrightness={false} />
+              </>
+            ) : boleto.estado === 'RESERVADO' ? (
+              <View className="items-center py-4">
+                <Text className="text-sm font-bold text-warning mb-2 uppercase text-center">
+                  Pago en Verificación
+                </Text>
+                <Text className="text-xs text-muted-foreground text-center w-3/4">
+                  El QR de abordaje se generará una vez que la cooperativa valide tu pago.
+                </Text>
+              </View>
+            ) : (
+              <View className="items-center py-4">
+                <Text className="text-sm font-bold text-muted-foreground mb-2 uppercase text-center">
+                  Boleto {boleto.estado}
+                </Text>
+              </View>
+            )}
           </View>
         </View>
       </ScrollView>

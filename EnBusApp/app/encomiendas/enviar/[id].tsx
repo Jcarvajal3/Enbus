@@ -21,26 +21,45 @@ export default function DetalleEnvioScreen() {
     if (!id) return;
     try {
       setLoading(true);
-      const { data: encData, error: encError } = await supabase
-        .from('encomiendas').select('*').eq('id', id).single();
+
+      // ── Fetch encomienda + historial en paralelo ──────────────────────────
+      const [encResult, histResult] = await Promise.all([
+        supabase
+          .from('encomiendas')
+          .select(`
+            id,
+            tracking_id,
+            estado,
+            costo_calculado,
+            descripcion_contenido,
+            created_at,
+            ciudad_origen,
+            estado_origen,
+            ciudad_destino,
+            estado_destino,
+            receiver_nombre
+          `)
+          .eq('id', id)
+          .single(),
+        supabase
+          .from('encomienda_estado_historial')
+          .select('id, estado_nuevo, created_at')
+          .eq('encomienda_id', id)
+          .order('created_at', { ascending: true })
+          .limit(20),
+      ]);
 
       // Race condition: si acaba de crearse, reintentamos con delay
-      if (encError || !encData) {
+      if (encResult.error || !encResult.data) {
         if (retries > 0) {
           setTimeout(() => fetchData(retries - 1), 700);
           return;
         }
-        throw encError || new Error('No encontrado');
+        throw encResult.error || new Error('No encontrado');
       }
 
-      const { data: histData } = await supabase
-        .from('encomienda_estado_historial')
-        .select('*')
-        .eq('encomienda_id', id)
-        .order('created_at', { ascending: true });
-
-      setEncomienda(encData);
-      setHistorial(histData || []);
+      setEncomienda(encResult.data);
+      setHistorial(histResult.data || []);
     } catch (err: any) {
       console.error('Error cargando encomienda:', err);
     } finally {
@@ -138,11 +157,25 @@ export default function DetalleEnvioScreen() {
             {encomienda.estado === 'POR_PAGAR' ? (
               <View className="mb-8">
                 <Text className="text-lg font-heading text-foreground mb-4">Pago Requerido</Text>
-                <PaymentFlow monto={encomienda.costo_calculado || 0} onPaymentSuccess={async () => {
-                  await supabase.from('encomiendas').update({ estado: 'PAGADA' }).eq('id', encomienda.id);
-                  setEncomienda({ ...encomienda, estado: 'PAGADA' });
-                }} />
+                <PaymentFlow
+                  monto={encomienda.costo_calculado || 0}
+                  encomienda_id={encomienda.id}
+                  cooperativa_id={encomienda.cooperativa_id}
+                  concepto={`Paquete: ${encomienda.descripcion_contenido || encomienda.tracking_id}`}
+                  onPaymentSuccess={async (_pagoId) => {
+                    // El PaymentFlow ya insertó el registro en `pagos`.
+                    // Aquí solo actualizamos el estado de la encomienda.
+                    const { error } = await supabase
+                      .from('encomiendas')
+                      .update({ estado: 'PAGADA' })
+                      .eq('id', encomienda.id);
+                    if (!error) {
+                      setEncomienda({ ...encomienda, estado: 'PAGADA' });
+                    }
+                  }}
+                />
               </View>
+
             ) : (
               <View className="bg-card rounded-[32px] p-6 shadow-sm border border-border/50 mb-8">
                 <Text className="text-lg font-heading text-foreground mb-4">Logística</Text>

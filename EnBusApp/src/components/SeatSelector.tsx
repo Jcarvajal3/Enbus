@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, Pressable, ScrollView } from '@/tw';
 
 interface SeatSelectorProps {
@@ -44,6 +44,14 @@ export function SeatSelector({
       prev.includes(seat) ? prev.filter((s) => s !== seat) : [...prev, seat]
     );
   };
+
+  // Si un asiento que el usuario ya eligió queda bloqueado por tiempo real,
+  // lo removemos automáticamente de su selección para evitar doble-booking.
+  useEffect(() => {
+    setSeleccionados((prev) =>
+      prev.filter((s) => !asientosOcupados.includes(s))
+    );
+  }, [asientosOcupados]);
 
   const getEstadoColor = (seat: string) => {
     if (seat === '') return 'bg-transparent';

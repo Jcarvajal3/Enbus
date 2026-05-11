@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Modal, Pressable, TextInput as RNTextInput } from 'react-native';
 import { View, Text, ScrollView } from '@/tw';
 import { VENEZUELA_LOCATIONS, Localidad } from '../utils/venezuela';
@@ -16,10 +16,23 @@ export function LocationSelector({ label, value, onChange, placeholder, customTr
   const [modalVisible, setModalVisible] = useState(false);
   const [search, setSearch] = useState('');
 
-  const filteredLocations = VENEZUELA_LOCATIONS.filter(
-    l => l.ciudad.toLowerCase().includes(search.toLowerCase()) ||
-      l.estado.toLowerCase().includes(search.toLowerCase())
-  );
+  const normalizeText = (text: string) => {
+    return text
+      .normalize('NFD') // Descompone caracteres con acentos
+      .replace(/[\u0300-\u036f]/g, '') // Elimina los diacríticos (acentos)
+      .replace(/\s+/g, '') // Elimina los espacios
+      .toLowerCase(); // Convierte a minúsculas
+  };
+
+  const filteredLocations = useMemo(() => {
+    const normalizedSearch = normalizeText(search);
+    if (!normalizedSearch) return VENEZUELA_LOCATIONS;
+
+    return VENEZUELA_LOCATIONS.filter((l) =>
+      normalizeText(l.ciudad).includes(normalizedSearch) ||
+      normalizeText(l.estado).includes(normalizedSearch)
+    );
+  }, [search]);
 
   return (
     <>

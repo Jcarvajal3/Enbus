@@ -7,6 +7,7 @@ import { Toaster } from "@/components/ui/sonner";
 const lora = Lora({
   subsets: ["latin"],
   variable: "--font-lora",
+  display: "swap",
 });
 
 export const metadata: Metadata = {

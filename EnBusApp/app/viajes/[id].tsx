@@ -1,50 +1,131 @@
 import { useEffect, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView, ScrollView, View, Text, Pressable } from '@/tw';
-import { ActivityIndicator } from 'react-native';
+import { ActivityIndicator, Alert } from 'react-native';
 import { CaretLeft, Clock, Star } from 'phosphor-react-native';
 import { SeatSelector } from '@/src/components/SeatSelector';
 import { PaymentFlow } from '@/src/components/PaymentFlow';
 import { Spinner } from '@/src/components/Spinner';
 import { supabase } from '@/src/utils/supabase';
 import { useAuth } from '@/src/contexts/AuthContext';
+import { formatDate, dateFull, timeOnly } from '@/src/utils/formatters';
 
 export default function DetalleViajeScreen() {
-  const { id } = useLocalSearchParams();
+  // useLocalSearchParams puede retornar string | string[]; normalizamos a string
+  // para evitar que el UUID llegue como "[object Object]" a Supabase.
+  const params = useLocalSearchParams<{ id: string }>();
+  const id = Array.isArray(params.id) ? params.id[0] : params.id;
   const router = useRouter();
   const { user } = useAuth();
 
   const [viaje, setViaje] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [asientosOcupados, setAsientosOcupados] = useState<string[]>([]);
   const [asientosSeleccionados, setAsientosSeleccionados] = useState<string[]>([]);
   const [showPayment, setShowPayment] = useState(false);
 
   useEffect(() => {
+    if (!id) return;
     let isMounted = true;
-    const fetchViaje = async () => {
-      if (!id) return;
+
+    const fetchData = async () => {
       try {
         setLoading(true);
-        const { data, error } = await supabase
-          .from('viajes')
-          .select(`
-            *,
-            rutas (*),
-            cooperativas (*)
-          `)
-          .eq('id', id)
-          .single();
 
-        if (error) throw error;
-        if (isMounted) setViaje(data);
+        // ── Carga paralela: datos del viaje + asientos ocupados reales ──
+        const [viajeResult, boletosResult] = await Promise.all([
+          supabase
+            .from('viajes')
+            .select(`
+              id,
+              fecha_hora_salida,
+              asientos_totales,
+              asientos_disponibles,
+              numero_unidad,
+              nombre_chofer,
+              rutas ( ciudad_origen, ciudad_destino, duracion_estimada_min, precio_pasaje ),
+              cooperativas ( id, nombre, calificacion_promedio )
+            `)
+            .eq('id', id)
+            .single(),
+          // Solo los boletos activos (RESERVADO + PAGADO + USADO) bloquean asientos.
+          // CANCELADO y EXPIRADO liberan el asiento.
+          supabase
+            .from('boletos')
+            .select('asiento')
+            .eq('viaje_id', id)
+            .in('estado', ['RESERVADO', 'PAGADO', 'USADO']),
+        ]);
+
+        if (viajeResult.error) throw viajeResult.error;
+
+        if (isMounted) {
+          setViaje(viajeResult.data);
+          setAsientosOcupados(
+            (boletosResult.data ?? []).map((b: { asiento: string }) => b.asiento)
+          );
+        }
       } catch (err: any) {
-        console.error('Error fetching viaje:', err.message);
+        console.error('[DetalleViaje] Error cargando datos:', err.message);
       } finally {
         if (isMounted) setLoading(false);
       }
     };
-    fetchViaje();
-    return () => { isMounted = false; };
+
+    fetchData();
+
+    // ── Realtime: actualiza asientos si otro usuario reserva mientras seleccionas ──
+    // Canal determinista por viaje (no prolifera si el efecto recorre)
+    const channel = supabase
+      .channel(`rt:boletos:viaje:${id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'boletos',
+          filter: `viaje_id=eq.${id}`,
+        },
+        (payload) => {
+          if (!isMounted) return;
+
+          setAsientosOcupados((prev) => {
+            if (payload.eventType === 'INSERT') {
+              const nuevo = payload.new as { asiento: string; estado: string };
+              // Solo bloquear si el estado es activo
+              if (['RESERVADO', 'PAGADO', 'USADO'].includes(nuevo.estado)) {
+                return [...new Set([...prev, nuevo.asiento])];
+              }
+              return prev;
+            }
+
+            if (payload.eventType === 'UPDATE') {
+              const updated = payload.new as { asiento: string; estado: string };
+              const ESTADOS_ACTIVOS = ['RESERVADO', 'PAGADO', 'USADO'];
+              if (ESTADOS_ACTIVOS.includes(updated.estado)) {
+                // Asiento ahora ocupado
+                return [...new Set([...prev, updated.asiento])];
+              } else {
+                // Asiento liberado (cancelado/expirado)
+                return prev.filter((a) => a !== updated.asiento);
+              }
+            }
+
+            if (payload.eventType === 'DELETE') {
+              const removed = payload.old as { asiento: string };
+              return prev.filter((a) => a !== removed.asiento);
+            }
+
+            return prev;
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      isMounted = false;
+      supabase.removeChannel(channel);
+    };
   }, [id]);
 
   if (loading) {
@@ -68,26 +149,19 @@ export default function DetalleViajeScreen() {
 
   const ruta = viaje.rutas;
   const cooperativa = viaje.cooperativas;
-  const fechaSalida = new Date(viaje.fecha_hora_salida);
   const horasDuration = Math.floor((ruta?.duracion_estimada_min || 0) / 60);
   const minDuration = (ruta?.duracion_estimada_min || 0) % 60;
   const precioUnitario = ruta?.precio_pasaje || 0;
-
-  // Los asientos ocupados serían calculados por la diferencia entre totales y disponibles.
-  // En un MVP, generamos una lista simulada basada en la data real del viaje.
-  const ocupados = Array.from(
-    { length: viaje.asientos_totales - viaje.asientos_disponibles },
-    (_, i) => String(i + 1)
-  );
 
   const handleConfirmSeats = (asientos: string[]) => {
     setAsientosSeleccionados(asientos);
     setShowPayment(true);
   };
 
-  const handlePaymentSuccess = async () => {
+  const handlePaymentSuccess = async (pagoId?: string, pagoPayload?: Record<string, unknown>) => {
     if (!user) return;
     try {
+      // 1. Creamos los boletos como RESERVADO (estado pendiente de confirmación de pago)
       const inserts = asientosSeleccionados.map((asiento) => ({
         codigo_boleto: `BOL-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
         comprador_id: user.id,
@@ -95,17 +169,44 @@ export default function DetalleViajeScreen() {
         cooperativa_id: cooperativa.id,
         asiento: asiento,
         precio: precioUnitario,
-        estado: 'PAGADO', // MVP auto-aprueba el pago
-        reserva_expira_at: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+        estado: 'RESERVADO', // Pendiente de verificación del pago por la cooperativa
+        reserva_expira_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // 24h para verificar
       }));
 
-      const { data, error } = await supabase.from('boletos').insert(inserts).select('codigo_boleto');
-      if (error) throw error;
+      const { data: boletosInsertados, error: boletosError } = await supabase
+        .from('boletos')
+        .insert(inserts)
+        .select('id, codigo_boleto');
+      
+      if (boletosError || !boletosInsertados || boletosInsertados.length === 0) {
+        throw boletosError || new Error('No se devolvieron los boletos insertados');
+      }
 
-      // Navegamos al PDF/Boarding Pass del primer boleto emitido
-      router.replace({ pathname: '/boletos/[id]' as any, params: { id: data[0].codigo_boleto } });
+      // 2. Insertamos el pago usando el ID del primer boleto
+      // El esquema exige que el pago tenga encomienda_id o boleto_id (check_pago_referencia)
+      // Como el panel de cooperativas totaliza los ingresos usando este ID, pasamos el primero 
+      // y con el monto TOTAL, lo que mantendrá las estadísticas cuadradas.
+      if (pagoPayload) {
+        const payloadToInsert = {
+          ...pagoPayload,
+          boleto_id: boletosInsertados[0].id
+        };
+
+        const { error: pagoInsertError } = await supabase
+          .from('pagos')
+          .insert(payloadToInsert);
+
+        if (pagoInsertError) {
+          console.error('[DetalleViaje] Pago insert falló:', pagoInsertError);
+          // Opcional: si falla el pago, los boletos quedan como "RESERVADO" y expirarán, es aceptable.
+        }
+      }
+
+      // Navegamos al Boarding Pass del primer boleto emitido
+      router.replace({ pathname: '/boletos/[id]' as any, params: { id: boletosInsertados[0].codigo_boleto } });
     } catch (err: any) {
-      alert('Error procesando pago: ' + err.message);
+      Alert.alert('Error', 'No se pudo generar el boleto. Contacta a la cooperativa.');
+      console.error('[DetalleViaje] Error creando boletos:', err.message);
     }
   };
 
@@ -162,12 +263,12 @@ export default function DetalleViajeScreen() {
           <View className="flex-row justify-between pt-4 border-t border-border/30">
             <View>
               <Text className="text-xs text-muted-foreground font-bold uppercase mb-1">Fecha</Text>
-              <Text className="text-sm text-foreground font-bold">{fechaSalida.toLocaleDateString('es-VE')}</Text>
+              <Text className="text-sm text-foreground font-bold">{formatDate(viaje.fecha_hora_salida, dateFull)}</Text>
             </View>
             <View>
               <Text className="text-xs text-muted-foreground font-bold uppercase mb-1">Hora salida</Text>
               <Text className="text-sm text-foreground font-bold">
-                {fechaSalida.toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' })}
+                {formatDate(viaje.fecha_hora_salida, timeOnly)}
               </Text>
             </View>
             <View>
@@ -181,13 +282,15 @@ export default function DetalleViajeScreen() {
         {showPayment ? (
           <PaymentFlow
             monto={asientosSeleccionados.length * precioUnitario}
+            cooperativa_id={cooperativa?.id}
+            concepto={`${asientosSeleccionados.length} asiento(s) - ${ruta?.ciudad_origen} → ${ruta?.ciudad_destino}`}
             onPaymentSuccess={handlePaymentSuccess}
           />
         ) : (
           <SeatSelector
             viaje_id={viaje.id}
             asientosTotales={viaje.asientos_totales}
-            asientosOcupados={ocupados}
+            asientosOcupados={asientosOcupados}
             precioUnitario={precioUnitario}
             onConfirm={handleConfirmSeats}
           />

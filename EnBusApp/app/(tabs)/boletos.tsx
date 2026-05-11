@@ -1,24 +1,38 @@
 import { SafeAreaView } from '@/tw';
+import { useState, useCallback } from 'react';
 import { ScrollView, View, Text, Pressable } from '@/tw';
 import { useAuth } from '@/src/contexts/AuthContext';
 import { useRealtime } from '@/src/hooks/useRealtime';
 import { useRouter } from 'expo-router';
 import { TransactionCard } from '@/src/components/TransactionCard';
-import { ActivityIndicator, Modal } from 'react-native';
+import { Modal } from 'react-native';
 import { Ticket, Bus } from 'phosphor-react-native';
 import { SearchForm } from '@/src/components/SearchForm';
-import { useState } from 'react';
 import { Spinner } from '@/src/components/Spinner';
+import { useFocusEffect } from '@react-navigation/native';
+import { formatDate } from '@/src/utils/formatters';
+
 export default function BoletosScreen() {
   const { user } = useAuth();
   const router = useRouter();
   const [isSearchModalVisible, setIsSearchModalVisible] = useState(false);
 
+  // ── Pausa la suscripción cuando esta tab no está activa ───────────────────
+  const [isFocused, setIsFocused] = useState(true);
+
+  useFocusEffect(
+    useCallback(() => {
+      setIsFocused(true);
+      return () => setIsFocused(false);
+    }, [])
+  );
+
   const { data: historial, loading } = useRealtime<any>(
     'boletos',
     'comprador_id',
     user?.id,
-    '*, viajes(*, rutas(ciudad_origen, ciudad_destino))'
+    '*, viajes(*, rutas(ciudad_origen, ciudad_destino))',
+    { enabled: isFocused && !!user?.id, limit: 30 }
   );
 
   return (
@@ -43,7 +57,7 @@ export default function BoletosScreen() {
                   id={bol.codigo_boleto || bol.id}
                   estado={bol.estado}
                   titulo={`${bol.viajes?.rutas?.ciudad_origen || 'Origen'} → ${bol.viajes?.rutas?.ciudad_destino || 'Destino'}`}
-                  subtitulo={new Date(bol.created_at).toLocaleDateString()}
+                  subtitulo={formatDate(bol.created_at)}
                   onPress={() => router.push({
                     pathname: '/boletos/[id]',
                     params: { id: bol.codigo_boleto || bol.id }
@@ -78,7 +92,7 @@ export default function BoletosScreen() {
         </Pressable>
       </View>
 
-      {/* Modal interactivo referenciado */}
+      {/* Modal de búsqueda */}
       <Modal visible={isSearchModalVisible} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setIsSearchModalVisible(false)}>
         <SafeAreaView className="flex-1 bg-background">
           <View className="px-6 pt-4 pb-4 bg-background flex-row items-center justify-between border-b border-border">

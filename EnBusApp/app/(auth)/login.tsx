@@ -1,39 +1,21 @@
-import { SafeAreaView } from '@/tw';
+import { SafeAreaView, View, Text, Pressable, useCSSVariable } from '@/tw';
 import { useState } from 'react';
-import { View, Text, Pressable, ScrollView } from '@/tw';
-import { TextInput, StyleSheet, Alert } from 'react-native';
+import { TextInput, Alert } from 'react-native';
 import { supabase } from '@/src/utils/supabase';
 import { Spinner } from '@/src/components/Spinner';
 
 type Mode = 'login' | 'register';
-
-// ──────────────────────────────────────────────
-// Maia Neutral palette — hardcoded for RN
-// ──────────────────────────────────────────────
-const C = {
-  bg: '#ffffff',
-  card: '#ffffff',
-  boarder: '#d4d4d8',     // Zinc-300 — visible across screens
-  secondary: '#f4f4f5',  // Zinc-100
-  primary: '#e2b714',
-  primaryFg: '#6b4a1a',
-  foreground: '#171717',
-  muted: '#737373',
-  placeholder: '#a1a1aa',
-  radius: 10,
-  cardRadius: 14,
-};
 
 function Field({
   label,
   ...props
 }: React.ComponentProps<typeof TextInput> & { label: string }) {
   return (
-    <View style={s.fieldGroup}>
-      <Text style={s.fieldLabel}>{label}</Text>
+    <View className="mb-3.5">
+      <Text className="text-[13px] font-semibold text-foreground mb-1.5 ml-0.5">{label}</Text>
       <TextInput
-        placeholderTextColor={C.placeholder}
-        style={s.input}
+        placeholderTextColor="#a1a1aa"
+        className="h-12 border border-input rounded-[10px] bg-background px-3.5 text-[15px] text-foreground"
         {...props}
       />
     </View>
@@ -48,6 +30,9 @@ export default function LoginScreen() {
   });
   const [loading, setLoading] = useState(false);
   const update = (k: string, v: string) => setForm(p => ({ ...p, [k]: v }));
+
+  // Ícono y elementos que no soportan className directamente
+  const primaryColor = useCSSVariable('--primary') as string || '#e2b714';
 
   async function handleSubmit() {
     if (mode === 'login') {
@@ -76,28 +61,39 @@ export default function LoginScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-background">
-      <ScrollView contentContainerClassName="flex-grow justify-center px-6 py-12">
+      <View className="flex-1 justify-center px-6 py-12">
 
         {/* Logo */}
-        <View style={s.logoArea}>
-          <View style={s.logoBox}>
-            <Text style={s.logoText}>EB</Text>
+        <View className="items-center mb-8">
+          <View className="size-[72px] rounded-2xl bg-primary/10 items-center justify-center mb-3">
+            <Text className="text-[28px] font-bold text-primary">EB</Text>
           </View>
-          <Text className="text-3xl font-heading text-foreground">EnBus App</Text>
+          <Text className="font-heading text-3xl text-foreground">EnBus App</Text>
           <Text className="text-base text-muted-foreground mt-1 text-center">
             Rastreo y Compra de Boletos
           </Text>
         </View>
 
         {/* Card */}
-        <View style={s.card}>
+        <View className="bg-card border border-border rounded-[14px] p-5">
+
           {/* Segmented Control */}
-          <View style={s.segmented}>
-            <Pressable onPress={() => setMode('login')} style={[s.segment, mode === 'login' && s.segmentActive]}>
-              <Text style={[s.segmentText, mode === 'login' && s.segmentTextActive]}>Iniciar Sesión</Text>
+          <View className="flex-row bg-secondary rounded-[10px] p-1 mb-5">
+            <Pressable
+              onPress={() => setMode('login')}
+              className={`flex-1 py-2.5 rounded-lg items-center ${mode === 'login' ? 'bg-background' : ''}`}
+            >
+              <Text className={`text-sm font-semibold ${mode === 'login' ? 'text-primary' : 'text-muted-foreground'}`}>
+                Iniciar Sesión
+              </Text>
             </Pressable>
-            <Pressable onPress={() => setMode('register')} style={[s.segment, mode === 'register' && s.segmentActive]}>
-              <Text style={[s.segmentText, mode === 'register' && s.segmentTextActive]}>Registrarse</Text>
+            <Pressable
+              onPress={() => setMode('register')}
+              className={`flex-1 py-2.5 rounded-lg items-center ${mode === 'register' ? 'bg-background' : ''}`}
+            >
+              <Text className={`text-sm font-semibold ${mode === 'register' ? 'text-primary' : 'text-muted-foreground'}`}>
+                Registrarse
+              </Text>
             </Pressable>
           </View>
 
@@ -116,69 +112,22 @@ export default function LoginScreen() {
             <Field label="Confirmar Contraseña" placeholder="••••••••" secureTextEntry autoCapitalize="none" value={form.confirmPassword} onChangeText={v => update('confirmPassword', v)} />
           )}
 
-          {/* CTA Button */}
-          <Pressable style={[s.cta, loading && s.ctaLoading]} onPress={handleSubmit} disabled={loading}>
-            {loading ? <Spinner /> : <Text style={s.ctaText}>{mode === 'login' ? 'Entrar' : 'Crear Cuenta'}</Text>}
+          {/* CTA */}
+          <Pressable
+            onPress={handleSubmit}
+            disabled={loading}
+            className={`h-[52px] rounded-full items-center justify-center mt-2 bg-primary ${loading ? 'opacity-60' : ''}`}
+          >
+            {loading
+              ? <Spinner />
+              : <Text className="text-[16px] font-bold text-primary-foreground">
+                  {mode === 'login' ? 'Entrar' : 'Crear Cuenta'}
+                </Text>
+            }
           </Pressable>
         </View>
 
-      </ScrollView>
+      </View>
     </SafeAreaView>
   );
 }
-
-const s = StyleSheet.create({
-  logoArea: { alignItems: 'center', marginBottom: 32 },
-  logoBox: {
-    width: 72, height: 72, borderRadius: 16,
-    backgroundColor: '#fdf5d3',
-    alignItems: 'center', justifyContent: 'center',
-    marginBottom: 12,
-  },
-  logoText: { fontSize: 28, fontWeight: '700', color: C.primary },
-  card: {
-    backgroundColor: C.card,
-    borderWidth: 1,
-    borderColor: C.boarder,
-    borderRadius: C.cardRadius,
-    padding: 20,
-  },
-  segmented: {
-    flexDirection: 'row',
-    backgroundColor: C.secondary,
-    borderRadius: C.radius,
-    padding: 4,
-    marginBottom: 20,
-  },
-  segment: {
-    flex: 1, paddingVertical: 10,
-    borderRadius: 8, alignItems: 'center',
-  },
-  segmentActive: { backgroundColor: C.bg },
-  segmentText: { fontSize: 14, fontWeight: '600', color: C.muted },
-  segmentTextActive: { color: C.primary },
-  fieldGroup: { marginBottom: 14 },
-  fieldLabel: {
-    fontSize: 13, fontWeight: '600',
-    color: C.foreground, marginBottom: 6, marginLeft: 2,
-  },
-  input: {
-    height: 48,
-    borderWidth: 1,
-    borderColor: C.boarder,
-    borderRadius: C.radius,
-    backgroundColor: C.bg,
-    paddingHorizontal: 14,
-    fontSize: 15,
-    color: C.foreground,
-  },
-  cta: {
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: C.primary,
-    alignItems: 'center', justifyContent: 'center',
-    marginTop: 8,
-  },
-  ctaLoading: { opacity: 0.6 },
-  ctaText: { fontSize: 16, fontWeight: '700', color: C.primaryFg },
-});

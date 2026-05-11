@@ -7,7 +7,7 @@
  *  - API / Supabase → Network-First (no se guardan datos sensibles en caché)
  */
 
-const CACHE_VERSION = "v1";
+const CACHE_VERSION = "v2";
 const CACHE_NAME = `enbus-panel-${CACHE_VERSION}`;
 
 /** Shell mínimo que garantiza que la app carga aunque no haya red */
@@ -59,8 +59,18 @@ self.addEventListener("fetch", (event) => {
   if (url.protocol === "chrome-extension:") return;
 
   // ── Estrategia 1: Cache-First para assets estáticos ────────────────────────
-  if (/\.(?:js|css|woff2?|ttf|otf|png|jpg|jpeg|webp|svg|ico)$/.test(url.pathname)) {
+  // Next.js hashed assets (_next/static) are immutable — cache aggressively
+  if (
+    url.pathname.startsWith("/_next/static/") ||
+    /\.(?:woff2?|ttf|otf|png|jpg|jpeg|webp|svg|ico)$/.test(url.pathname)
+  ) {
     event.respondWith(cacheFirst(request));
+    return;
+  }
+
+  // ── Estrategia 1b: Stale-While-Revalidate for other JS/CSS ────────────────
+  if (/\.(?:js|css)$/.test(url.pathname)) {
+    event.respondWith(staleWhileRevalidate(request));
     return;
   }
 
@@ -85,6 +95,7 @@ self.addEventListener("fetch", (event) => {
 
 /**
  * Cache-First: devuelve desde caché si existe; si no, busca en red y cachea.
+ * Best for immutable assets (hashed filenames).
  */
 async function cacheFirst(request) {
   const cached = await caches.match(request);
@@ -96,6 +107,28 @@ async function cacheFirst(request) {
     cache.put(request, response.clone());
   }
   return response;
+}
+
+/**
+ * Stale-While-Revalidate: return cached immediately, update in background.
+ * Good for JS/CSS that might change between deploys.
+ */
+async function staleWhileRevalidate(request) {
+  const cache = await caches.open(CACHE_NAME);
+  const cached = await cache.match(request);
+
+  // Always fetch fresh in background
+  const fetchPromise = fetch(request)
+    .then((response) => {
+      if (response.ok) {
+        cache.put(request, response.clone());
+      }
+      return response;
+    })
+    .catch(() => null);
+
+  // Return cached immediately if available, otherwise wait for network
+  return cached || (await fetchPromise) || new Response("Offline", { status: 503 });
 }
 
 /**

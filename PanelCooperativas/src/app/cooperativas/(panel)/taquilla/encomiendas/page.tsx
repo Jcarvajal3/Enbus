@@ -1,5 +1,7 @@
 "use client";
 
+import { relativeTimeFormatter, dateFormatterDayMonthTime } from "@/lib/utils";
+
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { PageHeader } from "@/components/page-header";
 import { ScanInput } from "@/components/scan-input";
@@ -99,31 +101,23 @@ export default function TaquillaEncomiendasPage() {
     try {
       const date = new Date(dateString);
       const now = new Date();
-      // now - date para valores negativos correctos en fechas pasadas
       const diffInMs = now.getTime() - date.getTime();
       const diffInDays = Math.round(diffInMs / (1000 * 3600 * 24));
-      
-      const rtf = new Intl.RelativeTimeFormat('es-VE', { numeric: 'auto' });
       
       if (diffInDays < 1) {
         const diffInHours = Math.round(diffInMs / (1000 * 3600));
         if (diffInHours < 1) {
           const diffInMinutes = Math.round(diffInMs / (1000 * 60));
-          return rtf.format(-diffInMinutes, 'minute');
+          return relativeTimeFormatter.format(-diffInMinutes, 'minute');
         }
-        return rtf.format(-diffInHours, 'hour');
+        return relativeTimeFormatter.format(-diffInHours, 'hour');
       }
       
       if (diffInDays < 7) {
-        return rtf.format(-diffInDays, 'day');
+        return relativeTimeFormatter.format(-diffInDays, 'day');
       }
       
-      return new Intl.DateTimeFormat("es-VE", { 
-        day: "2-digit", 
-        month: "short",
-        hour: "numeric",
-        minute: "numeric"
-      }).format(date);
+      return dateFormatterDayMonthTime.format(date);
     } catch {
       return dateString;
     }

@@ -1,6 +1,8 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { currencyFormatterVES, dateFormatterDayMonthTime12h } from "@/lib/utils";
+
+import { useState, useEffect, useMemo, useCallback, lazy, Suspense } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -16,7 +18,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { venderBoleto } from "../../app/cooperativas/(panel)/taquilla/boletos/actions";
-import { QRCodeSVG } from "qrcode.react";
+import { Skeleton } from "@/components/ui/skeleton";
+
+// Lazy-load QR code renderer (~40KB) — only needed in confirmation step
+const QRCodeSVG = lazy(() => import("qrcode.react").then((m) => ({ default: m.QRCodeSVG })));
 
 type VentaStep = "viaje" | "asiento" | "pasajero" | "pago" | "confirmacion";
 
@@ -152,21 +157,12 @@ export function VentaFlow({ isOpen, onClose }: VentaFlowProps) {
   };
 
   const formatMoney = (amount: number) => {
-    return new Intl.NumberFormat("es-VE", {
-      style: "currency",
-      currency: "VES",
-    }).format(amount);
+    return currencyFormatterVES.format(amount);
   };
 
   const formatDate = (dateString: string) => {
     try {
-      return new Intl.DateTimeFormat("es-VE", { 
-        day: "2-digit", 
-        month: "short",
-        hour: "numeric",
-        minute: "numeric",
-        hour12: true
-      }).format(new Date(dateString));
+      return dateFormatterDayMonthTime12h.format(new Date(dateString));
     } catch {
       return dateString;
     }
@@ -444,7 +440,9 @@ export function VentaFlow({ isOpen, onClose }: VentaFlowProps) {
               </div>
               
               <div className="flex justify-center bg-white p-4 rounded-xl">
-                <QRCodeSVG value={resultadoBoleto.qr_embarque_data || ""} size={160} />
+                <Suspense fallback={<Skeleton className="w-[160px] h-[160px]" />}>
+                  <QRCodeSVG value={resultadoBoleto.qr_embarque_data || ""} size={160} />
+                </Suspense>
               </div>
             </div>
             
