@@ -12,6 +12,8 @@ import { WarningCircle } from "@phosphor-icons/react";
 import { createClient } from "@/lib/supabase/client";
 import type { Encomienda } from "@/lib/types/encomiendas";
 import { confirmarRecepcion } from "@/app/cooperativas/(panel)/taquilla/encomiendas/actions";
+import { printGuiaEncomienda } from "@/lib/printing/print-helpers";
+import { printer } from "@/lib/printing/bluetooth";
 
 interface RecepcionModalProps {
   encomienda: Encomienda;
@@ -144,6 +146,10 @@ export function RecepcionModal({ encomienda, cooperativaId, isOpen, onClose, onS
   /* eslint-enable react-hooks/set-state-in-effect */
 
   const handleSubmit = async () => {
+    if (!navigator.onLine) {
+      toast.error("Esta operación requiere conexión a internet. Por favor, intente de nuevo cuando se restablezca la conexión.");
+      return;
+    }
     if (!costoCalculado || !peso || Number(peso) <= 0 || Number(peso) > 25) return;
     
     setSubmitting(true);
@@ -152,13 +158,29 @@ export function RecepcionModal({ encomienda, cooperativaId, isOpen, onClose, onS
       
       if (res.success) {
         toast.success("Recepción confirmada con éxito");
+        
+        // Impresión automática de la guía vía Bluetooth si está conectada (M-02)
+        if (printer.isConnected) {
+          try {
+            await printGuiaEncomienda({
+              ...encomienda,
+              peso_kg: Number(peso),
+              costo_calculado: costoCalculado
+            });
+            toast.success("Etiqueta de guía enviada a la impresora térmica Bluetooth");
+          } catch (printErr) {
+            console.error("Error al imprimir etiqueta Bluetooth:", printErr);
+            toast.warning("Recepción registrada pero falló la impresión automática.");
+          }
+        }
+        
         onSuccess();
         onClose();
       } else {
         toast.error(res.error || "Ocurrió un error al confirmar la recepción");
       }
     } catch {
-      toast.error("Ocurrido un error inesperado");
+      toast.error("Ocurrió un error inesperado");
     } finally {
       setSubmitting(false);
     }

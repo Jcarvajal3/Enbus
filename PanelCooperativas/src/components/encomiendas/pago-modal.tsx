@@ -59,6 +59,10 @@ export function PagoModal({ encomienda, cooperativaId, isOpen, onClose, onSucces
   }, [isOpen, encomienda.id, supabase]);
 
   const handleProcesar = async (tipo: "DIGITAL" | "EFECTIVO") => {
+    if (!navigator.onLine) {
+      toast.error("Esta operación requiere conexión a internet. Por favor, intente de nuevo cuando se restablezca la conexión.");
+      return;
+    }
     if (!encomienda.costo_calculado) return;
     
     setSubmitting(tipo);

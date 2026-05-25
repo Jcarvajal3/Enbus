@@ -92,7 +92,7 @@ export function useConnectivity(): ConnectivityState {
     document.addEventListener("visibilitychange", handleVisibility);
 
     // Run immediately + start polling
-    probe();
+    setTimeout(probe, 0);
     intervalRef.current = setInterval(probe, POLL_INTERVAL_MS);
 
     return () => {

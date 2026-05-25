@@ -1,6 +1,7 @@
 import {
   ChartBar, Package, Ticket, TruckTrailer,
-  MapPin, Users, Gear, CreditCard, CalendarBlank
+  MapPin, Users, Gear, CalendarBlank,
+  DownloadSimple
 } from "@phosphor-icons/react";
 
 export const NAV_ITEMS = [
@@ -29,6 +30,12 @@ export const NAV_ITEMS = [
     roles: ["admin_cooperativa", "taquillero"],
   },
   {
+    title: "Recepción Destino",
+    href: "/cooperativas/recepcion-destino",
+    icon: DownloadSimple,
+    roles: ["admin_cooperativa", "taquillero"],
+  },
+  {
     title: "Rutas y Horarios",
     href: "/cooperativas/rutas",
     icon: MapPin,
@@ -50,12 +57,6 @@ export const NAV_ITEMS = [
     title: "Configuración",
     href: "/cooperativas/configuracion",
     icon: Gear,
-    roles: ["admin_cooperativa"],
-  },
-  {
-    title: "Métodos de Pago",
-    href: "/cooperativas/metodos-pago",
-    icon: CreditCard,
     roles: ["admin_cooperativa"],
   },
 ];

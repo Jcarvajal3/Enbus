@@ -42,50 +42,53 @@ export function RecepcionLoteModal({ isOpen, onClose, cooperativaId, onSuccess }
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
+    let isMounted = true;
+
+    const fetchViajes = async () => {
+      setLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from("viajes")
+          .select(`
+            id, fecha_hora_salida, numero_unidad,
+            ruta:rutas(ciudad_origen, ciudad_destino),
+            encomiendas:encomiendas!viaje_id(id, tracking_id, estado, receiver_nombre)
+          `)
+          .eq("cooperativa_id", cooperativaId)
+          .eq("estado", "EN_CURSO")
+          .order("fecha_hora_salida", { ascending: false });
+
+        if (!isMounted) return;
+        if (error) throw error;
+
+        // Filtrar solo los viajes que tienen al menos una encomienda EN_TRANSITO
+        const viajesValidos = (data as unknown as ViajeData[]).filter(v => 
+          v.encomiendas?.some(e => e.estado === "EN_TRANSITO")
+        );
+
+        setViajes(viajesValidos);
+      } catch (err) {
+        if (!isMounted) return;
+        console.error(err);
+        toast.error("Error al cargar los viajes en curso");
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    };
+
     if (isOpen) {
-      fetchViajes();
+      void fetchViajes();
     } else {
       // Reset state when closed
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSelectedViaje(null);
       setSelectedEncomiendaIds(new Set());
     }
-  }, [isOpen]);
 
-  const fetchViajes = async () => {
-    setLoading(true);
-    let isMounted = true;
-
-    try {
-      const { data, error } = await supabase
-        .from("viajes")
-        .select(`
-          id, fecha_hora_salida, numero_unidad,
-          ruta:rutas(ciudad_origen, ciudad_destino),
-          encomiendas:encomiendas!viaje_id(id, tracking_id, estado, receiver_nombre)
-        `)
-        .eq("cooperativa_id", cooperativaId)
-        .eq("estado", "EN_CURSO")
-        .order("fecha_hora_salida", { ascending: false });
-
-      if (!isMounted) return;
-      if (error) throw error;
-
-      // Filtrar solo los viajes que tienen al menos una encomienda EN_TRANSITO
-      const viajesValidos = (data as unknown as ViajeData[]).filter(v => 
-        v.encomiendas?.some(e => e.estado === "EN_TRANSITO")
-      );
-
-      setViajes(viajesValidos);
-    } catch (err) {
-      if (!isMounted) return;
-      console.error(err);
-      toast.error("Error al cargar los viajes en curso");
-    } finally {
-      if (isMounted) setLoading(false);
-    }
-
-    return () => { isMounted = false; };
-  };
+    return () => {
+      isMounted = false;
+    };
+  }, [isOpen, supabase, cooperativaId]);
 
   const encomiendasPendientes = selectedViaje?.encomiendas.filter(e => e.estado === "EN_TRANSITO") || [];
 
@@ -129,7 +132,7 @@ export function RecepcionLoteModal({ isOpen, onClose, cooperativaId, onSuccess }
       } else {
         toast.error(result.error || "Error al procesar el lote");
       }
-    } catch (err) {
+    } catch {
       toast.error("Ocurrió un error inesperado");
     } finally {
       setIsSubmitting(false);

@@ -7,7 +7,7 @@ import { PageHeader } from "@/components/page-header";
 import { ScanInput } from "@/components/scan-input";
 import { StatusBadge } from "@/components/status-badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useUser } from "@/hooks/use-user";
 import { createClient } from "@/lib/supabase/client";
@@ -128,12 +128,10 @@ export default function TaquillaEncomiendasPage() {
       <PageHeader 
         title="Taquilla de Encomiendas" 
       >
-        <Button asChild>
-          <Link href="/cooperativas/taquilla/encomiendas/despacho">
-            <Truck className="w-4 h-4 mr-2" />
-            Despachar a Viaje
-          </Link>
-        </Button>
+        <Link href="/cooperativas/despacho" className={buttonVariants({ variant: "default" })}>
+          <Truck className="w-4 h-4 mr-2" />
+          Despachar a Viaje
+        </Link>
       </PageHeader>
       
       <ScanInput 

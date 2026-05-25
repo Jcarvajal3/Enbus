@@ -21,9 +21,19 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { confirmarEmbarque, verificarPagoBoleto } from "./actions";
 import { PasajerosViajeSheet } from "@/components/boletos/pasajeros-viaje-sheet";
 
+type PagoRow = {
+  id: string;
+  monto: number;
+  modalidad: string;
+  verificado: boolean;
+  banco_emisor?: string | null;
+  numero_referencia?: string | null;
+  fecha_transaccion: string;
+};
+
 type BoletoRow = Boleto & {
   comprador?: { nombre_completo: string } | null;
-  pagos?: any[];
+  pagos?: PagoRow[];
 };
 
 export default function TaquillaBoletosPage() {
@@ -39,11 +49,10 @@ export default function TaquillaBoletosPage() {
   const [filtroFecha, setFiltroFecha] = useState<string>("");
 
   const [showVentaFlow, setShowVentaFlow] = useState(false);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [boletoConfirmacion, setBoletoConfirmacion] = useState<any>(null);
+  const [boletoConfirmacion, setBoletoConfirmacion] = useState<BoletoRow | null>(null);
   const [isConfirming, setIsConfirming] = useState(false);
   
-  const [pagoVerification, setPagoVerification] = useState<{ boleto: any, pago: any } | null>(null);
+  const [pagoVerification, setPagoVerification] = useState<{ boleto: BoletoRow, pago: PagoRow } | null>(null);
   const [isVerifyingPago, setIsVerifyingPago] = useState(false);
 
   const [pasajerosSheetViaje, setPasajerosSheetViaje] = useState<{ id: string, ruta: string, fecha: string } | null>(null);
@@ -135,7 +144,7 @@ export default function TaquillaBoletosPage() {
     if (!pagoVerification) return;
     setIsVerifyingPago(true);
     try {
-      const res = await verificarPagoBoleto(pagoVerification.boleto.id, pagoVerification.pago.id);
+      const res = await verificarPagoBoleto(pagoVerification.boleto.id, pagoVerification.pago?.id);
       if (res.success) {
         toast.success("Pago verificado exitosamente. Boleto activo.");
         setPagoVerification(null);
@@ -184,7 +193,7 @@ export default function TaquillaBoletosPage() {
       <div className="flex flex-col sm:flex-row gap-4 items-end">
         <div className="space-y-1.5 w-full sm:w-[200px]">
           <label className="text-sm font-medium text-muted-foreground">Filtrar por Estado</label>
-          <Select value={filtroEstado} onValueChange={setFiltroEstado}>
+          <Select value={filtroEstado} onValueChange={(val) => setFiltroEstado(val ?? "todos")}>
             <SelectTrigger>
               <SelectValue placeholder="Estado" />
             </SelectTrigger>
@@ -259,6 +268,11 @@ export default function TaquillaBoletosPage() {
                   
                   const nombrePasajero = boleto.comprador?.nombre_completo || boleto.pasajero_nombre || "Desconocido";
 
+                  // Supabase can return arrays or objects depending on the exact foreign key setup
+                  const pagoAsociado = Array.isArray(boleto.pagos) ? boleto.pagos[0] : boleto.pagos;
+                  // Only show the button if RESERVADO, regardless of whether we found the pago (since it might be on another ticket in the same batch)
+                  const showValidarPago = boleto.estado === "RESERVADO" && (!pagoAsociado || !pagoAsociado.verificado);
+
                   return (
                     <TableRow key={boleto.id} className="hover:bg-muted/50 transition-colors">
                       <TableCell className="font-mono font-medium text-primary">
@@ -295,12 +309,12 @@ export default function TaquillaBoletosPage() {
                       <TableCell>
                         <div className="flex flex-col gap-2 items-start">
                           <StatusBadge status={boleto.estado} />
-                          {boleto.estado === "RESERVADO" && boleto.pagos?.[0] && !boleto.pagos[0].verificado && (
+                          {showValidarPago && (
                             <Button 
                               size="sm" 
                               variant="outline" 
                               className="h-7 text-xs border-primary/50 text-primary hover:bg-primary/10" 
-                              onClick={() => setPagoVerification({ boleto, pago: boleto.pagos![0] })}
+                              onClick={() => setPagoVerification({ boleto, pago: pagoAsociado })}
                             >
                               Validar Pago
                             </Button>
@@ -391,37 +405,46 @@ export default function TaquillaBoletosPage() {
           
           {pagoVerification && (
             <div className="space-y-4 py-4">
-              <div className="rounded-xl border bg-card p-4 space-y-3">
-                <div className="flex justify-between items-center border-b pb-2">
-                  <span className="text-muted-foreground text-sm font-bold">Monto Declarado</span>
-                  <span className="font-heading text-xl text-primary">{formatMoney(pagoVerification.pago.monto)}</span>
+              {pagoVerification.pago ? (
+                <div className="rounded-xl border bg-card p-4 space-y-3">
+                  <div className="flex justify-between items-center border-b pb-2">
+                    <span className="text-muted-foreground text-sm font-bold">Monto Declarado</span>
+                    <span className="font-heading text-xl text-primary">{formatMoney(pagoVerification.pago.monto)}</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4 pt-2">
+                    <div>
+                      <span className="block text-xs text-muted-foreground mb-1 uppercase font-bold">Método</span>
+                      <span className="font-medium">{pagoVerification.pago.tipo_pago}</span>
+                    </div>
+                    <div>
+                      <span className="block text-xs text-muted-foreground mb-1 uppercase font-bold">Banco</span>
+                      <span className="font-medium">{pagoVerification.pago.banco_emisor || "N/A"}</span>
+                    </div>
+                    <div className="col-span-2">
+                      <span className="block text-xs text-muted-foreground mb-1 uppercase font-bold">Referencia</span>
+                      <span className="font-mono text-lg bg-secondary/50 px-2 py-1 rounded inline-block">
+                        {pagoVerification.pago.numero_referencia || "N/A"}
+                      </span>
+                    </div>
+                    <div className="col-span-2">
+                      <span className="block text-xs text-muted-foreground mb-1 uppercase font-bold">Fecha / Hora</span>
+                      <span className="font-medium text-sm">
+                        {pagoVerification.pago.fecha_transaccion ? formatDate(pagoVerification.pago.fecha_transaccion) : "N/A"}
+                      </span>
+                    </div>
+                  </div>
                 </div>
-                <div className="grid grid-cols-2 gap-4 pt-2">
-                  <div>
-                    <span className="block text-xs text-muted-foreground mb-1 uppercase font-bold">Método</span>
-                    <span className="font-medium">{pagoVerification.pago.tipo_pago}</span>
-                  </div>
-                  <div>
-                    <span className="block text-xs text-muted-foreground mb-1 uppercase font-bold">Banco</span>
-                    <span className="font-medium">{pagoVerification.pago.banco_emisor || "N/A"}</span>
-                  </div>
-                  <div className="col-span-2">
-                    <span className="block text-xs text-muted-foreground mb-1 uppercase font-bold">Referencia</span>
-                    <span className="font-mono text-lg bg-secondary/50 px-2 py-1 rounded inline-block">
-                      {pagoVerification.pago.numero_referencia || "N/A"}
-                    </span>
-                  </div>
-                  <div className="col-span-2">
-                    <span className="block text-xs text-muted-foreground mb-1 uppercase font-bold">Fecha / Hora</span>
-                    <span className="font-medium text-sm">
-                      {pagoVerification.pago.fecha_transaccion ? formatDate(pagoVerification.pago.fecha_transaccion) : "N/A"}
-                    </span>
-                  </div>
+              ) : (
+                <div className="rounded-xl border border-warning/50 bg-warning/5 p-4 space-y-3">
+                  <p className="text-sm font-medium text-warning-foreground">
+                    Los datos bancarios están asociados a otro boleto de la misma compra. 
+                    Si apruebas este pago manualmente, todos los boletos reservados del pasajero se marcarán como pagados de todas formas.
+                  </p>
                 </div>
-              </div>
+              )}
 
-              <div className="bg-warning/10 p-3 rounded-lg border border-warning/20">
-                <p className="text-sm text-warning font-medium">
+              <div className="bg-success/10 p-3 rounded-lg border border-success/20">
+                <p className="text-sm text-success-foreground font-medium">
                   Al aprobar este pago, el boleto cambiará a estado PAGADO y se generará el código QR de abordaje para el pasajero.
                 </p>
               </div>

@@ -106,16 +106,18 @@ export async function verificarPagoBoleto(boletoId: string, pagoId: string) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { success: false, error: "No autorizado" };
 
-    // Update pago
-    const { error: pagoError } = await supabase.from("pagos")
-      .update({
-        verificado: true,
-        verificado_por: user.id,
-        verificado_at: new Date().toISOString()
-      })
-      .eq("id", pagoId);
+    // Update pago if pagoId is provided
+    if (pagoId) {
+      const { error: pagoError } = await supabase.from("pagos")
+        .update({
+          verificado: true,
+          verificado_por: user.id,
+          verificado_at: new Date().toISOString()
+        })
+        .eq("id", pagoId);
 
-    if (pagoError) return { success: false, error: pagoError.message };
+      if (pagoError) return { success: false, error: pagoError.message };
+    }
 
     // Get the boleto to know the comprador and viaje
     const { data: boleto } = await supabase.from("boletos")

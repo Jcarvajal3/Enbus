@@ -17,7 +17,14 @@ export const metadata = {
   description: "Configuración de datos, métodos de pago, sucursales y hardware",
 };
 
-export default async function ConfiguracionPage() {
+export default async function ConfiguracionPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ tab?: string }>;
+}) {
+  const { tab } = await searchParams;
+  const defaultTab = tab || "datos";
+
   const user = await getUserProfile();
   if (!user) redirect("/cooperativas/login");
 
@@ -76,7 +83,7 @@ export default async function ConfiguracionPage() {
         </p>
       </div>
 
-      <Tabs defaultValue="datos" className="w-full">
+      <Tabs key={defaultTab} defaultValue={defaultTab} className="w-full">
         <TabsList className="mb-6 w-full sm:w-auto">
           <TabsTrigger value="datos">Datos</TabsTrigger>
           <TabsTrigger value="metodos-pago">Métodos de Pago</TabsTrigger>

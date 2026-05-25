@@ -13,6 +13,7 @@ export interface Boleto {
   created_at: string;
   // Joined
   viaje?: {
+    id: string;
     fecha_hora_salida: string;
     ruta: {
       ciudad_origen: string;

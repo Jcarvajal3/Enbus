@@ -3,7 +3,6 @@
 import { useEffect, useState, useMemo } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Spinner } from "@/components/ui/spinner";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
@@ -52,84 +51,88 @@ export function EntregaModal({ encomiendaId, isOpen, onClose, onSuccess }: Entre
   const [isProcessingPago, setIsProcessingPago] = useState(false);
 
   useEffect(() => {
-    if (isOpen && encomiendaId) {
-      fetchDetails();
-    } else {
-      // Reset states
+    let isMounted = true;
+
+    const fetchDetails = async () => {
+      if (!encomiendaId) return;
+      setLoading(true);
+      
+      // Reset states at the start of fetching to avoid synchronous updates in effect body
       setEncomienda(null);
       setPagoPendiente(null);
       setPagoOk(false);
       setPinOk(false);
       setPinBloqueado(false);
       setIntentos(0);
-    }
-  }, [isOpen, encomiendaId]);
 
-  const fetchDetails = async () => {
-    setLoading(true);
-    let isMounted = true;
-
-    try {
-      // Obtener detalles completos de la encomienda
-      const { data: enc, error: encError } = await supabase
-        .from("encomiendas")
-        .select(`
-          *,
-          sender:profiles!sender_id(nombre_completo)
-        `)
-        .eq("id", encomiendaId)
-        .single();
-
-      if (!isMounted) return;
-      if (encError) throw encError;
-      
-      setEncomienda(enc as EntregaEncomienda);
-      setPinBloqueado(enc.pin_bloqueado);
-      setIntentos(enc.intentos_pin || 0);
-
-      // Si la modalidad es ORIGEN, el pago ya está ok
-      if (enc.modalidad_pago === "ORIGEN") {
-        setPagoOk(true);
-      } else {
-        // Verificar si hay pago verificado
-        const { data: pagoVerificado } = await supabase
-          .from("pagos")
-          .select("id")
-          .eq("encomienda_id", encomiendaId)
-          .eq("verificado", true)
-          .limit(1)
-          .maybeSingle();
+      try {
+        // Obtener detalles completos de la encomienda
+        const { data: enc, error: encError } = await supabase
+          .from("encomiendas")
+          .select(`
+            *,
+            sender:profiles!sender_id(nombre_completo)
+          `)
+          .eq("id", encomiendaId)
+          .single();
 
         if (!isMounted) return;
+        if (encError) throw encError;
+        
+        setEncomienda(enc as EntregaEncomienda);
+        setPinBloqueado(enc.pin_bloqueado);
+        setIntentos(enc.intentos_pin || 0);
 
-        if (pagoVerificado) {
+        // Si la modalidad es ORIGEN, el pago ya está ok
+        if (enc.modalidad_pago === "ORIGEN") {
           setPagoOk(true);
         } else {
-          setPagoOk(false);
-          // Verificar si hay pago pendiente por aprobar
-          const { data: pagoNoVerificado } = await supabase
+          // Verificar si hay pago verificado
+          const { data: pagoVerificado } = await supabase
             .from("pagos")
-            .select("id, banco_emisor, numero_referencia")
+            .select("id")
             .eq("encomienda_id", encomiendaId)
-            .eq("verificado", false)
+            .eq("verificado", true)
             .limit(1)
             .maybeSingle();
 
           if (!isMounted) return;
-          setPagoPendiente(pagoNoVerificado || null);
+
+          if (pagoVerificado) {
+            setPagoOk(true);
+          } else {
+            setPagoOk(false);
+            // Verificar si hay pago pendiente por aprobar
+            const { data: pagoNoVerificado } = await supabase
+              .from("pagos")
+              .select("id, banco_emisor, numero_referencia")
+              .eq("encomienda_id", encomiendaId)
+              .eq("verificado", false)
+              .limit(1)
+              .maybeSingle();
+
+            if (!isMounted) return;
+            setPagoPendiente(pagoNoVerificado || null);
+          }
         }
+      } catch (err) {
+        if (!isMounted) return;
+        console.error(err);
+        toast.error("Error al cargar los detalles de la encomienda");
+        onClose();
+      } finally {
+        if (isMounted) setLoading(false);
       }
-    } catch (err) {
-      if (!isMounted) return;
-      console.error(err);
-      toast.error("Error al cargar los detalles de la encomienda");
-      onClose();
-    } finally {
-      if (isMounted) setLoading(false);
+    };
+
+    if (isOpen && encomiendaId) {
+      void fetchDetails();
     }
 
-    return () => { isMounted = false; };
-  };
+    return () => {
+      isMounted = false;
+    };
+  }, [isOpen, encomiendaId, supabase, onClose]);
 
   const diasEnOficina = (updatedAt: string): number => {
     const llegada = new Date(updatedAt);
@@ -140,6 +143,10 @@ export function EntregaModal({ encomiendaId, isOpen, onClose, onSuccess }: Entre
   };
 
   const handleAprobarPago = async (tipo: "DIGITAL" | "EFECTIVO") => {
+    if (!navigator.onLine) {
+      toast.error("Esta operación requiere conexión a internet. Por favor, intente de nuevo cuando se restablezca la conexión.");
+      return;
+    }
     if (!encomienda) return;
     setIsProcessingPago(true);
     try {
@@ -169,7 +176,11 @@ export function EntregaModal({ encomiendaId, isOpen, onClose, onSuccess }: Entre
   const [isConfirming, setIsConfirming] = useState(false);
 
   const handleConfirmarEntrega = async () => {
-    if (!encomiendaId) return;
+    if (!navigator.onLine) {
+      toast.error("Esta operación requiere conexión a internet. Por favor, intente de nuevo cuando se restablezca la conexión.");
+      return;
+    }
+    if (!encomiendaId || !encomienda) return;
     setIsConfirming(true);
     
     try {
@@ -182,7 +193,7 @@ export function EntregaModal({ encomiendaId, isOpen, onClose, onSuccess }: Entre
       } else {
         toast.error(result.error || "Error al confirmar la entrega");
       }
-    } catch (err) {
+    } catch {
       toast.error("Ocurrió un error inesperado al confirmar");
     } finally {
       setIsConfirming(false);
@@ -245,7 +256,7 @@ export function EntregaModal({ encomiendaId, isOpen, onClose, onSuccess }: Entre
                     </div>
                   </div>
                   <div className="flex items-start gap-2">
-                    <Scale size={16} className="text-muted-foreground mt-0.5" />
+                    <Scales size={16} className="text-muted-foreground mt-0.5" />
                     <div>
                       <span className="block text-muted-foreground text-xs">Peso / Costo</span>
                       <span className="font-medium">{encomienda.peso_kg || 0} kg | ${encomienda.costo_calculado?.toFixed(2) || "0.00"}</span>

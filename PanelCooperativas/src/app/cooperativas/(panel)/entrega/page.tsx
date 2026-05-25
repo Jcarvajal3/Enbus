@@ -79,6 +79,7 @@ export default function EntregaPage() {
   }, [supabase, cooperativaId]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchEncomiendas();
   }, [fetchEncomiendas]);
 

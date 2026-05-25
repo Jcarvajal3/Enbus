@@ -39,14 +39,13 @@ export function CameraQRScanner({ onScan, open, onOpenChange }: CameraQRScannerP
   useEffect(() => {
     if (!open) return;
 
-    setCameraError(null);
-    setScanning(false);
-
     let active = true;
     // Lazy-loaded jsQR instance
     let jsQRFn: typeof import("jsqr").default | null = null;
 
     async function start() {
+      setCameraError(null);
+      setScanning(false);
       try {
         // Lazy-load jsQR (~100KB) only when camera opens
         const jsQRModule = await import("jsqr");

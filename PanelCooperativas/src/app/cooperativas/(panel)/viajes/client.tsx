@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useEffect, useMemo, useTransition } from "react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -13,10 +13,14 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { Plus, DotsThree, Eye, MapTrifold, XCircle, CalendarBlank } from "@phosphor-icons/react";
+import { Plus, DotsThree, Eye, MapTrifold, XCircle, CalendarBlank, Ticket, Package } from "@phosphor-icons/react";
 import { guardarViaje, cancelarViaje, checkBoletosVendidos } from "./actions";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
+import { createClient } from "@/lib/supabase/client";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { StatusBadge } from "@/components/status-badge";
+import { Spinner } from "@/components/ui/spinner";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 export function ViajesClient({
@@ -29,6 +33,7 @@ export function ViajesClient({
   userRole: string;
 }) {
   const isAdmin = userRole === "admin_cooperativa";
+  const supabase = useMemo(() => createClient(), []);
   
   // States
   const [filterRuta, setFilterRuta] = useState<string>("all");
@@ -40,6 +45,53 @@ export function ViajesClient({
   const [selectedViaje, setSelectedViaje] = useState<any | null>(null);
   
   const [isPending, startTransition] = useTransition();
+
+  // Sub-listas de boletos y encomiendas en el detalle del viaje (Tarea 9)
+  const [detallesLoading, setDetallesLoading] = useState(false);
+  const [viajeBoletos, setViajeBoletos] = useState<any[]>([]);
+  const [viajeEncomiendas, setViajeEncomiendas] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (!selectedViaje || !isSheetOpen) return;
+
+    let isMounted = true;
+    const loadDetalles = async () => {
+      setDetallesLoading(true);
+      // Reset sublists on load start to avoid synchronous setState inside effect body
+      setViajeBoletos([]);
+      setViajeEncomiendas([]);
+
+      try {
+        const [boletosRes, encomiendasRes] = await Promise.all([
+          supabase
+            .from("boletos")
+            .select("id, codigo_boleto, asiento, estado, pasajero_nombre, pasajero_cedula")
+            .eq("viaje_id", selectedViaje.id),
+          supabase
+            .from("encomiendas")
+            .select("id, tracking_id, estado, receiver_nombre, receiver_telefono, descripcion_contenido, peso_kg")
+            .eq("viaje_asignado_id", selectedViaje.id)
+        ]);
+
+        if (isMounted) {
+          setViajeBoletos(boletosRes.data || []);
+          setViajeEncomiendas(encomiendasRes.data || []);
+        }
+      } catch (err) {
+        console.error("Error al cargar detalles del viaje:", err);
+      } finally {
+        if (isMounted) {
+          setDetallesLoading(false);
+        }
+      }
+    };
+
+    void loadDetalles();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedViaje, isSheetOpen, supabase]);
 
   // Form states
   const [isRecurring, setIsRecurring] = useState(false);
@@ -78,8 +130,9 @@ export function ViajesClient({
         alert(check.error);
         return;
       }
-      if (check.count > 0) {
-        setAlertData({ id: viaje.id, count: check.count });
+      const count = check.count ?? 0;
+      if (count > 0) {
+        setAlertData({ id: viaje.id, count });
         setAlertOpen(true);
       } else {
         if (confirm("¿Seguro que deseas cancelar este viaje?")) {
@@ -103,15 +156,20 @@ export function ViajesClient({
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
-    const payload = Object.fromEntries(formData.entries());
+    const payload: Record<string, string> = {};
+    formData.forEach((value, key) => {
+      if (typeof value === "string") {
+        payload[key] = value;
+      }
+    });
 
     startTransition(async () => {
       const res = await guardarViaje(
         payload, 
         isRecurring, 
         recurringDays, 
-        payload.periodo_inicio as string, 
-        payload.periodo_fin as string
+        payload.periodo_inicio, 
+        payload.periodo_fin
       );
       if (res.error) {
         alert(res.error);
@@ -140,7 +198,7 @@ export function ViajesClient({
       <div className="flex flex-col sm:flex-row gap-4 bg-muted/50 p-4 rounded-lg border">
         <div className="flex-1 space-y-1">
           <Label>Filtrar por Ruta</Label>
-          <Select value={filterRuta} onValueChange={setFilterRuta}>
+          <Select value={filterRuta} onValueChange={(val) => setFilterRuta(val ?? "all")}>
             <SelectTrigger><SelectValue placeholder="Todas las rutas" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todas las rutas</SelectItem>
@@ -158,7 +216,7 @@ export function ViajesClient({
         </div>
         <div className="flex-1 space-y-1">
           <Label>Estado</Label>
-          <Select value={filterEstado} onValueChange={setFilterEstado}>
+          <Select value={filterEstado} onValueChange={(val) => setFilterEstado(val ?? "all")}>
             <SelectTrigger><SelectValue placeholder="Todos los estados" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todos los estados</SelectItem>
@@ -268,7 +326,7 @@ export function ViajesClient({
             <div className="grid gap-6 py-4">
               <div className="grid gap-2">
                 <Label>Ruta</Label>
-                <Select name="ruta_id" value={rutaSeleccionada} onValueChange={setRutaSeleccionada} required>
+                <Select name="ruta_id" value={rutaSeleccionada} onValueChange={(val) => setRutaSeleccionada(val ?? "")} required>
                   <SelectTrigger><SelectValue placeholder="Seleccionar ruta activa" /></SelectTrigger>
                   <SelectContent>
                     {rutasActivas.map(r => (
@@ -292,7 +350,7 @@ export function ViajesClient({
                 <div className="grid gap-4 border p-4 rounded-lg bg-muted/20">
                   <div className="grid gap-2">
                     <Label>Días de salida</Label>
-                    <ToggleGroup type="multiple" value={recurringDays} onValueChange={setRecurringDays} className="justify-start">
+                    <ToggleGroup multiple value={recurringDays} onValueChange={setRecurringDays} className="justify-start">
                       {["L", "M", "Mi", "J", "V", "S", "D"].map(d => (
                         <ToggleGroupItem key={d} value={d} className="w-10 h-10 rounded-full border">{d}</ToggleGroupItem>
                       ))}
@@ -347,47 +405,122 @@ export function ViajesClient({
       </Dialog>
 
       <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
-        <SheetContent className="sm:max-w-xl">
-          <SheetHeader>
+        <SheetContent className="sm:max-w-2xl w-full flex flex-col h-full">
+          <SheetHeader className="pb-4 border-b">
             <SheetTitle>Detalles del Viaje</SheetTitle>
             <SheetDescription>
               {selectedViaje?.estado} — {selectedViaje && new Intl.DateTimeFormat("es-VE", { dateStyle: "long", timeStyle: "short" }).format(new Date(selectedViaje.fecha_hora_salida))}
             </SheetDescription>
           </SheetHeader>
-          <div className="py-6 grid gap-6">
-            <div className="grid grid-cols-2 gap-4 text-sm">
-              <div>
-                <span className="text-muted-foreground block">Ruta</span>
-                <span className="font-medium">{formatCity(selectedViaje?.ruta?.ciudad_origen)} → {formatCity(selectedViaje?.ruta?.ciudad_destino)}</span>
+          
+          <ScrollArea className="flex-1 -mx-6 px-6 py-6">
+            <div className="space-y-6">
+              <div className="grid grid-cols-2 gap-4 text-sm bg-muted/30 p-4 rounded-lg border">
+                <div>
+                  <span className="text-muted-foreground block text-xs">Ruta</span>
+                  <span className="font-semibold text-base">{formatCity(selectedViaje?.ruta?.ciudad_origen)} → {formatCity(selectedViaje?.ruta?.ciudad_destino)}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground block text-xs">Asientos</span>
+                  <span className="font-semibold text-base">{selectedViaje?.asientos_disponibles} disponibles de {selectedViaje?.asientos_totales}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground block text-xs">Chofer</span>
+                  <span className="font-semibold text-base">{selectedViaje?.nombre_chofer || "No asignado"}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground block text-xs">Unidad</span>
+                  <span className="font-semibold text-base">Unidad {selectedViaje?.numero_unidad || "No asignada"}</span>
+                </div>
               </div>
-              <div>
-                <span className="text-muted-foreground block">Asientos</span>
-                <span className="font-medium">{selectedViaje?.asientos_disponibles} disponibles de {selectedViaje?.asientos_totales}</span>
-              </div>
-              <div>
-                <span className="text-muted-foreground block">Chofer</span>
-                <span className="font-medium">{selectedViaje?.nombre_chofer || "No asignado"}</span>
-              </div>
-              <div>
-                <span className="text-muted-foreground block">Unidad</span>
-                <span className="font-medium">{selectedViaje?.numero_unidad || "No asignada"}</span>
-              </div>
-            </div>
 
-            <div className="border-t pt-4">
-              <h3 className="font-medium mb-2">Boletos Vendidos</h3>
-              <div className="bg-muted p-4 rounded-md text-center text-sm text-muted-foreground">
-                Módulo en construcción o pendiente de carga...
+              {/* Sección Boletos */}
+              <div className="border-t pt-4">
+                <h3 className="font-semibold text-base mb-3 flex items-center gap-2">
+                  <Ticket className="w-5 h-5 text-primary" />
+                  Boletos Vendidos ({viajeBoletos.length})
+                </h3>
+                {detallesLoading ? (
+                  <div className="py-8 flex justify-center"><Spinner size="sm" /></div>
+                ) : viajeBoletos.length === 0 ? (
+                  <div className="bg-muted/30 border border-dashed p-6 rounded-md text-center text-sm text-muted-foreground">
+                    No hay boletos vendidos para este viaje.
+                  </div>
+                ) : (
+                  <div className="rounded-md border bg-card">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-16">Asiento</TableHead>
+                          <TableHead>Pasajero</TableHead>
+                          <TableHead>Código</TableHead>
+                          <TableHead>Estado</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {viajeBoletos.map((b) => (
+                          <TableRow key={b.id}>
+                            <TableCell className="font-bold text-center bg-muted/30">{b.asiento}</TableCell>
+                            <TableCell>
+                              <div className="flex flex-col">
+                                <span className="font-medium">{b.pasajero_nombre || "Desconocido"}</span>
+                                <span className="text-xs text-muted-foreground">{b.pasajero_cedula}</span>
+                              </div>
+                            </TableCell>
+                            <TableCell className="font-mono text-xs">{b.codigo_boleto}</TableCell>
+                            <TableCell><StatusBadge status={b.estado} /></TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
               </div>
-            </div>
 
-            <div className="border-t pt-4">
-              <h3 className="font-medium mb-2">Encomiendas Asignadas</h3>
-              <div className="bg-muted p-4 rounded-md text-center text-sm text-muted-foreground">
-                Módulo en construcción o pendiente de carga...
+              {/* Sección Encomiendas */}
+              <div className="border-t pt-4">
+                <h3 className="font-semibold text-base mb-3 flex items-center gap-2">
+                  <Package className="w-5 h-5 text-primary" />
+                  Encomiendas Asignadas ({viajeEncomiendas.length})
+                </h3>
+                {detallesLoading ? (
+                  <div className="py-8 flex justify-center"><Spinner size="sm" /></div>
+                ) : viajeEncomiendas.length === 0 ? (
+                  <div className="bg-muted/30 border border-dashed p-6 rounded-md text-center text-sm text-muted-foreground">
+                    No hay encomiendas asignadas a este viaje.
+                  </div>
+                ) : (
+                  <div className="rounded-md border bg-card">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Tracking ID</TableHead>
+                          <TableHead>Destinatario</TableHead>
+                          <TableHead>Peso</TableHead>
+                          <TableHead>Estado</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {viajeEncomiendas.map((e) => (
+                          <TableRow key={e.id}>
+                            <TableCell className="font-mono text-xs font-semibold text-primary">{e.tracking_id}</TableCell>
+                            <TableCell>
+                              <div className="flex flex-col">
+                                <span className="font-medium truncate max-w-[150px]">{e.receiver_nombre}</span>
+                                <span className="text-xs text-muted-foreground">{e.receiver_telefono}</span>
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-xs">{e.peso_kg ? `${e.peso_kg} kg` : "N/A"}</TableCell>
+                            <TableCell><StatusBadge status={e.estado} /></TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
               </div>
             </div>
-          </div>
+          </ScrollArea>
         </SheetContent>
       </Sheet>
 

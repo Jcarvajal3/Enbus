@@ -218,7 +218,7 @@ export function RutasClient({
               <div className="grid grid-cols-2 gap-4">
                 <div className="grid gap-2">
                   <Label>Estado Origen</Label>
-                  <Select name="estado_origen" value={estadoOrigen} onValueChange={(val) => { setEstadoOrigen(val); setCiudadOrigen(""); }} required>
+                  <Select name="estado_origen" value={estadoOrigen} onValueChange={(val) => { setEstadoOrigen(val ?? ""); setCiudadOrigen(""); }} required>
                     <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
                     <SelectContent>
                       {ESTADOS_VENEZUELA.map(e => <SelectItem key={e.value} value={e.value}>{e.label}</SelectItem>)}
@@ -227,7 +227,7 @@ export function RutasClient({
                 </div>
                 <div className="grid gap-2">
                   <Label>Ciudad Origen</Label>
-                  <Select name="ciudad_origen" value={ciudadOrigen} onValueChange={setCiudadOrigen} disabled={!estadoOrigen} required>
+                  <Select name="ciudad_origen" value={ciudadOrigen} onValueChange={(val) => setCiudadOrigen(val ?? "")} disabled={!estadoOrigen} required>
                     <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
                     <SelectContent>
                       {estadoOrigen && CIUDADES_POR_ESTADO[estadoOrigen]?.map(c => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}
@@ -239,7 +239,7 @@ export function RutasClient({
               <div className="grid grid-cols-2 gap-4">
                 <div className="grid gap-2">
                   <Label>Estado Destino</Label>
-                  <Select name="estado_destino" value={estadoDestino} onValueChange={(val) => { setEstadoDestino(val); setCiudadDestino(""); }} required>
+                  <Select name="estado_destino" value={estadoDestino} onValueChange={(val) => { setEstadoDestino(val ?? ""); setCiudadDestino(""); }} required>
                     <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
                     <SelectContent>
                       {ESTADOS_VENEZUELA.map(e => <SelectItem key={e.value} value={e.value}>{e.label}</SelectItem>)}
@@ -248,7 +248,7 @@ export function RutasClient({
                 </div>
                 <div className="grid gap-2">
                   <Label>Ciudad Destino</Label>
-                  <Select name="ciudad_destino" value={ciudadDestino} onValueChange={setCiudadDestino} disabled={!estadoDestino} required>
+                  <Select name="ciudad_destino" value={ciudadDestino} onValueChange={(val) => setCiudadDestino(val ?? "")} disabled={!estadoDestino} required>
                     <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
                     <SelectContent>
                       {estadoDestino && CIUDADES_POR_ESTADO[estadoDestino]?.map(c => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}

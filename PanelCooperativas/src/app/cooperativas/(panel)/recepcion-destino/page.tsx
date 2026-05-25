@@ -15,6 +15,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Package, Truck } from "@phosphor-icons/react";
 import { useEncomiendasRealtime } from "@/hooks/use-encomiendas-realtime";
 import { recibirEncomienda } from "./actions";
+import type { Encomienda } from "@/lib/types/encomiendas";
 import { RecepcionLoteModal } from "./recepcion-lote-modal";
 
 type ViajeData = {
@@ -74,12 +75,13 @@ export default function RecepcionDestinoPage() {
   }, [supabase, cooperativaId]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchEncomiendas();
   }, [fetchEncomiendas]);
 
   useEncomiendasRealtime(cooperativaId, fetchEncomiendas);
 
-  const handleScanFound = async (encomienda: any) => {
+  const handleScanFound = async (encomienda: Encomienda) => {
     // 2.1.b Validar estado
     if (encomienda.estado !== "EN_TRANSITO") {
       toast.error(`Solo se pueden recibir encomiendas en tránsito. Estado actual: ${encomienda.estado.replace(/_/g, " ")}`);

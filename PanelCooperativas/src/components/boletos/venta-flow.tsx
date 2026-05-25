@@ -19,6 +19,8 @@ import { Label } from "@/components/ui/label";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { venderBoleto } from "../../app/cooperativas/(panel)/taquilla/boletos/actions";
 import { Skeleton } from "@/components/ui/skeleton";
+import { printBoleto } from "@/lib/printing/print-helpers";
+import { printer } from "@/lib/printing/bluetooth";
 
 // Lazy-load QR code renderer (~40KB) — only needed in confirmation step
 const QRCodeSVG = lazy(() => import("qrcode.react").then((m) => ({ default: m.QRCodeSVG })));
@@ -66,6 +68,29 @@ export function VentaFlow({ isOpen, onClose }: VentaFlowProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [resultadoBoleto, setResultadoBoleto] = useState<any>(null);
+  const [printing, setPrinting] = useState(false);
+
+  const handleImprimirBoleto = async () => {
+    if (!resultadoBoleto) return;
+    if (printer.isConnected) {
+      setPrinting(true);
+      try {
+        await printBoleto({
+          ...resultadoBoleto,
+          qr_embarque_data: resultadoBoleto.qr_embarque_data || resultadoBoleto.codigo_boleto
+        });
+        toast.success("Boleto enviado a la impresora térmica Bluetooth");
+      } catch (err) {
+        console.error("Error al imprimir con Bluetooth:", err);
+        toast.error("Error al imprimir vía Bluetooth. Usando diálogo de impresión del sistema.");
+        window.print();
+      } finally {
+        setPrinting(false);
+      }
+    } else {
+      window.print();
+    }
+  };
 
   const fetchViajes = useCallback(async () => {
     if (!cooperativaId) return;
@@ -127,6 +152,10 @@ export function VentaFlow({ isOpen, onClose }: VentaFlowProps) {
   };
 
   const handleSubmitVenta = async () => {
+    if (!navigator.onLine) {
+      toast.error("Esta operación requiere conexión a internet. Por favor, intente de nuevo cuando se restablezca la conexión.");
+      return;
+    }
     if (!selectedViaje || !selectedAsiento) return;
     setIsSubmitting(true);
     
@@ -200,7 +229,7 @@ export function VentaFlow({ isOpen, onClose }: VentaFlowProps) {
         {step === "viaje" && (
           <div className="space-y-4">
             <div className="w-full sm:w-[300px]">
-              <Select value={filtroRuta} onValueChange={setFiltroRuta}>
+              <Select value={filtroRuta} onValueChange={(val) => setFiltroRuta(val ?? "todas")}>
                 <SelectTrigger>
                   <SelectValue placeholder="Filtrar por ruta" />
                 </SelectTrigger>
@@ -339,9 +368,13 @@ export function VentaFlow({ isOpen, onClose }: VentaFlowProps) {
             <div className="space-y-4">
               <Label className="text-base">Método de Cobro</Label>
               <ToggleGroup 
-                type="single" 
-                value={tipoPago} 
-                onValueChange={(val) => val && setTipoPago(val as "EFECTIVO" | "DIGITAL")}
+                value={[tipoPago]} 
+                onValueChange={(val) => {
+                  const first = val[0];
+                  if (first === "EFECTIVO" || first === "DIGITAL") {
+                    setTipoPago(first);
+                  }
+                }}
                 className="justify-start gap-4"
               >
                 <ToggleGroupItem value="EFECTIVO" className="h-24 w-32 flex flex-col gap-2 px-2 data-[state=on]:border-primary border-2 border-transparent bg-muted">
@@ -447,8 +480,8 @@ export function VentaFlow({ isOpen, onClose }: VentaFlowProps) {
             </div>
             
             <div className="flex flex-col sm:flex-row gap-3 w-full">
-              <Button className="flex-1" onClick={() => window.print()}>
-                <Printer className="w-4 h-4 mr-2" />
+              <Button className="flex-1" onClick={handleImprimirBoleto} disabled={printing}>
+                {printing ? <Spinner className="mr-2 h-4 w-4" /> : <Printer className="w-4 h-4 mr-2" />}
                 Imprimir Boleto
               </Button>
               <Button variant="outline" className="flex-1" onClick={() => {

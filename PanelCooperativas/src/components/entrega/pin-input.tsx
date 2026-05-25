@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback } from "react";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { validarPin } from "@/app/cooperativas/(panel)/entrega/actions";
 import { CheckCircle, Warning, LockKey } from "@phosphor-icons/react";
@@ -61,19 +61,18 @@ export function PinInput({
     }
   }, [encomiendaId, onSuccess, onBlocked]);
 
-  useEffect(() => {
-    if (pin.length === 4 && !isValidating && !isSuccess && !isBlocked) {
-      handleValidate(pin);
-    }
-  }, [pin, isValidating, isSuccess, isBlocked, handleValidate]);
-
   return (
     <div className="flex flex-col items-center justify-center py-2 space-y-4">
       <div className={cn("transition-all duration-200", shake && "animate-shake")}>
         <InputOTP
           maxLength={4}
           value={pin}
-          onChange={(value) => setPin(value)}
+          onChange={(value) => {
+            setPin(value);
+            if (value.length === 4 && !isValidating && !isSuccess && !isBlocked) {
+              void handleValidate(value);
+            }
+          }}
           disabled={isBlocked || isSuccess || isValidating}
           className={cn(
             isSuccess && "text-emerald-500",

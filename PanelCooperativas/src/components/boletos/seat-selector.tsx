@@ -32,7 +32,7 @@ export function SeatSelector({ viajeId, totalAsientos, onSelect, onCancel }: Sea
 
       if (error) throw error;
       
-      const ocupadosList = data.map((b) => b.asiento);
+      const ocupadosList = (data as { asiento: string }[] || []).map((b) => b.asiento);
       setOcupados(ocupadosList);
     } catch (error) {
       console.error("Error cargando asientos ocupados:", error);

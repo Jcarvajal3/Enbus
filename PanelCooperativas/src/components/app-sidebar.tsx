@@ -2,7 +2,7 @@
 
 import { useUser } from "@/hooks/use-user";
 import { NAV_ITEMS } from "@/lib/navigation";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Bus, SignOut } from "@phosphor-icons/react";
 import {
@@ -31,6 +31,8 @@ export function AppSidebar() {
   const { user } = useUser();
   const pathname = usePathname();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const currentTab = searchParams.get("tab");
   const supabase = createClient();
 
   const handleSignOut = async () => {
@@ -66,7 +68,11 @@ export function AppSidebar() {
                 <SidebarMenuItem key={item.href}>
                   <SidebarMenuButton 
                     render={<Link href={item.href} prefetch={true} />}
-                    isActive={pathname.startsWith(item.href)}
+                    isActive={
+                      item.href.includes("?tab=")
+                        ? pathname === item.href.split("?")[0] && currentTab === new URLSearchParams(item.href.split("?")[1]).get("tab")
+                        : pathname === item.href && !currentTab
+                    }
                     tooltip={item.title}
                   >
                     <item.icon />

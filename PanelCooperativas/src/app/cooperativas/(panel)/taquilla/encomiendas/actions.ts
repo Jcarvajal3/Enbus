@@ -8,18 +8,19 @@ export async function confirmarRecepcion(encomiendaId: string, peso: number, cos
   // Step 1: PENDIENTE_DE_ESCANEO → EN_RECEPCION
   // Activa el trigger de DB que genera el PIN de retiro.
   // Safety check en .eq garantiza idempotencia.
-  const { error: errorStep1, count: step1Count } = await supabase
+  const { error: errorStep1, data: step1Data } = await supabase
     .from("encomiendas")
     .update({ estado: "EN_RECEPCION" })
     .eq("id", encomiendaId)
     .eq("estado", "PENDIENTE_DE_ESCANEO")
-    .select("id", { count: "exact", head: true });
+    .select("id");
 
   if (errorStep1) {
     console.error("Error en transición a EN_RECEPCION:", errorStep1);
     return { success: false, error: errorStep1.message };
   }
 
+  const step1Count = step1Data?.length ?? 0;
   // Si afectó 0 filas, la encomienda ya no estaba en PENDIENTE_DE_ESCANEO
   if (step1Count === 0) {
     return { success: false, error: "La encomienda ya fue procesada o no existe." };

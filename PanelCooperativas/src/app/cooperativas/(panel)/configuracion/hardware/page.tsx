@@ -11,8 +11,8 @@ import { buildTicket } from "@/lib/printing/escpos";
 import { toast } from "sonner";
 
 export default function HardwareConfigPage() {
-  const [printerConnected, setPrinterConnected] = useState(false);
-  const [printerName, setPrinterName] = useState<string | null>(null);
+  const [printerConnected, setPrinterConnected] = useState(() => printer.isConnected);
+  const [printerName, setPrinterName] = useState<string | null>(() => printer.printerName);
   
   // Scanner state
   const [scanResult, setScanResult] = useState<{ code: string; time: number } | null>(null);
@@ -21,9 +21,6 @@ export default function HardwareConfigPage() {
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   useEffect(() => {
-    // Check initial printer state
-    setPrinterName(printer.printerName);
-    setPrinterConnected(printer.isConnected);
     // Cleanup timeout on unmount
     return () => {
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
