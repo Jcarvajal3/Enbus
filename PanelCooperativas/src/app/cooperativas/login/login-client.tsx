@@ -1,0 +1,162 @@
+"use client";
+
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { FieldGroup, Field, FieldLabel } from "@/components/ui/field";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Spinner } from "@/components/ui/spinner";
+import { Bus, WarningCircle } from "@phosphor-icons/react";
+import Link from "next/link";
+
+export default function LoginPage() {
+  const router = useRouter();
+  const supabase = createClient();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+
+    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (authError || !authData.user) {
+      setError("Credenciales inválidas");
+      setLoading(false);
+      return;
+    }
+
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select("role, cooperativa_id")
+      .eq("id", authData.user.id)
+      .single();
+
+    if (profileError || !profile) {
+      setError("Error al obtener el perfil. Intenta nuevamente.");
+      setLoading(false);
+      return;
+    }
+
+    if (profile.role !== "taquillero" && profile.role !== "admin_cooperativa") {
+      await supabase.auth.signOut();
+      setError("No tienes permisos para acceder a este panel");
+      setLoading(false);
+      return;
+    }
+
+    if (!profile.cooperativa_id) {
+      await supabase.auth.signOut();
+      setError("Tu cuenta no está vinculada a una cooperativa");
+      setLoading(false);
+      return;
+    }
+
+    // Success, router push
+    if (profile.role === "taquillero") {
+      router.push("/cooperativas/taquilla/encomiendas");
+    } else {
+      router.push("/cooperativas/dashboard");
+    }
+  };
+
+  return (
+    <div className="flex min-h-screen">
+      {/* Panel Izquierdo Decorativo (Oculto en mobile) */}
+      <div className="hidden w-3/5 flex-col justify-between bg-slate-950 p-12 text-white lg:flex">
+        <div className="flex items-center gap-2">
+          <div className="flex size-10 items-center justify-center rounded-lg bg-primary">
+            <Bus weight="fill" className="size-6 text-primary-foreground" />
+          </div>
+          <span className="text-xl font-bold tracking-tight">EnBus</span>
+        </div>
+        
+        <div className="flex flex-col gap-4">
+          <h1 className="text-5xl font-bold leading-tight">
+            Panel de <br />
+            <span className="text-primary">Cooperativas</span>
+          </h1>
+          <p className="text-xl text-slate-400">
+            Gestión operativa de rutas, taquilla y despacho.
+          </p>
+        </div>
+        
+        <p className="text-sm text-slate-500">
+          &copy; {new Date().getFullYear()} EnBus. Todos los derechos reservados.
+        </p>
+      </div>
+
+      {/* Panel Derecho con Formulario */}
+      <div className="flex w-full items-center justify-center p-6 lg:w-2/5">
+        <Card className="w-full max-w-sm">
+          <CardHeader>
+            <div className="mb-4 flex justify-center lg:hidden">
+              <div className="flex size-12 items-center justify-center rounded-lg bg-primary">
+                <Bus weight="fill" className="size-8 text-primary-foreground" />
+              </div>
+            </div>
+            <CardTitle className="text-2xl">Iniciar Sesión</CardTitle>
+            <CardDescription>Accede al panel de tu cooperativa</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSubmit} className="flex flex-col gap-6">
+              {error && (
+                <Alert variant="destructive">
+                  <WarningCircle className="size-4" data-icon="inline-start" />
+                  <AlertTitle>Error</AlertTitle>
+                  <AlertDescription>{error}</AlertDescription>
+                </Alert>
+              )}
+              
+              <FieldGroup>
+                <Field>
+                  <FieldLabel htmlFor="email">Email</FieldLabel>
+                  <Input 
+                    id="email" 
+                    type="email" 
+                    placeholder="nombre@cooperativa.com" 
+                    required 
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    disabled={loading}
+                  />
+                </Field>
+                <Field>
+                  <div className="flex items-center justify-between">
+                    <FieldLabel htmlFor="password">Contraseña</FieldLabel>
+                    <Link href="/cooperativas/recuperar" className="text-sm font-medium text-primary hover:underline">
+                      ¿Olvidaste tu contraseña?
+                    </Link>
+                  </div>
+                  <Input 
+                    id="password" 
+                    type="password" 
+                    required 
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    disabled={loading}
+                  />
+                </Field>
+              </FieldGroup>
+              
+              <Button type="submit" className="w-full" disabled={loading}>
+                {loading ? <Spinner data-icon="inline-start" /> : null}
+                Iniciar Sesión
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
