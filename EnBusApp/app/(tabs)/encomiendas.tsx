@@ -1,6 +1,7 @@
 import { SafeAreaView } from '@/tw';
 import { useState, useCallback } from 'react';
 import { ScrollView, View, Text, Pressable } from '@/tw';
+import { RefreshControl } from 'react-native';
 import { useAuth } from '@/src/contexts/AuthContext';
 import { useEncomiendas } from '@/src/hooks/useEncomiendas';
 import { useRouter } from 'expo-router';
@@ -8,6 +9,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { TransactionCard } from '@/src/components/TransactionCard';
 import { Plus } from 'phosphor-react-native';
 import { Spinner } from '@/src/components/Spinner';
+import { SkeletonLoader } from '@/src/components/SkeletonLoader';
 import { formatDate } from '@/src/utils/formatters';
 
 export default function EncomiendasScreen() {
@@ -28,10 +30,20 @@ export default function EncomiendasScreen() {
     }, [])
   );
 
-  const { data: todasLasEncomiendas, loading } = useEncomiendas(user?.id, {
+  const [refreshing, setRefreshing] = useState(false);
+
+  const { data: todasLasEncomiendas, loading, refetch } = useEncomiendas(user?.id, {
     enabled: isFocused && !!user?.id,
     limit: 30,
   });
+
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    refetch();
+    setTimeout(() => {
+      setRefreshing(false);
+    }, 1000);
+  }, [refetch]);
 
   // Filtrado local según el rol del usuario en cada registro
   const historial = (todasLasEncomiendas || []).filter((enc: any) => {
@@ -65,10 +77,28 @@ export default function EncomiendasScreen() {
         </View>
       </View>
 
-      <ScrollView contentContainerClassName="p-6 pb-32">
+      <ScrollView
+        contentContainerClassName="p-6 pb-32"
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={['#e2b714']}
+            tintColor="#e2b714"
+          />
+        }
+      >
         {loading ? (
-          <View className="py-20 items-center justify-center">
-            <Spinner size="large" />
+          <View className="items-center w-full gap-4">
+            {[1, 2, 3].map((i) => (
+              <View key={i} className="w-full bg-card border border-border p-4 rounded-[14px] flex-row items-center gap-3">
+                <SkeletonLoader width={40} height={40} borderRadius={20} />
+                <View className="flex-1 gap-1.5">
+                  <SkeletonLoader width="65%" height={14} />
+                  <SkeletonLoader width="35%" height={10} />
+                </View>
+              </View>
+            ))}
           </View>
         ) : historial && historial.length > 0 ? (
           <View className="items-center">

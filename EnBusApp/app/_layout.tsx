@@ -7,13 +7,34 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { useFonts, Lora_600SemiBold, Lora_700Bold } from '@expo-google-fonts/lora';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
+import { useToast } from "@/src/components/Toast";
 
 SplashScreen.preventAutoHideAsync();
+
+import { usePushNotifications } from "@/src/hooks/usePushNotifications";
 
 function RootLayoutNav() {
   const { session, initialized, isOffline } = useAuth();
   const segments = useSegments();
   const router = useRouter();
+
+  const toast = useToast();
+
+  // Suscribirse a notificaciones push y manejar eventos de primer plano
+  usePushNotifications(session?.user?.id, {
+    // Notificación recibida mientras la app está ACTIVA: mostrar Toast personalizado
+    // en lugar de depender solo de la alerta del sistema (que puede ser ignorada).
+    onNotificationReceived: (notification) => {
+      const title = notification.request.content.title ?? 'Notificación';
+      const body = notification.request.content.body ?? '';
+      const message = body ? `${title}: ${body}` : title;
+      toast.show('info', message);
+    },
+    // Usuario tocó la notificación: navegar a la pantalla de notificaciones
+    onNotificationResponse: () => {
+      router.push('/notificaciones');
+    },
+  });
 
   useEffect(() => {
     if (!initialized) return;
@@ -61,6 +82,9 @@ function RootLayoutNav() {
   );
 }
 
+import { ErrorBoundary } from "@/src/components/ErrorBoundary";
+import { ToastProvider } from "@/src/components/Toast";
+
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({
     'Lora-SemiBold': Lora_600SemiBold,
@@ -79,7 +103,11 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <StatusBar style="dark" />
       <AuthProvider>
-        <RootLayoutNav />
+        <ErrorBoundary>
+          <ToastProvider>
+            <RootLayoutNav />
+          </ToastProvider>
+        </ErrorBoundary>
       </AuthProvider>
     </SafeAreaProvider>
   );

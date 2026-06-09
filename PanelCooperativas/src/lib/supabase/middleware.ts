@@ -31,7 +31,13 @@ export async function updateSession(request: NextRequest) {
   const { data: { session } } = await supabase.auth.getSession();
 
   // Rutas públicas que NO requieren autenticación
-  const publicPaths = ["/cooperativas/login", "/cooperativas/invite"];
+  const publicPaths = [
+    "/cooperativas/login",
+    "/cooperativas/invite",
+    "/cooperativas/recuperar",
+    "/cooperativas/restablecer",
+    "/cooperativas/auth/callback"
+  ];
   const isPublicPath = publicPaths.some((path) =>
     request.nextUrl.pathname.startsWith(path)
   );

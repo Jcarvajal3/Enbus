@@ -7,16 +7,18 @@ import { PageHeader } from "@/components/page-header";
 import { ScanInput } from "@/components/scan-input";
 import { StatusBadge } from "@/components/status-badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { buttonVariants } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useUser } from "@/hooks/use-user";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
-import { Truck } from "@phosphor-icons/react";
+import { Truck, Printer } from "@phosphor-icons/react";
 import Link from "next/link";
 import type { Encomienda } from "@/lib/types/encomiendas";
 import { Spinner } from "@/components/ui/spinner";
+import { obtenerPdfGuia } from "@/app/cooperativas/(panel)/taquilla/encomiendas/actions";
 import { RecepcionModal } from "@/components/encomiendas/recepcion-modal";
+import { Pagination } from "@/components/ui/pagination";
 import { PagoModal } from "@/components/encomiendas/pago-modal";
 import { PhotoCaptureModal } from "@/components/encomiendas/photo-capture-modal";
 import { DetalleSheet } from "@/components/encomiendas/detalle-sheet";
@@ -31,6 +33,8 @@ export default function TaquillaEncomiendasPage() {
   const [encomiendas, setEncomiendas] = useState<Encomienda[]>([]);
   const [loading, setLoading] = useState(true);
   const [filtroEstado, setFiltroEstado] = useState<string>("todas");
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
   
   // State for modals (Integrates with Tarea 8)
   const [modalState, setModalState] = useState<
@@ -43,6 +47,7 @@ export default function TaquillaEncomiendasPage() {
 
   const fetchEncomiendas = useCallback(async () => {
     setLoading(true);
+    setCurrentPage(1);
     try {
       let query = supabase
         .from("encomiendas")
@@ -123,6 +128,9 @@ export default function TaquillaEncomiendasPage() {
     }
   };
 
+  const totalPages = Math.ceil(encomiendas.length / itemsPerPage);
+  const paginatedEncomiendas = encomiendas.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
   return (
     <div className="space-y-6 flex flex-col h-full animate-in fade-in duration-300">
       <PageHeader 
@@ -161,12 +169,13 @@ export default function TaquillaEncomiendasPage() {
                 <TableHead>Ruta</TableHead>
                 <TableHead>Estado</TableHead>
                 <TableHead className="text-right">Fecha</TableHead>
+                <TableHead className="w-12 text-center"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="h-32 text-center">
+                  <TableCell colSpan={7} className="h-32 text-center">
                     <div className="flex items-center justify-center">
                       <Spinner size="md" />
                       <span className="ml-3 text-muted-foreground font-medium">Cargando encomiendas...</span>
@@ -175,12 +184,12 @@ export default function TaquillaEncomiendasPage() {
                 </TableRow>
               ) : encomiendas.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="h-32 text-center text-muted-foreground">
+                  <TableCell colSpan={7} className="h-32 text-center text-muted-foreground">
                     No se encontraron encomiendas en esta categoría.
                   </TableCell>
                 </TableRow>
               ) : (
-                encomiendas.map((encomienda) => (
+                paginatedEncomiendas.map((encomienda) => (
                   <TableRow 
                     key={encomienda.id} 
                     className="cursor-pointer hover:bg-muted/50 transition-colors"
@@ -212,12 +221,24 @@ export default function TaquillaEncomiendasPage() {
                     <TableCell className="text-right text-muted-foreground text-sm whitespace-nowrap capitalize">
                       {formatDateRelative(encomienda.created_at)}
                     </TableCell>
+                    <TableCell className="text-center" onClick={(e) => e.stopPropagation()}>
+                      {encomienda.estado !== "PENDIENTE_DE_ESCANEO" ? (
+                        <RowPrintButton encomiendaId={encomienda.id} />
+                      ) : (
+                        <div className="w-8 h-8" />
+                      )}
+                    </TableCell>
                   </TableRow>
                 ))
               )}
             </TableBody>
           </Table>
         </div>
+        <Pagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          onPageChange={setCurrentPage}
+        />
       </div>
 
       {modalState.type === "recepcion" && (
@@ -272,5 +293,42 @@ export default function TaquillaEncomiendasPage() {
         />
       )}
     </div>
+  );
+}
+
+function RowPrintButton({ encomiendaId }: { encomiendaId: string }) {
+  const [loading, setLoading] = useState(false);
+  const handlePrint = async () => {
+    setLoading(true);
+    try {
+      const res = await obtenerPdfGuia(encomiendaId);
+      if (res.success && res.pdfUrl) {
+        window.open(res.pdfUrl, "_blank");
+        toast.success("Guía cargada con éxito");
+      } else {
+        toast.error(res.error || "No se pudo obtener la guía PDF");
+      }
+    } catch (err) {
+      toast.error("Error al obtener el PDF de la guía");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      className="h-8 w-8 text-muted-foreground hover:text-foreground"
+      onClick={handlePrint}
+      disabled={loading}
+      title="Reimprimir Guía"
+    >
+      {loading ? (
+        <Spinner className="h-4 w-4 animate-spin" />
+      ) : (
+        <Printer className="h-4 w-4" />
+      )}
+    </Button>
   );
 }

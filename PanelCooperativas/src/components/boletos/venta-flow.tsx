@@ -21,6 +21,7 @@ import { venderBoleto } from "../../app/cooperativas/(panel)/taquilla/boletos/ac
 import { Skeleton } from "@/components/ui/skeleton";
 import { printBoleto } from "@/lib/printing/print-helpers";
 import { printer } from "@/lib/printing/bluetooth";
+import { requireOnline } from "@/components/connectivity-banner";
 
 // Lazy-load QR code renderer (~40KB) — only needed in confirmation step
 const QRCodeSVG = lazy(() => import("qrcode.react").then((m) => ({ default: m.QRCodeSVG })));
@@ -152,15 +153,11 @@ export function VentaFlow({ isOpen, onClose }: VentaFlowProps) {
   };
 
   const handleSubmitVenta = async () => {
-    if (!navigator.onLine) {
-      toast.error("Esta operación requiere conexión a internet. Por favor, intente de nuevo cuando se restablezca la conexión.");
-      return;
-    }
     if (!selectedViaje || !selectedAsiento) return;
     setIsSubmitting(true);
     
     try {
-      const result = await venderBoleto({
+      const result = await requireOnline(() => venderBoleto({
         viajeId: selectedViaje.id,
         asiento: selectedAsiento,
         pasajeroNombre: pasajeroData.nombre,
@@ -168,7 +165,7 @@ export function VentaFlow({ isOpen, onClose }: VentaFlowProps) {
         pasajeroTelefono: pasajeroData.telefono,
         tipoPago,
         referenciaData: tipoPago === "DIGITAL" ? referenciaData : undefined
-      });
+      }))();
       
       if (result.success) {
         setResultadoBoleto(result.boleto);
@@ -178,7 +175,8 @@ export function VentaFlow({ isOpen, onClose }: VentaFlowProps) {
         toast.error(result.error || "Error al vender el boleto");
       }
     } catch (err) {
-      toast.error("Error inesperado en la venta");
+      const message = err instanceof Error ? err.message : "Error inesperado en la venta";
+      toast.error(message);
       console.error(err);
     } finally {
       setIsSubmitting(false);

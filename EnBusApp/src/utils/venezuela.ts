@@ -50,3 +50,20 @@ export const VENEZUELA_LOCATIONS: Localidad[] = [
   { estado: 'Miranda', ciudad: 'Guatire' },
   { estado: 'Miranda', ciudad: 'Cúa' }
 ];
+
+/**
+ * Normalizes a display city name to its database-equivalent value.
+ * e.g., "Mérida" -> "merida", "Puerto La Cruz" -> "puerto_la_cruz", "San Fernando de Apure" -> "san_fernando"
+ */
+export function normalizeCityForDb(ciudad: string | null | undefined): string {
+  if (!ciudad) return '';
+  const clean = ciudad.trim().toLowerCase();
+  if (clean === 'san fernando de apure') return 'san_fernando';
+  if (clean === 'san juan de los morros') return 'san_juan';
+  return ciudad
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, '_');
+}

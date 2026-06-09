@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import Image from "next/image";
 import { uploadLogo } from "@/app/cooperativas/(panel)/configuracion/actions";
 import type { CooperativaData } from "@/lib/types/configuracion";
+import { requireOnline } from "@/components/connectivity-banner";
 
 interface DatosCooperativaTabProps {
   cooperativa: CooperativaData;
@@ -43,7 +44,7 @@ export function DatosCooperativaTab({ cooperativa }: DatosCooperativaTabProps) {
 
     startTransition(async () => {
       try {
-        const { url } = await uploadLogo(formData);
+        const { url } = await requireOnline(() => uploadLogo(formData))();
         setLogoUrl(url);
         toast.success("Logo actualizado correctamente");
       } catch (err: unknown) {

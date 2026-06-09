@@ -10,6 +10,7 @@ import { CheckCircle, Money, LockKey, Warning, User, IdentificationCard, Phone, 
 import { PinInput } from "./pin-input";
 import { confirmarEntrega } from "@/app/cooperativas/(panel)/entrega/actions";
 import { procesarPago } from "@/app/cooperativas/(panel)/taquilla/encomiendas/actions";
+import { requireOnline } from "@/components/connectivity-banner";
 
 interface EntregaEncomienda {
   id: string;
@@ -143,20 +144,16 @@ export function EntregaModal({ encomiendaId, isOpen, onClose, onSuccess }: Entre
   };
 
   const handleAprobarPago = async (tipo: "DIGITAL" | "EFECTIVO") => {
-    if (!navigator.onLine) {
-      toast.error("Esta operación requiere conexión a internet. Por favor, intente de nuevo cuando se restablezca la conexión.");
-      return;
-    }
     if (!encomienda) return;
     setIsProcessingPago(true);
     try {
-      const result = await procesarPago(
+      const result = await requireOnline(() => procesarPago(
         encomienda.id,
         tipo,
         encomienda.costo_calculado ?? 0,
         encomienda.cooperativa_id,
         tipo === "DIGITAL" && pagoPendiente ? pagoPendiente.id : undefined
-      );
+      ))();
 
       if (result.success) {
         setPagoOk(true);
@@ -167,7 +164,8 @@ export function EntregaModal({ encomiendaId, isOpen, onClose, onSuccess }: Entre
       }
     } catch (err) {
       console.error(err);
-      toast.error("Error al registrar el pago");
+      const message = err instanceof Error ? err.message : "Error al registrar el pago";
+      toast.error(message);
     } finally {
       setIsProcessingPago(false);
     }
@@ -176,15 +174,11 @@ export function EntregaModal({ encomiendaId, isOpen, onClose, onSuccess }: Entre
   const [isConfirming, setIsConfirming] = useState(false);
 
   const handleConfirmarEntrega = async () => {
-    if (!navigator.onLine) {
-      toast.error("Esta operación requiere conexión a internet. Por favor, intente de nuevo cuando se restablezca la conexión.");
-      return;
-    }
     if (!encomiendaId || !encomienda) return;
     setIsConfirming(true);
     
     try {
-      const result = await confirmarEntrega(encomiendaId);
+      const result = await requireOnline(() => confirmarEntrega(encomiendaId))();
       
       if (result.success) {
         toast.success(`✅ Encomienda ${encomienda.tracking_id} entregada exitosamente`);
@@ -193,8 +187,9 @@ export function EntregaModal({ encomiendaId, isOpen, onClose, onSuccess }: Entre
       } else {
         toast.error(result.error || "Error al confirmar la entrega");
       }
-    } catch {
-      toast.error("Ocurrió un error inesperado al confirmar");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Ocurrió un error inesperado al confirmar";
+      toast.error(message);
     } finally {
       setIsConfirming(false);
     }

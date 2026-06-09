@@ -4,6 +4,12 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "
 import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/status-badge";
 import type { Encomienda } from "@/lib/types/encomiendas";
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Printer } from "@phosphor-icons/react";
+import { Spinner } from "@/components/ui/spinner";
+import { obtenerPdfGuia } from "@/app/cooperativas/(panel)/taquilla/encomiendas/actions";
+import { toast } from "sonner";
 
 interface DetalleSheetProps {
   encomienda: Encomienda;
@@ -12,11 +18,30 @@ interface DetalleSheetProps {
 }
 
 export function DetalleSheet({ encomienda, isOpen, onClose }: DetalleSheetProps) {
+  const [loadingPdf, setLoadingPdf] = useState(false);
+
   const formatDate = (dateString: string) => {
     return new Intl.DateTimeFormat("es-VE", {
       dateStyle: "medium",
       timeStyle: "short",
     }).format(new Date(dateString));
+  };
+
+  const handlePrint = async () => {
+    setLoadingPdf(true);
+    try {
+      const res = await obtenerPdfGuia(encomienda.id);
+      if (res.success && res.pdfUrl) {
+        window.open(res.pdfUrl, "_blank");
+        toast.success("Guía cargada con éxito");
+      } else {
+        toast.error(res.error || "No se pudo obtener la guía PDF");
+      }
+    } catch (err) {
+      toast.error("Error al obtener el PDF de la guía");
+    } finally {
+      setLoadingPdf(false);
+    }
   };
 
   return (
@@ -27,8 +52,26 @@ export function DetalleSheet({ encomienda, isOpen, onClose }: DetalleSheetProps)
             Detalle de Encomienda
             <StatusBadge status={encomienda.estado} />
           </SheetTitle>
-          <SheetDescription>
-            ID: <span className="font-mono text-foreground">{encomienda.tracking_id}</span>
+          <SheetDescription className="flex items-center justify-between gap-2">
+            <span>
+              ID: <span className="font-mono text-foreground">{encomienda.tracking_id}</span>
+            </span>
+            {encomienda.estado !== "PENDIENTE_DE_ESCANEO" && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 shrink-0"
+                onClick={handlePrint}
+                disabled={loadingPdf}
+              >
+                {loadingPdf ? (
+                  <Spinner className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Printer className="mr-1.5 h-3.5 w-3.5" />
+                )}
+                Imprimir Guía
+              </Button>
+            )}
           </SheetDescription>
         </SheetHeader>
 

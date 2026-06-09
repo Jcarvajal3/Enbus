@@ -20,11 +20,13 @@ import { ScanInput } from "@/components/scan-input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { confirmarEmbarque, verificarPagoBoleto } from "./actions";
 import { PasajerosViajeSheet } from "@/components/boletos/pasajeros-viaje-sheet";
+import { requireOnline } from "@/components/connectivity-banner";
+import { Pagination } from "@/components/ui/pagination";
 
 type PagoRow = {
   id: string;
   monto: number;
-  modalidad: string;
+  tipo_pago: string;
   verificado: boolean;
   banco_emisor?: string | null;
   numero_referencia?: string | null;
@@ -52,13 +54,17 @@ export default function TaquillaBoletosPage() {
   const [boletoConfirmacion, setBoletoConfirmacion] = useState<BoletoRow | null>(null);
   const [isConfirming, setIsConfirming] = useState(false);
   
-  const [pagoVerification, setPagoVerification] = useState<{ boleto: BoletoRow, pago: PagoRow } | null>(null);
+  const [pagoVerification, setPagoVerification] = useState<{ boleto: BoletoRow, pago?: PagoRow } | null>(null);
   const [isVerifyingPago, setIsVerifyingPago] = useState(false);
+  
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
 
   const [pasajerosSheetViaje, setPasajerosSheetViaje] = useState<{ id: string, ruta: string, fecha: string } | null>(null);
 
   const fetchBoletos = useCallback(async () => {
     setLoading(true);
+    setCurrentPage(1);
     try {
       let query = supabase
         .from("boletos")
@@ -125,7 +131,7 @@ export default function TaquillaBoletosPage() {
     if (!boletoConfirmacion) return;
     setIsConfirming(true);
     try {
-      const res = await confirmarEmbarque(boletoConfirmacion.id);
+      const res = await requireOnline(() => confirmarEmbarque(boletoConfirmacion.id))();
       if (res.success) {
         toast.success("Embarque confirmado exitosamente");
         setBoletoConfirmacion(null);
@@ -133,8 +139,9 @@ export default function TaquillaBoletosPage() {
       } else {
         toast.error(res.error || "Error al confirmar embarque");
       }
-    } catch {
-      toast.error("Error al procesar el embarque");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Error al procesar el embarque";
+      toast.error(message);
     } finally {
       setIsConfirming(false);
     }
@@ -144,7 +151,7 @@ export default function TaquillaBoletosPage() {
     if (!pagoVerification) return;
     setIsVerifyingPago(true);
     try {
-      const res = await verificarPagoBoleto(pagoVerification.boleto.id, pagoVerification.pago?.id);
+      const res = await requireOnline(() => verificarPagoBoleto(pagoVerification.boleto.id, pagoVerification.pago?.id))();
       if (res.success) {
         toast.success("Pago verificado exitosamente. Boleto activo.");
         setPagoVerification(null);
@@ -152,8 +159,9 @@ export default function TaquillaBoletosPage() {
       } else {
         toast.error(res.error || "Error al verificar pago");
       }
-    } catch {
-      toast.error("Error al procesar la verificación");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Error al procesar la verificación";
+      toast.error(message);
     } finally {
       setIsVerifyingPago(false);
     }
@@ -170,6 +178,9 @@ export default function TaquillaBoletosPage() {
       return dateString;
     }
   };
+
+  const totalPages = Math.ceil(boletos.length / itemsPerPage);
+  const paginatedBoletos = boletos.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   return (
     <div className="space-y-6 flex flex-col h-full animate-in fade-in duration-300">
@@ -260,7 +271,7 @@ export default function TaquillaBoletosPage() {
                   </TableCell>
                 </TableRow>
               ) : (
-                boletos.map((boleto) => {
+                paginatedBoletos.map((boleto) => {
                   const origen = boleto.viaje?.ruta?.ciudad_origen || "";
                   const destino = boleto.viaje?.ruta?.ciudad_destino || "";
                   const rutaString = origen && destino ? `${origen} → ${destino}` : "Ruta desconocida";
@@ -331,6 +342,11 @@ export default function TaquillaBoletosPage() {
             </TableBody>
           </Table>
         </div>
+        <Pagination 
+          currentPage={currentPage} 
+          totalPages={totalPages} 
+          onPageChange={setCurrentPage} 
+        />
       </div>
 
       <VentaFlow 

@@ -8,6 +8,17 @@ import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import type { Encomienda, Pago } from "@/lib/types/encomiendas";
 import { procesarPago } from "@/app/cooperativas/(panel)/taquilla/encomiendas/actions";
+import { requireOnline } from "@/components/connectivity-banner";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 interface PagoModalProps {
   encomienda: Encomienda;
@@ -24,6 +35,7 @@ export function PagoModal({ encomienda, cooperativaId, isOpen, onClose, onSucces
   const [loading, setLoading] = useState(true);
   const [pagoDigital, setPagoDigital] = useState<Pago | null>(null);
   const [submitting, setSubmitting] = useState<"DIGITAL" | "EFECTIVO" | null>(null);
+  const [confirmEfectivoOpen, setConfirmEfectivoOpen] = useState(false);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -59,23 +71,19 @@ export function PagoModal({ encomienda, cooperativaId, isOpen, onClose, onSucces
   }, [isOpen, encomienda.id, supabase]);
 
   const handleProcesar = async (tipo: "DIGITAL" | "EFECTIVO") => {
-    if (!navigator.onLine) {
-      toast.error("Esta operación requiere conexión a internet. Por favor, intente de nuevo cuando se restablezca la conexión.");
-      return;
-    }
     if (!encomienda.costo_calculado) return;
     
     setSubmitting(tipo);
     try {
       const pagoExistenteId = tipo === "DIGITAL" && pagoDigital ? pagoDigital.id : undefined;
       
-      const res = await procesarPago(
+      const res = await requireOnline(() => procesarPago(
         encomienda.id,
         tipo,
-        encomienda.costo_calculado,
+        encomienda.costo_calculado!,
         cooperativaId,
         pagoExistenteId
-      );
+      ))();
       
       if (res.success) {
         toast.success(tipo === "EFECTIVO" ? "Cobro en efectivo registrado" : "Pago digital aprobado");
@@ -86,7 +94,8 @@ export function PagoModal({ encomienda, cooperativaId, isOpen, onClose, onSucces
         toast.error(res.error || "Error al procesar el pago");
       }
     } catch (err) {
-      toast.error("Ocurrió un error inesperado al procesar el pago");
+      const message = err instanceof Error ? err.message : "Ocurrió un error inesperado al procesar el pago";
+      toast.error(message);
       console.error(err);
     } finally {
       setSubmitting(null);
@@ -205,7 +214,7 @@ export function PagoModal({ encomienda, cooperativaId, isOpen, onClose, onSucces
         <DialogFooter className="sm:justify-between items-center border-t pt-4">
           <Button 
             variant="outline" 
-            onClick={() => handleProcesar("EFECTIVO")}
+            onClick={() => setConfirmEfectivoOpen(true)}
             disabled={!!submitting}
             className="border-primary/20 hover:bg-primary/5 text-foreground"
           >
@@ -220,6 +229,34 @@ export function PagoModal({ encomienda, cooperativaId, isOpen, onClose, onSucces
             Cancelar
           </Button>
         </DialogFooter>
+
+        <AlertDialog open={confirmEfectivoOpen} onOpenChange={setConfirmEfectivoOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>¿Confirmar cobro en efectivo?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Esta acción registrará que has recibido en efectivo el monto de{" "}
+                <strong className="text-foreground">
+                  ${encomienda.costo_calculado?.toFixed(2) || "0.00"}
+                </strong>{" "}
+                para la encomienda <strong className="font-mono text-foreground">{encomienda.tracking_id}</strong>.
+                Esta acción no se puede deshacer y avanzará el estado del paquete.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => {
+                  setConfirmEfectivoOpen(false);
+                  handleProcesar("EFECTIVO");
+                }}
+                className="bg-primary text-primary-foreground hover:bg-primary/90"
+              >
+                Confirmar Cobro
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </DialogContent>
     </Dialog>
   );

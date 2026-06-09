@@ -5,6 +5,7 @@ import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp
 import { validarPin } from "@/app/cooperativas/(panel)/entrega/actions";
 import { CheckCircle, Warning, LockKey } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
+import { requireOnline } from "@/components/connectivity-banner";
 
 interface PinInputProps {
   encomiendaId: string;
@@ -34,7 +35,7 @@ export function PinInput({
     setErrorMsg("");
 
     try {
-      const result = await validarPin(encomiendaId, pinCode);
+      const result = await requireOnline(() => validarPin(encomiendaId, pinCode))();
 
       if (result.success) {
         setIsSuccess(true);
@@ -53,8 +54,9 @@ export function PinInput({
           setTimeout(() => setShake(false), 500);
         }
       }
-    } catch {
-      setErrorMsg("Error de conexión al validar");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Error de conexión al validar";
+      setErrorMsg(message);
       setPin("");
     } finally {
       setIsValidating(false);

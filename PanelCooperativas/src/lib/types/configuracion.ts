@@ -3,12 +3,10 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 export type TipoMetodoPago =
-  | "transferencia"
-  | "pago_movil"
-  | "zelle"
-  | "efectivo_usd"
-  | "efectivo_bs"
-  | "otro";
+  | "TRANSFERENCIA_BANCARIA"
+  | "PAGO_MOVIL"
+  | "ZELLE"
+  | "EFECTIVO";
 
 export interface MetodoPagoCooperativa {
   id: string;

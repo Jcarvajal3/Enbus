@@ -11,6 +11,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { toast } from "sonner";
 import { Truck, Package, ArrowLeft } from "@phosphor-icons/react";
 import { recibirLote } from "./actions";
+import { requireOnline } from "@/components/connectivity-banner";
 
 interface RecepcionLoteModalProps {
   isOpen: boolean;
@@ -123,7 +124,7 @@ export function RecepcionLoteModal({ isOpen, onClose, cooperativaId, onSuccess }
     setIsSubmitting(true);
     try {
       const ids = Array.from(selectedEncomiendaIds);
-      const result = await recibirLote(ids);
+      const result = await requireOnline(() => recibirLote(ids))();
       
       if (result.success) {
         toast.success(`✅ ${result.count} encomiendas recibidas exitosamente`);
@@ -132,8 +133,9 @@ export function RecepcionLoteModal({ isOpen, onClose, cooperativaId, onSuccess }
       } else {
         toast.error(result.error || "Error al procesar el lote");
       }
-    } catch {
-      toast.error("Ocurrió un error inesperado");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Ocurrió un error inesperado";
+      toast.error(message);
     } finally {
       setIsSubmitting(false);
     }

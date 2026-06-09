@@ -134,7 +134,7 @@ export default function LoginPage() {
                 <Field>
                   <div className="flex items-center justify-between">
                     <FieldLabel htmlFor="password">Contraseña</FieldLabel>
-                    <Link href="#" className="text-sm font-medium text-primary hover:underline">
+                    <Link href="/cooperativas/recuperar" className="text-sm font-medium text-primary hover:underline">
                       ¿Olvidaste tu contraseña?
                     </Link>
                   </div>

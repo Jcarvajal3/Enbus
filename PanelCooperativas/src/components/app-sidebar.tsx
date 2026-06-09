@@ -4,7 +4,9 @@ import { useUser } from "@/hooks/use-user";
 import { NAV_ITEMS } from "@/lib/navigation";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { Bus, SignOut } from "@phosphor-icons/react";
+import { Bus, SignOut, Sun, Moon, Monitor } from "@phosphor-icons/react";
+import { useTheme } from "next-themes";
+import { useState, useEffect } from "react";
 import {
   Sidebar,
   SidebarContent,
@@ -34,6 +36,15 @@ export function AppSidebar() {
   const searchParams = useSearchParams();
   const currentTab = searchParams.get("tab");
   const supabase = createClient();
+  const { theme, setTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setMounted(true);
+    }, 0);
+    return () => clearTimeout(timer);
+  }, []);
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -120,6 +131,23 @@ export function AppSidebar() {
                   </div>
                 </div>
               </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">Tema</DropdownMenuLabel>
+              <DropdownMenuItem onClick={() => setTheme("light")} className="cursor-pointer">
+                <Sun className="size-4 mr-2" />
+                <span>Claro</span>
+                {mounted && theme === "light" && <span className="ml-auto text-xs text-primary">✓</span>}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setTheme("dark")} className="cursor-pointer">
+                <Moon className="size-4 mr-2" />
+                <span>Oscuro</span>
+                {mounted && theme === "dark" && <span className="ml-auto text-xs text-primary">✓</span>}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setTheme("system")} className="cursor-pointer">
+                <Monitor className="size-4 mr-2" />
+                <span>Sistema</span>
+                {mounted && theme === "system" && <span className="ml-auto text-xs text-primary">✓</span>}
+              </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={handleSignOut} className="cursor-pointer text-destructive focus:text-destructive">
                 <SignOut />

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, Pressable, ScrollView } from '@/tw';
+import * as Haptics from 'expo-haptics';
 
 interface SeatSelectorProps {
   viaje_id: string;
@@ -40,6 +41,7 @@ export function SeatSelector({
 
   const toggleSeat = (seat: string) => {
     if (asientosOcupados.includes(seat)) return;
+    Haptics.selectionAsync();
     setSeleccionados((prev) =>
       prev.includes(seat) ? prev.filter((s) => s !== seat) : [...prev, seat]
     );
@@ -145,7 +147,10 @@ export function SeatSelector({
         )}
 
         <Pressable
-          onPress={() => onConfirm(seleccionados)}
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            onConfirm(seleccionados);
+          }}
           disabled={seleccionados.length === 0}
           className={`h-14 rounded-2xl items-center justify-center ${seleccionados.length > 0 ? 'bg-primary' : 'bg-primary/40'}`}
         >

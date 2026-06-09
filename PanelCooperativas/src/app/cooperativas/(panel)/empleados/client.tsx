@@ -12,7 +12,9 @@ import { Badge } from "@/components/ui/badge";
 import { invitarEmpleado, toggleEmpleado } from "./actions";
 import { DotsThree, UserPlus, Copy, Check, UsersThree } from "@phosphor-icons/react";
 import { PageHeader } from "@/components/page-header";
+import { requireOnline } from "@/components/connectivity-banner";
 import { EmptyState } from "@/components/empty-state";
+import { Pagination } from "@/components/ui/pagination";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 export function EmpleadosClient({
@@ -28,16 +30,22 @@ export function EmpleadosClient({
   const [isPending, startTransition] = useTransition();
   const [inviteLink, setInviteLink] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
 
   async function handleInvite(formData: FormData) {
     startTransition(async () => {
-      const res = await invitarEmpleado(formData);
-      if (res.error) {
-        alert(res.error);
-        return;
-      }
-      if (res.success && res.token) {
-        setInviteLink(`${window.location.origin}/cooperativas/invite/${res.token}`);
+      try {
+        const res = await requireOnline(() => invitarEmpleado(formData))();
+        if (res.error) {
+          alert(res.error);
+          return;
+        }
+        if (res.success && res.token) {
+          setInviteLink(`${window.location.origin}/cooperativas/invite/${res.token}`);
+        }
+      } catch (err: any) {
+        alert(err.message || "Error inesperado");
       }
     });
   }
@@ -45,9 +53,13 @@ export function EmpleadosClient({
   async function handleToggle(id: string, action: "desactivar" | "reactivar") {
     if (confirm(`¿Estás seguro de que deseas ${action} a este empleado?`)) {
       startTransition(async () => {
-        const res = await toggleEmpleado(id, action);
-        if (res.error) {
-          alert(res.error);
+        try {
+          const res = await requireOnline(() => toggleEmpleado(id, action))();
+          if (res.error) {
+            alert(res.error);
+          }
+        } catch (err: any) {
+          alert(err.message || "Error inesperado");
         }
       });
     }
@@ -60,6 +72,9 @@ export function EmpleadosClient({
       setTimeout(() => setCopied(false), 2000);
     }
   }
+
+  const totalPages = Math.ceil(empleados.length / itemsPerPage);
+  const paginatedEmpleados = empleados.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   return (
     <div className="flex flex-col gap-6">
@@ -139,7 +154,7 @@ export function EmpleadosClient({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {empleados.map((emp) => {
+            {paginatedEmpleados.map((emp) => {
               const isActive = !emp.isBanned;
               return (
                 <TableRow key={emp.id} className={!isActive ? "opacity-60" : ""}>
@@ -210,6 +225,11 @@ export function EmpleadosClient({
           </TableBody>
         </Table>
       </div>
+      <Pagination
+        currentPage={currentPage}
+        totalPages={totalPages}
+        onPageChange={setCurrentPage}
+      />
     </div>
   );
 }

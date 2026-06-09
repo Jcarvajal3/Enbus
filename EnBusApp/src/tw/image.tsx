@@ -10,7 +10,7 @@ export type ImageProps = React.ComponentProps<typeof RNImage>;
 
 function CSSImage(props: React.ComponentProps<typeof AnimatedExpoImage>) {
   const { objectFit, objectPosition, ...style } =
-    StyleSheet.flatten(props.style) || {};
+    (StyleSheet.flatten(props.style) || {}) as any;
 
   return (
     <AnimatedExpoImage

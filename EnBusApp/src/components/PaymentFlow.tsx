@@ -1,13 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, Pressable, ScrollView } from '@/tw';
-import { TextInput, Modal, Alert } from 'react-native';
+import { TextInput, Modal } from 'react-native';
 import { CheckCircle, CreditCard, Bank, X } from 'phosphor-react-native';
 import { Spinner } from '@/src/components/Spinner';
 import { supabase } from '@/src/utils/supabase';
 import { useAuth } from '@/src/contexts/AuthContext';
+import * as Haptics from 'expo-haptics';
+import { useToast } from '@/src/components/Toast';
 
 // ─── Bancos de Venezuela ──────────────────────────────────────────────────────
-
 const BANCOS_VE = [
   'Banco de Venezuela', 'Bancamiga', 'Banesco', 'BBVA Provincial',
   'Mercantil', 'BNC', 'Banco Exterior', 'Bicentenario',
@@ -19,30 +20,23 @@ const BANCOS_VE = [
 ];
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-
 type FlowStep = 'metodos' | 'formulario' | 'enviado';
-type MetodoPago = 'PAGO_MOVIL' | 'TRANSFERENCIA' | 'EFECTIVO' | 'ZELLE';
 
-// Mapeo al tipo_pago esperado por la tabla `pagos` del Panel
-const TIPO_PAGO_MAP: Record<MetodoPago, 'DIGITAL' | 'EFECTIVO'> = {
-  PAGO_MOVIL: 'DIGITAL',
-  TRANSFERENCIA: 'DIGITAL',
-  ZELLE: 'DIGITAL',
-  EFECTIVO: 'EFECTIVO',
+const METODO_INFO: Record<string, { label: string; desc: string }> = {
+  PAGO_MOVIL: { label: 'Pago Móvil', desc: 'Transferencia instantánea en bolívares' },
+  TRANSFERENCIA_BANCARIA: { label: 'Transferencia Bancaria', desc: 'Desde tu cuenta bancaria nacional' },
+  ZELLE: { label: 'Zelle / Divisas', desc: 'Pago electrónico en dólares' },
+  EFECTIVO: { label: 'Efectivo en Taquilla', desc: 'Pago directo en la taquilla de la cooperativa' },
 };
 
 interface PaymentFlowProps {
   monto: number;
   cooperativa_id?: string;
   concepto?: string;
-  /** UUID de la encomienda a vincular con el pago (opcional) */
   encomienda_id?: string;
-  /** UUID(s) de boleto(s) a vincular con el pago (opcional) */
   boleto_ids?: string[];
   onPaymentSuccess?: (pagoId?: string, pagoPayload?: Record<string, unknown>) => void;
 }
-
-// ─── Component ────────────────────────────────────────────────────────────────
 
 export function PaymentFlow({
   monto,
@@ -53,9 +47,13 @@ export function PaymentFlow({
   onPaymentSuccess,
 }: PaymentFlowProps) {
   const { user } = useAuth();
+  const toast = useToast();
 
   const [step, setStep] = useState<FlowStep>('metodos');
-  const [metodo, setMetodo] = useState<MetodoPago | null>(null);
+  const [metodosCuentas, setMetodosCuentas] = useState<any[]>([]);
+  const [loadingMetodos, setLoadingMetodos] = useState(true);
+  const [metodoSeleccionado, setMetodoSeleccionado] = useState<any>(null);
+
   const [referencia, setReferencia] = useState('');
   const [fecha, setFecha] = useState('');
   const [banco, setBanco] = useState('');
@@ -66,48 +64,89 @@ export function PaymentFlow({
 
   const inputClass = 'bg-background border border-input px-4 h-12 rounded-[10px] text-base text-foreground';
 
-  const metodos: { id: MetodoPago; label: string; desc: string }[] = [
-    { id: 'PAGO_MOVIL', label: 'Pago Móvil', desc: 'Transferencia instantánea entre bancos' },
-    { id: 'TRANSFERENCIA', label: 'Transferencia Bancaria', desc: 'Desde tu cuenta a la de la cooperativa' },
-    { id: 'ZELLE', label: 'Zelle / PayPal', desc: 'Pagos en divisas' },
-    { id: 'EFECTIVO', label: 'Efectivo en Taquilla', desc: 'Pagas al entregar el paquete' },
-  ];
+  // ── Cargar métodos de pago reales de la cooperativa ─────────────────────────
+  useEffect(() => {
+    if (!cooperativa_id) {
+      setLoadingMetodos(false);
+      return;
+    }
+    let isMounted = true;
+    const fetchMetodos = async () => {
+      try {
+        setLoadingMetodos(true);
+        const { data, error } = await supabase
+          .from('metodos_pago_cooperativa')
+          .select('*')
+          .eq('cooperativa_id', cooperativa_id)
+          .eq('activo', true);
 
-  // ── Validación ─────────────────────────────────────────────────────────────
-  // El efectivo no requiere referencia/banco/fecha — solo confirmación
-  const isEfectivo = metodo === 'EFECTIVO';
+        if (error) throw error;
+        if (isMounted) {
+          setMetodosCuentas(data || []);
+        }
+      } catch (err: any) {
+        console.error('[PaymentFlow] Error cargando métodos de pago:', err.message);
+      } finally {
+        if (isMounted) setLoadingMetodos(false);
+      }
+    };
+    fetchMetodos();
+    return () => { isMounted = false; };
+  }, [cooperativa_id]);
+
+  // Si no se han cargado métodos en BD, proveer Efectivo como fallback
+  const metodosDisponibles = metodosCuentas.length > 0 
+    ? metodosCuentas 
+    : [{ id: 'fallback-efectivo', tipo: 'EFECTIVO', cooperativa_id }];
+
+  const isEfectivo = metodoSeleccionado?.tipo === 'EFECTIVO';
   const isFormValid = isEfectivo
     ? true
     : referencia.trim().length >= 4 && fecha.trim().length >= 6 && banco.trim().length > 0;
 
-  // ── Submit ──────────────────────────────────────────────────────────────────
   const handleSubmitPago = async () => {
-    if (!isFormValid || !metodo || !user) return;
+    if (!isFormValid || !metodoSeleccionado || !user) return;
     setIsSubmitting(true);
 
     try {
-      // ── Construir el registro de pago (alineado al esquema real de `pagos`) ─
+      // Formatear fecha de DD/MM/AAAA a YYYY-MM-DD
+      let formattedDate: string | null = null;
+      if (!isEfectivo) {
+        const parts = fecha.trim().split('/');
+        if (parts.length === 3) {
+          const day = parts[0].padStart(2, '0');
+          const month = parts[1].padStart(2, '0');
+          const year = parts[2];
+          formattedDate = `${year}-${month}-${day}`;
+        } else {
+          formattedDate = fecha.trim();
+        }
+      }
+
       const pagoPayload: Record<string, unknown> = {
         pagador_id: user.id,
         monto,
-        tipo_pago: TIPO_PAGO_MAP[metodo],
-        metodo_pago_cliente: metodo, // columna adicional para detalle de canal
-        verificado: false, // La cooperativa lo verifica en su Panel
+        tipo_pago: isEfectivo ? 'EFECTIVO' : 'DIGITAL',
+        verificado: false,
       };
 
       if (cooperativa_id) pagoPayload.cooperativa_id = cooperativa_id;
       if (encomienda_id) pagoPayload.encomienda_id = encomienda_id;
 
+      // Vincular método de pago real (salvo que sea fallback)
+      if (metodoSeleccionado.id && metodoSeleccionado.id !== 'fallback-efectivo') {
+        pagoPayload.metodo_pago_id = metodoSeleccionado.id;
+      }
+
       if (!isEfectivo) {
         pagoPayload.numero_referencia = referencia.trim();
-        pagoPayload.fecha_transaccion = fecha.trim();
+        pagoPayload.fecha_transaccion = formattedDate;
         pagoPayload.banco_emisor = banco;
       }
 
       setCurrentPayload(pagoPayload);
 
-      // ── Insertar en `pagos` solo si tenemos un ID válido (encomienda o boleto ya creado) ─
-      // Si no hay ninguno, el padre creará los boletos y luego el pago usando el payload.
+      // Si tenemos ID de encomienda o boletos ya creados, insertamos el pago directamente
       if (encomienda_id || (boleto_ids && boleto_ids.length > 0)) {
         const { data: pago, error: pagoError } = await supabase
           .from('pagos')
@@ -116,32 +155,29 @@ export function PaymentFlow({
           .single();
 
         if (pagoError) throw pagoError;
-
-        // Si hay boletos vinculados (previamente creados), actualizamos su estado
-        // (Nota: la app actualmente delega la creación de boletos al padre, por lo que esto
-        // se ejecutará mayormente en flujos futuros o de encomiendas)
-        if (boleto_ids && boleto_ids.length > 0 && pago?.id) {
-          // El esquema de boletos no tiene pago_id, así que no podemos hacer el update en boletos.
-          // El diseño asume que boletos se crean después y se asigna el boleto_id al pago.
-        }
-
         setPagoId(pago?.id);
       }
 
       setStep('enviado');
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Error desconocido';
-      console.error('[PaymentFlow] Error al registrar pago:', msg);
-      Alert.alert(
-        'Error al enviar comprobante',
-        `No se pudo registrar el pago. Inténtalo de nuevo.\n\n${msg}`
-      );
+    } catch (err: any) {
+      console.error('[PaymentFlow] Error al registrar pago:', err.message);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      toast.show('error', `No se pudo registrar el pago: ${err.message}`);
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // ── Paso: Enviado ───────────────────────────────────────────────────────────
+  if (loadingMetodos) {
+    return (
+      <View className="bg-card rounded-[14px] p-8 border border-border items-center justify-center">
+        <Spinner size="large" />
+        <Text className="text-xs text-muted-foreground mt-2 font-bold">Cargando cuentas bancarias...</Text>
+      </View>
+    );
+  }
+
+  // Paso 3: Enviado
   if (step === 'enviado') {
     return (
       <View className="bg-card rounded-[14px] p-8 border border-border items-center">
@@ -150,7 +186,7 @@ export function PaymentFlow({
         </View>
         <Text className="font-heading text-xl text-foreground text-center mb-2">Comprobante Enviado</Text>
         <Text className="text-sm text-muted-foreground text-center mb-6 leading-5">
-          La cooperativa verificará tu pago. Cuando sea confirmado, tu transacción será procesada.
+          La cooperativa verificará tu pago. Una vez verificado por un taquillero, tu reserva/envío será confirmado.
         </Text>
 
         {!isEfectivo && referencia ? (
@@ -163,7 +199,7 @@ export function PaymentFlow({
         {isEfectivo && (
           <View className="bg-warning/10 rounded-[10px] px-4 py-3 w-full mb-6 border border-warning/20">
             <Text className="text-xs text-warning font-bold mb-1">Pago en efectivo</Text>
-            <Text className="text-sm text-foreground">Presenta este código al llegar a taquilla para completar tu pago.</Text>
+            <Text className="text-sm text-foreground">Completa tu pago al presentarte en la taquilla de la cooperativa.</Text>
           </View>
         )}
 
@@ -179,45 +215,81 @@ export function PaymentFlow({
     );
   }
 
-  // ── Paso: Formulario de comprobante ────────────────────────────────────────
+  // Paso 2: Formulario de comprobante
   if (step === 'formulario') {
+    const info = METODO_INFO[metodoSeleccionado?.tipo] || { label: 'Pago', desc: '' };
     return (
-      <View className="bg-card rounded-[14px] p-6 border border-border">
+      <ScrollView className="bg-card rounded-[14px] p-6 border border-border">
         {/* Volver */}
         <Pressable onPress={() => setStep('metodos')} className="flex-row items-center mb-6 gap-2">
           <X color="#a3a3a3" size={16} weight="bold" />
-          <Text className="text-sm text-muted-foreground">Volver</Text>
+          <Text className="text-sm text-muted-foreground">Volver a métodos</Text>
         </Pressable>
 
         <Text className="font-heading text-lg text-foreground mb-1">Confirmar Pago</Text>
-        <Text className="text-sm text-muted-foreground mb-6">
-          Método: {metodos.find(m => m.id === metodo)?.label}
+        <Text className="text-sm text-muted-foreground mb-4">
+          Método: {info.label}
         </Text>
 
         {/* Monto */}
-        <View className="bg-primary/10 rounded-[10px] px-4 py-3 mb-6 border border-primary/20 items-center">
+        <View className="bg-primary/10 rounded-[10px] px-4 py-3 mb-4 border border-primary/20 items-center">
           <Text className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1">Monto a pagar</Text>
           <Text className="font-heading text-3xl text-primary">{monto} Bs.</Text>
-          {concepto && <Text className="text-xs text-muted-foreground mt-1">{concepto}</Text>}
+          {concepto && <Text className="text-xs text-muted-foreground mt-1 text-center">{concepto}</Text>}
         </View>
 
-        {/* Efectivo: solo confirmación */}
+        {/* Datos reales de la Cooperativa */}
+        {!isEfectivo && (
+          <View className="bg-secondary rounded-[10px] p-4 mb-6 border border-border/50">
+            <Text className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">
+              Datos de Cuenta
+            </Text>
+            {metodoSeleccionado.tipo === 'PAGO_MOVIL' && (
+              <View className="gap-1.5">
+                {metodoSeleccionado.banco && <Text className="text-sm text-foreground"><Text className="font-bold">Banco:</Text> {metodoSeleccionado.banco}</Text>}
+                <Text className="text-sm text-foreground"><Text className="font-bold">Titular:</Text> {metodoSeleccionado.titular}</Text>
+                {metodoSeleccionado.numero_cuenta && <Text className="text-sm text-foreground"><Text className="font-bold">Teléfono PM:</Text> {metodoSeleccionado.numero_cuenta}</Text>}
+                {metodoSeleccionado.cedula_rif && <Text className="text-sm text-foreground"><Text className="font-bold">C.I. / RIF:</Text> {metodoSeleccionado.cedula_rif}</Text>}
+              </View>
+            )}
+            {metodoSeleccionado.tipo === 'TRANSFERENCIA_BANCARIA' && (
+              <View className="gap-1.5">
+                {metodoSeleccionado.banco && <Text className="text-sm text-foreground"><Text className="font-bold">Banco:</Text> {metodoSeleccionado.banco}</Text>}
+                <Text className="text-sm text-foreground"><Text className="font-bold">Titular:</Text> {metodoSeleccionado.titular}</Text>
+                {metodoSeleccionado.numero_cuenta && <Text className="text-sm text-foreground"><Text className="font-bold">Nro. Cuenta:</Text> {metodoSeleccionado.numero_cuenta}</Text>}
+                {metodoSeleccionado.cedula_rif && <Text className="text-sm text-foreground"><Text className="font-bold">C.I. / RIF:</Text> {metodoSeleccionado.cedula_rif}</Text>}
+              </View>
+            )}
+            {metodoSeleccionado.tipo === 'ZELLE' && (
+              <View className="gap-1.5">
+                <Text className="text-sm text-foreground"><Text className="font-bold">Titular:</Text> {metodoSeleccionado.titular}</Text>
+                {metodoSeleccionado.email_zelle && <Text className="text-sm text-foreground"><Text className="font-bold">Correo Zelle:</Text> {metodoSeleccionado.email_zelle}</Text>}
+              </View>
+            )}
+            {metodoSeleccionado.instrucciones && (
+              <Text className="text-xs text-muted-foreground mt-2 italic border-t border-border/30 pt-2">
+                Nota: {metodoSeleccionado.instrucciones}
+              </Text>
+            )}
+          </View>
+        )}
+
+        {/* Form Fields */}
         {isEfectivo ? (
           <View className="bg-warning/10 border border-warning/30 rounded-[10px] p-4 mb-6">
             <Text className="text-sm text-foreground font-bold mb-1">Pago en Taquilla</Text>
             <Text className="text-sm text-muted-foreground leading-5">
-              Al seleccionar esta opción, quedará registrado como pago pendiente.
-              Deberás presentarte en taquilla para completarlo.
+              Al seleccionar esta opción, tu reserva quedará pendiente.
+              Deberás realizar el pago directamente en la ventanilla de la cooperativa.
             </Text>
           </View>
         ) : (
-          /* Digital: referencia + fecha + banco */
           <View className="gap-4">
             <View>
               <Text className="text-sm font-medium text-foreground mb-2">Número de Referencia</Text>
               <TextInput
                 className={inputClass}
-                placeholder="Ej: 0000123456789"
+                placeholder="Últimos 4 o más dígitos"
                 placeholderTextColor="#a3a3a3"
                 keyboardType="number-pad"
                 value={referencia}
@@ -238,7 +310,7 @@ export function PaymentFlow({
             </View>
 
             <View>
-              <Text className="text-sm font-medium text-foreground mb-2">Banco Emisor</Text>
+              <Text className="text-sm font-medium text-foreground mb-2">Banco Emisor (Tu banco)</Text>
               <Pressable
                 onPress={() => setIsBancoModalVisible(true)}
                 className="bg-background border border-input h-12 rounded-[10px] px-4 flex-row justify-between items-center"
@@ -252,16 +324,16 @@ export function PaymentFlow({
           </View>
         )}
 
-        {/* Botón de envío */}
+        {/* Submit */}
         <Pressable
           onPress={handleSubmitPago}
           disabled={!isFormValid || isSubmitting}
-          className={`h-12 rounded-[10px] items-center justify-center mt-6 ${isFormValid ? 'bg-primary' : 'bg-primary/40'}`}
+          className={`h-12 rounded-[10px] items-center justify-center mt-6 mb-8 ${isFormValid ? 'bg-primary' : 'bg-primary/40'}`}
         >
           {isSubmitting
             ? <Spinner />
             : <Text className={`font-bold ${isFormValid ? 'text-primary-foreground' : 'text-primary-foreground/50'}`}>
-                {isEfectivo ? 'Registrar Pago en Efectivo' : 'Enviar Comprobante'}
+                {isEfectivo ? 'Confirmar Pago en Taquilla' : 'Registrar Pago'}
               </Text>
           }
         </Pressable>
@@ -299,37 +371,40 @@ export function PaymentFlow({
             </ScrollView>
           </View>
         </Modal>
-      </View>
+      </ScrollView>
     );
   }
 
-  // ── Paso 1: Selección de método ─────────────────────────────────────────────
+  // Paso 1: Selección de método
   return (
     <View className="bg-card rounded-[14px] p-6 border border-border">
       <Text className="font-heading text-lg text-foreground mb-1">Método de Pago</Text>
       {concepto && <Text className="text-sm text-muted-foreground mb-4">{concepto}</Text>}
 
       <View className="bg-primary/10 rounded-[10px] px-4 py-3 mb-6 border border-primary/20 items-center">
-        <Text className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1">Total</Text>
+        <Text className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1">Total a Transferir</Text>
         <Text className="font-heading text-3xl text-primary">{monto} Bs.</Text>
       </View>
 
       <View className="gap-3">
-        {metodos.map((m) => (
-          <Pressable
-            key={m.id}
-            onPress={() => { setMetodo(m.id); setStep('formulario'); }}
-            className="flex-row items-center p-4 bg-background border border-border rounded-[10px]"
-          >
-            <View className="size-10 bg-primary/10 rounded-full items-center justify-center mr-4">
-              <CreditCard color="#d4a017" weight="fill" size={20} />
-            </View>
-            <View className="flex-1">
-              <Text className="text-sm font-bold text-foreground">{m.label}</Text>
-              <Text className="text-xs text-muted-foreground">{m.desc}</Text>
-            </View>
-          </Pressable>
-        ))}
+        {metodosDisponibles.map((m) => {
+          const info = METODO_INFO[m.tipo] || { label: m.tipo, desc: 'Cuenta de la cooperativa' };
+          return (
+            <Pressable
+              key={m.id}
+              onPress={() => { setMetodoSeleccionado(m); setStep('formulario'); }}
+              className="flex-row items-center p-4 bg-background border border-border rounded-[10px]"
+            >
+              <View className="size-10 bg-primary/10 rounded-full items-center justify-center mr-4">
+                <CreditCard color="#d4a017" weight="fill" size={20} />
+              </View>
+              <View className="flex-1">
+                <Text className="text-sm font-bold text-foreground">{info.label}</Text>
+                <Text className="text-xs text-muted-foreground" numberOfLines={1}>{m.banco ? `${m.banco} - ` : ''}{info.desc}</Text>
+              </View>
+            </Pressable>
+          );
+        })}
       </View>
     </View>
   );

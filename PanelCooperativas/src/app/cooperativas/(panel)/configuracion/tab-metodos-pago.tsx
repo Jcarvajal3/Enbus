@@ -17,18 +17,17 @@ import {
   eliminarMetodoPago,
 } from "@/app/cooperativas/(panel)/configuracion/actions";
 import type { MetodoPagoCooperativa, TipoMetodoPago } from "@/lib/types/configuracion";
+import { requireOnline } from "@/components/connectivity-banner";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
 
 const TIPOS_METODO_PAGO: { value: TipoMetodoPago; label: string }[] = [
-  { value: "transferencia", label: "Transferencia Bancaria" },
-  { value: "pago_movil", label: "Pago Móvil" },
-  { value: "zelle", label: "Zelle" },
-  { value: "efectivo_usd", label: "Efectivo USD" },
-  { value: "efectivo_bs", label: "Efectivo Bs" },
-  { value: "otro", label: "Otro" },
+  { value: "TRANSFERENCIA_BANCARIA", label: "Transferencia Bancaria" },
+  { value: "PAGO_MOVIL", label: "Pago Móvil" },
+  { value: "ZELLE", label: "Zelle" },
+  { value: "EFECTIVO", label: "Efectivo" },
 ];
 
 const TIPO_LABELS: Record<TipoMetodoPago, string> = Object.fromEntries(
@@ -50,7 +49,7 @@ interface FormState {
 }
 
 const EMPTY_FORM: FormState = {
-  tipo: "transferencia",
+  tipo: "TRANSFERENCIA_BANCARIA",
   banco: "",
   titular: "",
   numero_cuenta: "",
@@ -122,7 +121,7 @@ export function MetodosPagoTab({ metodos: initialMetodos }: MetodosPagoTabProps)
     startTransition(async () => {
       try {
         if (editingId) {
-          await actualizarMetodoPago(editingId, formToInput(form));
+          await requireOnline(() => actualizarMetodoPago(editingId, formToInput(form)))();
           setMetodos((prev) =>
             prev.map((m) =>
               m.id === editingId ? { ...m, ...formToInput(form) } : m
@@ -130,7 +129,7 @@ export function MetodosPagoTab({ metodos: initialMetodos }: MetodosPagoTabProps)
           );
           toast.success("Método de pago actualizado");
         } else {
-          const nuevo = await crearMetodoPago(formToInput(form));
+          const nuevo = await requireOnline(() => crearMetodoPago(formToInput(form)))();
           setMetodos((prev) => [...prev, nuevo]);
           toast.success("Método de pago agregado");
         }
@@ -144,7 +143,7 @@ export function MetodosPagoTab({ metodos: initialMetodos }: MetodosPagoTabProps)
   function handleToggle(m: MetodoPagoCooperativa) {
     startTransition(async () => {
       try {
-        await actualizarMetodoPago(m.id, { activo: !m.activo });
+        await requireOnline(() => actualizarMetodoPago(m.id, { activo: !m.activo }))();
         setMetodos((prev) =>
           prev.map((x) => (x.id === m.id ? { ...x, activo: !x.activo } : x))
         );
@@ -157,7 +156,7 @@ export function MetodosPagoTab({ metodos: initialMetodos }: MetodosPagoTabProps)
   function handleDelete(id: string) {
     startTransition(async () => {
       try {
-        await eliminarMetodoPago(id);
+        await requireOnline(() => eliminarMetodoPago(id))();
         setMetodos((prev) => prev.filter((m) => m.id !== id));
         toast.success("Método de pago eliminado");
       } catch (err: unknown) {

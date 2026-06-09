@@ -14,6 +14,7 @@ import { toast } from "sonner";
 import { despacharEncomiendas } from "./actions";
 import { MapPin, Clock, Truck, Package, X } from "@phosphor-icons/react";
 import type { Encomienda } from "@/lib/types/encomiendas";
+import { requireOnline } from "@/components/connectivity-banner";
 
 interface ViajeDespacho {
   id: string;
@@ -106,7 +107,7 @@ export default function DespachoPage() {
     setIsSubmitting(true);
     try {
       const ids = encomiendasADespachar.map(e => e.id);
-      const res = await despacharEncomiendas(selectedViaje.id, ids);
+      const res = await requireOnline(() => despacharEncomiendas(selectedViaje.id, ids))();
       if (res.success) {
         toast.success(`${ids.length} encomiendas despachadas exitosamente`);
         setEncomiendasADespachar([]);
@@ -117,7 +118,8 @@ export default function DespachoPage() {
       }
     } catch (err) {
       console.error(err);
-      toast.error("Error inesperado");
+      const message = err instanceof Error ? err.message : "Error inesperado";
+      toast.error(message);
     } finally {
       setIsSubmitting(false);
     }

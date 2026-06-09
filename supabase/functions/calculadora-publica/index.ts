@@ -20,6 +20,19 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+function normalizeForDb(val: string | null | undefined): string {
+  if (!val) return "";
+  const clean = val.trim().toLowerCase();
+  if (clean === "san fernando de apure") return "san_fernando";
+  if (clean === "san juan de los morros") return "san_juan";
+  return val
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, "_");
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -66,10 +79,10 @@ Deno.serve(async (req) => {
     const { data: rutaData, error: rutaError } = await supabase
       .from('rutas')
       .select('duracion_estimada_min')
-      .eq('estado_origen', estado_origen)
-      .eq('ciudad_origen', ciudad_origen)
-      .eq('estado_destino', estado_destino)
-      .eq('ciudad_destino', ciudad_destino)
+      .eq('estado_origen', normalizeForDb(estado_origen))
+      .eq('ciudad_origen', normalizeForDb(ciudad_origen))
+      .eq('estado_destino', normalizeForDb(estado_destino))
+      .eq('ciudad_destino', normalizeForDb(ciudad_destino))
       .eq('activa', true)
       .order('duracion_estimada_min', { ascending: true })
       .limit(1)

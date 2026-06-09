@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '../utils/supabase';
@@ -42,26 +42,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [initialized, setInitialized] = useState(false);
   const [isOffline, setIsOffline] = useState(false);
 
+  // Ref semáforo para el timeout de inicialización.
+  // Un useState normal crea un closure stale dentro del setTimeout — el valor
+  // capturado en el closure siempre sería 'false' (el valor inicial). Con un ref,
+  // el timeout lee el valor mutado más reciente, sin importar cuándo se ejecute.
+  const initializedRef = useRef(false);
+
   useEffect(() => {
     let cancelled = false;
 
     // ── Helper: apply a session object to state ───────────────────────────────
     const applySession = (s: Session | null) => {
       if (cancelled) return;
+      initializedRef.current = true; // marcar antes del render para que el timeout lo vea
       setSession(s);
       setUser(s?.user ?? null);
       setInitialized(true);
     };
 
     // ── 1. Race getSession() vs. 5-second timeout ─────────────────────────────
-    // The Supabase client already persists the session in AsyncStorage.
-    // If we time out, `getSession()` will still resolve eventually — and the
-    // `onAuthStateChange` listener below will update state when it does.
+    // El cliente Supabase ya persiste la sesión en SecureStore (expo-secure-store).
+    // Si el timeout vence, getSession() puede aún resolver — el listener
+    // onAuthStateChange actualizará el estado cuando lo haga.
     const timeoutHandle = setTimeout(() => {
-      if (!initialized && !cancelled) {
+      // Usar el ref (no el estado) para leer el valor actual sin closure stale.
+      // Si getSession() ya resolvió en < 5s, initializedRef.current es true
+      // y NO sobreescribimos el estado con isOffline=true incorrectamente.
+      if (!initializedRef.current && !cancelled) {
         console.warn('[Auth] getSession() timed out — initializing in offline mode');
         setIsOffline(true);
-        setInitialized(true); // unblock the UI
+        setInitialized(true); // desbloquear la UI
       }
     }, 5000);
 

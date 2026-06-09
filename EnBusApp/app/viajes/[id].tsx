@@ -1,22 +1,36 @@
 import { useEffect, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView, ScrollView, View, Text, Pressable } from '@/tw';
-import { ActivityIndicator, Alert } from 'react-native';
+import { ActivityIndicator } from 'react-native';
 import { CaretLeft, Clock, Star } from 'phosphor-react-native';
 import { SeatSelector } from '@/src/components/SeatSelector';
 import { PaymentFlow } from '@/src/components/PaymentFlow';
 import { Spinner } from '@/src/components/Spinner';
 import { supabase } from '@/src/utils/supabase';
 import { useAuth } from '@/src/contexts/AuthContext';
-import { formatDate, dateFull, timeOnly } from '@/src/utils/formatters';
+import { formatDate, dateFull, timeOnly, formatCity } from '@/src/utils/formatters';
+import * as Haptics from 'expo-haptics';
+import { useToast } from '@/src/components/Toast';
+
+// ─── Generador de código de boleto criptográficamente seguro ───────────────────
+// Math.random() NO debe usarse para IDs públicos: con 36^6 combinaciones hay riesgo
+// real de colisión en producción. crypto.getRandomValues() es el estándar correcto.
+const BOLETO_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+function generateBoletoCode(): string {
+  const bytes = new Uint8Array(8);
+  crypto.getRandomValues(bytes); // CSPRNG nativo en Hermes (RN 0.73+) y V8
+  const suffix = Array.from(bytes)
+    .map(b => BOLETO_CHARS[b % BOLETO_CHARS.length])
+    .join('');
+  return `BOL-${suffix}`; // BOL-XXXXXXXX — 36^8 ≈ 2.8 billones de combinaciones
+}
 
 export default function DetalleViajeScreen() {
-  // useLocalSearchParams puede retornar string | string[]; normalizamos a string
-  // para evitar que el UUID llegue como "[object Object]" a Supabase.
   const params = useLocalSearchParams<{ id: string }>();
   const id = Array.isArray(params.id) ? params.id[0] : params.id;
   const router = useRouter();
   const { user } = useAuth();
+  const toast = useToast();
 
   const [viaje, setViaje] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -76,8 +90,9 @@ export default function DetalleViajeScreen() {
 
     // ── Realtime: actualiza asientos si otro usuario reserva mientras seleccionas ──
     // Canal determinista por viaje (no prolifera si el efecto recorre)
+    const uniqueId = Math.random().toString(36).substring(2, 9);
     const channel = supabase
-      .channel(`rt:boletos:viaje:${id}`)
+      .channel(`rt:boletos:viaje:${id}:${uniqueId}`)
       .on(
         'postgres_changes',
         {
@@ -163,14 +178,14 @@ export default function DetalleViajeScreen() {
     try {
       // 1. Creamos los boletos como RESERVADO (estado pendiente de confirmación de pago)
       const inserts = asientosSeleccionados.map((asiento) => ({
-        codigo_boleto: `BOL-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
+        codigo_boleto: generateBoletoCode(), // CSPRNG — sin colisiones prácticas
         comprador_id: user.id,
         viaje_id: viaje.id,
         cooperativa_id: cooperativa.id,
         asiento: asiento,
         precio: precioUnitario,
         estado: 'RESERVADO', // Pendiente de verificación del pago por la cooperativa
-        reserva_expira_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // 24h para verificar
+        reserva_expira_at: new Date(Date.now() + 30 * 60 * 1000).toISOString(), // 30 min para verificar
       }));
 
       const { data: boletosInsertados, error: boletosError } = await supabase
@@ -205,7 +220,8 @@ export default function DetalleViajeScreen() {
       // Navegamos al Boarding Pass del primer boleto emitido
       router.replace({ pathname: '/boletos/[id]' as any, params: { id: boletosInsertados[0].codigo_boleto } });
     } catch (err: any) {
-      Alert.alert('Error', 'No se pudo generar el boleto. Contacta a la cooperativa.');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      toast.show('error', 'No se pudo generar el boleto: ' + err.message);
       console.error('[DetalleViaje] Error creando boletos:', err.message);
     }
   };
@@ -242,8 +258,8 @@ export default function DetalleViajeScreen() {
         <View className="bg-card rounded-[14px] p-6 border border-border mb-6">
           <View className="flex-row justify-between items-center mb-4">
             <View className="items-center flex-1">
-              <Text className="text-2xl font-black text-foreground">{ruta?.ciudad_origen?.substring(0, 3).toUpperCase()}</Text>
-              <Text className="text-xs text-muted-foreground font-medium mt-1">{ruta?.ciudad_origen}</Text>
+              <Text className="text-2xl font-black text-foreground">{formatCity(ruta?.ciudad_origen).substring(0, 3).toUpperCase()}</Text>
+              <Text className="text-xs text-muted-foreground font-medium mt-1">{formatCity(ruta?.ciudad_origen)}</Text>
             </View>
 
           <View className="flex-1 items-center px-2">
@@ -255,8 +271,8 @@ export default function DetalleViajeScreen() {
             </View>
 
             <View className="items-center flex-1">
-              <Text className="text-2xl font-black text-foreground">{ruta?.ciudad_destino?.substring(0, 3).toUpperCase()}</Text>
-              <Text className="text-xs text-muted-foreground font-medium mt-1">{ruta?.ciudad_destino}</Text>
+              <Text className="text-2xl font-black text-foreground">{formatCity(ruta?.ciudad_destino).substring(0, 3).toUpperCase()}</Text>
+              <Text className="text-xs text-muted-foreground font-medium mt-1">{formatCity(ruta?.ciudad_destino)}</Text>
             </View>
           </View>
 
@@ -283,7 +299,7 @@ export default function DetalleViajeScreen() {
           <PaymentFlow
             monto={asientosSeleccionados.length * precioUnitario}
             cooperativa_id={cooperativa?.id}
-            concepto={`${asientosSeleccionados.length} asiento(s) - ${ruta?.ciudad_origen} → ${ruta?.ciudad_destino}`}
+            concepto={`${asientosSeleccionados.length} asiento(s) - ${formatCity(ruta?.ciudad_origen)} → ${formatCity(ruta?.ciudad_destino)}`}
             onPaymentSuccess={handlePaymentSuccess}
           />
         ) : (

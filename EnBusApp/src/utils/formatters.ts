@@ -77,3 +77,70 @@ export function formatDate(
     return dateString;
   }
 }
+
+/** Formats a db-friendly city/state name (e.g. "puerto_la_cruz" -> "Puerto La Cruz", "merida" -> "Mérida") */
+export function formatCity(val: string | null | undefined): string {
+  if (!val) return '—';
+  
+  // Reemplazar guiones bajos con espacios y capitalizar cada palabra
+  const formatted = val
+    .split('_')
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ');
+
+  // Mapear casos específicos que llevan acento o necesitan formato especial
+  const lower = formatted.toLowerCase();
+  if (lower === 'merida') return 'Mérida';
+  if (lower === 'falcon') return 'Falcón';
+  if (lower === 'bolivar') return 'Bolívar';
+  if (lower === 'tachira') return 'Táchira';
+  if (lower === 'anzoategui') return 'Anzoátegui';
+  if (lower === 'guarico') return 'Guárico';
+  if (lower === 'portuguesa') return 'Portuguesa';
+  if (lower === 'nueva esparta') return 'Nueva Esparta';
+  if (lower === 'la guaira') return 'La Guaira';
+  if (lower === 'apure') return 'Apure';
+  if (lower === 'cojedes') return 'Cojedes';
+  if (lower === 'trujillo') return 'Trujillo';
+  if (lower === 'miranda') return 'Miranda';
+  if (lower === 'caracas') return 'Caracas';
+  if (lower === 'valencia') return 'Valencia';
+  if (lower === 'maracay') return 'Maracay';
+  if (lower === 'barquisimeto') return 'Barquisimeto';
+  if (lower === 'maracaibo') return 'Maracaibo';
+  if (lower === 'maturin') return 'Maturín';
+  if (lower === 'cumana') return 'Cumaná';
+  if (lower === 'tovar') return 'Tovar';
+  if (lower === 'bocono') return 'Boconó';
+  if (lower === 'tariba') return 'Táriba';
+  if (lower === 'socopo') return 'Socopó';
+  if (lower === 'san fernando') return 'San Fernando de Apure';
+  if (lower === 'san juan') return 'San Juan de los Morros';
+  if (lower === 'puerto ayacucho') return 'Puerto Ayacucho';
+  if (lower === 'puerto la cruz') return 'Puerto La Cruz';
+  if (lower === 'lecheria') return 'Lechería';
+  if (lower === 'el tigre') return 'El Tigre';
+  if (lower === 'la victoria') return 'La Victoria';
+  if (lower === 'ciudad bolivar') return 'Ciudad Bolívar';
+  if (lower === 'puerto ordaz') return 'Puerto Ordaz';
+  if (lower === 'san felix') return 'San Félix';
+  if (lower === 'puerto cabello') return 'Puerto Cabello';
+  if (lower === 'san diego') return 'San Diego';
+  if (lower === 'san carlos') return 'San Carlos';
+  if (lower === 'punto fijo') return 'Punto Fijo';
+  if (lower === 'valle de la pascua') return 'Valle de la Pascua';
+  if (lower === 'el vigia') return 'El Vigía';
+  if (lower === 'los teques') return 'Los Teques';
+  if (lower === 'punta de mata') return 'Punta de Mata';
+  if (lower === 'la asuncion') return 'La Asunción';
+  if (lower === 'san cristobal') return 'San Cristóbal';
+  if (lower === 'la guaira') return 'La Guaira';
+  if (lower === 'maiquetia') return 'Maiquetía';
+  if (lower === 'catia la mar') return 'Catia La Mar';
+  if (lower === 'san felipe') return 'San Felipe';
+  if (lower === 'yaritagua') return 'Yaritagua';
+  if (lower === 'chivacoa') return 'Chivacoa';
+  if (lower === 'ciudad ojeda') return 'Ciudad Ojeda';
+
+  return formatted;
+}

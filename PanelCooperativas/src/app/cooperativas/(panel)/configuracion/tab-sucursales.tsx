@@ -11,6 +11,7 @@ import { MapPin, Plus, Pencil, Trash, Check, X } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { crearSucursal, actualizarSucursal, eliminarSucursal } from "@/app/cooperativas/(panel)/configuracion/actions";
 import type { Sucursal } from "@/lib/types/configuracion";
+import { requireOnline } from "@/components/connectivity-banner";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Form state
@@ -91,7 +92,7 @@ export function SucursalesTab({ sucursales: initialSucursales }: SucursalesTabPr
     startTransition(async () => {
       try {
         if (editingId) {
-          await actualizarSucursal(editingId, formToInput(form));
+          await requireOnline(() => actualizarSucursal(editingId, formToInput(form)))();
           setSucursales((prev) =>
             prev.map((s) =>
               s.id === editingId ? { ...s, ...formToInput(form) } : s
@@ -99,7 +100,7 @@ export function SucursalesTab({ sucursales: initialSucursales }: SucursalesTabPr
           );
           toast.success("Sucursal actualizada");
         } else {
-          const nueva = await crearSucursal(formToInput(form));
+          const nueva = await requireOnline(() => crearSucursal(formToInput(form)))();
           setSucursales((prev) => [...prev, nueva]);
           toast.success("Sucursal creada");
         }
@@ -113,7 +114,7 @@ export function SucursalesTab({ sucursales: initialSucursales }: SucursalesTabPr
   function handleToggle(s: Sucursal) {
     startTransition(async () => {
       try {
-        await actualizarSucursal(s.id, { activa: !s.activa });
+        await requireOnline(() => actualizarSucursal(s.id, { activa: !s.activa }))();
         setSucursales((prev) =>
           prev.map((x) => (x.id === s.id ? { ...x, activa: !x.activa } : x))
         );
@@ -126,7 +127,7 @@ export function SucursalesTab({ sucursales: initialSucursales }: SucursalesTabPr
   function handleDelete(id: string) {
     startTransition(async () => {
       try {
-        await eliminarSucursal(id);
+        await requireOnline(() => eliminarSucursal(id))();
         setSucursales((prev) => prev.filter((s) => s.id !== id));
         toast.success("Sucursal eliminada");
       } catch (err: unknown) {

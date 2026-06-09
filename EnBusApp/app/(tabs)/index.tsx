@@ -1,6 +1,7 @@
 import { SafeAreaView } from '@/tw';
 import { useState, useCallback } from 'react';
 import { ScrollView, View, Text, Pressable } from '@/tw';
+import { RefreshControl } from 'react-native';
 import { useAuth } from '@/src/contexts/AuthContext';
 import { useRealtime } from '@/src/hooks/useRealtime';
 import { SearchForm } from '@/src/components/SearchForm';
@@ -8,8 +9,9 @@ import { TransactionCard } from '@/src/components/TransactionCard';
 import { Bell, UserCircle } from 'phosphor-react-native';
 import { useRouter } from 'expo-router';
 import { Spinner } from '@/src/components/Spinner';
+import { SkeletonLoader } from '@/src/components/SkeletonLoader';
 import { useFocusEffect } from '@react-navigation/native';
-import { formatDate } from '@/src/utils/formatters';
+import { formatDate, formatCity } from '@/src/utils/formatters';
 
 export default function HomeScreen() {
   const { user } = useAuth();
@@ -27,7 +29,9 @@ export default function HomeScreen() {
     }, [])
   );
 
-  const { data: encomiendas, loading: loadingEnvios } = useRealtime<any>(
+  const [refreshing, setRefreshing] = useState(false);
+
+  const { data: encomiendas, loading: loadingEnvios, refetch: refetchEnvios } = useRealtime<any>(
     'encomiendas',
     'sender_id',
     user?.id,
@@ -35,7 +39,7 @@ export default function HomeScreen() {
     { enabled: isFocused && !!user?.id, limit: 10 }
   );
 
-  const { data: boletos, loading: loadingBoletos } = useRealtime<any>(
+  const { data: boletos, loading: loadingBoletos, refetch: refetchBoletos } = useRealtime<any>(
     'boletos',
     'comprador_id',
     user?.id,
@@ -43,9 +47,39 @@ export default function HomeScreen() {
     { enabled: isFocused && !!user?.id, limit: 10 }
   );
 
+  const { data: notifNoLeidas, refetch: refetchNotif } = useRealtime<any>(
+    'notificaciones_usuario',
+    'usuario_id',
+    user?.id,
+    'id, leida',
+    { enabled: isFocused && !!user?.id, limit: 50 }
+  );
+
+  const unreadCount = notifNoLeidas ? notifNoLeidas.filter(n => !n.leida).length : 0;
+
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    refetchEnvios();
+    refetchBoletos();
+    refetchNotif();
+    setTimeout(() => {
+      setRefreshing(false);
+    }, 1000);
+  }, [refetchEnvios, refetchBoletos, refetchNotif]);
+
   return (
     <SafeAreaView className="flex-1 bg-background">
-      <ScrollView contentContainerClassName="pb-10">
+      <ScrollView
+        contentContainerClassName="pb-10"
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={['#e2b714']}
+            tintColor="#e2b714"
+          />
+        }
+      >
 
         {/* Header Premium */}
         <View className="px-6 py-8 bg-background rounded-b-[40px] border-b border-border mb-6">
@@ -59,8 +93,15 @@ export default function HomeScreen() {
               </Text>
             </View>
             <View className="flex-row items-center gap-3">
-              <Pressable onPress={() => router.push('/notificaciones')} className="size-12 bg-secondary rounded-full items-center justify-center">
+              <Pressable onPress={() => router.push('/notificaciones')} className="size-12 bg-secondary rounded-full items-center justify-center relative">
                 <Bell weight="bold" size={22} color="#171717" />
+                {unreadCount > 0 && (
+                  <View className="absolute -top-1 -right-1 bg-destructive min-w-[20px] h-[20px] rounded-full items-center justify-center px-1">
+                    <Text className="text-[10px] text-white font-extrabold text-center">
+                      {unreadCount}
+                    </Text>
+                  </View>
+                )}
               </Pressable>
               <Pressable onPress={() => router.push('/perfil')} className="size-12 bg-secondary rounded-full items-center justify-center">
                 <UserCircle weight="fill" size={26} color="#171717" />
@@ -95,7 +136,17 @@ export default function HomeScreen() {
               </Text>
 
               {loadingEnvios ? (
-                <View className="py-8 items-center"><Spinner /></View>
+                <View className="flex-col gap-3">
+                  {[1, 2].map((i) => (
+                    <View key={i} className="bg-card border border-border p-4 rounded-[14px] flex-row items-center gap-3">
+                      <SkeletonLoader width={40} height={40} borderRadius={20} />
+                      <View className="flex-1 gap-1.5">
+                        <SkeletonLoader width="65%" height={14} />
+                        <SkeletonLoader width="35%" height={10} />
+                      </View>
+                    </View>
+                  ))}
+                </View>
               ) : (
                 <View className="flex-col gap-3">
                   {encomiendas.map((enc) => (
@@ -125,7 +176,17 @@ export default function HomeScreen() {
               </Text>
 
               {loadingBoletos ? (
-                <View className="py-8 items-center"><Spinner /></View>
+                <View className="flex-col gap-3">
+                  {[1, 2].map((i) => (
+                    <View key={i} className="bg-card border border-border p-4 rounded-[14px] flex-row items-center gap-3">
+                      <SkeletonLoader width={40} height={40} borderRadius={20} />
+                      <View className="flex-1 gap-1.5">
+                        <SkeletonLoader width="65%" height={14} />
+                        <SkeletonLoader width="35%" height={10} />
+                      </View>
+                    </View>
+                  ))}
+                </View>
               ) : (
                 <View className="flex-col gap-3">
                   {boletos.map((bol) => (
@@ -134,7 +195,7 @@ export default function HomeScreen() {
                       type="boleto"
                       id={bol.codigo_boleto || bol.id}
                       estado={bol.estado}
-                      titulo={`${bol.viajes?.rutas?.ciudad_origen || 'Origen'} → ${bol.viajes?.rutas?.ciudad_destino || 'Destino'}`}
+                      titulo={`${formatCity(bol.viajes?.rutas?.ciudad_origen) || 'Origen'} → ${formatCity(bol.viajes?.rutas?.ciudad_destino) || 'Destino'}`}
                       subtitulo={formatDate(bol.created_at)}
                       onPress={() => router.push({
                         pathname: '/boletos/[id]',

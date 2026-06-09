@@ -42,16 +42,18 @@ export async function confirmarRecepcion(encomiendaId: string, peso: number, cos
     return { success: false, error: errorStep2.message };
   }
 
-  // Step 3: Edge Function generar-guia-pdf (non-blocking)
+  // Step 3: Edge Function generar-guia-pdf
+  let pdfUrl: string | null = null;
   try {
-    await supabase.functions.invoke("generar-guia-pdf", {
+    const { data: pdfData } = await supabase.functions.invoke("generar-guia-pdf", {
       body: { encomienda_id: encomiendaId },
     });
+    pdfUrl = pdfData?.pdf_url || null;
   } catch (pdfError) {
     console.error("Error al generar PDF de guía:", pdfError);
   }
 
-  return { success: true };
+  return { success: true, pdfUrl };
 }
 
 
@@ -109,5 +111,17 @@ export async function procesarPago(
     console.error("Error al procesar pago:", error);
     return { success: false, error: err.message || "Error al procesar el pago" };
   }
+}
+
+export async function obtenerPdfGuia(encomiendaId: string) {
+  const supabase = await createClient();
+  const { data, error } = await supabase.functions.invoke("generar-guia-pdf", {
+    body: { encomienda_id: encomiendaId },
+  });
+  if (error) {
+    console.error("Error al obtener PDF de guía:", error);
+    return { success: false, error: error.message };
+  }
+  return { success: true, pdfUrl: data?.pdf_url || null };
 }
 

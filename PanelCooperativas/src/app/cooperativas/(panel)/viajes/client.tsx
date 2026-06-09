@@ -17,6 +17,7 @@ import { Plus, DotsThree, Eye, MapTrifold, XCircle, CalendarBlank, Ticket, Packa
 import { guardarViaje, cancelarViaje, checkBoletosVendidos } from "./actions";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
+import { requireOnline } from "@/components/connectivity-banner";
 import { createClient } from "@/lib/supabase/client";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { StatusBadge } from "@/components/status-badge";
@@ -125,20 +126,24 @@ export function ViajesClient({
 
   async function handleCancelar(viaje: any) {
     startTransition(async () => {
-      const check = await checkBoletosVendidos(viaje.id);
-      if (check.error) {
-        alert(check.error);
-        return;
-      }
-      const count = check.count ?? 0;
-      if (count > 0) {
-        setAlertData({ id: viaje.id, count });
-        setAlertOpen(true);
-      } else {
-        if (confirm("¿Seguro que deseas cancelar este viaje?")) {
-          const res = await cancelarViaje(viaje.id);
-          if (res.error) alert(res.error);
+      try {
+        const check = await checkBoletosVendidos(viaje.id);
+        if (check.error) {
+          alert(check.error);
+          return;
         }
+        const count = check.count ?? 0;
+        if (count > 0) {
+          setAlertData({ id: viaje.id, count });
+          setAlertOpen(true);
+        } else {
+          if (confirm("¿Seguro que deseas cancelar este viaje?")) {
+            const res = await requireOnline(() => cancelarViaje(viaje.id))();
+            if (res.error) alert(res.error);
+          }
+        }
+      } catch (err: any) {
+        alert(err.message || "Error inesperado");
       }
     });
   }
@@ -146,10 +151,14 @@ export function ViajesClient({
   async function forceCancelar() {
     if (!alertData) return;
     startTransition(async () => {
-      const res = await cancelarViaje(alertData.id);
-      if (res.error) alert(res.error);
-      setAlertOpen(false);
-      setAlertData(null);
+      try {
+        const res = await requireOnline(() => cancelarViaje(alertData.id))();
+        if (res.error) alert(res.error);
+        setAlertOpen(false);
+        setAlertData(null);
+      } catch (err: any) {
+        alert(err.message || "Error inesperado");
+      }
     });
   }
 
@@ -164,17 +173,21 @@ export function ViajesClient({
     });
 
     startTransition(async () => {
-      const res = await guardarViaje(
-        payload, 
-        isRecurring, 
-        recurringDays, 
-        payload.periodo_inicio, 
-        payload.periodo_fin
-      );
-      if (res.error) {
-        alert(res.error);
-      } else {
-        setIsModalOpen(false);
+      try {
+        const res = await requireOnline(() => guardarViaje(
+          payload, 
+          isRecurring, 
+          recurringDays, 
+          payload.periodo_inicio, 
+          payload.periodo_fin
+        ))();
+        if (res.error) {
+          alert(res.error);
+        } else {
+          setIsModalOpen(false);
+        }
+      } catch (err: any) {
+        alert(err.message || "Error inesperado");
       }
     });
   }

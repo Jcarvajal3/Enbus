@@ -103,7 +103,16 @@ export default function InvitePage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <form action={formAction} className="flex flex-col gap-6">
+            <form
+              action={formAction}
+              onSubmit={(e) => {
+                if (!navigator.onLine) {
+                  e.preventDefault();
+                  alert("Esta operación requiere conexión a internet.");
+                }
+              }}
+              className="flex flex-col gap-6"
+            >
               <input type="hidden" name="token" value={token} />
               
               {state?.error && (

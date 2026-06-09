@@ -100,7 +100,7 @@ export async function confirmarEmbarque(boletoId: string) {
   }
 }
 
-export async function verificarPagoBoleto(boletoId: string, pagoId: string) {
+export async function verificarPagoBoleto(boletoId: string, pagoId?: string) {
   try {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();

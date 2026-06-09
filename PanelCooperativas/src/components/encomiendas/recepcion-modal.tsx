@@ -14,6 +14,20 @@ import type { Encomienda } from "@/lib/types/encomiendas";
 import { confirmarRecepcion } from "@/app/cooperativas/(panel)/taquilla/encomiendas/actions";
 import { printGuiaEncomienda } from "@/lib/printing/print-helpers";
 import { printer } from "@/lib/printing/bluetooth";
+import { requireOnline } from "@/components/connectivity-banner";
+
+function normalizeForDb(val: string | null | undefined): string {
+  if (!val) return "";
+  const clean = val.trim().toLowerCase();
+  if (clean === "san fernando de apure") return "san_fernando";
+  if (clean === "san juan de los morros") return "san_juan";
+  return val
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, "_");
+}
 
 interface RecepcionModalProps {
   encomienda: Encomienda;
@@ -58,8 +72,8 @@ export function RecepcionModal({ encomienda, cooperativaId, isOpen, onClose, onS
         .select("id, duracion_estimada_min")
         .eq("cooperativa_id", cooperativaId)
         .eq("activa", true)
-        .eq("estado_destino", encomienda.estado_destino)
-        .eq("ciudad_destino", encomienda.ciudad_destino)
+        .eq("estado_destino", normalizeForDb(encomienda.estado_destino))
+        .eq("ciudad_destino", normalizeForDb(encomienda.ciudad_destino))
         .limit(1)
         .maybeSingle();
         
@@ -117,12 +131,24 @@ export function RecepcionModal({ encomienda, cooperativaId, isOpen, onClose, onS
       try {
         const { data, error } = await supabase.functions.invoke("calcular-costo-encomienda", {
           body: {
+            encomienda_id: encomienda.id,
             peso_kg: numPeso,
-            duracion_estimada_min: ruta.duracion_estimada_min,
+            preview: true
           },
         });
         
-        if (error) throw error;
+        if (error) {
+          let details = "";
+          try {
+            if (error.context && typeof error.context.text === "function") {
+              details = await error.context.text();
+            } else if (error.context) {
+              details = typeof error.context === "string" ? error.context : JSON.stringify(error.context);
+            }
+          } catch (_) {}
+          const errorMsg = details ? `${error.message}: ${details}` : error.message;
+          throw new Error(errorMsg);
+        }
 
         // Guard against undefined/NaN in case Edge Function schema changes
         const costo = Number(data?.costo);
@@ -132,9 +158,10 @@ export function RecepcionModal({ encomienda, cooperativaId, isOpen, onClose, onS
           toast.error("Respuesta inválida del cálculo de costo");
           setCostoCalculado(null);
         }
-      } catch {
-        console.error("Error calculando costo");
-        toast.error("Error al calcular el costo");
+      } catch (err) {
+        console.error("Error calculando costo:", err);
+        const errMsg = err instanceof Error ? err.message : "Error al calcular el costo";
+        toast.error(errMsg);
         setCostoCalculado(null);
       } finally {
         setCalculating(false);
@@ -146,15 +173,11 @@ export function RecepcionModal({ encomienda, cooperativaId, isOpen, onClose, onS
   /* eslint-enable react-hooks/set-state-in-effect */
 
   const handleSubmit = async () => {
-    if (!navigator.onLine) {
-      toast.error("Esta operación requiere conexión a internet. Por favor, intente de nuevo cuando se restablezca la conexión.");
-      return;
-    }
     if (!costoCalculado || !peso || Number(peso) <= 0 || Number(peso) > 25) return;
     
     setSubmitting(true);
     try {
-      const res = await confirmarRecepcion(encomienda.id, Number(peso), costoCalculado);
+      const res = await requireOnline(() => confirmarRecepcion(encomienda.id, Number(peso), costoCalculado))();
       
       if (res.success) {
         toast.success("Recepción confirmada con éxito");
@@ -171,6 +194,15 @@ export function RecepcionModal({ encomienda, cooperativaId, isOpen, onClose, onS
           } catch (printErr) {
             console.error("Error al imprimir etiqueta Bluetooth:", printErr);
             toast.warning("Recepción registrada pero falló la impresión automática.");
+            if (res.pdfUrl) {
+              window.open(res.pdfUrl, "_blank");
+            }
+          }
+        } else {
+          // Si no hay impresora Bluetooth conectada, se abre el PDF en una pestaña nueva para impresión estándar
+          if (res.pdfUrl) {
+            window.open(res.pdfUrl, "_blank");
+            toast.info("Abriendo guía en formato PDF para impresión estándar.");
           }
         }
         
@@ -179,8 +211,9 @@ export function RecepcionModal({ encomienda, cooperativaId, isOpen, onClose, onS
       } else {
         toast.error(res.error || "Ocurrió un error al confirmar la recepción");
       }
-    } catch {
-      toast.error("Ocurrió un error inesperado");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Ocurrió un error inesperado";
+      toast.error(message);
     } finally {
       setSubmitting(false);
     }

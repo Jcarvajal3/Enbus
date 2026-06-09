@@ -1,8 +1,13 @@
 import { SafeAreaView, View, Text, Pressable, useCSSVariable } from '@/tw';
 import { useState } from 'react';
-import { TextInput, Alert } from 'react-native';
+import { TextInput } from 'react-native';
+import { useRouter } from 'expo-router';
 import { supabase } from '@/src/utils/supabase';
 import { Spinner } from '@/src/components/Spinner';
+import * as Haptics from 'expo-haptics';
+import { useToast } from '@/src/components/Toast';
+import { GoogleLogo } from 'phosphor-react-native';
+import * as Linking from 'expo-linking';
 
 type Mode = 'login' | 'register';
 
@@ -23,6 +28,8 @@ function Field({
 }
 
 export default function LoginScreen() {
+  const router = useRouter();
+  const toast = useToast();
   const [mode, setMode] = useState<Mode>('login');
   const [form, setForm] = useState({
     email: '', password: '', confirmPassword: '',
@@ -35,26 +42,68 @@ export default function LoginScreen() {
   const primaryColor = useCSSVariable('--primary') as string || '#e2b714';
 
   async function handleSubmit() {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     if (mode === 'login') {
       setLoading(true);
       const { error } = await supabase.auth.signInWithPassword({ email: form.email, password: form.password });
-      if (error) Alert.alert('Error al entrar', error.message);
+      if (error) {
+        toast.show('error', error.message);
+      } else {
+        toast.show('success', 'Sesión iniciada con éxito');
+      }
       setLoading(false);
     } else {
       if (!form.nombre_completo || !form.telefono || !form.cedula_rif || !form.email || !form.password) {
-        Alert.alert('Error', 'Todos los campos son obligatorios'); return;
+        toast.show('error', 'Todos los campos son obligatorios');
+        return;
       }
       if (form.password !== form.confirmPassword) {
-        Alert.alert('Error', 'Las contraseñas no coinciden'); return;
+        toast.show('error', 'Las contraseñas no coinciden');
+        return;
       }
       setLoading(true);
       const { data, error } = await supabase.auth.signUp({
         email: form.email, password: form.password,
         options: { data: { nombre_completo: form.nombre_completo, telefono: form.telefono, cedula_rif: form.cedula_rif } }
       });
-      if (error) Alert.alert('Error al registrar', error.message);
-      else if (data.session) Alert.alert('Éxito', 'Cuenta creada e iniciada automáticamente');
-      else Alert.alert('Revise su correo', 'Se ha enviado un enlace de confirmación');
+      if (error) {
+        toast.show('error', error.message);
+      } else if (data.session) {
+        toast.show('success', 'Cuenta creada e iniciada automáticamente');
+      } else {
+        toast.show('success', 'Se ha enviado un enlace de confirmación a su correo');
+      }
+      setLoading(false);
+    }
+  }
+
+  async function handleGoogleSignIn() {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    try {
+      setLoading(true);
+      toast.show('info', 'Iniciando sesión con Google...');
+      
+      const redirectUrl = Linking.createURL('/(tabs)');
+      
+      // Estructura OAuth Supabase para Google lista para producción.
+      // Cuando se disponga de las credenciales de Google Cloud,
+      // esto redirigirá automáticamente a la pantalla de consentimiento de Google y retornará a la app.
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: redirectUrl,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'select_account',
+          },
+        },
+      });
+
+      if (error) throw error;
+    } catch (err: any) {
+      console.error('Google Sign-In Error:', err.message);
+      toast.show('error', 'Error al conectar con Google: ' + err.message);
+    } finally {
       setLoading(false);
     }
   }
@@ -80,7 +129,10 @@ export default function LoginScreen() {
           {/* Segmented Control */}
           <View className="flex-row bg-secondary rounded-[10px] p-1 mb-5">
             <Pressable
-              onPress={() => setMode('login')}
+              onPress={() => {
+                Haptics.selectionAsync();
+                setMode('login');
+              }}
               className={`flex-1 py-2.5 rounded-lg items-center ${mode === 'login' ? 'bg-background' : ''}`}
             >
               <Text className={`text-sm font-semibold ${mode === 'login' ? 'text-primary' : 'text-muted-foreground'}`}>
@@ -88,7 +140,10 @@ export default function LoginScreen() {
               </Text>
             </Pressable>
             <Pressable
-              onPress={() => setMode('register')}
+              onPress={() => {
+                Haptics.selectionAsync();
+                setMode('register');
+              }}
               className={`flex-1 py-2.5 rounded-lg items-center ${mode === 'register' ? 'bg-background' : ''}`}
             >
               <Text className={`text-sm font-semibold ${mode === 'register' ? 'text-primary' : 'text-muted-foreground'}`}>
@@ -112,6 +167,19 @@ export default function LoginScreen() {
             <Field label="Confirmar Contraseña" placeholder="••••••••" secureTextEntry autoCapitalize="none" value={form.confirmPassword} onChangeText={v => update('confirmPassword', v)} />
           )}
 
+          {mode === 'login' && (
+            <Pressable
+              onPress={() => {
+                Haptics.selectionAsync();
+                router.push('/(auth)/recuperar' as any);
+              }}
+              className="mt-1 mb-4"
+              style={{ alignSelf: 'flex-end' }}
+            >
+              <Text className="text-sm font-semibold text-primary">¿Olvidaste tu contraseña?</Text>
+            </Pressable>
+          )}
+
           {/* CTA */}
           <Pressable
             onPress={handleSubmit}
@@ -124,6 +192,23 @@ export default function LoginScreen() {
                   {mode === 'login' ? 'Entrar' : 'Crear Cuenta'}
                 </Text>
             }
+          </Pressable>
+
+          {/* Divider */}
+          <View className="flex-row items-center my-4">
+            <View className="flex-1 h-[1px] bg-border" />
+            <Text className="mx-3 text-[11px] text-muted-foreground font-bold uppercase tracking-wider">O continuar con</Text>
+            <View className="flex-1 h-[1px] bg-border" />
+          </View>
+
+          {/* Google Sign In Button */}
+          <Pressable
+            onPress={handleGoogleSignIn}
+            disabled={loading}
+            className="h-[52px] rounded-full items-center justify-center border border-border bg-card flex-row gap-3 active:bg-secondary/40"
+          >
+            <GoogleLogo size={20} color="#171717" weight="bold" />
+            <Text className="text-[15px] font-bold text-foreground">Google</Text>
           </Pressable>
         </View>
 

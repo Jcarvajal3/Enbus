@@ -30,7 +30,7 @@ export function ResultsList({ data, onSelect }: ResultsListProps) {
         <Pressable
           key={item.id}
           onPress={() => onSelect(item.id)}
-          className="bg-card border border-border p-4 mb-4 rounded-[14px]"
+          className="bg-card border border-border p-4 mb-4 rounded-[14px] flex-row"
         >
           {/* Timeline miniatura */}
           <View className="items-center justify-center mr-4 w-16">

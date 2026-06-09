@@ -17,6 +17,7 @@ import { useEncomiendasRealtime } from "@/hooks/use-encomiendas-realtime";
 import { recibirEncomienda } from "./actions";
 import type { Encomienda } from "@/lib/types/encomiendas";
 import { RecepcionLoteModal } from "./recepcion-lote-modal";
+import { requireOnline } from "@/components/connectivity-banner";
 
 type ViajeData = {
   id: string;
@@ -89,12 +90,17 @@ export default function RecepcionDestinoPage() {
     }
 
     // 2.1.c Procesar recepción
-    const result = await recibirEncomienda(encomienda.id);
-    if (result.success) {
-      toast.success(`✅ ${encomienda.tracking_id} — ${encomienda.receiver_nombre} — Recibida`);
-      fetchEncomiendas();
-    } else {
-      toast.error(result.error || "Error al recibir la encomienda");
+    try {
+      const result = await requireOnline(() => recibirEncomienda(encomienda.id))();
+      if (result.success) {
+        toast.success(`✅ ${encomienda.tracking_id} — ${encomienda.receiver_nombre} — Recibida`);
+        fetchEncomiendas();
+      } else {
+        toast.error(result.error || "Error al recibir la encomienda");
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Error al recibir la encomienda";
+      toast.error(message);
     }
   };
 

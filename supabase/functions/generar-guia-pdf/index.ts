@@ -33,8 +33,11 @@ Deno.serve(async (req) => {
       global: { headers: { Authorization: authHeader } }
     });
 
-    const { data: { user }, error: userError } = await supabaseAuth.auth.getUser();
-    if (userError || !user) throw new Error("Usuario no autenticado");
+    const token = authHeader.replace("Bearer ", "");
+    const { data: { user }, error: userError } = await supabaseAuth.auth.getUser(token);
+    if (userError || !user) {
+      throw new Error("Usuario no autenticado: " + (userError?.message || "token inválido o nulo"));
+    }
 
     // M-10: Traer toda la data necesaria para el PDF
     const { data: enc, error: encError } = await supabaseAuth

@@ -16,6 +16,7 @@ import { ESTADOS_VENEZUELA, CIUDADES_POR_ESTADO } from "@/lib/data/venezuela";
 import { guardarRuta, toggleActivaRuta, checkDesactivarRuta } from "./actions";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
+import { requireOnline } from "@/components/connectivity-banner";
 import { formatCurrency } from "@/lib/utils";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -67,25 +68,33 @@ export function RutasClient({
     if (ruta.activa) {
       // Intento de desactivar
       startTransition(async () => {
-        const check = await checkDesactivarRuta(ruta.id);
-        if (check.error) {
-          alert(check.error);
-          return;
-        }
-        if (check.hasViajes) {
-          setAlertData({ id: ruta.id, count: check.count });
-          setAlertOpen(true);
-        } else {
-          // desactivar seguro
-          const res = await toggleActivaRuta(ruta.id, false);
-          if (res.error) alert(res.error);
+        try {
+          const check = await checkDesactivarRuta(ruta.id);
+          if (check.error) {
+            alert(check.error);
+            return;
+          }
+          if (check.hasViajes) {
+            setAlertData({ id: ruta.id, count: check.count });
+            setAlertOpen(true);
+          } else {
+            // desactivar seguro
+            const res = await requireOnline(() => toggleActivaRuta(ruta.id, false))();
+            if (res.error) alert(res.error);
+          }
+        } catch (err: any) {
+          alert(err.message || "Error inesperado");
         }
       });
     } else {
       // reactivar
       startTransition(async () => {
-        const res = await toggleActivaRuta(ruta.id, true);
-        if (res.error) alert(res.error);
+        try {
+          const res = await requireOnline(() => toggleActivaRuta(ruta.id, true))();
+          if (res.error) alert(res.error);
+        } catch (err: any) {
+          alert(err.message || "Error inesperado");
+        }
       });
     }
   }
@@ -93,22 +102,30 @@ export function RutasClient({
   async function forceDesactivar() {
     if (!alertData) return;
     startTransition(async () => {
-      const res = await toggleActivaRuta(alertData.id, false);
-      if (res.error) alert(res.error);
-      setAlertOpen(false);
-      setAlertData(null);
+      try {
+        const res = await requireOnline(() => toggleActivaRuta(alertData.id, false))();
+        if (res.error) alert(res.error);
+        setAlertOpen(false);
+        setAlertData(null);
+      } catch (err: any) {
+        alert(err.message || "Error inesperado");
+      }
     });
   }
 
   async function handleSubmit(formData: FormData) {
     startTransition(async () => {
-      // Inject activa from controlled state since shadcn Switch with checked= won't add to FormData
-      formData.set("activa", activaSwitch ? "on" : "off");
-      const res = await guardarRuta(formData, editingRuta?.id);
-      if (res.error) {
-        alert(res.error);
-      } else {
-        setIsModalOpen(false);
+      try {
+        // Inject activa from controlled state since shadcn Switch with checked= won't add to FormData
+        formData.set("activa", activaSwitch ? "on" : "off");
+        const res = await requireOnline(() => guardarRuta(formData, editingRuta?.id))();
+        if (res.error) {
+          alert(res.error);
+        } else {
+          setIsModalOpen(false);
+        }
+      } catch (err: any) {
+        alert(err.message || "Error inesperado");
       }
     });
   }

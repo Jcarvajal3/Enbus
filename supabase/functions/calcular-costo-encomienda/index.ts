@@ -6,6 +6,19 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+function normalizeForDb(val: string | null | undefined): string {
+  if (!val) return "";
+  const clean = val.trim().toLowerCase();
+  if (clean === "san fernando de apure") return "san_fernando";
+  if (clean === "san juan de los morros") return "san_juan";
+  return val
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, "_");
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -17,7 +30,7 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: "No authorization header" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    const { encomienda_id, peso_kg } = await req.json();
+    const { encomienda_id, peso_kg, preview } = await req.json();
 
     if (!encomienda_id || !peso_kg || peso_kg <= 0) {
       return new Response(JSON.stringify({ error: "Datos inválidos" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -31,8 +44,11 @@ Deno.serve(async (req) => {
       global: { headers: { Authorization: authHeader } }
     });
 
-    const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
-    if (userError || !user) throw new Error("Usuario no autenticado");
+    const token = authHeader.replace("Bearer ", "");
+    const { data: { user }, error: userError } = await supabaseClient.auth.getUser(token);
+    if (userError || !user) {
+      throw new Error("Usuario no autenticado: " + (userError?.message || "token inválido o nulo"));
+    }
 
     // Verificar rol directamente (o confiar en RLS, pero la spec pide validarlo aquí)
     const { data: profile, error: profileError } = await supabaseClient
@@ -49,7 +65,7 @@ Deno.serve(async (req) => {
     // 1. Obtener la encomienda
     const { data: enc, error: encError } = await supabaseClient
       .from('encomiendas')
-      .select('estado_origen, ciudad_origen, estado_destino, ciudad_destino, cooperativa_id')
+      .select('estado, estado_origen, ciudad_origen, estado_destino, ciudad_destino, cooperativa_id')
       .eq('id', encomienda_id)
       .single();
 
@@ -73,10 +89,10 @@ Deno.serve(async (req) => {
     const { data: ruta, error: rutaError } = await supabaseClient
       .from('rutas')
       .select('duracion_estimada_min')
-      .eq('estado_origen', enc.estado_origen)
-      .eq('ciudad_origen', enc.ciudad_origen)
-      .eq('estado_destino', enc.estado_destino)
-      .eq('ciudad_destino', enc.ciudad_destino)
+      .eq('estado_origen', normalizeForDb(enc.estado_origen))
+      .eq('ciudad_origen', normalizeForDb(enc.ciudad_origen))
+      .eq('estado_destino', normalizeForDb(enc.estado_destino))
+      .eq('ciudad_destino', normalizeForDb(enc.ciudad_destino))
       .eq('cooperativa_id', profile.cooperativa_id)
       .eq('activa', true)
       .limit(1)
@@ -87,7 +103,26 @@ Deno.serve(async (req) => {
     // 4. Calcular costo
     const costo = parseFloat((peso_kg * tarifaData.tarifa_por_kg * (1 + tarifaData.factor_distancia_por_min * ruta.duracion_estimada_min)).toFixed(2));
 
+    if (preview) {
+      return new Response(JSON.stringify({
+        costo: costo,
+        costo_calculado: costo,
+        estado: enc.estado
+      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
     // 5. Actualizar encomienda (RLS lo permite porque es taquillero de la cooperativa)
+    // Para cumplir con el trigger de transición validar_transicion_encomienda:
+    if (enc.estado === 'PENDIENTE_DE_ESCANEO') {
+      const { error: step1Error } = await supabaseClient
+        .from('encomiendas')
+        .update({ estado: 'EN_RECEPCION' })
+        .eq('id', encomienda_id)
+        .eq('estado', 'PENDIENTE_DE_ESCANEO');
+      
+      if (step1Error) throw new Error("Error en transición intermedia a EN_RECEPCION: " + step1Error.message);
+    }
+
     const { data: updateRes, error: updateError } = await supabaseClient
       .from('encomiendas')
       .update({ 
@@ -101,7 +136,12 @@ Deno.serve(async (req) => {
 
     if (updateError) throw new Error("Error actualizando la encomienda: " + updateError.message);
 
-    return new Response(JSON.stringify(updateRes), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    const responseData = {
+      ...updateRes,
+      costo: updateRes.costo_calculado
+    };
+
+    return new Response(JSON.stringify(responseData), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (error: any) {
     return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }

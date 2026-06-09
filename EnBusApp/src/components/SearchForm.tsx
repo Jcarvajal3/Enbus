@@ -120,7 +120,9 @@ export function SearchForm({
               </Text>
             </Pressable>
             
-            <CalendarBlank color="#e2b714" weight="bold" size={24} className="mx-2" />
+            <View className="mx-2">
+              <CalendarBlank color="#e2b714" weight="bold" size={24} />
+            </View>
             
             <Pressable className="flex-1 items-end">
               <Text className="text-base font-medium text-muted-foreground">

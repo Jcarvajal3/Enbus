@@ -12,8 +12,9 @@ export function useEncomiendasRealtime(
 
     const supabase = createClient();
 
+    const uniqueId = Math.random().toString(36).substring(2, 9);
     const channel = supabase
-      .channel(`encomiendas-changes-${cooperativaId}`)
+      .channel(`encomiendas-changes-${cooperativaId}-${uniqueId}`)
       .on(
         "postgres_changes",
         {
