@@ -21,10 +21,10 @@ export const getUserProfile = cache(async () => {
 
   return {
     id: profile.id,
-    role: profile.role as "taquillero" | "admin_cooperativa",
+    role: profile.role as "taquillero" | "admin_cooperativa" | "super_admin",
     nombre_completo: profile.nombre_completo,
-    cooperativa_id: profile.cooperativa_id,
+    cooperativa_id: profile.cooperativa_id ?? null,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    cooperativa_nombre: (profile.cooperativas as any)?.nombre,
+    cooperativa_nombre: (profile.cooperativas as any)?.nombre ?? null,
   };
 });

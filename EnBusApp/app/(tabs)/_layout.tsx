@@ -1,4 +1,5 @@
-import { Tabs, useRouter } from 'expo-router';
+import { Tabs } from 'expo-router';
+import { useMemo } from 'react';
 import { Package, House, Ticket } from 'phosphor-react-native';
 import { useCSSVariable } from '@/tw';
 import { useAuth } from '@/src/contexts/AuthContext';
@@ -28,17 +29,19 @@ export default function TabLayout() {
     limit: 30,
   });
 
-  // Cuando user es null (logout en progreso), las suscripciones se deshabilitan
-  // pero los arrays de datos retienen su último valor hasta el próximo render.
-  // El guard !user garantiza que los badges muestren 0 de inmediato al cerrar sesión,
-  // evitando el parpadeo de contadores obsoletos durante la transición.
-  const activeBoletosCount = !user ? 0 : boletosActivos
-    ? boletosActivos.filter(b => b.estado === 'RESERVADO' || b.estado === 'PAGADO').length
-    : 0;
+  // PERF-02: useMemo prevents badge counts from being recalculated on every
+  // render of this component (e.g. theme variable changes, navigation events).
+  const activeBoletosCount = useMemo(() =>
+    !user ? 0 : (boletosActivos ?? []).filter(
+      b => b.estado === 'RESERVADO' || b.estado === 'PAGADO'
+    ).length
+  , [user, boletosActivos]);
 
-  const activeEncomiendasCount = !user ? 0 : todasLasEncomiendas
-    ? todasLasEncomiendas.filter(e => e.estado !== 'ENTREGADA' && e.estado !== 'CANCELADA' && e.estado !== 'DEVUELTA').length
-    : 0;
+  const activeEncomiendasCount = useMemo(() =>
+    !user ? 0 : (todasLasEncomiendas ?? []).filter(
+      e => e.estado !== 'ENTREGADA' && e.estado !== 'CANCELADA' && e.estado !== 'DEVUELTA'
+    ).length
+  , [user, todasLasEncomiendas]);
 
   return (
     <Tabs

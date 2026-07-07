@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { SafeAreaView, ScrollView, View, Text, Pressable } from '@/tw';
+import { SafeAreaView, ScrollView, View, Text, Pressable, useCSSVariable } from '@/tw';
 import { ActivityIndicator } from 'react-native';
-import { CaretLeft, Clock, Star } from 'phosphor-react-native';
+import { CaretLeft, Clock, Star, WarningCircle } from 'phosphor-react-native';
 import { SeatSelector } from '@/src/components/SeatSelector';
 import { PaymentFlow } from '@/src/components/PaymentFlow';
 import { Spinner } from '@/src/components/Spinner';
@@ -11,6 +11,7 @@ import { useAuth } from '@/src/contexts/AuthContext';
 import { formatDate, dateFull, timeOnly, formatCity } from '@/src/utils/formatters';
 import * as Haptics from 'expo-haptics';
 import { useToast } from '@/src/components/Toast';
+import type { Viaje } from '@/src/types';
 
 // ─── Generador de código de boleto criptográficamente seguro ───────────────────
 // Math.random() NO debe usarse para IDs públicos: con 36^6 combinaciones hay riesgo
@@ -31,9 +32,12 @@ export default function DetalleViajeScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const toast = useToast();
+  const foregroundColor = useCSSVariable('--foreground') as string || '#171717';
+  const destructiveColor = useCSSVariable('--destructive') as string || '#dc2626';
 
-  const [viaje, setViaje] = useState<any>(null);
+  const [viaje, setViaje] = useState<Viaje | null>(null);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [asientosOcupados, setAsientosOcupados] = useState<string[]>([]);
   const [asientosSeleccionados, setAsientosSeleccionados] = useState<string[]>([]);
   const [showPayment, setShowPayment] = useState(false);
@@ -74,13 +78,15 @@ export default function DetalleViajeScreen() {
         if (viajeResult.error) throw viajeResult.error;
 
         if (isMounted) {
-          setViaje(viajeResult.data);
+          setViaje(viajeResult.data as unknown as Viaje);
           setAsientosOcupados(
             (boletosResult.data ?? []).map((b: { asiento: string }) => b.asiento)
           );
         }
       } catch (err: any) {
         console.error('[DetalleViaje] Error cargando datos:', err.message);
+        // UX-01: Expose error to UI instead of silently failing
+        if (isMounted) setFetchError(err.message ?? 'Error al cargar el viaje');
       } finally {
         if (isMounted) setLoading(false);
       }
@@ -151,6 +157,20 @@ export default function DetalleViajeScreen() {
     );
   }
 
+  // UX-01: Visible error state
+  if (fetchError && !viaje) {
+    return (
+      <SafeAreaView className="flex-1 bg-background justify-center items-center px-8">
+        <WarningCircle color={destructiveColor} size={48} weight="thin" />
+        <Text className="text-foreground font-bold text-base mt-4 text-center">No se pudo cargar el viaje</Text>
+        <Text className="text-muted-foreground text-sm mt-2 text-center">{fetchError}</Text>
+        <Pressable onPress={() => router.back()} className="mt-6 px-6 py-3 bg-secondary rounded-full">
+          <Text className="text-foreground font-bold">Volver</Text>
+        </Pressable>
+      </SafeAreaView>
+    );
+  }
+
   if (!viaje) {
     return (
       <SafeAreaView className="flex-1 bg-background justify-center items-center">
@@ -181,7 +201,7 @@ export default function DetalleViajeScreen() {
         codigo_boleto: generateBoletoCode(), // CSPRNG — sin colisiones prácticas
         comprador_id: user.id,
         viaje_id: viaje.id,
-        cooperativa_id: cooperativa.id,
+        cooperativa_id: cooperativa?.id ?? '',
         asiento: asiento,
         precio: precioUnitario,
         estado: 'RESERVADO', // Pendiente de verificación del pago por la cooperativa
@@ -231,8 +251,14 @@ export default function DetalleViajeScreen() {
       {/* Header */}
       <View className="px-6 pt-4 pb-4 bg-background border-b border-border">
         <View className="flex-row items-center">
-          <Pressable onPress={() => showPayment ? setShowPayment(false) : router.back()} className="size-10 bg-secondary rounded-full flex items-center justify-center mr-4">
-            <CaretLeft weight="bold" color="#171717" size={24} />
+          <Pressable
+            onPress={() => showPayment ? setShowPayment(false) : router.back()}
+            className="size-10 bg-secondary rounded-full flex items-center justify-center mr-4"
+            accessibilityLabel={showPayment ? 'Volver al selector de asientos' : 'Volver a resultados'}
+            accessibilityRole="button"
+          >
+            {/* BUG-08 fix: use CSS variable instead of hardcoded #171717 */}
+            <CaretLeft weight="bold" color={foregroundColor} size={24} />
           </Pressable>
           <View className="flex-1">
             <Text className="text-sm font-bold text-muted-foreground uppercase tracking-wider">
@@ -242,11 +268,11 @@ export default function DetalleViajeScreen() {
               {cooperativa?.nombre || 'Cooperativa'}
             </Text>
           </View>
-          {cooperativa?.calificacion_promedio > 0 && (
+          {(cooperativa?.calificacion_promedio ?? 0) > 0 && (
             <View className="flex-row items-center bg-secondary px-3 py-1.5 rounded-full">
               <Star weight="fill" color="#e2b714" size={14} />
               <Text className="text-sm font-bold text-foreground ml-1">
-                {Number(cooperativa.calificacion_promedio).toFixed(1)}
+                {Number(cooperativa?.calificacion_promedio ?? 0).toFixed(1)}
               </Text>
             </View>
           )}
@@ -305,7 +331,7 @@ export default function DetalleViajeScreen() {
         ) : (
           <SeatSelector
             viaje_id={viaje.id}
-            asientosTotales={viaje.asientos_totales}
+            asientosTotales={viaje.asientos_totales ?? 0}
             asientosOcupados={asientosOcupados}
             precioUnitario={precioUnitario}
             onConfirm={handleConfirmSeats}

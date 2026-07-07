@@ -8,15 +8,20 @@ import { useFonts, Lora_600SemiBold, Lora_700Bold } from '@expo-google-fonts/lor
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useToast } from "@/src/components/Toast";
+import { ErrorBoundary } from "@/src/components/ErrorBoundary";
+import { ToastProvider } from "@/src/components/Toast";
+import { usePushNotifications } from "@/src/hooks/usePushNotifications";
 
 SplashScreen.preventAutoHideAsync();
-
-import { usePushNotifications } from "@/src/hooks/usePushNotifications";
 
 function RootLayoutNav() {
   const { session, initialized, isOffline } = useAuth();
   const segments = useSegments();
   const router = useRouter();
+  // PERF-05: Extract segments[0] — useSegments() returns a new array every render.
+  // Using the full array as a useEffect dependency causes the routing guard to fire
+  // on every navigation event even when auth state hasn't changed.
+  const firstSegment = segments[0];
 
   const toast = useToast();
 
@@ -40,7 +45,7 @@ function RootLayoutNav() {
     if (!initialized) return;
 
     // Verificar si estamos dentro del grupo de rutas de autenticación
-    const inAuthGroup = segments[0] === '(auth)';
+    const inAuthGroup = firstSegment === '(auth)';
 
     if (!session && !inAuthGroup) {
       // Si no hay sesión iniciada y no estamos en Login, obligar a ir al Login.
@@ -49,7 +54,7 @@ function RootLayoutNav() {
       // Si ya hay sesión iniciada y estamos en Login, mandar a Home.
       router.replace('/(tabs)');
     }
-  }, [session, initialized, segments]);
+  }, [session, initialized, firstSegment]);
 
   if (!initialized) {
     return (
@@ -82,8 +87,7 @@ function RootLayoutNav() {
   );
 }
 
-import { ErrorBoundary } from "@/src/components/ErrorBoundary";
-import { ToastProvider } from "@/src/components/Toast";
+
 
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({

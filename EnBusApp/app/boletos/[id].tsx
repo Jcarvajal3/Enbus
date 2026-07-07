@@ -1,7 +1,7 @@
 import { SafeAreaView } from '@/tw';
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ScrollView, View, Text, Pressable } from '@/tw';
+import { ScrollView, View, Text, Pressable, useCSSVariable } from '@/tw';
 import { Alert, Modal, TextInput, StyleSheet, ActivityIndicator } from 'react-native';
 import { CaretLeft, Clock } from 'phosphor-react-native';
 import { QRCodeViewer } from '@/src/components/QRCodeViewer';
@@ -15,15 +15,18 @@ import * as Sharing from 'expo-sharing';
 import * as Haptics from 'expo-haptics';
 import { useToast } from '@/src/components/Toast';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import type { Boleto } from '@/src/types';
 
 export default function DetalleBoletoScreen() {
   const params = useLocalSearchParams<{ id: string }>();
   const id = Array.isArray(params.id) ? params.id[0] : params.id;
   const router = useRouter();
   const toast = useToast();
+  const foregroundColor = useCSSVariable('--foreground') as string || '#171717';
+  const cardColor = useCSSVariable('--card') as string || '#ffffff';
 
   const { user } = useAuth();
-  const [boleto, setBoleto] = useState<any>(null);
+  const [boleto, setBoleto] = useState<Boleto | null>(null);
   const [loading, setLoading] = useState(true);
   const [canceling, setCanceling] = useState(false);
   const [isCancelModalVisible, setIsCancelModalVisible] = useState(false);
@@ -32,6 +35,7 @@ export default function DetalleBoletoScreen() {
   const viewShotRef = useRef<any>(null);
 
   const handleSharePass = async () => {
+    if (!boleto) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     try {
       if (!viewShotRef.current) return;
@@ -121,7 +125,7 @@ export default function DetalleBoletoScreen() {
         }
 
         if (isMounted) {
-          setBoleto(data);
+          setBoleto(data as unknown as Boleto);
           AsyncStorage.setItem(cacheKey, JSON.stringify(data)).catch((err) => {
             console.warn('Error saving cache for boleto:', err);
           });
@@ -148,7 +152,7 @@ export default function DetalleBoletoScreen() {
 
     const interval = setInterval(() => {
       const now = new Date().getTime();
-      const expiry = new Date(boleto.reserva_expira_at).getTime();
+      const expiry = new Date((boleto as any).reserva_expira_at as string).getTime();
       const diff = expiry - now;
 
       if (diff <= 0) {
@@ -164,7 +168,7 @@ export default function DetalleBoletoScreen() {
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [boleto?.reserva_expira_at, boleto?.estado]);
+  }, [(boleto as any)?.reserva_expira_at, boleto?.estado]);
 
   // Carga de calificacion previa para boletos USADO
   useEffect(() => {
@@ -211,7 +215,7 @@ export default function DetalleBoletoScreen() {
         .insert({
           boleto_id: boleto.id,
           usuario_id: user.id,
-          cooperativa_id: boleto.cooperativa_id,
+          cooperativa_id: (boleto as any).cooperativa_id,
           estrellas: selectedStars,
           comentario: comentarioCalificacion.trim() || null,
         });
@@ -235,6 +239,7 @@ export default function DetalleBoletoScreen() {
   };
 
   const handleCancelReserva = async () => {
+    if (!boleto) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     Alert.alert(
       'Cancelar Reserva',
@@ -269,6 +274,7 @@ export default function DetalleBoletoScreen() {
   };
 
   const handleCancelBoletoConfirmado = async () => {
+    if (!boleto) return;
     if (!motivo.trim()) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
       toast.show('error', 'Por favor ingresa un motivo para la cancelación');
@@ -277,7 +283,7 @@ export default function DetalleBoletoScreen() {
 
     try {
       setCanceling(true);
-      const refundAmount = boleto.precio * 0.95;
+      const refundAmount = (boleto.precio ?? 0) * 0.95;
       const { error } = await supabase
         .from('boletos')
         .update({
@@ -333,16 +339,22 @@ export default function DetalleBoletoScreen() {
   const horasDuration = Math.floor((ruta?.duracion_estimada_min || 0) / 60);
   const minDuration = (ruta?.duracion_estimada_min || 0) % 60;
 
-  const acronym = (city: string) => city ? formatCity(city).substring(0, 3).toUpperCase() : 'UNK';
+  const acronym = (city: string | undefined) => city ? formatCity(city).substring(0, 3).toUpperCase() : 'UNK';
 
   return (
     <SafeAreaView className="flex-1 bg-background">
       {/* Navbar Custom */}
       <View className="px-6 pt-4 pb-4 bg-background flex-row justify-between items-center border-b border-border">
         <View className="flex-row items-center gap-4">
-          <Pressable onPress={() => router.back()} className="size-10 bg-secondary rounded-full flex items-center justify-center">
-            <CaretLeft weight="bold" color="#171717" size={24} />
-          </Pressable>
+        <Pressable
+          onPress={() => router.back()}
+          className="size-10 bg-secondary rounded-full flex items-center justify-center"
+          accessibilityLabel="Volver al historial de boletos"
+          accessibilityRole="button"
+        >
+          {/* BUG-08 fix: CSS variable instead of hardcoded #171717 */}
+          <CaretLeft weight="bold" color={foregroundColor} size={24} />
+        </Pressable>
           <View>
             <Text className="text-sm font-bold text-muted-foreground uppercase">Boarding Pass</Text>
             <Text className="font-heading text-xl text-foreground">{boleto.codigo_boleto}</Text>
@@ -490,6 +502,8 @@ export default function DetalleBoletoScreen() {
           <Pressable
             onPress={handleSharePass}
             className="bg-primary h-12 rounded-[10px] items-center justify-center mt-2 mb-2 flex-row gap-2"
+            accessibilityLabel="Compartir boarding pass como imagen"
+            accessibilityRole="button"
           >
             <Text className="text-primary-foreground font-bold">Compartir Pase de Abordaje</Text>
           </Pressable>
@@ -605,10 +619,10 @@ export default function DetalleBoletoScreen() {
         }}
       >
         <View style={s.modalOverlay}>
-          <View style={s.modalContainer}>
+          <View style={[s.modalContainer, { backgroundColor: cardColor }]}>
             <Text className="font-heading text-lg text-foreground mb-2">Motivo de Cancelación</Text>
             <Text className="text-xs text-muted-foreground mb-4 text-center">
-              La cancelación de boletos pagados tiene un cargo administrativo del 5%. Recibirás un reembolso de {(boleto.precio * 0.95).toFixed(2)} Bs.
+              La cancelación de boletos pagados tiene un cargo administrativo del 5%. Recibirás un reembolso de {((boleto.precio ?? 0) * 0.95).toFixed(2)} Bs.
             </Text>
             <TextInput
               style={s.textInput}
@@ -651,8 +665,9 @@ const s = StyleSheet.create({
     justifyContent: 'center',
     padding: 24,
   },
+  // BUG-08: backgroundColor moved to inline style using CSS variable via prop
+  // to support dark mode. StyleSheet cannot use CSS variables — it's static.
   modalContainer: {
-    backgroundColor: '#FFFFFF',
     borderRadius: 14,
     padding: 24,
     alignItems: 'center',

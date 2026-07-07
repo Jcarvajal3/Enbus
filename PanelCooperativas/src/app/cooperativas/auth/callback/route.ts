@@ -2,10 +2,20 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
+/**
+ * Sanitize the `next` redirect param to prevent open redirect attacks.
+ * Only internal absolute paths are allowed (must start with `/` but NOT `//`).
+ */
+function sanitizeNext(raw: string | null, fallback: string): string {
+  if (!raw) return fallback;
+  if (raw.startsWith("/") && !raw.startsWith("//")) return raw;
+  return fallback;
+}
+
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
-  const next = searchParams.get("next") ?? "/cooperativas/restablecer";
+  const next = sanitizeNext(searchParams.get("next"), "/cooperativas/restablecer");
 
   if (code) {
     const cookieStore = await cookies();

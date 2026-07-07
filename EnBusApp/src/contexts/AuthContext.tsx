@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { createContext, useContext, useEffect, useMemo, useCallback, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '../utils/supabase';
@@ -35,6 +35,13 @@ const AuthContext = createContext<AuthContextType>({
  *
  * 2. **Offline flag**: exposes `isOffline` so UI can show a connectivity hint
  *    without blocking the rest of the app.
+ *
+ * PERF-03: `signOut` is wrapped in `useCallback` and the context `value` is
+ * wrapped in `useMemo` so that all `useAuth()` consumers only re-render when
+ * auth state actually changes — not on every parent render.
+ *
+ * PERF-09: `getSession()` on foreground is debounced with a 60-second minimum
+ * interval to avoid hammering the network on rapid app switches.
  */
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
@@ -47,6 +54,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // capturado en el closure siempre sería 'false' (el valor inicial). Con un ref,
   // el timeout lee el valor mutado más reciente, sin importar cuándo se ejecute.
   const initializedRef = useRef(false);
+
+  // PERF-09: Track last foreground refresh to debounce getSession() calls.
+  const lastForegroundRefreshRef = useRef<number>(0);
+  const FOREGROUND_REFRESH_INTERVAL_MS = 60_000; // 60 seconds minimum between refreshes
 
   useEffect(() => {
     let cancelled = false;
@@ -77,6 +88,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     supabase.auth.getSession().then(({ data: { session: s } }) => {
       clearTimeout(timeoutHandle);
+      lastForegroundRefreshRef.current = Date.now();
       setIsOffline(false);
       applySession(s);
     }).catch(() => {
@@ -95,8 +107,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     // ── 3. Refresh session when app comes back from background ────────────────
     // Prevents stale tokens after the device wakes from sleep.
+    // PERF-09: Debounced — only refresh if 60+ seconds have passed since the
+    // last refresh to avoid unnecessary network requests on rapid app switches.
     const appStateSubscription = AppState.addEventListener('change', (state) => {
       if (state === 'active') {
+        const now = Date.now();
+        if (now - lastForegroundRefreshRef.current < FOREGROUND_REFRESH_INTERVAL_MS) {
+          return; // Skip — refreshed recently
+        }
+        lastForegroundRefreshRef.current = now;
         supabase.auth.getSession().then(({ data: { session: s } }) => {
           if (!cancelled) {
             setSession(s);
@@ -119,12 +138,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const signOut = async () => {
-    await supabase.auth.signOut();
-  };
+  // PERF-03: Stable reference — useCallback prevents consumers from re-rendering
+  // when AuthProvider re-renders for unrelated state changes.
+  const signOut = useCallback(async () => {
+    try {
+      await supabase.auth.signOut();
+    } catch (e) {
+      console.warn('[Auth] signOut failed:', e);
+    }
+  }, []);
+
+  // PERF-03: Memoize the context value object so its reference only changes
+  // when one of the auth state values actually changes. Without this, every
+  // render of AuthProvider creates a new object and forces ALL consumers
+  // (screens, hooks, components) to re-render unnecessarily.
+  const value = useMemo(() => ({
+    session, user, initialized, isOffline, signOut,
+  }), [session, user, initialized, isOffline, signOut]);
 
   return (
-    <AuthContext.Provider value={{ session, user, initialized, isOffline, signOut }}>
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );

@@ -2,7 +2,7 @@ import { SafeAreaView } from '@/tw';
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ActivityIndicator, Alert, Image } from 'react-native';
-import { ScrollView, View, Text, Pressable } from '@/tw';
+import { ScrollView, View, Text, Pressable, useCSSVariable } from '@/tw';
 import { CaretLeft, Clock } from 'phosphor-react-native';
 import { QRCodeViewer } from '@/src/components/QRCodeViewer';
 import { StatusTimeline } from '@/src/components/StatusTimeline';
@@ -24,6 +24,7 @@ export default function DetalleEnvioScreen() {
   const [loading, setLoading] = useState(true);
   const [fotoUrlFirmada, setFotoUrlFirmada] = useState<string | null>(null);
   const isMountedRef = useRef(true);
+  const foregroundColor = useCSSVariable('--foreground') as string || '#171717';
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -144,8 +145,17 @@ export default function DetalleEnvioScreen() {
       { text: 'No' },
       {
         text: 'Sí, cancelar', style: 'destructive', onPress: async () => {
-          await supabase.from('encomiendas').update({ estado: 'CANCELADA' }).eq('id', id);
-          router.back();
+          try {
+            const { error } = await supabase
+              .from('encomiendas')
+              .update({ estado: 'CANCELADA' })
+              .eq('id', id);
+            if (error) throw error;
+            router.back();
+          } catch (err: any) {
+            toast.show('error', 'No se pudo cancelar la encomienda. Intenta de nuevo.');
+            console.error('[enviar] Error cancelando encomienda:', err.message);
+          }
         }
       }
     ]);
@@ -192,7 +202,7 @@ export default function DetalleEnvioScreen() {
     <SafeAreaView className="flex-1 bg-background">
       <View className="px-6 pt-4 pb-4 bg-background shadow-sm flex-row items-center space-x-4 border-b border-border/50">
         <Pressable onPress={() => router.back()} className="w-10 h-10 bg-secondary rounded-full flex items-center justify-center">
-          <CaretLeft weight="bold" color="#171717" size={24} />
+          <CaretLeft weight="bold" color={foregroundColor} size={24} />
         </Pressable>
         {loading ? <ActivityIndicator color="#6b4a1a" /> : (
           <View>

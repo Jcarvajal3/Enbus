@@ -22,6 +22,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -118,7 +119,7 @@ export function AppSidebar() {
               }
             />
             <DropdownMenuContent className="w-[--radix-dropdown-menu-trigger-width] min-w-56 rounded-lg" side="bottom" align="end" sideOffset={4}>
-              <DropdownMenuLabel className="p-0 font-normal">
+              <div className="p-0 font-normal">
                 <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
                   <Avatar className="size-8 rounded-lg">
                     <AvatarFallback className="rounded-lg">
@@ -130,9 +131,10 @@ export function AppSidebar() {
                     <span className="truncate text-xs capitalize text-muted-foreground">{user.role.replace("_", " ")}</span>
                   </div>
                 </div>
-              </DropdownMenuLabel>
+              </div>
               <DropdownMenuSeparator />
-              <DropdownMenuLabel className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">Tema</DropdownMenuLabel>
+              <DropdownMenuGroup>
+                <DropdownMenuLabel className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">Tema</DropdownMenuLabel>
               <DropdownMenuItem onClick={() => setTheme("light")} className="cursor-pointer">
                 <Sun className="size-4 mr-2" />
                 <span>Claro</span>
@@ -148,6 +150,7 @@ export function AppSidebar() {
                 <span>Sistema</span>
                 {mounted && theme === "system" && <span className="ml-auto text-xs text-primary">✓</span>}
               </DropdownMenuItem>
+              </DropdownMenuGroup>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={handleSignOut} className="cursor-pointer text-destructive focus:text-destructive">
                 <SignOut />

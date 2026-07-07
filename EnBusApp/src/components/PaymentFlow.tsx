@@ -100,9 +100,20 @@ export function PaymentFlow({
     : [{ id: 'fallback-efectivo', tipo: 'EFECTIVO', cooperativa_id }];
 
   const isEfectivo = metodoSeleccionado?.tipo === 'EFECTIVO';
+
+  // Validate fecha format DD/MM/AAAA and that it represents a real date
+  const isFechaValid = (() => {
+    if (!fecha.trim()) return false;
+    const DATE_REGEX = /^\d{2}\/\d{2}\/\d{4}$/;
+    if (!DATE_REGEX.test(fecha.trim())) return false;
+    const [day, month, year] = fecha.trim().split('/').map(Number);
+    const d = new Date(year, month - 1, day);
+    return d.getFullYear() === year && d.getMonth() === month - 1 && d.getDate() === day;
+  })();
+
   const isFormValid = isEfectivo
     ? true
-    : referencia.trim().length >= 4 && fecha.trim().length >= 6 && banco.trim().length > 0;
+    : referencia.trim().length >= 4 && /^\d+$/.test(referencia.trim()) && isFechaValid && banco.trim().length > 0;
 
   const handleSubmitPago = async () => {
     if (!isFormValid || !metodoSeleccionado || !user) return;

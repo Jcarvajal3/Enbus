@@ -4,10 +4,10 @@ import { createContext, useContext, ReactNode } from "react";
 
 export type UserProfile = {
   id: string;
-  role: "taquillero" | "admin_cooperativa";
+  role: "taquillero" | "admin_cooperativa" | "super_admin";
   nombre_completo: string;
-  cooperativa_id: string;
-  cooperativa_nombre?: string;
+  cooperativa_id: string | null;
+  cooperativa_nombre?: string | null;
 };
 
 type UserContextType = {

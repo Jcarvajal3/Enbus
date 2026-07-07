@@ -28,7 +28,7 @@ interface ViajeDespacho {
 
 export default function DespachoPage() {
   const { user } = useUser();
-  const cooperativaId = user.cooperativa_id;
+  const cooperativaId = user.cooperativa_id!;
   const supabase = useMemo(() => createClient(), []);
 
   const [fecha, setFecha] = useState(() => new Date().toISOString().split("T")[0]);

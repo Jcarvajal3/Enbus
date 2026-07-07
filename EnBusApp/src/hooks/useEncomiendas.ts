@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/src/utils/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import type { Encomienda } from '@/src/types';
 
 type WithId = { id: string };
 
@@ -33,18 +34,19 @@ export function useEncomiendas(
   userId?: string,
   { enabled = true, limit = 30 }: UseEncomiendasOptions = {}
 ) {
-  const [data, setData] = useState<any[]>([]);
+  const [data, setData] = useState<Encomienda[]>([]);
   const [loading, setLoading] = useState(true);
   const setDataRef = useRef(setData);
   setDataRef.current = setData;
 
   const cacheKey = `cache:encomiendas_or:${userId || 'anon'}:${limit}`;
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (): Promise<void> => {
     if (!userId) {
       setLoading(false);
       return;
     }
+    setLoading(true); // REF-05: Show spinner on manual refetch too
     try {
       const { data: result, error } = await supabase
         .from('encomiendas')
@@ -117,8 +119,10 @@ export function useEncomiendas(
 
         if (payload.eventType === 'INSERT') {
           const newRec = payload.new as any;
-          // Guard de seguridad: solo añadir si el registro pertenece al usuario
-          if (newRec.sender_id === userId || newRec.receiver_user_id === userId) {
+          // Guard: solo añadir si el registro pertenece al usuario
+          // y si todavía no existe en la lista (deduplicación por los dos canales)
+          const alreadyExists = current.some((item) => item.id === newRec.id);
+          if (!alreadyExists && (newRec.sender_id === userId || newRec.receiver_user_id === userId)) {
             updatedList = [newRec, ...current];
           }
         } else if (payload.eventType === 'UPDATE') {

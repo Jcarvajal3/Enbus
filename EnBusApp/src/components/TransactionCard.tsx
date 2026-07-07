@@ -1,5 +1,6 @@
+import React, { memo } from 'react';
 import { View, Text, Pressable } from '@/tw';
-import { Package, Ticket, CaretRight } from 'phosphor-react-native';
+import { Package, Ticket } from 'phosphor-react-native';
 
 export type TransactionType = 'encomienda_envio' | 'encomienda_recepcion' | 'boleto';
 
@@ -12,6 +13,7 @@ interface TransactionCardProps {
   onPress?: () => void;
 }
 
+// Memoize at module level — this never changes, so no need to recreate on each render.
 const getStatusBadge = (type: TransactionType, estado: string) => {
   let color = 'bg-muted';
   let text = 'text-muted-foreground';
@@ -48,7 +50,10 @@ const getStatusBadge = (type: TransactionType, estado: string) => {
   );
 };
 
-export function TransactionCard({ type, id, estado, titulo, subtitulo, onPress }: TransactionCardProps) {
+// PERF-07: Wrapped in React.memo so that FlatList / list screens only re-render
+// individual cards when their props actually change (e.g. estado update via
+// Realtime), not when the parent re-renders for unrelated state changes.
+export const TransactionCard = memo(({ type, id, estado, titulo, subtitulo, onPress }: TransactionCardProps) => {
   const isBoleto = type === 'boleto';
   const Icon = isBoleto ? Ticket : Package;
 
@@ -81,4 +86,6 @@ export function TransactionCard({ type, id, estado, titulo, subtitulo, onPress }
       </View>
     </Pressable>
   );
-}
+});
+
+TransactionCard.displayName = 'TransactionCard';

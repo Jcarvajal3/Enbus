@@ -40,7 +40,7 @@ function RetentionBadge({ dias }: { dias: number }) {
 
 export default function EntregaPage() {
   const { user } = useUser();
-  const cooperativaId = user.cooperativa_id;
+  const cooperativaId = user.cooperativa_id!;
   const supabase = useMemo(() => createClient(), []);
   
   const [encomiendas, setEncomiendas] = useState<EncomiendaEntrega[]>([]);

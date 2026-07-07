@@ -7,7 +7,7 @@ export default async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    // Aplicar a todas las rutas /cooperativas/* excepto assets estáticos
     "/cooperativas/:path*",
+    "/admin/:path*",
   ],
 };

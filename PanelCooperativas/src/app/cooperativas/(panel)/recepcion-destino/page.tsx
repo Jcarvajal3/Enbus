@@ -39,7 +39,7 @@ type EncomiendaTransito = {
 
 export default function RecepcionDestinoPage() {
   const { user } = useUser();
-  const cooperativaId = user.cooperativa_id;
+  const cooperativaId = user.cooperativa_id!;
   const supabase = useMemo(() => createClient(), []);
   
   const [encomiendas, setEncomiendas] = useState<EncomiendaTransito[]>([]);

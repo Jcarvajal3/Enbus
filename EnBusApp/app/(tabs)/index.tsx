@@ -1,21 +1,21 @@
 import { SafeAreaView } from '@/tw';
-import { useState, useCallback } from 'react';
-import { ScrollView, View, Text, Pressable } from '@/tw';
+import { useState, useCallback, useMemo } from 'react';
+import { ScrollView, View, Text, Pressable, useCSSVariable } from '@/tw';
 import { RefreshControl } from 'react-native';
 import { useAuth } from '@/src/contexts/AuthContext';
 import { useRealtime } from '@/src/hooks/useRealtime';
 import { SearchForm } from '@/src/components/SearchForm';
 import { TransactionCard } from '@/src/components/TransactionCard';
+import { CardSkeleton } from '@/src/components/CardSkeleton';
 import { Bell, UserCircle } from 'phosphor-react-native';
 import { useRouter } from 'expo-router';
-import { Spinner } from '@/src/components/Spinner';
-import { SkeletonLoader } from '@/src/components/SkeletonLoader';
 import { useFocusEffect } from '@react-navigation/native';
 import { formatDate, formatCity } from '@/src/utils/formatters';
 
 export default function HomeScreen() {
   const { user } = useAuth();
   const router = useRouter();
+  const foregroundColor = useCSSVariable('--foreground') as string || '#171717';
 
   // ── Controlled: suscripciones SOLO activas cuando esta tab tiene foco ──────
   // Esto evita que 2 WebSockets permanezcan abiertos mientras el usuario está
@@ -55,16 +55,19 @@ export default function HomeScreen() {
     { enabled: isFocused && !!user?.id, limit: 50 }
   );
 
-  const unreadCount = notifNoLeidas ? notifNoLeidas.filter(n => !n.leida).length : 0;
+  // PERF-02: memoize unread count
+  const unreadCount = useMemo(
+    () => notifNoLeidas ? notifNoLeidas.filter(n => !n.leida).length : 0,
+    [notifNoLeidas]
+  );
 
-  const onRefresh = useCallback(() => {
+  const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    refetchEnvios();
-    refetchBoletos();
-    refetchNotif();
-    setTimeout(() => {
+    try {
+      await Promise.all([refetchEnvios(), refetchBoletos(), refetchNotif()]);
+    } finally {
       setRefreshing(false);
-    }, 1000);
+    }
   }, [refetchEnvios, refetchBoletos, refetchNotif]);
 
   return (
@@ -94,7 +97,7 @@ export default function HomeScreen() {
             </View>
             <View className="flex-row items-center gap-3">
               <Pressable onPress={() => router.push('/notificaciones')} className="size-12 bg-secondary rounded-full items-center justify-center relative">
-                <Bell weight="bold" size={22} color="#171717" />
+                <Bell weight="bold" size={22} color={foregroundColor} />
                 {unreadCount > 0 && (
                   <View className="absolute -top-1 -right-1 bg-destructive min-w-[20px] h-[20px] rounded-full items-center justify-center px-1">
                     <Text className="text-[10px] text-white font-extrabold text-center">
@@ -104,7 +107,7 @@ export default function HomeScreen() {
                 )}
               </Pressable>
               <Pressable onPress={() => router.push('/perfil')} className="size-12 bg-secondary rounded-full items-center justify-center">
-                <UserCircle weight="fill" size={26} color="#171717" />
+                <UserCircle weight="fill" size={26} color={foregroundColor} />
               </Pressable>
             </View>
           </View>
@@ -136,17 +139,7 @@ export default function HomeScreen() {
               </Text>
 
               {loadingEnvios ? (
-                <View className="flex-col gap-3">
-                  {[1, 2].map((i) => (
-                    <View key={i} className="bg-card border border-border p-4 rounded-[14px] flex-row items-center gap-3">
-                      <SkeletonLoader width={40} height={40} borderRadius={20} />
-                      <View className="flex-1 gap-1.5">
-                        <SkeletonLoader width="65%" height={14} />
-                        <SkeletonLoader width="35%" height={10} />
-                      </View>
-                    </View>
-                  ))}
-                </View>
+                <CardSkeleton count={2} />
               ) : (
                 <View className="flex-col gap-3">
                   {encomiendas.map((enc) => (
@@ -176,17 +169,7 @@ export default function HomeScreen() {
               </Text>
 
               {loadingBoletos ? (
-                <View className="flex-col gap-3">
-                  {[1, 2].map((i) => (
-                    <View key={i} className="bg-card border border-border p-4 rounded-[14px] flex-row items-center gap-3">
-                      <SkeletonLoader width={40} height={40} borderRadius={20} />
-                      <View className="flex-1 gap-1.5">
-                        <SkeletonLoader width="65%" height={14} />
-                        <SkeletonLoader width="35%" height={10} />
-                      </View>
-                    </View>
-                  ))}
-                </View>
+                <CardSkeleton count={2} />
               ) : (
                 <View className="flex-col gap-3">
                   {boletos.map((bol) => (

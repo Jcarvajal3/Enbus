@@ -2,7 +2,7 @@ import { SafeAreaView } from '@/tw';
 import { useEffect, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ActivityIndicator, Image } from 'react-native';
-import { ScrollView, View, Text, Pressable } from '@/tw';
+import { ScrollView, View, Text, Pressable, useCSSVariable } from '@/tw';
 import { CaretLeft } from 'phosphor-react-native';
 import { StatusTimeline } from '@/src/components/StatusTimeline';
 import { PaymentFlow } from '@/src/components/PaymentFlow';
@@ -18,6 +18,7 @@ export default function DetalleRecibirScreen() {
   const [historial, setHistorial] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [fotoUrlFirmada, setFotoUrlFirmada] = useState<string | null>(null);
+  const foregroundColor = useCSSVariable('--foreground') as string || '#171717';
 
   useEffect(() => {
     let isMounted = true;
@@ -138,7 +139,7 @@ export default function DetalleRecibirScreen() {
     <SafeAreaView className="flex-1 bg-background">
       <View className="px-6 pt-4 pb-4 bg-background shadow-sm flex-row items-center space-x-4 border-b border-border/50">
         <Pressable onPress={() => router.back()} className="w-10 h-10 bg-secondary rounded-full flex items-center justify-center">
-          <CaretLeft weight="bold" color="#171717" size={24} />
+          <CaretLeft weight="bold" color={foregroundColor} size={24} />
         </Pressable>
         {loading ? <ActivityIndicator color="#6b4a1a" /> : (
           <View>

@@ -1,18 +1,18 @@
 import { SafeAreaView } from '@/tw';
-import { useState, useCallback } from 'react';
-import { ScrollView, View, Text, Pressable } from '@/tw';
-import { RefreshControl } from 'react-native';
+import { useState, useCallback, useMemo } from 'react';
+import { View, Text, Pressable } from '@/tw';
+import { FlatList, RefreshControl, ListRenderItem } from 'react-native';
 import { useAuth } from '@/src/contexts/AuthContext';
 import { useRealtime } from '@/src/hooks/useRealtime';
 import { useRouter } from 'expo-router';
 import { TransactionCard } from '@/src/components/TransactionCard';
+import { CardSkeleton } from '@/src/components/CardSkeleton';
 import { Modal } from 'react-native';
 import { Ticket, Bus } from 'phosphor-react-native';
 import { SearchForm } from '@/src/components/SearchForm';
-import { Spinner } from '@/src/components/Spinner';
-import { SkeletonLoader } from '@/src/components/SkeletonLoader';
 import { useFocusEffect } from '@react-navigation/native';
 import { formatDate, formatCity } from '@/src/utils/formatters';
+
 
 export default function BoletosScreen() {
   const { user } = useAuth();
@@ -39,13 +39,46 @@ export default function BoletosScreen() {
     { enabled: isFocused && !!user?.id, limit: 30 }
   );
 
-  const onRefresh = useCallback(() => {
+  const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    refetch();
-    setTimeout(() => {
+    try {
+      await refetch();
+    } finally {
       setRefreshing(false);
-    }, 1000);
+    }
   }, [refetch]);
+
+  // PERF-02: Memoize the renderItem callback so FlatList doesn't re-render
+  // all rows when this component re-renders for unrelated state changes.
+  const renderItem = useCallback<ListRenderItem<any>>(({ item: bol }) => (
+    <View className="mb-4 w-full">
+      <TransactionCard
+        type="boleto"
+        id={bol.codigo_boleto || bol.id}
+        estado={bol.estado}
+        titulo={`${formatCity(bol.viajes?.rutas?.ciudad_origen) || 'Origen'} → ${formatCity(bol.viajes?.rutas?.ciudad_destino) || 'Destino'}`}
+        subtitulo={formatDate(bol.created_at)}
+        onPress={() => router.push({
+          pathname: '/boletos/[id]',
+          params: { id: bol.codigo_boleto || bol.id }
+        })}
+      />
+    </View>
+  ), [router]);
+
+  const keyExtractor = useCallback((item: any) => item.id, []);
+
+  const emptyComponent = useMemo(() => (
+    <View className="py-20 items-center justify-center">
+      <View className="size-24 bg-secondary rounded-full items-center justify-center mb-6">
+        <Ticket color="#a3a3a3" weight="bold" size={32} />
+      </View>
+      <Text className="text-xl font-bold text-foreground mb-2">No has viajado aún</Text>
+      <Text className="text-base text-muted-foreground text-center px-4">
+        Busca y reserva pasajes a cualquier parte de Venezuela fácilmente.
+      </Text>
+    </View>
+  ), []);
 
   return (
     <SafeAreaView className="flex-1 bg-background">
@@ -55,59 +88,33 @@ export default function BoletosScreen() {
         <Text className="text-sm font-medium text-muted-foreground">Historial completo de tus pasajes</Text>
       </View>
 
-      <ScrollView
-        contentContainerClassName="p-6 pb-32"
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            colors={['#e2b714']}
-            tintColor="#e2b714"
-          />
-        }
-      >
-        {loading ? (
-          <View className="items-center w-full gap-4">
-            {[1, 2, 3].map((i) => (
-              <View key={i} className="w-full bg-card border border-border p-4 rounded-[14px] flex-row items-center gap-3">
-                <SkeletonLoader width={40} height={40} borderRadius={20} />
-                <View className="flex-1 gap-1.5">
-                  <SkeletonLoader width="65%" height={14} />
-                  <SkeletonLoader width="35%" height={10} />
-                </View>
-              </View>
-            ))}
-          </View>
-        ) : historial && historial.length > 0 ? (
-          <View className="items-center">
-            {historial.map((bol) => (
-              <View key={bol.id} className="mb-4">
-                <TransactionCard
-                  type="boleto"
-                  id={bol.codigo_boleto || bol.id}
-                  estado={bol.estado}
-                  titulo={`${formatCity(bol.viajes?.rutas?.ciudad_origen) || 'Origen'} → ${formatCity(bol.viajes?.rutas?.ciudad_destino) || 'Destino'}`}
-                  subtitulo={formatDate(bol.created_at)}
-                  onPress={() => router.push({
-                    pathname: '/boletos/[id]',
-                    params: { id: bol.codigo_boleto || bol.id }
-                  })}
-                />
-              </View>
-            ))}
-          </View>
-        ) : (
-          <View className="py-20 items-center justify-center">
-            <View className="size-24 bg-secondary rounded-full items-center justify-center mb-6">
-              <Ticket color="#a3a3a3" weight="bold" size={32} />
-            </View>
-            <Text className="text-xl font-bold text-foreground mb-2">No has viajado aún</Text>
-            <Text className="text-base text-muted-foreground text-center px-4">
-              Busca y reserva pasajes a cualquier parte de Venezuela fácilmente.
-            </Text>
-          </View>
-        )}
-      </ScrollView>
+      {/* PERF-01: FlatList replaces ScrollView + .map() for virtualized rendering */}
+      {loading ? (
+        <View className="p-6">
+          <CardSkeleton count={3} />
+        </View>
+      ) : (
+        <FlatList
+          data={historial ?? []}
+          renderItem={renderItem}
+          keyExtractor={keyExtractor}
+          ListEmptyComponent={emptyComponent}
+          contentContainerStyle={{ padding: 24, paddingBottom: 128 }}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={['#e2b714']}
+              tintColor="#e2b714"
+            />
+          }
+          removeClippedSubviews={true}
+          maxToRenderPerBatch={10}
+          windowSize={5}
+          initialNumToRender={8}
+        />
+      )}
 
       {/* Floating Action Button CTA */}
       <View className="absolute bottom-6 left-6 right-6">

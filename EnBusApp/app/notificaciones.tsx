@@ -1,8 +1,8 @@
 import { SafeAreaView, View, Text, Pressable, useCSSVariable, ScrollView } from '@/tw';
 import { useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, RefreshControl } from 'react-native';
-import { CaretLeft, Bell, CheckSquare, BookmarkSimple } from 'phosphor-react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, FlatList, ListRenderItem, RefreshControl } from 'react-native';
+import { CaretLeft, Bell, CheckSquare } from 'phosphor-react-native';
 import { supabase } from '@/src/utils/supabase';
 import { useAuth } from '@/src/contexts/AuthContext';
 import { useRealtime } from '@/src/hooks/useRealtime';
@@ -29,13 +29,14 @@ export default function NotificacionesScreen() {
     { enabled: !!user?.id, limit: 50 }
   );
 
-  const onRefresh = () => {
+  const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    refetch();
-    setTimeout(() => {
+    try {
+      await refetch();
+    } finally {
       setRefreshing(false);
-    }, 1000);
-  };
+    }
+  }, [refetch]);
 
   const [markingAll, setMarkingAll] = useState(false);
 
@@ -130,7 +131,52 @@ export default function NotificacionesScreen() {
     }
   };
 
-  const unreadCount = (notificaciones ?? []).filter(n => !n.leida).length;
+  // PERF-02: Memoize unread count — avoids recomputing on every render.
+  const unreadCount = useMemo(
+    () => (notificaciones ?? []).filter(n => !n.leida).length,
+    [notificaciones]
+  );
+
+  // PERF-01: Memoize renderItem for stable FlatList row references.
+  const renderItem = useCallback<ListRenderItem<any>>(({ item: notif }) => (
+    <Pressable
+      key={notif.id}
+      onPress={() => handleMarkAsRead(notif)}
+      className={`p-4 rounded-[14px] border flex-row items-start gap-3 bg-card mb-3 ${notif.leida ? 'border-border/50 opacity-75' : 'border-primary bg-primary/5 shadow-sm'}`}
+    >
+      <View className={`size-10 rounded-full items-center justify-center mt-0.5 ${notif.leida ? 'bg-secondary' : 'bg-primary/20'}`}>
+        <Bell weight={notif.leida ? 'regular' : 'fill'} color={notif.leida ? mutedColor : primaryColor} size={18} />
+      </View>
+      <View className="flex-1">
+        <View className="flex-row justify-between items-start gap-1">
+          <Text className={`text-sm text-foreground flex-1 leading-5 ${notif.leida ? 'font-medium' : 'font-bold'}`}>
+            {notif.titulo}
+          </Text>
+          {!notif.leida && (
+            <View className="size-2 rounded-full bg-primary mt-1.5" />
+          )}
+        </View>
+        <Text className="text-xs text-muted-foreground mt-1 leading-4">
+          {notif.mensaje}
+        </Text>
+        <Text className="text-[10px] text-muted-foreground/80 mt-2 font-semibold">
+          {formatDate(notif.created_at)}
+        </Text>
+      </View>
+    </Pressable>
+  ), [mutedColor, primaryColor, handleMarkAsRead]);
+
+  const keyExtractor = useCallback((item: any) => item.id, []);
+
+  const emptyComponent = useMemo(() => (
+    <View className="py-20 items-center justify-center gap-3">
+      <Bell color={mutedColor} size={48} weight="thin" />
+      <Text className="text-lg font-bold text-foreground">Sin notificaciones</Text>
+      <Text className="text-sm text-muted-foreground text-center leading-[22px] px-6">
+        Aquí aparecerán los cambios de estado de tus paquetes y viajes.
+      </Text>
+    </View>
+  ), [mutedColor]);
 
   return (
     <SafeAreaView className="flex-1 bg-background">
@@ -166,62 +212,33 @@ export default function NotificacionesScreen() {
         )}
       </View>
 
-      {/* List content */}
-      <ScrollView
-        contentContainerClassName="p-6 pb-20"
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            colors={[primaryColor]}
-            tintColor={primaryColor}
-          />
-        }
-      >
-        {loading ? (
-          <View className="py-20 items-center">
-            <ActivityIndicator size="large" color={primaryColor} />
-          </View>
-        ) : notificaciones && notificaciones.length > 0 ? (
-          <View className="gap-3">
-            {notificaciones.map((notif) => (
-              <Pressable
-                key={notif.id}
-                onPress={() => handleMarkAsRead(notif)}
-                className={`p-4 rounded-[14px] border flex-row items-start gap-3 bg-card ${notif.leida ? 'border-border/50 opacity-75' : 'border-primary bg-primary/5 shadow-sm'}`}
-              >
-                <View className={`size-10 rounded-full items-center justify-center mt-0.5 ${notif.leida ? 'bg-secondary' : 'bg-primary/20'}`}>
-                  <Bell weight={notif.leida ? 'regular' : 'fill'} color={notif.leida ? mutedColor : primaryColor} size={18} />
-                </View>
-                <View className="flex-1">
-                  <View className="flex-row justify-between items-start gap-1">
-                    <Text className={`text-sm text-foreground flex-1 leading-5 ${notif.leida ? 'font-medium' : 'font-bold'}`}>
-                      {notif.titulo}
-                    </Text>
-                    {!notif.leida && (
-                      <View className="size-2 rounded-full bg-primary mt-1.5" />
-                    )}
-                  </View>
-                  <Text className="text-xs text-muted-foreground mt-1 leading-4">
-                    {notif.mensaje}
-                  </Text>
-                  <Text className="text-[10px] text-muted-foreground/80 mt-2 font-semibold">
-                    {formatDate(notif.created_at)}
-                  </Text>
-                </View>
-              </Pressable>
-            ))}
-          </View>
-        ) : (
-          <View className="py-20 items-center justify-center gap-3">
-            <Bell color={mutedColor} size={48} weight="thin" />
-            <Text className="text-lg font-bold text-foreground">Sin notificaciones</Text>
-            <Text className="text-sm text-muted-foreground text-center leading-[22px] px-6">
-              Aquí aparecerán los cambios de estado de tus paquetes y viajes.
-            </Text>
-          </View>
-        )}
-      </ScrollView>
+      {/* PERF-01: FlatList replaces ScrollView + .map() */}
+      {loading ? (
+        <View className="py-20 items-center">
+          <ActivityIndicator size="large" color={primaryColor} />
+        </View>
+      ) : (
+        <FlatList
+          data={notificaciones ?? []}
+          renderItem={renderItem}
+          keyExtractor={keyExtractor}
+          ListEmptyComponent={emptyComponent}
+          contentContainerStyle={{ padding: 24, paddingBottom: 80 }}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={[primaryColor]}
+              tintColor={primaryColor}
+            />
+          }
+          removeClippedSubviews={true}
+          maxToRenderPerBatch={15}
+          windowSize={5}
+          initialNumToRender={10}
+        />
+      )}
     </SafeAreaView>
   );
 }

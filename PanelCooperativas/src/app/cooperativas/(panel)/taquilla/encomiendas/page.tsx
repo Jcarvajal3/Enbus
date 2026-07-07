@@ -26,7 +26,7 @@ import { useEncomiendasRealtime } from "@/hooks/use-encomiendas-realtime";
 
 export default function TaquillaEncomiendasPage() {
   const { user } = useUser();
-  const cooperativaId = user.cooperativa_id;
+  const cooperativaId = user.cooperativa_id!;
   // Stable client instance — not recreated on every render
   const supabase = useMemo(() => createClient(), []);
   

@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { View, Text, Pressable, ScrollView } from '@/tw';
 import * as Haptics from 'expo-haptics';
+import { generarAsientos } from '@/src/utils/seatLayout';
 
 interface SeatSelectorProps {
   viaje_id: string;
@@ -10,24 +11,6 @@ interface SeatSelectorProps {
   onConfirm: (asientos: string[]) => void;
 }
 
-// Genera la distribución de asientos tipo bus interurbano (2+2 por fila)
-function generarAsientos(total: number): string[][] {
-  const filas: string[][] = [];
-  let numero = 1;
-  while (numero <= total) {
-    const fila: string[] = [];
-    // Lado izquierdo (2 asientos)
-    if (numero <= total) fila.push(String(numero++));
-    if (numero <= total) fila.push(String(numero++));
-    // Pasillo marcado como null → lo representamos como ''
-    fila.push('');
-    // Lado derecho (2 asientos)
-    if (numero <= total) fila.push(String(numero++));
-    if (numero <= total) fila.push(String(numero++));
-    filas.push(fila);
-  }
-  return filas;
-}
 
 export function SeatSelector({
   viaje_id,
@@ -37,15 +20,19 @@ export function SeatSelector({
   onConfirm,
 }: SeatSelectorProps) {
   const [seleccionados, setSeleccionados] = useState<string[]>([]);
-  const filas = generarAsientos(asientosTotales);
 
-  const toggleSeat = (seat: string) => {
+  // REF-02: generarAsientos is now imported from src/utils/seatLayout.ts
+  // useMemo so the grid is only recomputed when asientosTotales changes.
+  const filas = useMemo(() => generarAsientos(asientosTotales), [asientosTotales]);
+
+  // REF-04: useCallback for stable reference
+  const toggleSeat = useCallback((seat: string) => {
     if (asientosOcupados.includes(seat)) return;
     Haptics.selectionAsync();
     setSeleccionados((prev) =>
       prev.includes(seat) ? prev.filter((s) => s !== seat) : [...prev, seat]
     );
-  };
+  }, [asientosOcupados]);
 
   // Si un asiento que el usuario ya eligió queda bloqueado por tiempo real,
   // lo removemos automáticamente de su selección para evitar doble-booking.
@@ -129,7 +116,7 @@ export function SeatSelector({
           <View className="mb-4">
             <View className="flex-row justify-between items-center mb-2">
               <Text className="text-sm text-muted-foreground font-medium">
-                Asientos: <Text className="text-foreground font-bold">{seleccionados.sort((a, b) => Number(a) - Number(b)).join(', ')}</Text>
+                Asientos: <Text className="text-foreground font-bold">{[...seleccionados].sort((a, b) => Number(a) - Number(b)).join(', ')}</Text>
               </Text>
               <Text className="text-sm text-muted-foreground font-medium">
                 × {precioUnitario} Bs c/u

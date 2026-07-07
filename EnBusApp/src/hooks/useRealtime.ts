@@ -46,7 +46,13 @@ export function useRealtime<T extends WithId>(
   const [error, setError] = useState<Error | null>(null);
   const [refreshCount, setRefreshCount] = useState(0);
 
-  const refetch = () => setRefreshCount(prev => prev + 1);
+  // REF-03: Typed as () => Promise<void> so callers can correctly await it.
+  // Previously typed as () => void which caused TypeScript to warn when awaited.
+  const refetch = (): Promise<void> => new Promise((resolve) => {
+    setRefreshCount(prev => prev + 1);
+    // Resolve on next tick to allow the state update to propagate
+    setTimeout(resolve, 0);
+  });
 
   // Keep a stable ref so the WebSocket callback never closes over a stale setter.
   const setDataRef = useRef(setData);

@@ -1,5 +1,5 @@
-import { SafeAreaView, ScrollView, View, Text, Pressable } from '@/tw';
-import { useEffect, useState } from 'react';
+import { SafeAreaView, ScrollView, View, Text, Pressable, useCSSVariable } from '@/tw';
+import { useEffect, useMemo, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { CaretLeft } from 'phosphor-react-native';
 import { ResultsList } from '@/src/components/ResultsList';
@@ -10,6 +10,7 @@ import { SkeletonLoader } from '@/src/components/SkeletonLoader';
 export default function ResultadosBusquedaScreen() {
   const router = useRouter();
   const { origen, destino, fecha } = useLocalSearchParams();
+  const foregroundColor = useCSSVariable('--foreground') as string || '#171717';
 
   const [loading, setLoading] = useState(true);
   const [resultados, setResultados] = useState<any[]>([]);
@@ -44,8 +45,13 @@ export default function ResultadosBusquedaScreen() {
 
         if (fecha) {
           const date = new Date(fecha as string);
-          const startOfDay = new Date(date.setHours(0, 0, 0, 0)).toISOString();
-          const endOfDay = new Date(date.setHours(23, 59, 59, 999)).toISOString();
+          // Create independent Date instances to avoid setHours() mutation side-effects
+          const startOfDay = new Date(
+            date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0
+          ).toISOString();
+          const endOfDay = new Date(
+            date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999
+          ).toISOString();
           query = query
             .gte('fecha_hora_salida', startOfDay)
             .lte('fecha_hora_salida', endOfDay);
@@ -82,21 +88,27 @@ export default function ResultadosBusquedaScreen() {
     return () => { isMounted = false; };
   }, [origen, destino, fecha]);
 
-  // Cooperativas únicas presentes en el resultado
-  const cooperativas = Array.from(new Set(resultados.map(r => r.cooperativa)));
+  // PERF-02: useMemo prevents re-sorting/re-filtering on every render.
+  // Previously these ran on every state update (e.g. pressing a sort button
+  // triggered a full sort of all 50 items before painting the new selection).
+  const cooperativas = useMemo(
+    () => Array.from(new Set(resultados.map(r => r.cooperativa))),
+    [resultados]
+  );
 
-  // Filtrado y ordenamiento computado
-  const filteredAndSorted = resultados
-    .filter(r => !selectedCoop || r.cooperativa === selectedCoop)
-    .sort((a, b) => {
-      if (sortType === 'precio_asc') return a.precio - b.precio;
-      if (sortType === 'precio_desc') return b.precio - a.precio;
-      const timeToMin = (t: string) => {
-        const [h, m] = t.split(':').map(Number);
-        return h * 60 + m;
-      };
-      return timeToMin(a.horaSalida) - timeToMin(b.horaSalida);
-    });
+  const filteredAndSorted = useMemo(() =>
+    resultados
+      .filter(r => !selectedCoop || r.cooperativa === selectedCoop)
+      .sort((a, b) => {
+        if (sortType === 'precio_asc') return a.precio - b.precio;
+        if (sortType === 'precio_desc') return b.precio - a.precio;
+        const timeToMin = (t: string) => {
+          const [h, m] = t.split(':').map(Number);
+          return h * 60 + m;
+        };
+        return timeToMin(a.horaSalida) - timeToMin(b.horaSalida);
+      })
+  , [resultados, selectedCoop, sortType]);
 
   return (
     <SafeAreaView className="flex-1 bg-background">
@@ -104,7 +116,7 @@ export default function ResultadosBusquedaScreen() {
       <View className="px-6 pt-4 pb-4 bg-background shadow-sm border-b border-border/50">
         <View className="flex-row items-center mb-4">
           <Pressable onPress={() => router.back()} className="w-10 h-10 bg-secondary rounded-full flex items-center justify-center mr-4">
-            <CaretLeft weight="bold" color="#171717" size={24} />
+            <CaretLeft weight="bold" color={foregroundColor} size={24} />
           </Pressable>
           <View>
             <Text className="text-xs font-bold text-muted-foreground uppercase">Resultados de búsqueda</Text>

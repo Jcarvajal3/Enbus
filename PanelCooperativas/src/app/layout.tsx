@@ -3,7 +3,6 @@ import { Lora } from "next/font/google";
 import "./globals.css";
 import { cn } from "@/lib/utils";
 import { Toaster } from "@/components/ui/sonner";
-import { ThemeProvider } from "@/components/theme-provider";
 
 const lora = Lora({
   subsets: ["latin"],
@@ -13,15 +12,15 @@ const lora = Lora({
 
 export const metadata: Metadata = {
   title: {
-    default: "Panel Cooperativas | EnBus",
-    template: "%s | EnBus Panel",
+    default: "EnBus — Envios seguros por toda Venezuela",
+    template: "%s | EnBus",
   },
-  description: "Panel de gestión operativa para cooperativas de transporte EnBus",
+  description: "Conectamos tu envio con cooperativas de transporte verificadas. Cobertura en mas de 50 ciudades con seguimiento en tiempo real.",
   manifest: "/manifest.json",
 };
 
 export const viewport: Viewport = {
-  themeColor: "#09090b",
+  themeColor: "#F0A500",
 };
 
 export default function RootLayout({
@@ -30,12 +29,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="es" suppressHydrationWarning>
+    <html lang="es" className="light scroll-smooth" style={{ colorScheme: "light" }} suppressHydrationWarning>
       <body className={cn("min-h-full flex flex-col antialiased font-sans", lora.variable)}>
-        <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-          {children}
-          <Toaster />
-        </ThemeProvider>
+        {children}
+        <Toaster />
       </body>
     </html>
   );

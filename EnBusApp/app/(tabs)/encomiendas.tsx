@@ -1,15 +1,14 @@
 import { SafeAreaView } from '@/tw';
-import { useState, useCallback } from 'react';
-import { ScrollView, View, Text, Pressable } from '@/tw';
-import { RefreshControl } from 'react-native';
+import { useState, useCallback, useMemo } from 'react';
+import { View, Text, Pressable } from '@/tw';
+import { FlatList, RefreshControl, ListRenderItem } from 'react-native';
 import { useAuth } from '@/src/contexts/AuthContext';
 import { useEncomiendas } from '@/src/hooks/useEncomiendas';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { TransactionCard } from '@/src/components/TransactionCard';
+import { CardSkeleton } from '@/src/components/CardSkeleton';
 import { Plus } from 'phosphor-react-native';
-import { Spinner } from '@/src/components/Spinner';
-import { SkeletonLoader } from '@/src/components/SkeletonLoader';
 import { formatDate } from '@/src/utils/formatters';
 
 export default function EncomiendasScreen() {
@@ -37,19 +36,57 @@ export default function EncomiendasScreen() {
     limit: 30,
   });
 
-  const onRefresh = useCallback(() => {
+  const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    refetch();
-    setTimeout(() => {
+    try {
+      await refetch();
+    } finally {
       setRefreshing(false);
-    }, 1000);
+    }
   }, [refetch]);
 
-  // Filtrado local según el rol del usuario en cada registro
-  const historial = (todasLasEncomiendas || []).filter((enc: any) => {
-    if (tab === 'enviar') return enc.sender_id === user?.id;
-    return enc.receiver_user_id === user?.id;
-  });
+  // PERF-02: Memoize filtered list — only recompute when data or tab changes.
+  const historial = useMemo(() =>
+    (todasLasEncomiendas || []).filter((enc: any) => {
+      if (tab === 'enviar') return enc.sender_id === user?.id;
+      return enc.receiver_user_id === user?.id;
+    })
+  , [todasLasEncomiendas, tab, user?.id]);
+
+  // PERF-02: Stable renderItem to prevent FlatList from invalidating all rows.
+  const renderItem = useCallback<ListRenderItem<any>>(({ item: enc }) => (
+    <View className="mb-4 w-full">
+      <TransactionCard
+        type={tab === 'enviar' ? "encomienda_envio" : "encomienda_recepcion"}
+        id={enc.tracking_id || enc.id}
+        estado={enc.estado}
+        titulo={tab === 'enviar' ? 'Envío Regular' : 'Paquete Entrante'}
+        subtitulo={formatDate(enc.created_at)}
+        onPress={() => router.push({
+          pathname: tab === 'enviar'
+            ? '/encomiendas/enviar/[id]' as any
+            : '/encomiendas/recibir/[id]' as any,
+          params: { id: enc.id }
+        })}
+      />
+    </View>
+  ), [tab, router]);
+
+  const keyExtractor = useCallback((item: any) => item.id, []);
+
+  const emptyComponent = useMemo(() => (
+    <View className="py-20 items-center justify-center">
+      <View className="size-24 bg-secondary rounded-full items-center justify-center mb-6">
+        <Plus color="#a3a3a3" weight="bold" size={32} />
+      </View>
+      <Text className="text-xl font-bold text-foreground mb-2">Sin encomiendas</Text>
+      <Text className="text-base text-muted-foreground text-center px-4">
+        {tab === 'enviar'
+          ? 'No tienes envíos registrados por los momentos.'
+          : 'No tienes paquetes en camino hacia ti.'}
+      </Text>
+    </View>
+  ), [tab]);
 
   return (
     <SafeAreaView className="flex-1 bg-background">
@@ -77,63 +114,33 @@ export default function EncomiendasScreen() {
         </View>
       </View>
 
-      <ScrollView
-        contentContainerClassName="p-6 pb-32"
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            colors={['#e2b714']}
-            tintColor="#e2b714"
-          />
-        }
-      >
-        {loading ? (
-          <View className="items-center w-full gap-4">
-            {[1, 2, 3].map((i) => (
-              <View key={i} className="w-full bg-card border border-border p-4 rounded-[14px] flex-row items-center gap-3">
-                <SkeletonLoader width={40} height={40} borderRadius={20} />
-                <View className="flex-1 gap-1.5">
-                  <SkeletonLoader width="65%" height={14} />
-                  <SkeletonLoader width="35%" height={10} />
-                </View>
-              </View>
-            ))}
-          </View>
-        ) : historial && historial.length > 0 ? (
-          <View className="items-center">
-            {historial.map((enc) => (
-              <View key={enc.id} className="mb-4">
-                <TransactionCard
-                  type={tab === 'enviar' ? "encomienda_envio" : "encomienda_recepcion"}
-                  id={enc.tracking_id || enc.id}
-                  estado={enc.estado}
-                  titulo={tab === 'enviar' ? 'Envío Regular' : 'Paquete Entrante'}
-                  subtitulo={formatDate(enc.created_at)}
-                  onPress={() => router.push({
-                    pathname: tab === 'enviar'
-                      ? '/encomiendas/enviar/[id]' as any
-                      : '/encomiendas/recibir/[id]' as any,
-                    params: { id: enc.id }
-                  })}
-                />
-              </View>
-            ))}
-          </View>
-        ) : (
-          <View className="py-20 items-center justify-center">
-            <View className="size-24 bg-secondary rounded-full items-center justify-center mb-6">
-              <Plus color="#a3a3a3" weight="bold" size={32} />
-            </View>
-            <Text className="text-xl font-bold text-foreground mb-2">Sin encomiendas</Text>
-            <Text className="text-base text-muted-foreground text-center px-4">
-              {tab === 'enviar'
-                ? 'No tienes envíos registrados por los momentos.'
-                : 'No tienes paquetes en camino hacia ti.'}
-            </Text>
-          </View>
-        )}
-      </ScrollView>
+      {/* PERF-01: FlatList replaces ScrollView + .map() */}
+      {loading ? (
+        <View className="p-6">
+          <CardSkeleton count={3} />
+        </View>
+      ) : (
+        <FlatList
+          data={historial}
+          renderItem={renderItem}
+          keyExtractor={keyExtractor}
+          ListEmptyComponent={emptyComponent}
+          contentContainerStyle={{ padding: 24, paddingBottom: 128 }}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={['#e2b714']}
+              tintColor="#e2b714"
+            />
+          }
+          removeClippedSubviews={true}
+          maxToRenderPerBatch={10}
+          windowSize={5}
+          initialNumToRender={8}
+        />
+      )}
 
       {/* Floating Action Button CTA */}
       <View className="absolute bottom-6 left-6 right-6">

@@ -78,69 +78,73 @@ export function formatDate(
   }
 }
 
+// PERF-06: Replace 45+ if/else chain with a O(1) Map lookup.
+// Previously every formatCity() call iterated through all branches in the worst case.
+// With a Map, the lookup is O(1) regardless of the number of entries.
+const CITY_MAP = new Map<string, string>([
+  ['merida', 'Mérida'],
+  ['falcon', 'Falcón'],
+  ['bolivar', 'Bolívar'],
+  ['tachira', 'Táchira'],
+  ['anzoategui', 'Anzoátegui'],
+  ['guarico', 'Guárico'],
+  ['portuguesa', 'Portuguesa'],
+  ['nueva esparta', 'Nueva Esparta'],
+  ['la guaira', 'La Guaira'],
+  ['apure', 'Apure'],
+  ['cojedes', 'Cojedes'],
+  ['trujillo', 'Trujillo'],
+  ['miranda', 'Miranda'],
+  ['caracas', 'Caracas'],
+  ['valencia', 'Valencia'],
+  ['maracay', 'Maracay'],
+  ['barquisimeto', 'Barquisimeto'],
+  ['maracaibo', 'Maracaibo'],
+  ['maturin', 'Maturín'],
+  ['cumana', 'Cumaná'],
+  ['tovar', 'Tovar'],
+  ['bocono', 'Boconó'],
+  ['tariba', 'Táriba'],
+  ['socopo', 'Socopó'],
+  ['san fernando', 'San Fernando de Apure'],
+  ['san juan', 'San Juan de los Morros'],
+  ['puerto ayacucho', 'Puerto Ayacucho'],
+  ['puerto la cruz', 'Puerto La Cruz'],
+  ['lecheria', 'Lechería'],
+  ['el tigre', 'El Tigre'],
+  ['la victoria', 'La Victoria'],
+  ['ciudad bolivar', 'Ciudad Bolívar'],
+  ['puerto ordaz', 'Puerto Ordaz'],
+  ['san felix', 'San Félix'],
+  ['puerto cabello', 'Puerto Cabello'],
+  ['san diego', 'San Diego'],
+  ['san carlos', 'San Carlos'],
+  ['punto fijo', 'Punto Fijo'],
+  ['valle de la pascua', 'Valle de la Pascua'],
+  ['el vigia', 'El Vigía'],
+  ['los teques', 'Los Teques'],
+  ['punta de mata', 'Punta de Mata'],
+  ['la asuncion', 'La Asunción'],
+  ['san cristobal', 'San Cristóbal'],
+  ['maiquetia', 'Maiquetía'],
+  ['catia la mar', 'Catia La Mar'],
+  ['san felipe', 'San Felipe'],
+  ['yaritagua', 'Yaritagua'],
+  ['chivacoa', 'Chivacoa'],
+  ['ciudad ojeda', 'Ciudad Ojeda'],
+]);
+
 /** Formats a db-friendly city/state name (e.g. "puerto_la_cruz" -> "Puerto La Cruz", "merida" -> "Mérida") */
 export function formatCity(val: string | null | undefined): string {
   if (!val) return '—';
-  
-  // Reemplazar guiones bajos con espacios y capitalizar cada palabra
+
+  // Replace underscores with spaces and capitalize each word
   const formatted = val
     .split('_')
     .map(w => w.charAt(0).toUpperCase() + w.slice(1))
     .join(' ');
 
-  // Mapear casos específicos que llevan acento o necesitan formato especial
+  // O(1) lookup for special accent/format cases
   const lower = formatted.toLowerCase();
-  if (lower === 'merida') return 'Mérida';
-  if (lower === 'falcon') return 'Falcón';
-  if (lower === 'bolivar') return 'Bolívar';
-  if (lower === 'tachira') return 'Táchira';
-  if (lower === 'anzoategui') return 'Anzoátegui';
-  if (lower === 'guarico') return 'Guárico';
-  if (lower === 'portuguesa') return 'Portuguesa';
-  if (lower === 'nueva esparta') return 'Nueva Esparta';
-  if (lower === 'la guaira') return 'La Guaira';
-  if (lower === 'apure') return 'Apure';
-  if (lower === 'cojedes') return 'Cojedes';
-  if (lower === 'trujillo') return 'Trujillo';
-  if (lower === 'miranda') return 'Miranda';
-  if (lower === 'caracas') return 'Caracas';
-  if (lower === 'valencia') return 'Valencia';
-  if (lower === 'maracay') return 'Maracay';
-  if (lower === 'barquisimeto') return 'Barquisimeto';
-  if (lower === 'maracaibo') return 'Maracaibo';
-  if (lower === 'maturin') return 'Maturín';
-  if (lower === 'cumana') return 'Cumaná';
-  if (lower === 'tovar') return 'Tovar';
-  if (lower === 'bocono') return 'Boconó';
-  if (lower === 'tariba') return 'Táriba';
-  if (lower === 'socopo') return 'Socopó';
-  if (lower === 'san fernando') return 'San Fernando de Apure';
-  if (lower === 'san juan') return 'San Juan de los Morros';
-  if (lower === 'puerto ayacucho') return 'Puerto Ayacucho';
-  if (lower === 'puerto la cruz') return 'Puerto La Cruz';
-  if (lower === 'lecheria') return 'Lechería';
-  if (lower === 'el tigre') return 'El Tigre';
-  if (lower === 'la victoria') return 'La Victoria';
-  if (lower === 'ciudad bolivar') return 'Ciudad Bolívar';
-  if (lower === 'puerto ordaz') return 'Puerto Ordaz';
-  if (lower === 'san felix') return 'San Félix';
-  if (lower === 'puerto cabello') return 'Puerto Cabello';
-  if (lower === 'san diego') return 'San Diego';
-  if (lower === 'san carlos') return 'San Carlos';
-  if (lower === 'punto fijo') return 'Punto Fijo';
-  if (lower === 'valle de la pascua') return 'Valle de la Pascua';
-  if (lower === 'el vigia') return 'El Vigía';
-  if (lower === 'los teques') return 'Los Teques';
-  if (lower === 'punta de mata') return 'Punta de Mata';
-  if (lower === 'la asuncion') return 'La Asunción';
-  if (lower === 'san cristobal') return 'San Cristóbal';
-  if (lower === 'la guaira') return 'La Guaira';
-  if (lower === 'maiquetia') return 'Maiquetía';
-  if (lower === 'catia la mar') return 'Catia La Mar';
-  if (lower === 'san felipe') return 'San Felipe';
-  if (lower === 'yaritagua') return 'Yaritagua';
-  if (lower === 'chivacoa') return 'Chivacoa';
-  if (lower === 'ciudad ojeda') return 'Ciudad Ojeda';
-
-  return formatted;
+  return CITY_MAP.get(lower) ?? formatted;
 }

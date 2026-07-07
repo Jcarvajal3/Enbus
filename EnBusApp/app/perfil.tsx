@@ -2,20 +2,23 @@ import { SafeAreaView, ScrollView, View, Text, Pressable, useCSSVariable } from 
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/src/contexts/AuthContext';
 import { supabase } from '@/src/utils/supabase';
-import { useEffect, useState } from 'react';
-import { CaretLeft, UserCircle, SignOut, Phone, EnvelopeSimple, IdentificationCard, PencilSimple, Check, X } from 'phosphor-react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { CaretLeft, UserCircle, SignOut, Phone, EnvelopeSimple, IdentificationCard, PencilSimple, Check, X, WarningCircle } from 'phosphor-react-native';
 import { InputField } from '@/src/components/InputField';
 import { Spinner } from '@/src/components/Spinner';
 import * as Haptics from 'expo-haptics';
 import { useToast } from '@/src/components/Toast';
+import type { PerfilUsuario } from '@/src/types';
+import { sanitizeText } from '@/src/utils/validation';
 
 export default function PerfilScreen() {
   const router = useRouter();
   const { user, signOut } = useAuth();
   const toast = useToast();
 
-  const [profile, setProfile] = useState<any>(null);
+  const [profile, setProfile] = useState<PerfilUsuario | null>(null);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   
   const [nombreCompleto, setNombreCompleto] = useState('');
@@ -36,6 +39,7 @@ export default function PerfilScreen() {
       if (!user) return;
       try {
         setLoading(true);
+        setFetchError(null);
         const { data, error } = await supabase
           .from('profiles')
           .select('*')
@@ -44,13 +48,15 @@ export default function PerfilScreen() {
 
         if (error) throw error;
         if (isMounted && data) {
-          setProfile(data);
-          setNombreCompleto(data.nombre_completo);
-          setTelefono(data.telefono);
-          setCedulaRif(data.cedula_rif);
+          setProfile(data as PerfilUsuario);
+          setNombreCompleto(data.nombre_completo ?? '');
+          setTelefono(data.telefono ?? '');
+          setCedulaRif(data.cedula_rif ?? '');
         }
       } catch (err: any) {
-        console.error('Error fetching profile:', err.message);
+        // POL-01: Only log in development to avoid leaking Supabase internals in production
+        if (__DEV__) console.error('Error fetching profile:', err.message);
+        if (isMounted) setFetchError(err.message ?? 'No se pudo cargar el perfil.');
       } finally {
         if (isMounted) setLoading(false);
       }
@@ -67,19 +73,19 @@ export default function PerfilScreen() {
     await signOut();
   };
 
-  const handleSave = async () => {
+  const handleSave = useCallback(async () => {
     if (!user) return;
-    if (nombreCompleto.trim().length < 2) {
+    if (sanitizeText(nombreCompleto).length < 2) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
       toast.show('error', 'El nombre debe tener al menos 2 caracteres');
       return;
     }
-    if (telefono.trim().length < 8) {
+    if (sanitizeText(telefono).length < 8) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
       toast.show('error', 'El teléfono debe tener al menos 8 caracteres');
       return;
     }
-    if (cedulaRif.trim().length < 4) {
+    if (sanitizeText(cedulaRif).length < 4) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
       toast.show('error', 'La cédula/RIF debe tener al menos 4 caracteres');
       return;
@@ -90,27 +96,27 @@ export default function PerfilScreen() {
       const { error } = await supabase
         .from('profiles')
         .update({
-          nombre_completo: nombreCompleto.trim(),
-          telefono: telefono.trim(),
-          cedula_rif: cedulaRif.trim(),
+          nombre_completo: sanitizeText(nombreCompleto),
+          telefono: sanitizeText(telefono),
+          cedula_rif: sanitizeText(cedulaRif),
         })
         .eq('id', user.id);
 
       if (error) throw error;
 
-      setProfile((prev: any) => ({
+      setProfile((prev) => prev ? ({
         ...prev,
-        nombre_completo: nombreCompleto.trim(),
-        telefono: telefono.trim(),
-        cedula_rif: cedulaRif.trim(),
-      }));
+        nombre_completo: sanitizeText(nombreCompleto),
+        telefono: sanitizeText(telefono),
+        cedula_rif: sanitizeText(cedulaRif),
+      }) : prev);
 
       // Actualizar también metadatos de auth para consistencia
       await supabase.auth.updateUser({
         data: {
-          nombre_completo: nombreCompleto.trim(),
-          telefono: telefono.trim(),
-          cedula_rif: cedulaRif.trim(),
+          nombre_completo: sanitizeText(nombreCompleto),
+          telefono: sanitizeText(telefono),
+          cedula_rif: sanitizeText(cedulaRif),
         }
       });
 
@@ -118,19 +124,20 @@ export default function PerfilScreen() {
       toast.show('success', 'Perfil actualizado correctamente');
       setIsEditing(false);
     } catch (err: any) {
-      console.error('Error saving profile:', err.message);
+      if (__DEV__) console.error('Error saving profile:', err.message);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       toast.show('error', 'No se pudieron guardar los cambios: ' + err.message);
     } finally {
       setSaving(false);
     }
-  };
+  }, [user, nombreCompleto, telefono, cedulaRif, toast]);
 
   const handleCancel = () => {
+    // ACC: null-safe — profile could be null if fetch failed
     if (profile) {
-      setNombreCompleto(profile.nombre_completo);
-      setTelefono(profile.telefono);
-      setCedulaRif(profile.cedula_rif);
+      setNombreCompleto(profile.nombre ?? profile.nombre_completo ?? '');
+      setTelefono(profile.telefono ?? '');
+      setCedulaRif(profile.cedula_rif ?? '');
     }
     setIsEditing(false);
   };
@@ -188,6 +195,13 @@ export default function PerfilScreen() {
         {loading ? (
           <View className="py-20 items-center justify-center">
             <Spinner size="large" />
+          </View>
+        ) : fetchError ? (
+          // UX-01: Visible error state with retry option
+          <View className="py-20 items-center justify-center px-8 gap-4">
+            <WarningCircle color={destructiveColor} size={48} weight="thin" />
+            <Text className="text-base font-bold text-foreground text-center">No se pudo cargar el perfil</Text>
+            <Text className="text-sm text-muted-foreground text-center">{fetchError}</Text>
           </View>
         ) : (
           <>

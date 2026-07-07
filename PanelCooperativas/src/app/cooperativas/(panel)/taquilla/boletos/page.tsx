@@ -40,7 +40,7 @@ type BoletoRow = Boleto & {
 
 export default function TaquillaBoletosPage() {
   const { user } = useUser();
-  const cooperativaId = user.cooperativa_id;
+  const cooperativaId = user.cooperativa_id!;
   const supabase = useMemo(() => createClient(), []);
   
   const [boletos, setBoletos] = useState<BoletoRow[]>([]);

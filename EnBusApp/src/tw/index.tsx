@@ -45,18 +45,20 @@ View.displayName = "CSS(View)";
 // --- Font Family Resolver ---
 // CSS variables cannot drive `fontFamily` on native components.
 // We inspect className and inject the correct Lora variant as a native style prop.
-const FONT_MAP: Record<string, string> = {
-  'font-heading': 'Lora-Bold',
-  'font-heading-semi': 'Lora-SemiBold',
-};
+// IMPORTANT: More specific keys must come first to avoid false substring matches.
+// e.g. 'font-heading-semi' must precede 'font-heading' so it is checked first.
+const FONT_MAP: [string, string][] = [
+  ['font-heading-semi', 'Lora-SemiBold'],
+  ['font-heading', 'Lora-Bold'],
+];
 
 function resolveFont(className?: string): string | undefined {
   if (!className) return undefined;
-
-  for (const [cls, family] of Object.entries(FONT_MAP)) {
-    if (className.includes(cls)) return family;
+  // Split by whitespace to get individual class tokens for exact matching.
+  const classes = className.split(/\s+/);
+  for (const [cls, family] of FONT_MAP) {
+    if (classes.includes(cls)) return family;
   }
-
   return undefined;
 }
 

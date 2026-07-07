@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'expo-router';
-import { SafeAreaView, ScrollView, View, Text, Pressable } from '@/tw';
+import { SafeAreaView, ScrollView, View, Text, Pressable, useCSSVariable } from '@/tw';
 import { StyleSheet, Image } from 'react-native';
 import { CaretLeft, Check, Package, Warning, Star, Camera, Image as ImageIcon } from 'phosphor-react-native';
 import { LocationSelector } from '@/src/components/LocationSelector';
@@ -13,6 +13,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
 import { useToast } from '@/src/components/Toast';
 import { uploadEvidencePhoto } from '@/src/utils/storage';
+import { sanitizeText, validatePhone, validateCedula, validatePeso, validateMonto, validateMinLength } from '@/src/utils/validation';
 
 export default function NuevaEncomiendaWizard() {
   const router = useRouter();
@@ -20,6 +21,11 @@ export default function NuevaEncomiendaWizard() {
   const [step, setStep] = useState(1);
   const toast = useToast();
   const [foto, setFoto] = useState<string | null>(null);
+  // SEC-03: Prevent double-tap on submit by tracking in-flight state via ref
+  const submittingRef = useRef(false);
+
+  // BUG-08: use CSS variables instead of hardcoded colors in StyleSheet
+  const foregroundColor = useCSSVariable('--foreground') as string || '#171717';
 
   const handleTakePhoto = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -75,7 +81,7 @@ export default function NuevaEncomiendaWizard() {
   const [costoEstimado, setCostoEstimado] = useState<number | null>(null);
   const [loadingCosto, setLoadingCosto] = useState(false);
 
-  // Consulta en tiempo real de costo estimado por Edge Function
+  // Consulta en tiempo real de costo estimado por Edge Function (debounced 500ms)
   useEffect(() => {
     const peso = parseFloat(pesoKg);
     if (isNaN(peso) || peso <= 0 || !origen || !destino) {
@@ -116,7 +122,6 @@ export default function NuevaEncomiendaWizard() {
   const [loadingRutas, setLoadingRutas] = useState(false);
   const [rutaSeleccionada, setRutaSeleccionada] = useState<any>(null);
 
-  // Modalidad de pago
   const [modalidadPago, setModalidadPago] = useState<'ORIGEN' | 'DESTINO'>('DESTINO');
 
   useEffect(() => {
@@ -145,7 +150,7 @@ export default function NuevaEncomiendaWizard() {
         if (error) throw error;
         if (isMounted) {
           setRutasDisponibles(data || []);
-          setRutaSeleccionada(null); // Reset selection
+          setRutaSeleccionada(null);
         }
       } catch (err: any) {
         console.error('Error fetching routes for wizard:', err.message);
@@ -158,12 +163,15 @@ export default function NuevaEncomiendaWizard() {
     return () => { isMounted = false; };
   }, [origen, destino]);
 
+  // SEC-01: Validate step 2 with proper validators instead of raw .length checks
   const isStep1Valid = origen !== null && destino !== null && rutaSeleccionada !== null;
   const isStep2Valid =
-    nombre.trim().length >= 2 &&
-    cedula.trim().length >= 4 &&
-    telefono.trim().length >= 8 &&
-    descripcion.trim().length >= 3;
+    validateMinLength(nombre, 2).valid &&
+    validateCedula(cedula).valid &&
+    validatePhone(telefono).valid &&
+    validateMinLength(descripcion, 3, 'Descripción').valid &&
+    validatePeso(pesoKg).valid &&
+    validateMonto(valorDeclarado).valid;
 
   const canContinue = () => {
     if (step === 1) return isStep1Valid;
@@ -171,13 +179,35 @@ export default function NuevaEncomiendaWizard() {
     return true;
   };
 
-  const handleSubmit = async () => {
+  // SEC-03: handleSubmit protected by ref-based double-submit guard
+  const handleSubmit = useCallback(async () => {
     if (step < 3) {
       Haptics.selectionAsync();
       setStep(step + 1);
       return;
     }
+    // Guard against double-tap
+    if (submittingRef.current) return;
     if (!user) return;
+
+    // SEC-01: Final validation before submit with user-visible errors
+    const phoneCheck = validatePhone(telefono);
+    if (!phoneCheck.valid) {
+      toast.show('error', phoneCheck.message);
+      return;
+    }
+    const cedulaCheck = validateCedula(cedula);
+    if (!cedulaCheck.valid) {
+      toast.show('error', cedulaCheck.message);
+      return;
+    }
+    const pesoCheck = validatePeso(pesoKg);
+    if (!pesoCheck.valid) {
+      toast.show('error', pesoCheck.message);
+      return;
+    }
+
+    submittingRef.current = true;
     setIsSubmitting(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     try {
@@ -187,16 +217,17 @@ export default function NuevaEncomiendaWizard() {
         fotoUrl = await uploadEvidencePhoto(foto, user.id);
       }
 
+      // SEC-01: Sanitize all text inputs before sending to DB
       const insertPayload: Record<string, any> = {
         sender_id: user.id,
-        receiver_nombre: nombre.trim(),
-        receiver_cedula_rif: cedula.trim(),
-        receiver_telefono: telefono.trim(),
+        receiver_nombre: sanitizeText(nombre),
+        receiver_cedula_rif: sanitizeText(cedula),
+        receiver_telefono: sanitizeText(telefono),
         estado_origen: origen?.estado,
         ciudad_origen: origen?.ciudad,
         estado_destino: destino?.estado,
         ciudad_destino: destino?.ciudad,
-        descripcion_contenido: descripcion.trim(),
+        descripcion_contenido: sanitizeText(descripcion),
         peso_kg: pesoKg ? parseFloat(pesoKg) : null,
         estado: 'PENDIENTE_DE_ESCANEO',
         modalidad_pago: modalidadPago,
@@ -222,8 +253,9 @@ export default function NuevaEncomiendaWizard() {
       toast.show('error', 'No se pudo crear la encomienda: ' + err.message);
     } finally {
       setIsSubmitting(false);
+      submittingRef.current = false;
     }
-  };
+  }, [step, user, nombre, cedula, telefono, descripcion, pesoKg, valorDeclarado, foto, origen, destino, modalidadPago, rutaSeleccionada, toast, router]);
 
   return (
     <SafeAreaView className="flex-1 bg-background">
@@ -233,8 +265,11 @@ export default function NuevaEncomiendaWizard() {
           <Pressable
             onPress={() => step > 1 ? setStep(step - 1) : router.back()}
             style={s.backBtn}
+            accessibilityLabel={step > 1 ? 'Volver al paso anterior' : 'Volver'}
+            accessibilityRole="button"
           >
-            <CaretLeft weight="bold" color="#171717" size={22} />
+            {/* BUG-08 fix: foregroundColor from CSS var */}
+            <CaretLeft weight="bold" color={foregroundColor} size={22} />
           </Pressable>
           <Text className="font-heading text-xl text-foreground">
             {step === 1 ? '¿A dónde lo envías?' : step === 2 ? 'Detalles del Envío' : 'Resumen'}
@@ -272,6 +307,8 @@ export default function NuevaEncomiendaWizard() {
                           key={r.id}
                           onPress={() => setRutaSeleccionada(r)}
                           className={`flex-row items-center justify-between p-4 bg-card border rounded-[10px] ${isSelected ? 'border-primary bg-primary/5' : 'border-border'}`}
+                          accessibilityRole="radio"
+                          accessibilityState={{ selected: isSelected }}
                         >
                           <View className="flex-row items-center gap-3">
                             <View className="size-10 bg-primary/10 rounded-full items-center justify-center">
@@ -279,7 +316,7 @@ export default function NuevaEncomiendaWizard() {
                             </View>
                             <View>
                               <Text className="text-sm font-bold text-foreground">{r.cooperativas?.nombre}</Text>
-                              {r.cooperativas?.calificacion_promedio > 0 && (
+                              {(r.cooperativas?.calificacion_promedio ?? 0) > 0 && (
                                 <View className="flex-row items-center mt-0.5">
                                   <Star weight="fill" color="#e2b714" size={12} />
                                   <Text className="text-xs text-muted-foreground ml-1">
@@ -322,22 +359,23 @@ export default function NuevaEncomiendaWizard() {
           <View>
             <Text style={s.sectionLabel}>Datos de quien recibe</Text>
 
+            {/* SEC-01: maxLength to prevent oversized DB inserts */}
             <InputField
               placeholder="Nombre Completo"
               value={nombre}
-              onChangeText={setNombre}
+              onChangeText={(v) => setNombre(v.slice(0, 80))}
             />
             <InputField
               placeholder="Cédula de Identidad"
               keyboardType="number-pad"
               value={cedula}
-              onChangeText={setCedula}
+              onChangeText={(v) => setCedula(v.slice(0, 12))}
             />
             <InputField
               placeholder="Teléfono (Ej: +58 414...)"
               keyboardType="phone-pad"
               value={telefono}
-              onChangeText={setTelefono}
+              onChangeText={(v) => setTelefono(v.slice(0, 15))}
               containerStyle={{ marginBottom: 24 }}
             />
 
@@ -345,7 +383,7 @@ export default function NuevaEncomiendaWizard() {
             <InputField
               placeholder="¿Qué contiene? (Ej: Documentos, ropa, electrónica...)"
               value={descripcion}
-              onChangeText={setDescripcion}
+              onChangeText={(v) => setDescripcion(v.slice(0, 300))}
               multiline
               numberOfLines={3}
             />
@@ -415,7 +453,6 @@ export default function NuevaEncomiendaWizard() {
               </View>
             )}
 
-            {/* Alert informativa */}
             <View style={s.alertBox}>
               <Warning weight="fill" color="#e2b714" size={18} />
               <Text style={s.alertText}>
@@ -483,6 +520,8 @@ export default function NuevaEncomiendaWizard() {
               <Pressable
                 onPress={() => setModalidadPago('ORIGEN')}
                 className={`flex-1 p-4 rounded-[10px] border items-center justify-center ${modalidadPago === 'ORIGEN' ? 'bg-primary/5 border-primary' : 'bg-card border-border'}`}
+                accessibilityRole="radio"
+                accessibilityState={{ selected: modalidadPago === 'ORIGEN' }}
               >
                 <Text className={`font-bold text-sm ${modalidadPago === 'ORIGEN' ? 'text-primary' : 'text-foreground'}`}>
                   Cobro en Origen
@@ -493,6 +532,8 @@ export default function NuevaEncomiendaWizard() {
               <Pressable
                 onPress={() => setModalidadPago('DESTINO')}
                 className={`flex-1 p-4 rounded-[10px] border items-center justify-center ${modalidadPago === 'DESTINO' ? 'bg-primary/5 border-primary' : 'bg-card border-border'}`}
+                accessibilityRole="radio"
+                accessibilityState={{ selected: modalidadPago === 'DESTINO' }}
               >
                 <Text className={`font-bold text-sm ${modalidadPago === 'DESTINO' ? 'text-primary' : 'text-foreground'}`}>
                   Cobro en Destino
@@ -516,6 +557,8 @@ export default function NuevaEncomiendaWizard() {
           style={[s.ctaBtn, !canContinue() && s.ctaDisabled]}
           disabled={!canContinue() || isSubmitting}
           onPress={handleSubmit}
+          accessibilityLabel={step === 3 ? 'Generar Código QR' : 'Continuar al siguiente paso'}
+          accessibilityRole="button"
         >
           {isSubmitting ? <Spinner /> : (
             <Text style={s.ctaText}>
