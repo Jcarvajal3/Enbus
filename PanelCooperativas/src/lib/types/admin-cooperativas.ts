@@ -1,4 +1,4 @@
-export type EstadoCooperativa = "ACTIVA" | "SUSPENDIDA" | "DESACTIVADA";
+export type EstadoCooperativa = "PENDIENTE" | "ACTIVA" | "SUSPENDIDA" | "DESACTIVADA";
 
 export interface Cooperativa {
   id: string;
@@ -9,6 +9,10 @@ export interface Cooperativa {
   estado: EstadoCooperativa;
   calificacion_promedio: number;
   total_calificaciones: number;
+  email?: string | null;
+  telefono?: string | null;
+  direccion?: string | null;
+  descripcion?: string | null;
   created_at: string;
   updated_at: string;
 }

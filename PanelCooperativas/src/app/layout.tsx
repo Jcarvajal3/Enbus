@@ -1,12 +1,12 @@
 import type { Metadata, Viewport } from "next";
-import { Lora } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 import { cn } from "@/lib/utils";
 import { Toaster } from "@/components/ui/sonner";
 
-const lora = Lora({
-  subsets: ["latin"],
-  variable: "--font-lora",
+const roobert = localFont({
+  src: "../../public/fonts/RoobertVF.ttf",
+  variable: "--font-roobert",
   display: "swap",
 });
 
@@ -20,7 +20,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#F0A500",
+  themeColor: "#FFC757",
 };
 
 export default function RootLayout({
@@ -30,7 +30,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="es" className="light scroll-smooth" style={{ colorScheme: "light" }} suppressHydrationWarning>
-      <body className={cn("min-h-full flex flex-col antialiased font-sans", lora.variable)}>
+      <body className={cn("min-h-full flex flex-col antialiased font-sans", roobert.variable)}>
         {children}
         <Toaster />
       </body>

@@ -5,6 +5,7 @@ export type DashboardKPIs = {
   comisiones_estimadas_hoy: number;
   cooperativas_activas: number;
   alertas_amarillas_abiertas: number;
+  solicitudes_pendientes: number;
 };
 
 export type DailyActivity = {

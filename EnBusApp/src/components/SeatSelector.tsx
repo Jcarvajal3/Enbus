@@ -1,7 +1,15 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { View, Text, Pressable, ScrollView } from '@/tw';
+import { StyleSheet } from 'react-native';
+import { View, Text, ScrollView } from '@/tw';
 import * as Haptics from 'expo-haptics';
 import { generarAsientos } from '@/src/utils/seatLayout';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+} from 'react-native-reanimated';
+import { PressableScale } from './PressableScale';
+import { Colors, Typography, Radius, Shadows, Gradients } from '@/src/theme';
 
 interface SeatSelectorProps {
   viaje_id: string;
@@ -11,6 +19,81 @@ interface SeatSelectorProps {
   onConfirm: (asientos: string[]) => void;
 }
 
+// Asiento individual con spring animation al seleccionar (P2)
+function SeatButton({
+  seat,
+  isOcupado,
+  isSeleccionado,
+  onToggle,
+}: {
+  seat: string;
+  isOcupado: boolean;
+  isSeleccionado: boolean;
+  onToggle: (seat: string) => void;
+}) {
+  const scale = useSharedValue(1);
+
+  const handlePress = () => {
+    if (isOcupado) return;
+    // Spring bounce al seleccionar: 0.85 → 1.1 → 1.0
+    scale.value = withSpring(isSeleccionado ? 1 : 1.12, {
+      damping: 8,
+      stiffness: 300,
+    });
+    setTimeout(() => {
+      scale.value = withSpring(1, { damping: 12, stiffness: 200 });
+    }, 100);
+    Haptics.selectionAsync();
+    onToggle(seat);
+  };
+
+  const animStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
+
+  let bgColor: string = Colors.white;
+  let borderColor: string = Colors.border;
+  let textColor: string = Colors.foreground;
+  let textWeight: '700' | '900' | '400' = '700';
+  let strikethrough = false;
+
+  if (isSeleccionado) {
+    bgColor = Colors.accent;
+    borderColor = Colors.accent;
+    textColor = Colors.white;
+    textWeight = '900';
+  } else if (isOcupado) {
+    bgColor = Colors.surface;
+    borderColor = Colors.border;
+    textColor = Colors.mutedForeground;
+    strikethrough = true;
+  }
+
+  return (
+    <Animated.View style={[styles.seatWrapper, animStyle]}>
+      <PressableScale
+        onPress={handlePress}
+        disabled={isOcupado}
+        scaleValue={0.92}
+        duration={100}
+        style={[
+          styles.seat,
+          { backgroundColor: bgColor, borderColor },
+        ]}
+      >
+        <Text
+          style={[
+            styles.seatText,
+            { color: textColor, fontWeight: textWeight },
+            strikethrough && styles.strikethrough,
+          ]}
+        >
+          {seat}
+        </Text>
+      </PressableScale>
+    </Animated.View>
+  );
+}
 
 export function SeatSelector({
   viaje_id,
@@ -20,89 +103,66 @@ export function SeatSelector({
   onConfirm,
 }: SeatSelectorProps) {
   const [seleccionados, setSeleccionados] = useState<string[]>([]);
-
-  // REF-02: generarAsientos is now imported from src/utils/seatLayout.ts
-  // useMemo so the grid is only recomputed when asientosTotales changes.
   const filas = useMemo(() => generarAsientos(asientosTotales), [asientosTotales]);
 
-  // REF-04: useCallback for stable reference
-  const toggleSeat = useCallback((seat: string) => {
-    if (asientosOcupados.includes(seat)) return;
-    Haptics.selectionAsync();
-    setSeleccionados((prev) =>
-      prev.includes(seat) ? prev.filter((s) => s !== seat) : [...prev, seat]
-    );
-  }, [asientosOcupados]);
+  const toggleSeat = useCallback(
+    (seat: string) => {
+      if (asientosOcupados.includes(seat)) return;
+      setSeleccionados((prev) =>
+        prev.includes(seat)
+          ? prev.filter((s) => s !== seat)
+          : [...prev, seat]
+      );
+    },
+    [asientosOcupados]
+  );
 
-  // Si un asiento que el usuario ya eligió queda bloqueado por tiempo real,
-  // lo removemos automáticamente de su selección para evitar doble-booking.
   useEffect(() => {
     setSeleccionados((prev) =>
       prev.filter((s) => !asientosOcupados.includes(s))
     );
   }, [asientosOcupados]);
 
-  const getEstadoColor = (seat: string) => {
-    if (seat === '') return 'bg-transparent';
-    if (asientosOcupados.includes(seat)) return 'bg-muted opacity-50';
-    if (seleccionados.includes(seat)) return 'bg-primary';
-    return 'bg-secondary border border-border';
-  };
-
-  const getTextColor = (seat: string) => {
-    if (seleccionados.includes(seat)) return 'text-primary-foreground font-black';
-    if (asientosOcupados.includes(seat)) return 'text-muted-foreground line-through';
-    return 'text-foreground font-bold';
-  };
-
   const total = seleccionados.length * precioUnitario;
 
   return (
-    <View className="bg-card rounded-[14px] p-6 border border-border">
+    <View style={styles.container}>
       {/* Leyenda */}
-      <View className="flex-row justify-center gap-6 mb-6">
-        <View className="flex-row items-center">
-          <View className="size-4 bg-secondary border border-border rounded mr-2" />
-          <Text className="text-xs text-muted-foreground font-medium">Libre</Text>
+      <View style={styles.legend}>
+        <View style={styles.legendItem}>
+          <View style={[styles.legendDot, { backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.border }]} />
+          <Text style={styles.legendText}>Libre</Text>
         </View>
-        <View className="flex-row items-center">
-          <View className="size-4 bg-primary rounded mr-2" />
-          <Text className="text-xs text-muted-foreground font-medium">Tu asiento</Text>
+        <View style={styles.legendItem}>
+          <View style={[styles.legendDot, { backgroundColor: Colors.accent }]} />
+          <Text style={styles.legendText}>Tu asiento</Text>
         </View>
-        <View className="flex-row items-center">
-          <View className="size-4 bg-muted rounded mr-2 opacity-50" />
-          <Text className="text-xs text-muted-foreground font-medium">Ocupado</Text>
+        <View style={styles.legendItem}>
+          <View style={[styles.legendDot, { backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border }]} />
+          <Text style={styles.legendText}>Ocupado</Text>
         </View>
       </View>
 
       {/* Bus Layout */}
-      <View className="bg-secondary/30 rounded-2xl p-4 mb-6">
-        {/* Frente del bus */}
-        <View className="items-center mb-4">
-          <View className="w-20 h-6 bg-muted/50 rounded-t-full items-center justify-center">
-            <Text className="text-[10px] text-muted-foreground font-bold uppercase">Frente</Text>
-          </View>
+      <View style={styles.busLayout}>
+        <View style={styles.busFront}>
+          <Text style={styles.busFrontText}>FRENTE</Text>
         </View>
-
-        {/* Filas de asientos */}
-        <ScrollView className="max-h-80">
+        <ScrollView style={{ maxHeight: 320 }} showsVerticalScrollIndicator={false}>
           {filas.map((fila, i) => (
-            <View key={i} className="flex-row justify-center items-center mb-2">
+            <View key={i} style={styles.fila}>
               {fila.map((seat, j) => {
                 if (seat === '') {
-                  // Pasillo
-                  return <View key={`pasillo-${i}-${j}`} className="w-6 h-10" />;
+                  return <View key={`pasillo-${i}-${j}`} style={styles.pasillo} />;
                 }
-                const esOcupado = asientosOcupados.includes(seat);
                 return (
-                  <Pressable
+                  <SeatButton
                     key={seat}
-                    onPress={() => toggleSeat(seat)}
-                    disabled={esOcupado}
-                    className={`size-10 rounded-lg items-center justify-center mx-1 ${getEstadoColor(seat)}`}
-                  >
-                    <Text className={`text-xs ${getTextColor(seat)}`}>{seat}</Text>
-                  </Pressable>
+                    seat={seat}
+                    isOcupado={asientosOcupados.includes(seat)}
+                    isSeleccionado={seleccionados.includes(seat)}
+                    onToggle={toggleSeat}
+                  />
                 );
               })}
             </View>
@@ -110,42 +170,198 @@ export function SeatSelector({
         </ScrollView>
       </View>
 
-      {/* Resumen de selección */}
-      <View className="border-t border-border/50 pt-4">
+      {/* Resumen */}
+      <View style={styles.summary}>
         {seleccionados.length > 0 ? (
-          <View className="mb-4">
-            <View className="flex-row justify-between items-center mb-2">
-              <Text className="text-sm text-muted-foreground font-medium">
-                Asientos: <Text className="text-foreground font-bold">{[...seleccionados].sort((a, b) => Number(a) - Number(b)).join(', ')}</Text>
+          <View style={styles.summaryInner}>
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>
+                Asientos:{' '}
+                <Text style={styles.summaryValue}>
+                  {[...seleccionados].sort((a, b) => Number(a) - Number(b)).join(', ')}
+                </Text>
               </Text>
-              <Text className="text-sm text-muted-foreground font-medium">
-                × {precioUnitario} Bs c/u
-              </Text>
+              <Text style={styles.perUnit}>× {precioUnitario} Bs</Text>
             </View>
-            <View className="flex-row justify-between items-center">
-              <Text className="text-lg font-black text-foreground">Total</Text>
-              <Text className="text-2xl font-black text-primary">{total.toFixed(2)} Bs</Text>
+            <View style={styles.totalRow}>
+              <Text style={styles.totalLabel}>Total</Text>
+              <Text style={styles.totalValue}>{total.toFixed(2)} Bs</Text>
             </View>
           </View>
         ) : (
-          <Text className="text-center text-sm text-muted-foreground mb-4">
-            Selecciona al menos un asiento para continuar
-          </Text>
+          <Text style={styles.hint}>Selecciona al menos un asiento para continuar</Text>
         )}
 
-        <Pressable
+        <PressableScale
           onPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
             onConfirm(seleccionados);
           }}
           disabled={seleccionados.length === 0}
-          className={`h-14 rounded-2xl items-center justify-center ${seleccionados.length > 0 ? 'bg-primary' : 'bg-primary/40'}`}
+          haptic
+          hapticType="medium"
+          style={[
+            styles.confirmBtn,
+            seleccionados.length === 0 && styles.confirmBtnDisabled,
+          ]}
         >
-          <Text className={`font-bold text-lg ${seleccionados.length > 0 ? 'text-primary-foreground' : 'text-primary-foreground/50'}`}>
+          <Text
+            style={[
+              styles.confirmBtnText,
+              seleccionados.length === 0 && styles.confirmBtnTextDisabled,
+            ]}
+          >
             Continuar al Pago
           </Text>
-        </Pressable>
+        </PressableScale>
       </View>
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    backgroundColor: Colors.white,
+    borderRadius: Radius.xl, // 24
+    padding: 20,
+  },
+  legend: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 20,
+    marginBottom: 20,
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  legendDot: {
+    width: 14,
+    height: 14,
+    borderRadius: 4,
+  },
+  legendText: {
+    fontSize: 12,
+    color: Colors.mutedForeground,
+    fontWeight: Typography.weights.medium,
+    fontFamily: Typography.family,
+  },
+  busLayout: {
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.md, // 16
+    padding: 16,
+    marginBottom: 20,
+  },
+  busFront: {
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  busFrontText: {
+    fontSize: 9,
+    fontWeight: Typography.weights.bold,
+    color: Colors.mutedForeground,
+    letterSpacing: 2,
+    fontFamily: Typography.family,
+  },
+  fila: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  seatWrapper: {
+    marginHorizontal: 3,
+  },
+  seat: {
+    width: 40,
+    height: 40,
+    borderRadius: Radius.sm, // 10
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+  },
+  seatText: {
+    fontSize: 11,
+    fontFamily: Typography.family,
+  },
+  strikethrough: {
+    textDecorationLine: 'line-through',
+  },
+  pasillo: {
+    width: 20,
+    height: 40,
+  },
+  summary: {
+    borderTopWidth: 0,
+    paddingTop: 16,
+  },
+  summaryInner: {
+    marginBottom: 16,
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  summaryLabel: {
+    fontSize: 13,
+    color: Colors.mutedForeground,
+    fontFamily: Typography.family,
+  },
+  summaryValue: {
+    fontSize: 13,
+    fontWeight: Typography.weights.bold,
+    color: Colors.foreground,
+    fontFamily: Typography.family,
+  },
+  perUnit: {
+    fontSize: 13,
+    color: Colors.mutedForeground,
+    fontFamily: Typography.family,
+  },
+  totalRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  totalLabel: {
+    fontSize: 17,
+    fontWeight: Typography.weights.heavy,
+    color: Colors.foreground,
+    fontFamily: Typography.family,
+  },
+  totalValue: {
+    fontSize: 22,
+    fontWeight: Typography.weights.heavy,
+    color: Colors.accent,
+    fontFamily: Typography.family,
+  },
+  hint: {
+    fontSize: 13,
+    color: Colors.mutedForeground,
+    textAlign: 'center',
+    marginBottom: 16,
+    fontFamily: Typography.family,
+  },
+  confirmBtn: {
+    height: 54,
+    borderRadius: Radius.full,
+    backgroundColor: Colors.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  confirmBtnDisabled: {
+    backgroundColor: 'rgba(74, 127, 248, 0.35)',
+  },
+  confirmBtnText: {
+    fontSize: 16,
+    fontWeight: Typography.weights.bold,
+    color: Colors.white,
+    fontFamily: Typography.family,
+  },
+  confirmBtnTextDisabled: {
+    color: 'rgba(255, 255, 255, 0.5)',
+    fontFamily: Typography.family,
+  },
+});

@@ -8,6 +8,7 @@ export type UserProfile = {
   nombre_completo: string;
   cooperativa_id: string | null;
   cooperativa_nombre?: string | null;
+  cooperativa_estado?: string | null;
 };
 
 type UserContextType = {

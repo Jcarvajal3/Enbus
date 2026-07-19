@@ -1,8 +1,8 @@
 import { SafeAreaView } from '@/tw';
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ActivityIndicator, Alert, Image } from 'react-native';
-import { ScrollView, View, Text, Pressable, useCSSVariable } from '@/tw';
+import { ActivityIndicator, Alert, Image, StyleSheet } from 'react-native';
+import { ScrollView, View, Text } from '@/tw';
 import { CaretLeft, Clock } from 'phosphor-react-native';
 import { QRCodeViewer } from '@/src/components/QRCodeViewer';
 import { StatusTimeline } from '@/src/components/StatusTimeline';
@@ -12,6 +12,8 @@ import * as Haptics from 'expo-haptics';
 import { useToast } from '@/src/components/Toast';
 import { getSignedPhotoUrl } from '@/src/utils/storage';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { PressableScale } from '@/src/components/PressableScale';
+import { Colors, Typography, Spacing, Radius, Shadows } from '@/src/theme';
 
 export default function DetalleEnvioScreen() {
   const { id } = useLocalSearchParams();
@@ -24,7 +26,6 @@ export default function DetalleEnvioScreen() {
   const [loading, setLoading] = useState(true);
   const [fotoUrlFirmada, setFotoUrlFirmada] = useState<string | null>(null);
   const isMountedRef = useRef(true);
-  const foregroundColor = useCSSVariable('--foreground') as string || '#171717';
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -37,7 +38,6 @@ export default function DetalleEnvioScreen() {
     if (!id) return;
     const cacheKey = `cache:encomienda_envio:${id}`;
     try {
-      // ── 1. Cargar caché primero para respuesta instantánea ──
       const cached = await AsyncStorage.getItem(cacheKey);
       if (cached && isMountedRef.current) {
         const parsed = JSON.parse(cached);
@@ -54,7 +54,6 @@ export default function DetalleEnvioScreen() {
         if (isMountedRef.current) setLoading(true);
       }
 
-      // ── 2. Fetch de datos frescos de Supabase ──
       const [encResult, histResult, pagosResult] = await Promise.all([
         supabase
           .from('encomiendas')
@@ -89,7 +88,6 @@ export default function DetalleEnvioScreen() {
           .limit(1)
       ]);
 
-      // Race condition: si acaba de crearse, reintentamos con delay
       if (encResult.error || !encResult.data) {
         if (retries > 0) {
           setTimeout(() => fetchData(retries - 1), 700);
@@ -101,11 +99,8 @@ export default function DetalleEnvioScreen() {
       if (isMountedRef.current) {
         setEncomienda(encResult.data);
         setHistorial(histResult.data || []);
-        
         const freshPago = pagosResult.data && pagosResult.data.length > 0 ? pagosResult.data[0] : null;
         setPagoPendiente(freshPago);
-
-        // Guardar en cache
         const cacheData = {
           encomienda: encResult.data,
           historial: histResult.data || [],
@@ -133,7 +128,6 @@ export default function DetalleEnvioScreen() {
     }
   }, [id]);
 
-  // Solo fetch al montar — sin useFocusEffect para evitar loops
   useEffect(() => {
     fetchData();
   }, [fetchData]);
@@ -199,47 +193,67 @@ export default function DetalleEnvioScreen() {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-background">
-      <View className="px-6 pt-4 pb-4 bg-background shadow-sm flex-row items-center space-x-4 border-b border-border/50">
-        <Pressable onPress={() => router.back()} className="w-10 h-10 bg-secondary rounded-full flex items-center justify-center">
-          <CaretLeft weight="bold" color={foregroundColor} size={24} />
-        </Pressable>
-        {loading ? <ActivityIndicator color="#6b4a1a" /> : (
-          <View>
-            <Text className="text-sm font-bold text-muted-foreground uppercase">Tú Envío</Text>
-            <Text className="text-xl font-heading text-foreground">{encomienda ? encomienda.tracking_id : 'Cargando...'}</Text>
+    <SafeAreaView style={st.screen}>
+      {/* Header */}
+      <View style={st.header}>
+        <PressableScale
+          onPress={() => router.back()}
+          style={st.headerBackBtn}
+          accessibilityLabel="Volver"
+          accessibilityRole="button"
+        >
+          <CaretLeft weight="bold" color={Colors.foreground} size={24} />
+        </PressableScale>
+        {loading ? (
+          <ActivityIndicator color={Colors.accent} style={st.headerLoader} />
+        ) : (
+          <View style={st.headerTextBlock}>
+            <Text style={st.headerEyebrow}>Tu Envío</Text>
+            <Text style={st.headerTitle}>{encomienda ? encomienda.tracking_id : 'Cargando...'}</Text>
           </View>
         )}
       </View>
 
-      <ScrollView contentContainerClassName="p-6 pb-32">
-        {loading ? <View className="py-20 items-center"><ActivityIndicator color="#6b4a1a" size="large" /></View> : !encomienda ? <View className="py-20 items-center"><Text className="text-muted-foreground">Encomienda no encontrada</Text></View> : (
+      <ScrollView contentContainerStyle={st.scrollContent}>
+        {loading ? (
+          <View style={st.loadingBlock}>
+            <ActivityIndicator color={Colors.accent} size="large" />
+          </View>
+        ) : !encomienda ? (
+          <View style={st.loadingBlock}>
+            <Text style={st.emptyText}>Encomienda no encontrada</Text>
+          </View>
+        ) : (
           <>
             {encomienda.estado === 'PENDIENTE_DE_ESCANEO' && (
-              <View className="mb-8 items-center bg-card p-6 rounded-[32px] border border-border/50">
-                <Text className="text-center font-bold text-foreground mb-4">Código para escanear en Taquilla</Text>
+              <View style={st.card}>
+                <Text style={st.cardTitle}>
+                  Código para escanear en Taquilla
+                </Text>
                 <QRCodeViewer data={encomienda.id} size={220} autoMaxBrightness={true} />
               </View>
             )}
 
             {encomienda.estado === 'EN_RECEPCION' && (
-              <View className="mb-8 p-4 bg-orange-100 rounded-xl items-center">
-                <Text className="text-orange-800 font-bold">Siendo procesada en taquilla...</Text>
+              <View style={st.processingBanner}>
+                <Text style={st.processingBannerText}>
+                  Siendo procesada en taquilla...
+                </Text>
               </View>
             )}
 
             {encomienda.estado === 'POR_PAGAR' ? (
-              <View className="mb-8">
+              <View style={st.paymentSection}>
                 {pagoPendiente && !pagoPendiente.verificado ? (
-                  <View className="bg-card border border-border rounded-[14px] p-6 items-center">
-                    <View className="size-16 bg-warning/20 rounded-full items-center justify-center mb-4">
-                      <Clock weight="fill" color="#e2b714" size={32} />
+                  <View style={[st.card, st.cardCenter]}>
+                    <View style={st.pendingIconContainer}>
+                      <Clock weight="fill" color={Colors.warning} size={32} />
                     </View>
-                    <Text className="font-heading text-lg text-foreground text-center mb-2">
+                    <Text style={st.pendingTitle}>
                       {pagoPendiente.tipo_pago === 'EFECTIVO' ? 'Pago Pendiente en Taquilla' : 'Pago en Verificación'}
                     </Text>
-                    <Text className="text-sm text-muted-foreground text-center leading-5">
-                      {pagoPendiente.tipo_pago === 'EFECTIVO' 
+                    <Text style={st.pendingSubtitle}>
+                      {pagoPendiente.tipo_pago === 'EFECTIVO'
                         ? 'Debes realizar el pago en efectivo al entregar tu paquete en la taquilla de la cooperativa.'
                         : 'Hemos registrado tu comprobante de pago. La cooperativa verificará la transacción a la brevedad. Tu envío comenzará una vez sea verificado.'
                       }
@@ -247,52 +261,105 @@ export default function DetalleEnvioScreen() {
                   </View>
                 ) : (
                   <>
-                    <Text className="text-lg font-heading text-foreground mb-4">Pago Requerido</Text>
+                    <Text style={st.paymentTitle}>
+                      Pago Requerido
+                    </Text>
                     <PaymentFlow
                       monto={encomienda.costo_calculado || 0}
                       encomienda_id={encomienda.id}
                       cooperativa_id={encomienda.cooperativa_id}
                       concepto={`Paquete: ${encomienda.descripcion_contenido || encomienda.tracking_id}`}
-                      onPaymentSuccess={async () => {
-                        // El PaymentFlow ya insertó el registro en `pagos`.
-                        // Simplemente volvemos a cargar los datos para reflejar que el pago está pendiente de verificación
-                        fetchData();
-                      }}
+                      onPaymentSuccess={async () => { fetchData(); }}
                     />
                   </>
                 )}
               </View>
-
             ) : (
-              <View className="bg-card rounded-[32px] p-6 shadow-sm border border-border/50 mb-8">
-                <Text className="text-lg font-heading text-foreground mb-4">Logística</Text>
+              <View style={st.card}>
+                <Text style={st.sectionTitle}>Logística</Text>
                 <StatusTimeline estados={buildTimeline()} />
               </View>
             )}
 
+            {/* Shipment details card */}
+            <View style={st.card}>
+              <Text style={st.sectionTitle}>Detalles del Envío</Text>
+
+              <View style={st.detailRow}>
+                <Text style={st.detailLabel}>Contenido</Text>
+                <Text style={st.detailValue}>
+                  {encomienda.descripcion_contenido || 'Sin descripción'}
+                </Text>
+              </View>
+
+              <View style={st.detailsRow2}>
+                <View style={st.detailRowFlex}>
+                  <Text style={st.detailLabel}>Código de Tracking</Text>
+                  <Text style={st.detailValue}>{encomienda.tracking_id}</Text>
+                </View>
+                <View style={st.detailRowEnd}>
+                  <Text style={st.detailLabel}>Costo</Text>
+                  <Text style={st.detailValueAccent}>
+                    {encomienda.costo_calculado ? `${encomienda.costo_calculado} Bs` : 'Por calcular'}
+                  </Text>
+                </View>
+              </View>
+            </View>
+
+            {/* Sender Card */}
+            <View style={st.card}>
+              <Text style={st.sectionTitle}>Remitente</Text>
+              <Text style={st.detailLabel}>Origen</Text>
+              <Text style={st.detailValue}>
+                {encomienda.ciudad_origen}, {encomienda.estado_origen}
+              </Text>
+            </View>
+
+            {/* Recipient Card */}
+            <View style={st.card}>
+              <Text style={st.sectionTitle}>Destinatario</Text>
+              <View style={st.detailRow}>
+                <Text style={st.detailLabel}>Nombre</Text>
+                <Text style={st.detailValue}>{encomienda.receiver_nombre || 'N/A'}</Text>
+              </View>
+              <Text style={st.detailLabel}>Destino</Text>
+              <Text style={st.detailValue}>
+                {encomienda.ciudad_destino}, {encomienda.estado_destino}
+              </Text>
+            </View>
+
             {fotoUrlFirmada && (
-              <View className="bg-card rounded-[32px] p-6 shadow-sm border border-border/50 mb-8">
-                <Text className="text-lg font-heading text-foreground mb-4">Evidencia Fotográfica</Text>
+              <View style={st.card}>
+                <Text style={st.sectionTitle}>Evidencia Fotográfica</Text>
                 <Image
                   source={{ uri: fotoUrlFirmada }}
-                  style={{ width: '100%', height: 200, borderRadius: 14 }}
+                  style={st.evidenciaPhoto}
                   resizeMode="cover"
                 />
-                <Text className="text-xs text-muted-foreground mt-3 leading-4">
+                <Text style={st.evidenciaCaption}>
                   Fotografía de registro del paquete con etiqueta de envío visible.
                 </Text>
               </View>
             )}
 
             {canCancel && (
-              <Pressable onPress={handleCancel} className="mt-4 p-4 rounded-xl border border-destructive items-center">
-                <Text className="text-destructive font-bold">Cancelar Envío</Text>
-              </Pressable>
+              <PressableScale
+                onPress={handleCancel}
+                haptic
+                hapticType="medium"
+                style={st.cancelButton}
+                accessibilityLabel="Cancelar envío"
+                accessibilityRole="button"
+              >
+                <Text style={st.cancelButtonText}>Cancelar Envío</Text>
+              </PressableScale>
             )}
 
             {['CANCELADA', 'DEVUELTA'].includes(encomienda.estado) && (
-              <View className="p-4 bg-red-100 rounded-xl items-center">
-                <Text className="text-red-800 font-bold">Encomienda {encomienda.estado}</Text>
+              <View style={st.cancelledBanner}>
+                <Text style={st.cancelledBannerText}>
+                  Encomienda {encomienda.estado}
+                </Text>
               </View>
             )}
           </>
@@ -301,3 +368,214 @@ export default function DetalleEnvioScreen() {
     </SafeAreaView>
   );
 }
+
+// ─── StyleSheet ───────────────────────────────────────────────────────────────
+const st = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: Colors.surface,
+  },
+  header: {
+    paddingHorizontal: Spacing['2xl'],
+    paddingTop: Spacing.lg,
+    paddingBottom: Spacing.lg,
+    backgroundColor: Colors.white,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  headerBackBtn: {
+    width: Spacing['4xl'],
+    height: Spacing['4xl'],
+    backgroundColor: Colors.transparent,
+    borderRadius: Radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerLoader: {
+    marginLeft: Spacing.lg,
+  },
+  headerTextBlock: {
+    marginLeft: Spacing.lg,
+  },
+  headerEyebrow: {
+    fontFamily: Typography.family,
+    fontWeight: Typography.weights.bold,
+    color: Colors.mutedForeground,
+    fontSize: Typography.sizes.xs,
+    textTransform: 'uppercase',
+  },
+  headerTitle: {
+    fontFamily: Typography.family,
+    fontWeight: Typography.weights.bold,
+    color: Colors.foreground,
+    fontSize: Typography.sizes.xl,
+  },
+  scrollContent: {
+    padding: Spacing['2xl'],
+    paddingBottom: Spacing['5xl'] * 2 + Spacing['3xl'],
+  },
+  loadingBlock: {
+    paddingVertical: Spacing['4xl'] * 2,
+    alignItems: 'center',
+  },
+  emptyText: {
+    fontFamily: Typography.family,
+    color: Colors.mutedForeground,
+    fontSize: Typography.sizes.base,
+  },
+  // Cards
+  card: {
+    backgroundColor: Colors.white,
+    borderRadius: Radius.lg,
+    padding: Spacing['2xl'],
+    marginBottom: Spacing['2xl'],
+    ...Shadows.card,
+  },
+  cardCenter: {
+    alignItems: 'center',
+  },
+  cardTitle: {
+    fontFamily: Typography.family,
+    fontWeight: Typography.weights.bold,
+    color: Colors.foreground,
+    textAlign: 'center',
+    marginBottom: Spacing.lg,
+    fontSize: Typography.sizes.base,
+  },
+  // Processing banner
+  processingBanner: {
+    backgroundColor: Colors.secondaryLight,
+    borderRadius: Radius.lg,
+    padding: Spacing.lg,
+    marginBottom: Spacing['2xl'],
+    alignItems: 'center',
+  },
+  processingBannerText: {
+    fontFamily: Typography.family,
+    fontWeight: Typography.weights.bold,
+    color: Colors.secondary,
+    fontSize: Typography.sizes.base,
+  },
+  // Payment section
+  paymentSection: {
+    marginBottom: Spacing['2xl'],
+  },
+  paymentTitle: {
+    fontFamily: Typography.family,
+    fontWeight: Typography.weights.bold,
+    fontSize: Typography.sizes.lg + 1,
+    color: Colors.foreground,
+    marginBottom: Spacing.lg,
+  },
+  pendingIconContainer: {
+    width: Spacing['4xl'] + Spacing['2xl'],
+    height: Spacing['4xl'] + Spacing['2xl'],
+    backgroundColor: Colors.warningLight,
+    borderRadius: Radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: Spacing.lg,
+  },
+  pendingTitle: {
+    fontFamily: Typography.family,
+    fontWeight: Typography.weights.bold,
+    fontSize: Typography.sizes.lg + 1,
+    color: Colors.foreground,
+    textAlign: 'center',
+    marginBottom: Spacing.sm,
+  },
+  pendingSubtitle: {
+    fontFamily: Typography.family,
+    fontSize: Typography.sizes.sm + 1,
+    color: Colors.mutedForeground,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  // Section header
+  sectionTitle: {
+    fontFamily: Typography.family,
+    fontWeight: Typography.weights.bold,
+    color: Colors.foreground,
+    fontSize: Typography.sizes.lg,
+    marginBottom: Spacing.lg,
+  },
+  // Detail fields
+  detailRow: {
+    marginBottom: Spacing.lg,
+  },
+  detailsRow2: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  detailRowFlex: {
+    flex: 1,
+  },
+  detailRowEnd: {
+    alignItems: 'flex-end',
+    flex: 1,
+  },
+  detailLabel: {
+    fontFamily: Typography.family,
+    fontWeight: Typography.weights.semibold,
+    color: Colors.mutedForeground,
+    fontSize: Typography.sizes.xs,
+    textTransform: 'uppercase',
+    marginBottom: Spacing.xs,
+  },
+  detailValue: {
+    fontFamily: Typography.family,
+    color: Colors.foreground,
+    fontSize: Typography.sizes.base,
+  },
+  detailValueAccent: {
+    fontFamily: Typography.family,
+    fontWeight: Typography.weights.bold,
+    color: Colors.accent,
+    fontSize: Typography.sizes.lg,
+  },
+  // Evidencia foto
+  evidenciaPhoto: {
+    width: '100%',
+    height: 200,
+    borderRadius: Radius.sm,
+  },
+  evidenciaCaption: {
+    fontFamily: Typography.family,
+    fontSize: Typography.sizes.xs,
+    color: Colors.mutedForeground,
+    lineHeight: 18,
+    marginTop: Spacing.md,
+  },
+  // Cancel button
+  cancelButton: {
+    marginTop: Spacing.lg,
+    padding: Spacing.lg,
+    borderRadius: Radius.full,
+    borderWidth: 1.5,
+    borderColor: Colors.destructive,
+    alignItems: 'center',
+    backgroundColor: Colors.transparent,
+  },
+  cancelButtonText: {
+    fontFamily: Typography.family,
+    color: Colors.destructive,
+    fontWeight: Typography.weights.bold,
+    fontSize: Typography.sizes.base,
+  },
+  // Cancelled/returned banner
+  cancelledBanner: {
+    backgroundColor: Colors.destructiveLight,
+    borderRadius: Radius.lg,
+    padding: Spacing.lg,
+    alignItems: 'center',
+    marginTop: Spacing.lg,
+  },
+  cancelledBannerText: {
+    fontFamily: Typography.family,
+    color: Colors.destructive,
+    fontWeight: Typography.weights.bold,
+    fontSize: Typography.sizes.base,
+  },
+});

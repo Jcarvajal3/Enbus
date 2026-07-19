@@ -1,8 +1,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { SafeAreaView, ScrollView, View, Text, Pressable, useCSSVariable } from '@/tw';
-import { ActivityIndicator } from 'react-native';
-import { CaretLeft, Clock, Star, WarningCircle } from 'phosphor-react-native';
+import { SafeAreaView, ScrollView, View, Text as BaseText, useCSSVariable } from '@/tw';
+import { ActivityIndicator, StyleSheet } from 'react-native';
+import { ArrowLeft, Clock, Star, WarningCircle } from 'phosphor-react-native';
 import { SeatSelector } from '@/src/components/SeatSelector';
 import { PaymentFlow } from '@/src/components/PaymentFlow';
 import { Spinner } from '@/src/components/Spinner';
@@ -12,6 +12,18 @@ import { formatDate, dateFull, timeOnly, formatCity } from '@/src/utils/formatte
 import * as Haptics from 'expo-haptics';
 import { useToast } from '@/src/components/Toast';
 import type { Viaje } from '@/src/types';
+import { PressableScale } from '@/src/components/PressableScale';
+import { PageTransition } from '@/src/components/PageTransition';
+import { Colors, Typography, Radius, Spacing, Shadows } from '@/src/theme';
+
+const Text = (props: React.ComponentProps<typeof BaseText>) => {
+  return (
+    <BaseText
+      {...props}
+      style={[{ fontFamily: Typography.family }, props.style]}
+    />
+  );
+};
 
 // ─── Generador de código de boleto criptográficamente seguro ───────────────────
 // Math.random() NO debe usarse para IDs públicos: con 36^6 combinaciones hay riesgo
@@ -32,8 +44,8 @@ export default function DetalleViajeScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const toast = useToast();
-  const foregroundColor = useCSSVariable('--foreground') as string || '#171717';
-  const destructiveColor = useCSSVariable('--destructive') as string || '#dc2626';
+  const foregroundColor = useCSSVariable('--foreground') as string || Colors.foreground;
+  const destructiveColor = useCSSVariable('--destructive') as string || Colors.destructive;
 
   const [viaje, setViaje] = useState<Viaje | null>(null);
   const [loading, setLoading] = useState(true);
@@ -164,9 +176,12 @@ export default function DetalleViajeScreen() {
         <WarningCircle color={destructiveColor} size={48} weight="thin" />
         <Text className="text-foreground font-bold text-base mt-4 text-center">No se pudo cargar el viaje</Text>
         <Text className="text-muted-foreground text-sm mt-2 text-center">{fetchError}</Text>
-        <Pressable onPress={() => router.back()} className="mt-6 px-6 py-3 bg-secondary rounded-full">
-          <Text className="text-foreground font-bold">Volver</Text>
-        </Pressable>
+        <PressableScale
+          onPress={() => router.back()}
+          style={s.errorBackButton}
+        >
+          <Text style={s.errorBackButtonText}>Volver</Text>
+        </PressableScale>
       </SafeAreaView>
     );
   }
@@ -175,9 +190,12 @@ export default function DetalleViajeScreen() {
     return (
       <SafeAreaView className="flex-1 bg-background justify-center items-center">
         <Text className="text-muted-foreground font-bold">Viaje no encontrado</Text>
-        <Pressable onPress={() => router.back()} className="mt-4 px-6 py-3 bg-secondary rounded-full">
-          <Text className="text-foreground">Volver</Text>
-        </Pressable>
+        <PressableScale
+          onPress={() => router.back()}
+          style={s.notFoundBackButton}
+        >
+          <Text style={s.notFoundBackButtonText}>Volver</Text>
+        </PressableScale>
       </SafeAreaView>
     );
   }
@@ -212,15 +230,12 @@ export default function DetalleViajeScreen() {
         .from('boletos')
         .insert(inserts)
         .select('id, codigo_boleto');
-      
+
       if (boletosError || !boletosInsertados || boletosInsertados.length === 0) {
         throw boletosError || new Error('No se devolvieron los boletos insertados');
       }
 
       // 2. Insertamos el pago usando el ID del primer boleto
-      // El esquema exige que el pago tenga encomienda_id o boleto_id (check_pago_referencia)
-      // Como el panel de cooperativas totaliza los ingresos usando este ID, pasamos el primero 
-      // y con el monto TOTAL, lo que mantendrá las estadísticas cuadradas.
       if (pagoPayload) {
         const payloadToInsert = {
           ...pagoPayload,
@@ -233,7 +248,6 @@ export default function DetalleViajeScreen() {
 
         if (pagoInsertError) {
           console.error('[DetalleViaje] Pago insert falló:', pagoInsertError);
-          // Opcional: si falla el pago, los boletos quedan como "RESERVADO" y expirarán, es aceptable.
         }
       }
 
@@ -246,98 +260,322 @@ export default function DetalleViajeScreen() {
     }
   };
 
+  const step = showPayment ? 2 : 1;
+
   return (
     <SafeAreaView className="flex-1 bg-background">
-      {/* Header */}
-      <View className="px-6 pt-4 pb-4 bg-background border-b border-border">
-        <View className="flex-row items-center">
-          <Pressable
-            onPress={() => showPayment ? setShowPayment(false) : router.back()}
-            className="size-10 bg-secondary rounded-full flex items-center justify-center mr-4"
-            accessibilityLabel={showPayment ? 'Volver al selector de asientos' : 'Volver a resultados'}
-            accessibilityRole="button"
-          >
-            {/* BUG-08 fix: use CSS variable instead of hardcoded #171717 */}
-            <CaretLeft weight="bold" color={foregroundColor} size={24} />
-          </Pressable>
-          <View className="flex-1">
-            <Text className="text-sm font-bold text-muted-foreground uppercase tracking-wider">
-              {showPayment ? 'Confirmar Pago' : 'Detalle del Viaje'}
-            </Text>
-            <Text className="font-heading text-xl text-foreground">
-              {cooperativa?.nombre || 'Cooperativa'}
-            </Text>
-          </View>
-          {(cooperativa?.calificacion_promedio ?? 0) > 0 && (
-            <View className="flex-row items-center bg-secondary px-3 py-1.5 rounded-full">
-              <Star weight="fill" color="#e2b714" size={14} />
-              <Text className="text-sm font-bold text-foreground ml-1">
-                {Number(cooperativa?.calificacion_promedio ?? 0).toFixed(1)}
-              </Text>
-            </View>
-          )}
-        </View>
-      </View>
-
-      <ScrollView contentContainerClassName="p-6 pb-32">
-        {/* Info de la Ruta */}
-        <View className="bg-card rounded-[14px] p-6 border border-border mb-6">
-          <View className="flex-row justify-between items-center mb-4">
-            <View className="items-center flex-1">
-              <Text className="text-2xl font-black text-foreground">{formatCity(ruta?.ciudad_origen).substring(0, 3).toUpperCase()}</Text>
-              <Text className="text-xs text-muted-foreground font-medium mt-1">{formatCity(ruta?.ciudad_origen)}</Text>
-            </View>
-
-          <View className="flex-1 items-center px-2">
-              <View className="flex-row items-center gap-1">
-                <Clock color="#a3a3a3" weight="fill" size={12} />
-                <Text className="text-xs text-muted-foreground font-bold">{horasDuration}h {minDuration}m</Text>
+      <PageTransition>
+        {/* Header Stepper */}
+        <View style={s.header}>
+          <View style={s.headerTopRow}>
+            <PressableScale
+              onPress={() => showPayment ? setShowPayment(false) : router.back()}
+              style={s.backButton}
+              accessibilityLabel={showPayment ? 'Volver al selector de asientos' : 'Volver a resultados'}
+              accessibilityRole="button"
+            >
+              <ArrowLeft weight="bold" color={foregroundColor} size={22} />
+            </PressableScale>
+            <View style={s.stepperRow}>
+              <View style={s.stepperDotsContainer}>
+                {[1, 2].map((s2) => {
+                  const isActive = s2 === step;
+                  return (
+                    <View
+                      key={s2}
+                      style={isActive ? s.stepperActivePill : s.stepperInactiveDot}
+                    />
+                  );
+                })}
               </View>
-              <View className="w-full border-t border-dashed border-muted mt-2" />
-            </View>
-
-            <View className="items-center flex-1">
-              <Text className="text-2xl font-black text-foreground">{formatCity(ruta?.ciudad_destino).substring(0, 3).toUpperCase()}</Text>
-              <Text className="text-xs text-muted-foreground font-medium mt-1">{formatCity(ruta?.ciudad_destino)}</Text>
-            </View>
-          </View>
-
-          <View className="flex-row justify-between pt-4 border-t border-border/30">
-            <View>
-              <Text className="text-xs text-muted-foreground font-bold uppercase mb-1">Fecha</Text>
-              <Text className="text-sm text-foreground font-bold">{formatDate(viaje.fecha_hora_salida, dateFull)}</Text>
-            </View>
-            <View>
-              <Text className="text-xs text-muted-foreground font-bold uppercase mb-1">Hora salida</Text>
-              <Text className="text-sm text-foreground font-bold">
-                {formatDate(viaje.fecha_hora_salida, timeOnly)}
+              <Text style={s.stepperNumber}>
+                {`0${step}`}
               </Text>
             </View>
-            <View>
-              <Text className="text-xs text-muted-foreground font-bold uppercase mb-1">Precio</Text>
-              <Text className="text-sm text-primary font-black">{precioUnitario} Bs</Text>
-            </View>
           </View>
+          <Text style={s.headerTitle}>
+            {step === 1 ? 'Selección de Asientos' : 'Confirmar Pago'}
+          </Text>
         </View>
 
-        {/* Sección condicional: SeatSelector o PaymentFlow */}
-        {showPayment ? (
-          <PaymentFlow
-            monto={asientosSeleccionados.length * precioUnitario}
-            cooperativa_id={cooperativa?.id}
-            concepto={`${asientosSeleccionados.length} asiento(s) - ${formatCity(ruta?.ciudad_origen)} → ${formatCity(ruta?.ciudad_destino)}`}
-            onPaymentSuccess={handlePaymentSuccess}
-          />
-        ) : (
-          <SeatSelector
-            viaje_id={viaje.id}
-            asientosTotales={viaje.asientos_totales ?? 0}
-            asientosOcupados={asientosOcupados}
-            precioUnitario={precioUnitario}
-            onConfirm={handleConfirmSeats}
-          />
-        )}
-      </ScrollView>
+        <ScrollView contentContainerStyle={s.scrollContent}>
+          <View style={s.formCard}>
+            {/* Info de la Ruta */}
+            <View style={s.infoCard}>
+              {/* Cooperativa info header inside the card */}
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, borderBottomWidth: 1, borderBottomColor: Colors.borderLight, paddingBottom: 12 }}>
+                <Text style={{ fontSize: 16, fontWeight: '700', color: Colors.foreground }}>
+                  {cooperativa?.nombre || 'Cooperativa'}
+                </Text>
+                {(cooperativa?.calificacion_promedio ?? 0) > 0 && (
+                  <View style={s.ratingBadge}>
+                    <Star weight="fill" color={Colors.primary} size={14} />
+                    <Text style={s.ratingText}>
+                      {Number(cooperativa?.calificacion_promedio ?? 0).toFixed(1)}
+                    </Text>
+                  </View>
+                )}
+              </View>
+
+              <View className="flex-row justify-between items-center mb-4">
+                <View className="items-center flex-1">
+                  <Text style={s.cityCode}>{formatCity(ruta?.ciudad_origen).substring(0, 3).toUpperCase()}</Text>
+                  <Text style={s.cityName}>{formatCity(ruta?.ciudad_origen)}</Text>
+                </View>
+
+                <View style={s.routeMiddle}>
+                  {/* Visual Timeline / Route */}
+                  <View style={s.routeTimeline}>
+                    {/* Origin Dot (active/completed: Colors.accent) */}
+                    <View style={s.dotOrigin} />
+
+                    {/* Line */}
+                    <View style={s.routeLine} />
+
+                    {/* Destination Dot (upcoming: Colors.secondary) */}
+                    <View style={s.dotDestination} />
+                  </View>
+                  <View className="flex-row items-center gap-1">
+                    <Clock color={Colors.mutedForeground} weight="fill" size={12} />
+                    <Text style={s.durationText}>{horasDuration}h {minDuration}m</Text>
+                  </View>
+                </View>
+
+                <View className="items-center flex-1">
+                  <Text style={s.cityCode}>{formatCity(ruta?.ciudad_destino).substring(0, 3).toUpperCase()}</Text>
+                  <Text style={s.cityName}>{formatCity(ruta?.ciudad_destino)}</Text>
+                </View>
+              </View>
+
+              <View style={s.infoCardFooter}>
+                <View>
+                  <Text style={s.infoLabel}>Fecha</Text>
+                  <Text style={s.infoValue}>{formatDate(viaje.fecha_hora_salida, dateFull)}</Text>
+                </View>
+                <View>
+                  <Text style={s.infoLabel}>Hora salida</Text>
+                  <Text style={s.infoValue}>
+                    {formatDate(viaje.fecha_hora_salida, timeOnly)}
+                  </Text>
+                </View>
+                <View>
+                  <Text style={s.infoLabel}>Precio</Text>
+                  <Text style={s.priceValue}>{precioUnitario} Bs</Text>
+                </View>
+              </View>
+            </View>
+
+            {/* Sección condicional: SeatSelector o PaymentFlow */}
+            {showPayment ? (
+              <PaymentFlow
+                monto={asientosSeleccionados.length * precioUnitario}
+                cooperativa_id={cooperativa?.id}
+                concepto={`${asientosSeleccionados.length} asiento(s) - ${formatCity(ruta?.ciudad_origen)} → ${formatCity(ruta?.ciudad_destino)}`}
+                onPaymentSuccess={handlePaymentSuccess}
+              />
+            ) : (
+              <SeatSelector
+                viaje_id={viaje.id}
+                asientosTotales={viaje.asientos_totales ?? 0}
+                asientosOcupados={asientosOcupados}
+                precioUnitario={precioUnitario}
+                onConfirm={handleConfirmSeats}
+              />
+            )}
+          </View>
+        </ScrollView>
+      </PageTransition>
     </SafeAreaView>
   );
 }
+
+const s = StyleSheet.create({
+  // ─── Error / Not Found States ────────────────────────────────────────────────
+  errorBackButton: {
+    marginTop: Spacing['2xl'],
+    paddingHorizontal: Spacing['2xl'],
+    paddingVertical: Spacing.md,
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.full,
+  },
+  errorBackButtonText: {
+    fontWeight: Typography.weights.bold,
+    color: Colors.foreground,
+  },
+  notFoundBackButton: {
+    marginTop: Spacing.lg,
+    paddingHorizontal: Spacing['2xl'],
+    paddingVertical: Spacing.md,
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.full,
+  },
+  notFoundBackButtonText: {
+    color: Colors.foreground,
+  },
+
+  // ─── Header Stepper ──────────────────────────────────────────────────────────
+  header: {
+    paddingHorizontal: 24,
+    paddingTop: 16,
+    paddingBottom: 16,
+    backgroundColor: Colors.background,
+  },
+  headerTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: Radius.full,
+    backgroundColor: 'transparent',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepperRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  stepperDotsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  stepperActivePill: {
+    width: 40,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: Colors.foreground,
+  },
+  stepperInactiveDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: Colors.border,
+  },
+  stepperNumber: {
+    fontSize: 14,
+    fontFamily: Typography.family,
+    fontWeight: Typography.weights.semibold,
+    color: Colors.foreground,
+  },
+  headerTitle: {
+    fontSize: Typography.sizes.xl,
+    fontFamily: Typography.family,
+    fontWeight: Typography.weights.bold,
+    color: Colors.foreground,
+    textAlign: 'center',
+    marginTop: 4,
+  },
+  formCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.xl,
+    padding: 20,
+    marginBottom: 24,
+  },
+  ratingBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.primaryLight,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs + 2,
+    borderRadius: Radius.full,
+  },
+  ratingText: {
+    fontSize: Typography.sizes.sm,
+    fontWeight: Typography.weights.bold,
+    color: Colors.foreground,
+    marginLeft: 4,
+  },
+
+  // ─── Scroll ───────────────────────────────────────────────────────────────────
+  scrollContent: {
+    padding: Spacing['2xl'],
+    paddingBottom: 128,
+  },
+
+  // ─── Info Card ───────────────────────────────────────────────────────────────
+  infoCard: {
+    backgroundColor: Colors.white,
+    borderRadius: Radius.xl,
+    padding: Spacing['2xl'],
+    marginBottom: Spacing['2xl'],
+  },
+  cityCode: {
+    fontSize: Typography.sizes['2xl'],
+    fontWeight: Typography.weights.heavy,
+    color: Colors.foreground,
+  },
+  cityName: {
+    fontSize: 12,
+    color: Colors.mutedForeground,
+    fontWeight: Typography.weights.medium,
+    marginTop: 4,
+  },
+
+  // ─── Route Middle / Timeline ──────────────────────────────────────────────────
+  routeMiddle: {
+    flex: 1,
+    alignItems: 'center',
+    paddingHorizontal: Spacing.sm,
+  },
+  routeTimeline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: '100%',
+    justifyContent: 'center',
+    marginBottom: 6,
+  },
+  dotOrigin: {
+    width: 8,
+    height: 8,
+    borderRadius: Radius.full,
+    backgroundColor: Colors.accent,
+  },
+  routeLine: {
+    flex: 1,
+    height: 2,
+    backgroundColor: Colors.border,
+    marginHorizontal: 4,
+  },
+  dotDestination: {
+    width: 8,
+    height: 8,
+    borderRadius: Radius.full,
+    backgroundColor: Colors.secondary,
+  },
+  durationText: {
+    fontSize: 12,
+    color: Colors.mutedForeground,
+    fontWeight: Typography.weights.bold,
+  },
+
+  // ─── Info Card Footer ─────────────────────────────────────────────────────────
+  infoCardFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingTop: Spacing.lg,
+    borderTopWidth: 1,
+    borderTopColor: Colors.borderLight,
+  },
+  infoLabel: {
+    fontSize: 12,
+    color: Colors.mutedForeground,
+    fontWeight: Typography.weights.bold,
+    textTransform: 'uppercase',
+    marginBottom: 4,
+  },
+  infoValue: {
+    fontSize: 14,
+    color: Colors.foreground,
+    fontWeight: Typography.weights.bold,
+  },
+  priceValue: {
+    fontSize: 14,
+    color: Colors.secondary,
+    fontWeight: Typography.weights.heavy,
+  },
+});

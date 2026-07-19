@@ -38,12 +38,49 @@ export function AdminSidebar() {
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
 
+  const [pendingCount, setPendingCount] = useState(0);
+
   useEffect(() => {
     const timer = setTimeout(() => {
       setMounted(true);
     }, 0);
     return () => clearTimeout(timer);
   }, []);
+
+  useEffect(() => {
+    async function fetchCount() {
+      const { count, error } = await supabase
+        .from("cooperativas")
+        .select("id", { count: "exact", head: true })
+        .eq("estado", "PENDIENTE");
+      
+      if (!error && count !== null) {
+        setPendingCount(count);
+      }
+    }
+
+    fetchCount();
+
+    // Realtime subscription to database changes for cooperativas status
+    const channel = supabase
+      .channel("cooperativas_pending_changes")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "cooperativas",
+        },
+        () => {
+          fetchCount();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [supabase]);
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -70,18 +107,26 @@ export function AdminSidebar() {
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
-              {ADMIN_NAV_ITEMS.map((item) => (
-                <SidebarMenuItem key={item.href}>
-                  <SidebarMenuButton 
-                    render={<Link href={item.href} prefetch={true} />}
-                    isActive={pathname === item.href || pathname.startsWith(item.href + "/")}
-                    tooltip={item.title}
-                  >
-                    <item.icon />
-                    <span>{item.title}</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
+              {ADMIN_NAV_ITEMS.map((item) => {
+                const isSolicitudes = item.href === "/admin/solicitudes";
+                return (
+                  <SidebarMenuItem key={item.href}>
+                    <SidebarMenuButton 
+                      render={<Link href={item.href} prefetch={true} />}
+                      isActive={pathname === item.href || pathname.startsWith(item.href + "/")}
+                      tooltip={item.title}
+                    >
+                      <item.icon />
+                      <span>{item.title}</span>
+                      {isSolicitudes && pendingCount > 0 && (
+                        <span className="ml-auto flex h-5 w-5 items-center justify-center rounded-full bg-blue-500 text-[10px] font-bold text-white animate-pulse">
+                          {pendingCount}
+                        </span>
+                      )}
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                );
+              })}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

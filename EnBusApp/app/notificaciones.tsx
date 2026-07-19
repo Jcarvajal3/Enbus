@@ -1,7 +1,7 @@
-import { SafeAreaView, View, Text, Pressable, useCSSVariable, ScrollView } from '@/tw';
+import { SafeAreaView, View, Text } from '@/tw';
 import { useRouter } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, FlatList, ListRenderItem, RefreshControl } from 'react-native';
+import { useCallback, useMemo, useState, useEffect } from 'react';
+import { ActivityIndicator, FlatList, ListRenderItem, RefreshControl, StyleSheet } from 'react-native';
 import { CaretLeft, Bell, CheckSquare } from 'phosphor-react-native';
 import { supabase } from '@/src/utils/supabase';
 import { useAuth } from '@/src/contexts/AuthContext';
@@ -9,15 +9,63 @@ import { useRealtime } from '@/src/hooks/useRealtime';
 import { formatDate } from '@/src/utils/formatters';
 import * as Haptics from 'expo-haptics';
 import { useToast } from '@/src/components/Toast';
+import { PressableScale } from '@/src/components/PressableScale';
+import { StaggerItem } from '@/src/components/StaggerItem';
+import { PageTransition } from '@/src/components/PageTransition';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withRepeat,
+  withSequence,
+  withTiming,
+  Easing,
+} from 'react-native-reanimated';
+import { Colors, Typography, Radius, Shadows } from '@/src/theme';
+
+/** P2: Dot pulsante para notificaciones no leidas */
+function PulseDot() {
+  const scale = useSharedValue(1);
+  const opacity = useSharedValue(1);
+
+  useEffect(() => {
+    const ease = Easing.inOut(Easing.ease);
+    scale.value = withRepeat(
+      withSequence(
+        withTiming(1.4, { duration: 600, easing: ease }),
+        withTiming(1, { duration: 600, easing: ease })
+      ),
+      -1,
+      false
+    );
+    opacity.value = withRepeat(
+      withSequence(
+        withTiming(0.4, { duration: 600, easing: ease }),
+        withTiming(1, { duration: 600, easing: ease })
+      ),
+      -1,
+      false
+    );
+  }, []);
+
+  const animStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+    opacity: opacity.value,
+  }));
+
+  return (
+    <Animated.View
+      style={[
+        styles.pulseDot,
+        animStyle,
+      ]}
+    />
+  );
+}
 
 export default function NotificacionesScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const toast = useToast();
-
-  const mutedColor = useCSSVariable('--muted-foreground') as string || '#737373';
-  const foregroundColor = useCSSVariable('--foreground') as string || '#171717';
-  const primaryColor = useCSSVariable('--primary') as string || '#e2b714';
 
   const [refreshing, setRefreshing] = useState(false);
 
@@ -45,17 +93,12 @@ export default function NotificacionesScreen() {
       handleNavigate(notif);
       return;
     }
-
     try {
       const { error } = await supabase
         .from('notificaciones_usuario')
         .update({ leida: true })
         .eq('id', notif.id);
-      
       if (error) throw error;
-      
-      // La suscripción Realtime actualizará el estado local de forma automática.
-      // Pero hacemos navegación inmediata por UX.
       handleNavigate(notif);
     } catch (err: any) {
       console.error('Error marking notification as read:', err.message);
@@ -64,41 +107,23 @@ export default function NotificacionesScreen() {
 
   const handleNavigate = async (notif: any) => {
     if (!notif.recurso_tipo || !notif.recurso_id) return;
-
     if (notif.recurso_tipo === 'boleto') {
-      router.push({
-        pathname: '/boletos/[id]',
-        params: { id: notif.recurso_id }
-      });
+      router.push({ pathname: '/boletos/[id]', params: { id: notif.recurso_id } });
     } else if (notif.recurso_tipo === 'encomienda') {
       try {
-        // Consultar quién es el remitente para dirigir al flujo correcto
         const { data, error } = await supabase
           .from('encomiendas')
           .select('sender_id')
           .eq('id', notif.recurso_id)
           .single();
-        
         if (error) throw error;
-        
         if (data.sender_id === user?.id) {
-          router.push({
-            pathname: '/encomiendas/enviar/[id]',
-            params: { id: notif.recurso_id }
-          });
+          router.push({ pathname: '/encomiendas/enviar/[id]', params: { id: notif.recurso_id } });
         } else {
-          router.push({
-            pathname: '/encomiendas/recibir/[id]',
-            params: { id: notif.recurso_id }
-          });
+          router.push({ pathname: '/encomiendas/recibir/[id]', params: { id: notif.recurso_id } });
         }
       } catch (err) {
-        console.error('Error determining package route:', err);
-        // Fallback genérico a enviar si falla
-        router.push({
-          pathname: '/encomiendas/enviar/[id]',
-          params: { id: notif.recurso_id }
-        });
+        router.push({ pathname: '/encomiendas/enviar/[id]', params: { id: notif.recurso_id } });
       }
     }
   };
@@ -107,7 +132,6 @@ export default function NotificacionesScreen() {
     if (!user) return;
     const unread = (notificaciones ?? []).filter(n => !n.leida);
     if (unread.length === 0) return;
-
     try {
       setMarkingAll(true);
       const { error } = await supabase
@@ -115,15 +139,11 @@ export default function NotificacionesScreen() {
         .update({ leida: true })
         .eq('usuario_id', user.id)
         .eq('leida', false);
-
       if (error) throw error;
-
-      // Actualizar localmente de forma inmediata por UX
       setData(prev => prev.map(n => ({ ...n, leida: true })));
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       toast.show('success', 'Todas las notificaciones marcadas como leídas');
     } catch (err: any) {
-      console.error('Error marking all as read:', err.message);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       toast.show('error', 'No se pudieron actualizar las notificaciones.');
     } finally {
@@ -131,114 +151,229 @@ export default function NotificacionesScreen() {
     }
   };
 
-  // PERF-02: Memoize unread count — avoids recomputing on every render.
   const unreadCount = useMemo(
     () => (notificaciones ?? []).filter(n => !n.leida).length,
     [notificaciones]
   );
 
-  // PERF-01: Memoize renderItem for stable FlatList row references.
-  const renderItem = useCallback<ListRenderItem<any>>(({ item: notif }) => (
-    <Pressable
-      key={notif.id}
-      onPress={() => handleMarkAsRead(notif)}
-      className={`p-4 rounded-[14px] border flex-row items-start gap-3 bg-card mb-3 ${notif.leida ? 'border-border/50 opacity-75' : 'border-primary bg-primary/5 shadow-sm'}`}
-    >
-      <View className={`size-10 rounded-full items-center justify-center mt-0.5 ${notif.leida ? 'bg-secondary' : 'bg-primary/20'}`}>
-        <Bell weight={notif.leida ? 'regular' : 'fill'} color={notif.leida ? mutedColor : primaryColor} size={18} />
-      </View>
-      <View className="flex-1">
-        <View className="flex-row justify-between items-start gap-1">
-          <Text className={`text-sm text-foreground flex-1 leading-5 ${notif.leida ? 'font-medium' : 'font-bold'}`}>
-            {notif.titulo}
-          </Text>
-          {!notif.leida && (
-            <View className="size-2 rounded-full bg-primary mt-1.5" />
-          )}
+  const renderItem = useCallback<ListRenderItem<any>>(({ item: notif, index }) => (
+    <StaggerItem index={index} delayStep={40}>
+      <PressableScale
+        onPress={() => handleMarkAsRead(notif)}
+        scaleValue={0.98}
+        style={[
+          styles.notifCard,
+          notif.leida ? styles.notifRead : styles.notifUnread,
+        ]}
+      >
+        <View style={[
+          styles.iconCircle,
+          { backgroundColor: notif.leida ? Colors.surface : Colors.primaryLight },
+        ]}>
+          <Bell
+            weight={notif.leida ? 'regular' : 'fill'}
+            color={notif.leida ? Colors.mutedForeground : Colors.primary}
+            size={18}
+          />
         </View>
-        <Text className="text-xs text-muted-foreground mt-1 leading-4">
-          {notif.mensaje}
-        </Text>
-        <Text className="text-[10px] text-muted-foreground/80 mt-2 font-semibold">
-          {formatDate(notif.created_at)}
-        </Text>
-      </View>
-    </Pressable>
-  ), [mutedColor, primaryColor, handleMarkAsRead]);
+        <View style={{ flex: 1 }}>
+          <View style={styles.notifHeader}>
+            <Text style={[
+              styles.notifTitle,
+              { fontWeight: notif.leida ? Typography.weights.medium : Typography.weights.bold },
+            ]} numberOfLines={2}>
+              {notif.titulo}
+            </Text>
+            {!notif.leida && <PulseDot />}
+          </View>
+          <Text style={styles.notifMsg} numberOfLines={2}>
+            {notif.mensaje}
+          </Text>
+          <Text style={styles.notifDate}>
+            {formatDate(notif.created_at)}
+          </Text>
+        </View>
+      </PressableScale>
+    </StaggerItem>
+  ), [handleMarkAsRead]);
 
   const keyExtractor = useCallback((item: any) => item.id, []);
 
   const emptyComponent = useMemo(() => (
-    <View className="py-20 items-center justify-center gap-3">
-      <Bell color={mutedColor} size={48} weight="thin" />
-      <Text className="text-lg font-bold text-foreground">Sin notificaciones</Text>
-      <Text className="text-sm text-muted-foreground text-center leading-[22px] px-6">
+    <View style={styles.empty}>
+      <Bell color={Colors.mutedForeground} size={48} weight="thin" />
+      <Text style={styles.emptyTitle}>Sin notificaciones</Text>
+      <Text style={styles.emptyMsg}>
         Aquí aparecerán los cambios de estado de tus paquetes y viajes.
       </Text>
     </View>
-  ), [mutedColor]);
+  ), []);
 
   return (
     <SafeAreaView className="flex-1 bg-background">
-      {/* Header */}
-      <View className="px-6 pt-4 pb-4 bg-background flex-row justify-between items-center border-b border-border">
-        <View className="flex-row items-center gap-4">
-          <Pressable
-            onPress={() => router.back()}
-            className="size-10 bg-secondary rounded-full items-center justify-center"
-          >
-            <CaretLeft weight="bold" color={foregroundColor} size={22} />
-          </Pressable>
-          <View>
-            <Text className="font-heading text-xl text-foreground">Notificaciones</Text>
-            {unreadCount > 0 && (
-              <Text className="text-xs text-primary font-bold mt-0.5">{unreadCount} pendientes</Text>
-            )}
+      <PageTransition>
+        <View style={styles.header}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
+            <PressableScale
+              onPress={() => router.back()}
+              style={styles.iconBtn}
+            >
+              <CaretLeft weight="bold" color={Colors.foreground} size={22} />
+            </PressableScale>
+            <View>
+              <Text className="font-heading text-xl text-foreground" style={{ fontFamily: Typography.family }}>
+                Notificaciones
+              </Text>
+              {unreadCount > 0 && (
+                <Text style={{ fontFamily: Typography.family, fontSize: 11, color: Colors.primary, fontWeight: Typography.weights.bold, marginTop: 2 }}>
+                  {unreadCount} pendientes
+                </Text>
+              )}
+            </View>
           </View>
+
+          {unreadCount > 0 && (
+            <PressableScale
+              onPress={handleMarkAllAsRead}
+              disabled={markingAll}
+              style={styles.iconBtn}
+            >
+              {markingAll ? (
+                <ActivityIndicator size="small" color={Colors.primary} />
+              ) : (
+                <CheckSquare weight="bold" color={Colors.foreground} size={20} />
+              )}
+            </PressableScale>
+          )}
         </View>
 
-        {unreadCount > 0 && (
-          <Pressable
-            onPress={handleMarkAllAsRead}
-            disabled={markingAll}
-            className="size-10 bg-secondary rounded-full items-center justify-center"
-          >
-            {markingAll ? (
-              <ActivityIndicator size="small" color={primaryColor} />
-            ) : (
-              <CheckSquare weight="bold" color={foregroundColor} size={20} />
-            )}
-          </Pressable>
+        {loading ? (
+          <View style={{ paddingVertical: 80, alignItems: 'center' }}>
+            <ActivityIndicator size="large" color={Colors.primary} />
+          </View>
+        ) : (
+          <FlatList
+            data={notificaciones ?? []}
+            renderItem={renderItem}
+            keyExtractor={keyExtractor}
+            ListEmptyComponent={emptyComponent}
+            contentContainerStyle={{ padding: 24, paddingBottom: 80 }}
+            showsVerticalScrollIndicator={false}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                colors={[Colors.primary]}
+                tintColor={Colors.primary}
+              />
+            }
+            removeClippedSubviews={true}
+            maxToRenderPerBatch={15}
+            windowSize={5}
+            initialNumToRender={10}
+          />
         )}
-      </View>
-
-      {/* PERF-01: FlatList replaces ScrollView + .map() */}
-      {loading ? (
-        <View className="py-20 items-center">
-          <ActivityIndicator size="large" color={primaryColor} />
-        </View>
-      ) : (
-        <FlatList
-          data={notificaciones ?? []}
-          renderItem={renderItem}
-          keyExtractor={keyExtractor}
-          ListEmptyComponent={emptyComponent}
-          contentContainerStyle={{ padding: 24, paddingBottom: 80 }}
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              colors={[primaryColor]}
-              tintColor={primaryColor}
-            />
-          }
-          removeClippedSubviews={true}
-          maxToRenderPerBatch={15}
-          windowSize={5}
-          initialNumToRender={10}
-        />
-      )}
+      </PageTransition>
     </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  header: {
+    paddingHorizontal: 24,
+    paddingTop: 16,
+    paddingBottom: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+    backgroundColor: Colors.white,
+  },
+  iconBtn: {
+    width: 44,
+    height: 44,
+    backgroundColor: 'transparent',
+    borderRadius: Radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  notifCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    padding: 16,
+    borderRadius: Radius.md, // 16
+    marginBottom: 12,
+    ...Shadows.card,
+  },
+  notifRead: {
+    backgroundColor: Colors.white,
+    opacity: 0.8,
+  },
+  notifUnread: {
+    backgroundColor: Colors.surface, // warm beige (#F0EFEB)
+  },
+  iconCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: Radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 2,
+  },
+  notifHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 8,
+    marginBottom: 4,
+  },
+  notifTitle: {
+    fontFamily: Typography.family,
+    fontSize: 14,
+    color: Colors.foreground,
+    flex: 1,
+    lineHeight: 20,
+  },
+  notifMsg: {
+    fontFamily: Typography.family,
+    fontSize: 12,
+    color: Colors.mutedForeground,
+    lineHeight: 17,
+    marginBottom: 6,
+  },
+  notifDate: {
+    fontFamily: Typography.family,
+    fontSize: 10,
+    color: Colors.mutedForeground,
+    fontWeight: Typography.weights.semibold,
+  },
+  pulseDot: {
+    width: 8,
+    height: 8,
+    borderRadius: Radius.full,
+    backgroundColor: Colors.primary,
+    marginTop: 6,
+  },
+  empty: {
+    paddingVertical: 80,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+  },
+  emptyTitle: {
+    fontFamily: Typography.family,
+    fontSize: 18,
+    fontWeight: Typography.weights.bold,
+    color: Colors.foreground,
+  },
+  emptyMsg: {
+    fontFamily: Typography.family,
+    fontSize: 14,
+    color: Colors.mutedForeground,
+    textAlign: 'center',
+    lineHeight: 22,
+    paddingHorizontal: 24,
+  },
+});

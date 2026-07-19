@@ -1,5 +1,6 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { Colors, Typography, Spacing, Radius, Shadows } from '@/src/theme';
 
 interface Props {
   children: ReactNode;
@@ -53,7 +54,12 @@ export class ErrorBoundary extends Component<Props, State> {
               </View>
             )}
 
-            <Pressable onPress={this.handleReset} style={s.button}>
+            <Pressable
+              onPress={this.handleReset}
+              style={s.button}
+              accessibilityLabel="Reintentar"
+              accessibilityRole="button"
+            >
               <Text style={s.buttonText}>Reintentar</Text>
             </Pressable>
           </View>
@@ -68,85 +74,86 @@ export class ErrorBoundary extends Component<Props, State> {
 const s = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: Colors.surface,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 24,
+    padding: Spacing['2xl'],
   },
   card: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 14,
+    backgroundColor: Colors.white,
+    borderRadius: Radius.md,
     borderWidth: 1,
-    borderColor: '#E5E5E5',
-    padding: 24,
+    borderColor: Colors.border,
+    padding: Spacing['2xl'],
     width: '100%',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
+    ...Shadows.card,
   },
   badge: {
-    backgroundColor: '#FDF5D3',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 99,
-    marginBottom: 16,
+    backgroundColor: Colors.warningLight,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
+    borderRadius: Radius.full,
+    marginBottom: Spacing.lg,
   },
   badgeText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#D4A017',
+    fontFamily: Typography.family,
+    fontSize: Typography.sizes.xs,
+    fontWeight: Typography.weights.bold,
+    color: Colors.warning,
     letterSpacing: 0.5,
   },
   title: {
-    fontSize: 22,
-    fontFamily: 'Lora-Bold',
-    fontWeight: 'bold',
-    color: '#171717',
+    fontFamily: Typography.family,
+    fontSize: Typography.sizes['2xl'],
+    fontWeight: Typography.weights.bold,
+    color: Colors.foreground,
     textAlign: 'center',
-    marginBottom: 10,
+    marginBottom: Spacing.sm,
   },
   message: {
-    fontSize: 14,
-    color: '#737373',
+    fontFamily: Typography.family,
+    fontSize: Typography.sizes.sm,
+    fontWeight: Typography.weights.regular,
+    color: Colors.mutedForeground,
     textAlign: 'center',
     lineHeight: 20,
-    marginBottom: 24,
+    marginBottom: Spacing['2xl'],
   },
   debugContainer: {
-    backgroundColor: '#F4F4F5',
-    borderRadius: 8,
-    padding: 12,
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.sm,
+    padding: Spacing.md,
     width: '100%',
-    marginBottom: 24,
+    marginBottom: Spacing['2xl'],
     borderWidth: 1,
-    borderColor: '#E4E4E7',
+    borderColor: Colors.border,
   },
   debugTitle: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#71717A',
-    marginBottom: 4,
+    fontFamily: Typography.family,
+    fontSize: Typography.sizes.xs,
+    fontWeight: Typography.weights.bold,
+    color: Colors.mutedForeground,
+    marginBottom: Spacing.xs,
     textTransform: 'uppercase',
   },
   debugText: {
-    fontSize: 12,
-    fontFamily: 'monospace',
-    color: '#EF4444',
+    fontFamily: Typography.family,
+    fontSize: Typography.sizes.xs,
+    color: Colors.destructive,
   },
   button: {
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#E2B714',
+    height: Spacing['5xl'],
+    borderRadius: Radius.full,
+    backgroundColor: Colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 32,
+    paddingHorizontal: Spacing['3xl'],
   },
   buttonText: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#6B4A1A',
+    fontFamily: Typography.family,
+    fontSize: Typography.sizes.base,
+    fontWeight: Typography.weights.bold,
+    color: Colors.primaryForeground,
   },
 });

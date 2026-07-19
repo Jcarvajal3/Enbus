@@ -6,6 +6,7 @@ import { PopularRoutes } from "@/components/popular-routes"
 import { CalculatorCTA } from "@/components/calculator-cta"
 import { Testimonials } from "@/components/testimonials"
 import { AppDownload } from "@/components/app-download"
+import { CooperativaCTA } from "@/components/cooperativa-cta"
 import { Footer } from "@/components/footer"
 
 export default function Home() {
@@ -20,6 +21,7 @@ export default function Home() {
         <CalculatorCTA />
         <Testimonials />
         <AppDownload />
+        <CooperativaCTA />
       </main>
       <Footer />
     </>

@@ -6,6 +6,7 @@ import {
 import { Link as RouterLink } from "expo-router";
 import Animated from "react-native-reanimated";
 import React from "react";
+import { Typography } from "@/src/theme";
 import {
   View as RNView,
   Text as RNText,
@@ -44,20 +45,22 @@ View.displayName = "CSS(View)";
 
 // --- Font Family Resolver ---
 // CSS variables cannot drive `fontFamily` on native components.
-// We inspect className and inject the correct Lora variant as a native style prop.
+// We inspect className and inject the correct Roobert variant as a native style prop.
+// Roobert is a variable font — we set fontFamily + fontWeight to select axis instances.
 // IMPORTANT: More specific keys must come first to avoid false substring matches.
-// e.g. 'font-heading-semi' must precede 'font-heading' so it is checked first.
-const FONT_MAP: [string, string][] = [
-  ['font-heading-semi', 'Lora-SemiBold'],
-  ['font-heading', 'Lora-Bold'],
+const FONT_MAP: [string, string, string][] = [
+  // [css-class, fontFamily, fontWeight]
+  // Typography.family is the single source of truth — never hardcode the font name here.
+  ['font-heading-semi', Typography.family, Typography.weights.semibold],
+  ['font-heading',      Typography.family, Typography.weights.bold],
+  ['font-body',         Typography.family, Typography.weights.regular],
 ];
 
-function resolveFont(className?: string): string | undefined {
+function resolveFont(className?: string): { fontFamily: string; fontWeight: string } | undefined {
   if (!className) return undefined;
-  // Split by whitespace to get individual class tokens for exact matching.
   const classes = className.split(/\s+/);
-  for (const [cls, family] of FONT_MAP) {
-    if (classes.includes(cls)) return family;
+  for (const [cls, family, weight] of FONT_MAP) {
+    if (classes.includes(cls)) return { fontFamily: family, fontWeight: weight };
   }
   return undefined;
 }
@@ -65,8 +68,8 @@ function resolveFont(className?: string): string | undefined {
 export const Text = (
   props: React.ComponentProps<typeof RNText> & { className?: string }
 ) => {
-  const loraFamily = resolveFont(props.className);
-  const fontStyle = loraFamily ? [{ fontFamily: loraFamily }] : [];
+  const fontResolved = resolveFont(props.className);
+  const fontStyle = fontResolved ? [fontResolved] : [];
   const mergedStyle = [...fontStyle, props.style].filter(Boolean);
   return useCssElement(
     RNText,
@@ -99,8 +102,8 @@ Pressable.displayName = "CSS(Pressable)";
 export const TextInput = (
   props: React.ComponentProps<typeof RNTextInput> & { className?: string }
 ) => {
-  const loraFamily = resolveFont(props.className);
-  const fontStyle = loraFamily ? [{ fontFamily: loraFamily }] : [];
+  const fontResolved = resolveFont(props.className);
+  const fontStyle = fontResolved ? [fontResolved] : [];
   const mergedStyle = [...fontStyle, props.style].filter(Boolean);
   return useCssElement(RNTextInput, { ...props, style: mergedStyle }, { className: "style" });
 };

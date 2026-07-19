@@ -40,6 +40,7 @@ export async function fetchDashboardKPIs(): Promise<DashboardKPIs> {
     pagosComisionesRes,
     cooperativasRes,
     alertasRes,
+    solicitudesRes,
   ] = await Promise.all([
     // 1. Encomiendas recibidas hoy
     supabase
@@ -84,6 +85,12 @@ export async function fetchDashboardKPIs(): Promise<DashboardKPIs> {
       .select("id", { count: "exact", head: true })
       .eq("tipo", "ALERTA_AMARILLA")
       .eq("estado", "ABIERTA"),
+
+    // 7. Solicitudes pendientes
+    supabase
+      .from("cooperativas")
+      .select("id", { count: "exact", head: true })
+      .eq("estado", "PENDIENTE"),
   ]);
 
   // Log any Supabase errors without crashing the dashboard
@@ -93,6 +100,7 @@ export async function fetchDashboardKPIs(): Promise<DashboardKPIs> {
   if (pagosComisionesRes.error) console.error("[fetchDashboardKPIs] pagosComisiones:", pagosComisionesRes.error.message);
   if (cooperativasRes.error) console.error("[fetchDashboardKPIs] cooperativas:", cooperativasRes.error.message);
   if (alertasRes.error) console.error("[fetchDashboardKPIs] alertas:", alertasRes.error.message);
+  if (solicitudesRes.error) console.error("[fetchDashboardKPIs] solicitudes:", solicitudesRes.error.message);
 
   const encomiendas_hoy = encomiendasRes.count ?? 0;
   const boletos_hoy = boletosRes.count ?? 0;
@@ -107,6 +115,7 @@ export async function fetchDashboardKPIs(): Promise<DashboardKPIs> {
 
   const cooperativas_activas = cooperativasRes.count ?? 0;
   const alertas_amarillas_abiertas = alertasRes.count ?? 0;
+  const solicitudes_pendientes = solicitudesRes.count ?? 0;
 
   return {
     encomiendas_hoy,
@@ -115,6 +124,7 @@ export async function fetchDashboardKPIs(): Promise<DashboardKPIs> {
     comisiones_estimadas_hoy,
     cooperativas_activas,
     alertas_amarillas_abiertas,
+    solicitudes_pendientes,
   };
 }
 

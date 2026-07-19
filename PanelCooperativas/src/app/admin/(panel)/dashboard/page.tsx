@@ -1,5 +1,5 @@
 import { PageHeader } from "@/components/page-header";
-import { Package, Ticket, CurrencyDollar, Receipt, Buildings, Warning } from "@phosphor-icons/react/dist/ssr";
+import { Package, Ticket, CurrencyDollar, Receipt, Buildings, Warning, ClipboardText } from "@phosphor-icons/react/dist/ssr";
 import { formatCurrency } from "@/lib/utils";
 import {
   fetchDashboardKPIs,
@@ -41,7 +41,7 @@ export default async function AdminDashboardPage() {
       />
 
       {/* Grid of KPIs */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-4">
         <KPICard
           title="Encomiendas Hoy"
           value={kpis.encomiendas_hoy}
@@ -71,6 +71,13 @@ export default async function AdminDashboardPage() {
           value={kpis.cooperativas_activas}
           icon={Buildings}
           description="Total activas"
+        />
+        <KPICard
+          title="Solicitudes Reg."
+          value={kpis.solicitudes_pendientes}
+          icon={ClipboardText}
+          variant={kpis.solicitudes_pendientes > 0 ? "warning" : "default"}
+          description="Pendientes"
         />
         <KPICard
           title="Alertas Amarillas"

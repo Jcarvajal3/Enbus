@@ -1,13 +1,15 @@
-import { SafeAreaView, View, Text, Pressable, useCSSVariable } from '@/tw';
+import { SafeAreaView, View, Text } from '@/tw';
 import { useState } from 'react';
 import { TextInput } from 'react-native';
 import { useRouter } from 'expo-router';
-import { CaretLeft } from 'phosphor-react-native';
+import { ArrowLeft } from 'phosphor-react-native';
 import { supabase } from '@/src/utils/supabase';
 import { Spinner } from '@/src/components/Spinner';
 import * as Haptics from 'expo-haptics';
 import { useToast } from '@/src/components/Toast';
 import * as Linking from 'expo-linking';
+import { PressableScale } from '@/src/components/PressableScale';
+import { Colors, Typography, Radius, Shadows } from '@/src/theme';
 
 export default function RecuperarPasswordScreen() {
   const router = useRouter();
@@ -15,8 +17,7 @@ export default function RecuperarPasswordScreen() {
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const primaryColor = useCSSVariable('--primary') as string || '#e2b714';
-  const foregroundColor = useCSSVariable('--foreground') as string || '#171717';
+  const foregroundColor = Colors.foreground;
 
   async function handleResetPassword() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -24,18 +25,11 @@ export default function RecuperarPasswordScreen() {
       toast.show('error', 'Por favor ingresa tu correo electrónico');
       return;
     }
-
     try {
       setLoading(true);
-      // Usar Linking.createURL para generar el deep-link correcto según el
-      // scheme registrado en app.json ('enbus://') — tanto en dev como en producción.
       const redirectTo = Linking.createURL('recuperar');
-      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-        redirectTo,
-      });
-
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo });
       if (error) throw error;
-
       toast.show('success', 'Se ha enviado un enlace para restablecer tu contraseña.');
       router.back();
     } catch (err: any) {
@@ -47,50 +41,107 @@ export default function RecuperarPasswordScreen() {
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-background">
-      <View className="px-6 pt-4 pb-4 flex-row items-center border-b border-border gap-4">
-        <Pressable
+    <SafeAreaView style={{ backgroundColor: Colors.background }} className="flex-1">
+      <View style={{ paddingHorizontal: 24, paddingTop: 16, paddingBottom: 16, flexDirection: 'row', alignItems: 'center', gap: 16 }}>
+        <PressableScale
           onPress={() => router.back()}
-          className="size-10 bg-secondary rounded-full items-center justify-center"
+          style={{ width: 40, height: 40, alignItems: 'center', justifyContent: 'center', backgroundColor: 'transparent', borderRadius: Radius.full }}
         >
-          <CaretLeft weight="bold" color={foregroundColor} size={22} />
-        </Pressable>
-        <Text className="font-heading text-xl text-foreground">Recuperar Contraseña</Text>
+          <ArrowLeft weight="bold" color={foregroundColor} size={22} />
+        </PressableScale>
+        <Text
+          style={{
+            fontFamily: Typography.family,
+            fontWeight: Typography.weights.bold,
+            color: Colors.foreground,
+          }}
+          className="text-xl"
+        >
+          Recuperar Contraseña
+        </Text>
       </View>
 
       <View className="flex-1 justify-center px-6 pb-20">
-        <View className="bg-card border border-border rounded-[14px] p-5 shadow-sm">
-          <Text className="text-sm text-muted-foreground mb-6 leading-5">
-            Ingresa el correo electrónico asociado a tu cuenta de EnBus. Te enviaremos un enlace para que puedas restablecer tu contraseña.
+        <View
+          style={{
+            backgroundColor: Colors.surface,
+            borderRadius: Radius.xl,
+            padding: 20,
+          }}
+        >
+          <Text
+            style={{
+              fontFamily: Typography.family,
+              fontWeight: Typography.weights.regular,
+              color: Colors.mutedForeground,
+            }}
+            className="text-sm mb-6 leading-5"
+          >
+            Ingresa el correo electrónico asociado a tu cuenta de EnBus. Te enviaremos un enlace
+            para que puedas restablecer tu contraseña.
           </Text>
 
           <View className="mb-6">
-            <Text className="text-[13px] font-semibold text-foreground mb-1.5 ml-0.5">Correo Electrónico</Text>
+            <Text
+              style={{
+                fontFamily: Typography.family,
+                fontWeight: Typography.weights.semibold,
+                color: Colors.foreground,
+              }}
+              className="text-[13px] mb-1.5 ml-0.5"
+            >
+              Correo Electrónico
+            </Text>
             <TextInput
               placeholder="tu@correo.com"
-              placeholderTextColor="#a1a1aa"
+              placeholderTextColor={Colors.mutedForeground}
               keyboardType="email-address"
               autoCapitalize="none"
               value={email}
               onChangeText={setEmail}
               editable={!loading}
-              className="h-12 border border-input rounded-[10px] bg-background px-3.5 text-[15px] text-foreground"
+              style={{
+                height: 48,
+                borderRadius: Radius.full,
+                backgroundColor: Colors.white,
+                paddingHorizontal: 20,
+                fontSize: 15,
+                color: Colors.foreground,
+                fontFamily: Typography.family,
+                borderWidth: 0,
+              }}
             />
           </View>
 
-          <Pressable
+          <PressableScale
             onPress={handleResetPassword}
             disabled={loading}
-            className={`h-[52px] rounded-full items-center justify-center bg-primary ${loading ? 'opacity-60' : ''}`}
+            haptic
+            hapticType="medium"
+            style={{
+              height: 52,
+              borderRadius: Radius.full,
+              backgroundColor: Colors.accent,
+              alignItems: 'center',
+              justifyContent: 'center',
+              opacity: loading ? 0.6 : 1,
+            }}
           >
             {loading ? (
               <Spinner />
             ) : (
-              <Text className="text-[16px] font-bold text-primary-foreground">
+              <Text
+                style={{
+                  fontFamily: Typography.family,
+                  fontWeight: Typography.weights.bold,
+                  color: Colors.accentForeground,
+                }}
+                className="text-[16px]"
+              >
                 Enviar Enlace
               </Text>
             )}
-          </Pressable>
+          </PressableScale>
         </View>
       </View>
     </SafeAreaView>

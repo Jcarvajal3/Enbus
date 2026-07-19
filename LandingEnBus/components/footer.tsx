@@ -7,6 +7,7 @@ import {
 const companyLinks = [
   { label: "Sobre nosotros", href: "#" },
   { label: "Contacto", href: "#" },
+  { label: "Registra tu Cooperativa", href: "/registro-cooperativa" },
   { label: "Cooperativas afiliadas", href: "#" },
   { label: "Blog", href: "#" },
 ]

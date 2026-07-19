@@ -1,91 +1,193 @@
 import React, { memo } from 'react';
-import { View, Text, Pressable } from '@/tw';
+import { StyleSheet } from 'react-native';
+import { View, Text } from '@/tw';
 import { Package, Ticket } from 'phosphor-react-native';
+import { PressableScale } from './PressableScale';
+import { Colors, Typography, Radius, Shadows, Spacing } from '@/src/theme';
 
 export type TransactionType = 'encomienda_envio' | 'encomienda_recepcion' | 'boleto';
 
 interface TransactionCardProps {
   type: TransactionType;
-  id: string; // Tracking ID o código boleto
+  id: string;
   estado: string;
-  titulo: string; // Nombre destinatario / Remitente / Ruta
-  subtitulo: string; // Fecha
+  titulo: string;
+  subtitulo: string;
   onPress?: () => void;
 }
 
-// Memoize at module level — this never changes, so no need to recreate on each render.
 const getStatusBadge = (type: TransactionType, estado: string) => {
-  let color = 'bg-muted';
-  let text = 'text-muted-foreground';
+  let bgColor = 'rgba(138, 138, 138, 0.12)';
+  let textColor: string = Colors.mutedForeground;
 
   if (type === 'boleto') {
     switch (estado) {
-      case 'RESERVADO': color = 'bg-warning/20'; text = 'text-warning'; break;
-      case 'PAGADO': color = 'bg-success/20'; text = 'text-success'; break;
-      case 'USADO': color = 'bg-muted'; text = 'text-muted-foreground'; break;
-      case 'CANCELADO': color = 'bg-destructive/20'; text = 'text-destructive'; break;
-      case 'EXPIRADO': color = 'bg-muted'; text = 'text-muted-foreground'; break;
+      case 'RESERVADO':
+        bgColor = Colors.warningLight;
+        textColor = Colors.warning;
+        break;
+      case 'PAGADO':
+        bgColor = Colors.successLight;
+        textColor = Colors.success;
+        break;
+      case 'USADO':
+      case 'CANCELADO':
+      case 'EXPIRADO':
+        bgColor = 'rgba(138, 138, 138, 0.12)';
+        textColor = Colors.mutedForeground;
+        break;
     }
   } else {
-    // encomienda
     switch (estado) {
-      case 'PENDIENTE_DE_ESCANEO': color = 'bg-warning/20'; text = 'text-warning'; break;
-      case 'EN_RECEPCION': color = 'bg-warning/20'; text = 'text-warning'; break;
-      case 'POR_PAGAR': color = 'bg-destructive/20'; text = 'text-destructive'; break;
-      case 'PAGADA': color = 'bg-info/20'; text = 'text-info'; break;
-      case 'EN_TRANSITO': color = 'bg-info/20'; text = 'text-info'; break;
-      case 'EN_OFICINA_DESTINO': color = 'bg-success/20'; text = 'text-success'; break;
-      case 'ENTREGADA': color = 'bg-success/20'; text = 'text-success'; break;
-      case 'CANCELADA': color = 'bg-muted'; text = 'text-muted-foreground'; break;
-      case 'DEVUELTA': color = 'bg-destructive/20'; text = 'text-destructive'; break;
+      case 'PENDIENTE_DE_ESCANEO':
+      case 'EN_RECEPCION':
+        bgColor = Colors.warningLight;
+        textColor = Colors.warning;
+        break;
+      case 'POR_PAGAR':
+      case 'DEVUELTA':
+        bgColor = Colors.destructiveLight;
+        textColor = Colors.destructive;
+        break;
+      case 'PAGADA':
+      case 'EN_TRANSITO':
+        bgColor = Colors.infoLight;
+        textColor = Colors.info;
+        break;
+      case 'EN_OFICINA_DESTINO':
+      case 'ENTREGADA':
+        bgColor = Colors.successLight;
+        textColor = Colors.success;
+        break;
+      case 'CANCELADA':
+        bgColor = 'rgba(138, 138, 138, 0.12)';
+        textColor = Colors.mutedForeground;
+        break;
     }
   }
 
   return (
-    <View className={`px-2.5 py-1 rounded-full ${color}`}>
-      <Text className={`text-[10px] font-bold ${text}`}>
+    <View style={[styles.badge, { backgroundColor: bgColor }]}>
+      <Text style={[styles.badgeText, { color: textColor }]}>
         {estado.replace(/_/g, ' ')}
       </Text>
     </View>
   );
 };
 
-// PERF-07: Wrapped in React.memo so that FlatList / list screens only re-render
-// individual cards when their props actually change (e.g. estado update via
-// Realtime), not when the parent re-renders for unrelated state changes.
 export const TransactionCard = memo(({ type, id, estado, titulo, subtitulo, onPress }: TransactionCardProps) => {
-  const isBoleto = type === 'boleto';
-  const Icon = isBoleto ? Ticket : Package;
+  let pillBg: string = Colors.accentLight;
+  let pillTextColor: string = Colors.accent;
+  let pillLetter = 'B';
+
+  if (type === 'encomienda_envio') {
+    pillBg = Colors.secondaryLight;
+    pillTextColor = Colors.secondary;
+    pillLetter = 'E';
+  } else if (type === 'encomienda_recepcion') {
+    pillBg = Colors.successLight;
+    pillTextColor = Colors.success;
+    pillLetter = 'R';
+  }
 
   return (
-    <Pressable
+    <PressableScale
       onPress={onPress}
-      className="bg-card border border-border rounded-[14px] p-4 w-full flex-col justify-between"
+      haptic
+      hapticType="selection"
+      style={styles.cardContainer}
+      accessibilityRole="button"
+      accessibilityLabel={`Tarjeta de transacción: ${titulo}. Estado: ${estado.replace(/_/g, ' ')}`}
     >
-      <View className="flex-row justify-between items-start mb-4">
-        <View className="flex-row items-center gap-2 flex-shrink">
-          <View className={`size-10 rounded-full items-center justify-center ${isBoleto ? 'bg-primary/20' : 'bg-info/10'}`}>
-            <Icon color={isBoleto ? '#6b4a1a' : '#3b82f6'} weight="fill" size={20} />
-          </View>
-          <View className="flex-1 ml-2">
-            <Text className="text-sm font-black text-foreground mb-1" numberOfLines={1}>
-              {id}
-            </Text>
+      <View style={styles.card}>
+        <View style={styles.leftContent}>
+          <View style={styles.badgeRow}>
             {getStatusBadge(type, estado)}
+            <Text style={styles.idText}>{id}</Text>
           </View>
+          <Text style={styles.titulo} numberOfLines={2}>
+            {titulo}
+          </Text>
+          <Text style={styles.subtitulo} numberOfLines={1}>
+            {subtitulo}
+          </Text>
+        </View>
+        <View style={[styles.rightPill, { backgroundColor: pillBg }]}>
+          <Text style={[styles.rightPillText, { color: pillTextColor }]}>
+            {pillLetter}
+          </Text>
         </View>
       </View>
-
-      <View>
-        <Text className="text-base font-bold text-foreground mb-1" numberOfLines={1}>
-          {titulo}
-        </Text>
-        <Text className="text-xs font-semibold text-muted-foreground" numberOfLines={1}>
-          {subtitulo}
-        </Text>
-      </View>
-    </Pressable>
+    </PressableScale>
   );
 });
 
 TransactionCard.displayName = 'TransactionCard';
+
+const styles = StyleSheet.create({
+  cardContainer: {
+    marginBottom: Spacing.md + 2,
+  },
+  card: {
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.xl,
+    padding: Spacing.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  leftContent: {
+    flex: 1,
+    justifyContent: 'space-between',
+  },
+  badgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  idText: {
+    fontSize: Typography.sizes.xs - 1,
+    fontFamily: Typography.family,
+    fontWeight: Typography.weights.bold,
+    color: Colors.mutedForeground,
+    textTransform: 'uppercase',
+  },
+  badge: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: Spacing.sm + 2,
+    paddingVertical: Spacing.xs - 1,
+    borderRadius: Radius.full,
+  },
+  badgeText: {
+    fontSize: Typography.sizes.xs - 2,
+    fontFamily: Typography.family,
+    fontWeight: Typography.weights.bold,
+    letterSpacing: 0.2,
+    textTransform: 'uppercase',
+  },
+  titulo: {
+    fontSize: Typography.sizes.lg - 1,
+    fontFamily: Typography.family,
+    fontWeight: Typography.weights.bold,
+    color: Colors.foreground,
+    marginTop: Spacing.sm + 2,
+    marginBottom: Spacing.sm,
+  },
+  subtitulo: {
+    fontSize: Typography.sizes.sm - 1,
+    fontFamily: Typography.family,
+    color: Colors.mutedForeground,
+  },
+  rightPill: {
+    width: 50,
+    height: 80,
+    borderRadius: Radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: Spacing.lg,
+  },
+  rightPillText: {
+    fontSize: Typography.sizes['2xl'],
+    fontFamily: Typography.family,
+    fontWeight: Typography.weights.bold,
+  },
+});

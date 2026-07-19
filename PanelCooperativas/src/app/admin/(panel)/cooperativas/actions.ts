@@ -267,6 +267,7 @@ export async function changeCooperativaEstado(id: string, nuevoEstado: EstadoCoo
 
     // Explicit allowlist of valid state transitions
     const transicionesPermitidas: Record<string, EstadoCooperativa[]> = {
+      PENDIENTE: ["ACTIVA", "DESACTIVADA"],
       ACTIVA: ["SUSPENDIDA", "DESACTIVADA"],
       SUSPENDIDA: ["ACTIVA", "DESACTIVADA"],
       DESACTIVADA: [], // terminal state — no transitions allowed

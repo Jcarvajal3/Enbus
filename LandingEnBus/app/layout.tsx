@@ -1,10 +1,10 @@
 import type { Metadata } from "next"
-import { Lora } from "next/font/google"
+import localFont from "next/font/local"
 import "./globals.css"
 
-const lora = Lora({
-  subsets: ["latin"],
-  variable: "--font-lora",
+const roobert = localFont({
+  src: "../public/fonts/RoobertVF.ttf",
+  variable: "--font-roobert",
   display: "swap",
 })
 
@@ -42,7 +42,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="es" className={`${lora.variable} font-serif antialiased`}>
+    <html lang="es" className={`${roobert.variable} font-sans antialiased`}>
       <body>{children}</body>
     </html>
   )

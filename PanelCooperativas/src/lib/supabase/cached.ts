@@ -13,7 +13,7 @@ export const getUserProfile = cache(async () => {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("id, role, nombre_completo, cooperativa_id, cooperativas(nombre)")
+    .select("id, role, nombre_completo, cooperativa_id, cooperativas(nombre, estado)")
     .eq("id", session.user.id)
     .single();
 
@@ -26,5 +26,7 @@ export const getUserProfile = cache(async () => {
     cooperativa_id: profile.cooperativa_id ?? null,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     cooperativa_nombre: (profile.cooperativas as any)?.nombre ?? null,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    cooperativa_estado: (profile.cooperativas as any)?.estado ?? null,
   };
 });

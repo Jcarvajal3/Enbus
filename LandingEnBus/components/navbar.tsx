@@ -67,6 +67,12 @@ export function Navbar() {
         {/* Desktop actions */}
         <div className="hidden items-center gap-3 lg:flex">
           <a
+            href="/registro-cooperativa"
+            className="text-sm font-medium text-foreground/60 transition-colors hover:text-foreground"
+          >
+            Registrar Cooperativa
+          </a>
+          <a
             href={process.env.NEXT_PUBLIC_COOPERATIVAS_URL || "http://localhost:3001"}
             className="text-sm font-medium text-foreground/60 transition-colors hover:text-foreground"
           >
@@ -114,6 +120,13 @@ export function Navbar() {
               >
                 Calcular Envio
               </Button>
+              <a
+                href="/registro-cooperativa"
+                className="text-center text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+                onClick={() => setOpen(false)}
+              >
+                Registrar Cooperativa
+              </a>
               <a
                 href={process.env.NEXT_PUBLIC_COOPERATIVAS_URL || "http://localhost:3001"}
                 className="text-center text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"

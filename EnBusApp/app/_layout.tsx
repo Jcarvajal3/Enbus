@@ -3,39 +3,104 @@ import { Stack, useRouter, useSegments } from "expo-router";
 import { AuthProvider, useAuth } from "@/src/contexts/AuthContext";
 import { useEffect } from "react";
 import { View, Text } from "@/tw";
+import { StyleSheet } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
-import { useFonts, Lora_600SemiBold, Lora_700Bold } from '@expo-google-fonts/lora';
+import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useToast } from "@/src/components/Toast";
 import { ErrorBoundary } from "@/src/components/ErrorBoundary";
 import { ToastProvider } from "@/src/components/Toast";
 import { usePushNotifications } from "@/src/hooks/usePushNotifications";
+import { Colors, Typography } from "@/src/theme";
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withRepeat,
+  withSequence,
+  withTiming,
+  Easing,
+} from 'react-native-reanimated';
 
 SplashScreen.preventAutoHideAsync();
+
+/** Pantalla de carga animada con branding actualizado */
+function LoadingScreen() {
+  const opacity = useSharedValue(0.6);
+  const scale = useSharedValue(0.95);
+
+  useEffect(() => {
+    const easeInOut = Easing.inOut(Easing.ease);
+    opacity.value = withRepeat(
+      withSequence(
+        withTiming(1, { duration: 800, easing: easeInOut }),
+        withTiming(0.6, { duration: 800, easing: easeInOut })
+      ),
+      -1,
+      false
+    );
+    scale.value = withRepeat(
+      withSequence(
+        withTiming(1.04, { duration: 800, easing: easeInOut }),
+        withTiming(0.95, { duration: 800, easing: easeInOut })
+      ),
+      -1,
+      false
+    );
+  }, []);
+
+  const animStyle = useAnimatedStyle(() => ({
+    opacity: opacity.value,
+    transform: [{ scale: scale.value }],
+  }));
+
+  return (
+    <View style={ls.container}>
+      <Animated.View style={[ls.logoBox, animStyle]}>
+        <Text style={ls.logoText}>EB</Text>
+      </Animated.View>
+    </View>
+  );
+}
+
+const ls = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: Colors.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  logoBox: {
+    width: 72,
+    height: 72,
+    borderRadius: 22,
+    backgroundColor: Colors.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  logoText: {
+    fontSize: 28,
+    fontFamily: Typography.family,
+    fontWeight: Typography.weights.bold,
+    color: Colors.primary,
+  },
+});
 
 function RootLayoutNav() {
   const { session, initialized, isOffline } = useAuth();
   const segments = useSegments();
   const router = useRouter();
-  // PERF-05: Extract segments[0] — useSegments() returns a new array every render.
-  // Using the full array as a useEffect dependency causes the routing guard to fire
-  // on every navigation event even when auth state hasn't changed.
   const firstSegment = segments[0];
 
   const toast = useToast();
 
-  // Suscribirse a notificaciones push y manejar eventos de primer plano
   usePushNotifications(session?.user?.id, {
-    // Notificación recibida mientras la app está ACTIVA: mostrar Toast personalizado
-    // en lugar de depender solo de la alerta del sistema (que puede ser ignorada).
     onNotificationReceived: (notification) => {
       const title = notification.request.content.title ?? 'Notificación';
       const body = notification.request.content.body ?? '';
       const message = body ? `${title}: ${body}` : title;
       toast.show('info', message);
     },
-    // Usuario tocó la notificación: navegar a la pantalla de notificaciones
     onNotificationResponse: () => {
       router.push('/notificaciones');
     },
@@ -43,56 +108,50 @@ function RootLayoutNav() {
 
   useEffect(() => {
     if (!initialized) return;
-
-    // Verificar si estamos dentro del grupo de rutas de autenticación
     const inAuthGroup = firstSegment === '(auth)';
-
     if (!session && !inAuthGroup) {
-      // Si no hay sesión iniciada y no estamos en Login, obligar a ir al Login.
       router.replace('/(auth)/login');
     } else if (session && inAuthGroup) {
-      // Si ya hay sesión iniciada y estamos en Login, mandar a Home.
       router.replace('/(tabs)');
     }
   }, [session, initialized, firstSegment]);
 
   if (!initialized) {
-    return (
-      <View className="flex-1 bg-background" />
-    );
+    return <LoadingScreen />;
   }
 
   return (
     <>
-      {/* Banner offline — no bloquea la UI, solo informa */}
       {isOffline && (
         <View style={{
-          backgroundColor: '#f59e0b',
+          backgroundColor: Colors.warning,
           paddingVertical: 6,
           paddingHorizontal: 16,
           alignItems: 'center',
         }}>
-          <Text style={{ color: '#1c1917', fontSize: 12, fontWeight: '700' }}>
+          <Text style={{ color: Colors.foreground, fontSize: 12, fontWeight: '700', fontFamily: Typography.family }}>
             Sin conexión — mostrando datos guardados
           </Text>
         </View>
       )}
-      <Stack screenOptions={{ headerShown: false }}>
+      <Stack
+        screenOptions={{
+          headerShown: false,
+          animation: 'slide_from_right',
+        }}
+      >
         <Stack.Screen name="(auth)" options={{ headerShown: false, animation: 'fade' }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false, animation: 'fade' }} />
-        <Stack.Screen name="perfil" options={{ headerShown: false }} />
-        <Stack.Screen name="notificaciones" options={{ headerShown: false }} />
+        <Stack.Screen name="perfil" options={{ headerShown: false, animation: 'slide_from_bottom' }} />
+        <Stack.Screen name="notificaciones" options={{ headerShown: false, animation: 'slide_from_bottom' }} />
       </Stack>
     </>
   );
 }
 
-
-
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({
-    'Lora-SemiBold': Lora_600SemiBold,
-    'Lora-Bold': Lora_700Bold,
+    'Roobert': require('../assets/fonts/Roobert.ttf'),
   });
 
   useEffect(() => {

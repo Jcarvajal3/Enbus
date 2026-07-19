@@ -1,10 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useRouter } from 'expo-router';
-import { SafeAreaView, ScrollView, View, Text, Pressable, useCSSVariable } from '@/tw';
-import { StyleSheet, Image } from 'react-native';
-import { CaretLeft, Check, Package, Warning, Star, Camera, Image as ImageIcon } from 'phosphor-react-native';
+import { useRouter, useLocalSearchParams } from 'expo-router';
+import { SafeAreaView, ScrollView, View, Pressable } from '@/tw';
+import { StyleSheet, Image, TextInput as RNTextInput } from 'react-native';
+import { ArrowLeft, Check, Package, Warning, Star, Camera, Image as ImageIcon, MapPin } from 'phosphor-react-native';
 import { LocationSelector } from '@/src/components/LocationSelector';
-import { InputField } from '@/src/components/InputField';
 import { Localidad, normalizeCityForDb } from '@/src/utils/venezuela';
 import { supabase } from '@/src/utils/supabase';
 import { useAuth } from '@/src/contexts/AuthContext';
@@ -14,18 +13,110 @@ import * as Haptics from 'expo-haptics';
 import { useToast } from '@/src/components/Toast';
 import { uploadEvidencePhoto } from '@/src/utils/storage';
 import { sanitizeText, validatePhone, validateCedula, validatePeso, validateMonto, validateMinLength } from '@/src/utils/validation';
+import { Colors, Typography, Radius, Shadows } from '@/src/theme';
+import { Text as TWText } from '@/tw';
+
+// ─── Local Customized Wrappers to apply brand manual ───
+
+// Ensure all texts use 'fontFamily: Typography.family'
+const Text = ({ style, ...props }: React.ComponentProps<typeof TWText>) => (
+  <TWText
+    {...props}
+    style={[{ fontFamily: Typography.family }, style]}
+  />
+);
+
+interface BrandInputProps {
+  label?: string;
+  placeholder?: string;
+  value?: string;
+  onChangeText?: (text: string) => void;
+  keyboardType?: 'default' | 'number-pad' | 'phone-pad' | 'decimal-pad';
+  containerStyle?: any;
+  multiline?: boolean;
+  numberOfLines?: number;
+}
+
+// Form fields and inputs: use white background, full corner radius, and no borders
+function BrandInput({
+  label,
+  placeholder,
+  value,
+  onChangeText,
+  keyboardType,
+  containerStyle,
+  multiline,
+  numberOfLines,
+}: BrandInputProps) {
+  return (
+    <View style={[{ marginBottom: 16 }, containerStyle]}>
+      {label && (
+        <Text
+          style={{
+            fontSize: 12,
+            fontWeight: '700',
+            color: Colors.mutedForeground,
+            textTransform: 'uppercase',
+            letterSpacing: 0.8,
+            marginBottom: 8,
+            marginLeft: 4,
+          }}
+        >
+          {label}
+        </Text>
+      )}
+      <View
+        style={{
+          backgroundColor: Colors.white,
+          borderRadius: multiline ? Radius.md : Radius.full,
+          borderWidth: 0,
+          paddingHorizontal: 16,
+          height: multiline ? undefined : 48,
+          justifyContent: multiline ? 'flex-start' : 'center',
+          paddingVertical: multiline ? 12 : 0,
+        }}
+      >
+        <RNTextInput
+          placeholder={placeholder}
+          placeholderTextColor={Colors.mutedForeground}
+          value={value}
+          onChangeText={onChangeText}
+          keyboardType={keyboardType}
+          multiline={multiline}
+          numberOfLines={numberOfLines}
+          style={{
+            fontSize: 15,
+            color: Colors.foreground,
+            fontFamily: Typography.family,
+            padding: 0,
+            margin: 0,
+            flex: multiline ? undefined : 1,
+            textAlignVertical: multiline ? 'top' : 'center',
+          }}
+        />
+      </View>
+    </View>
+  );
+}
 
 export default function NuevaEncomiendaWizard() {
   const router = useRouter();
   const { user } = useAuth();
   const [step, setStep] = useState(1);
   const toast = useToast();
+
+  // Pre-fill origen/destino if navigated from home search form
+  const params = useLocalSearchParams<{
+    origen_ciudad?: string;
+    origen_estado?: string;
+    destino_ciudad?: string;
+    destino_estado?: string;
+  }>();
   const [foto, setFoto] = useState<string | null>(null);
   // SEC-03: Prevent double-tap on submit by tracking in-flight state via ref
   const submittingRef = useRef(false);
 
-  // BUG-08: use CSS variables instead of hardcoded colors in StyleSheet
-  const foregroundColor = useCSSVariable('--foreground') as string || '#171717';
+  const foregroundColor = Colors.foreground;
 
   const handleTakePhoto = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -69,8 +160,16 @@ export default function NuevaEncomiendaWizard() {
     }
   };
 
-  const [origen, setOrigen] = useState<Localidad | null>(null);
-  const [destino, setDestino] = useState<Localidad | null>(null);
+  const [origen, setOrigen] = useState<Localidad | null>(
+    params.origen_ciudad && params.origen_estado
+      ? { ciudad: params.origen_ciudad, estado: params.origen_estado }
+      : null
+  );
+  const [destino, setDestino] = useState<Localidad | null>(
+    params.destino_ciudad && params.destino_estado
+      ? { ciudad: params.destino_ciudad, estado: params.destino_estado }
+      : null
+  );
   const [nombre, setNombre] = useState('');
   const [cedula, setCedula] = useState('');
   const [telefono, setTelefono] = useState('');
@@ -261,35 +360,75 @@ export default function NuevaEncomiendaWizard() {
     <SafeAreaView className="flex-1 bg-background">
       {/* Header Stepper */}
       <View style={s.header}>
-        <View className="flex-row items-center mb-5">
+        <View style={s.headerTopRow}>
           <Pressable
             onPress={() => step > 1 ? setStep(step - 1) : router.back()}
             style={s.backBtn}
             accessibilityLabel={step > 1 ? 'Volver al paso anterior' : 'Volver'}
             accessibilityRole="button"
           >
-            {/* BUG-08 fix: foregroundColor from CSS var */}
-            <CaretLeft weight="bold" color={foregroundColor} size={22} />
+            <ArrowLeft weight="bold" color={foregroundColor} size={22} />
           </Pressable>
-          <Text className="font-heading text-xl text-foreground">
-            {step === 1 ? '¿A dónde lo envías?' : step === 2 ? 'Detalles del Envío' : 'Resumen'}
-          </Text>
+          <View style={s.stepperRow}>
+            <View style={s.stepperDotsContainer}>
+              {[1, 2, 3].map((s2) => {
+                const isActive = s2 === step;
+                return (
+                  <View
+                    key={s2}
+                    style={isActive ? s.stepperActivePill : s.stepperInactiveDot}
+                  />
+                );
+              })}
+            </View>
+            <Text style={s.stepperNumber}>
+              {`0${step}`}
+            </Text>
+          </View>
         </View>
-        {/* Progress Bar */}
-        <View className="flex-row gap-2">
-          {[1, 2, 3].map((s2) => (
-            <View key={s2} style={[s.progressBar, s2 <= step ? s.progressActive : s.progressInactive]} />
-          ))}
-        </View>
+        <Text style={s.headerTitle}>
+          {step === 1 ? '¿A dónde lo envías?' : step === 2 ? 'Detalles del Envío' : 'Resumen'}
+        </Text>
       </View>
 
       <ScrollView contentContainerClassName="p-6 pb-32">
-        {/* ─── Paso 1: Ubicación ─── */}
+        <View style={s.formCard}>
+          {/* ─── Paso 1: Ubicación ─── */}
         {step === 1 && (
           <View>
-            <LocationSelector label="Desde (Tu ubicación)" value={origen} onChange={setOrigen} />
-            <View className="h-4" />
-            <LocationSelector label="Hacia (Destino)" value={destino} onChange={setDestino} />
+            <View style={s.searchBarRow}>
+              <View style={{ flex: 1 }}>
+                <LocationSelector
+                  label=""
+                  value={origen}
+                  onChange={setOrigen}
+                  customTrigger={(openModal) => (
+                    <Pressable onPress={openModal} style={s.compactInput}>
+                      <MapPin size={14} color={Colors.accent} weight="fill" />
+                      <Text style={s.compactInputText} numberOfLines={1}>
+                        {origen ? origen.ciudad : 'Origen'}
+                      </Text>
+                    </Pressable>
+                  )}
+                />
+              </View>
+              <Text style={s.arrowText}>→</Text>
+              <View style={{ flex: 1 }}>
+                <LocationSelector
+                  label=""
+                  value={destino}
+                  onChange={setDestino}
+                  customTrigger={(openModal) => (
+                    <Pressable onPress={openModal} style={s.compactInput}>
+                      <MapPin size={14} color={Colors.secondary} weight="fill" />
+                      <Text style={s.compactInputText} numberOfLines={1}>
+                        {destino ? destino.ciudad : 'Destino'}
+                      </Text>
+                    </Pressable>
+                  )}
+                />
+              </View>
+            </View>
             
             {origen && destino && (
               <View className="mt-6">
@@ -306,37 +445,57 @@ export default function NuevaEncomiendaWizard() {
                         <Pressable
                           key={r.id}
                           onPress={() => setRutaSeleccionada(r)}
-                          className={`flex-row items-center justify-between p-4 bg-card border rounded-[10px] ${isSelected ? 'border-primary bg-primary/5' : 'border-border'}`}
+                          style={[
+                            s.routeCard,
+                            isSelected && s.routeCardActive,
+                          ]}
                           accessibilityRole="radio"
                           accessibilityState={{ selected: isSelected }}
                         >
-                          <View className="flex-row items-center gap-3">
-                            <View className="size-10 bg-primary/10 rounded-full items-center justify-center">
-                              <Package color="#e2b714" size={20} weight="fill" />
-                            </View>
-                            <View>
-                              <Text className="text-sm font-bold text-foreground">{r.cooperativas?.nombre}</Text>
-                              {(r.cooperativas?.calificacion_promedio ?? 0) > 0 && (
-                                <View className="flex-row items-center mt-0.5">
-                                  <Star weight="fill" color="#e2b714" size={12} />
-                                  <Text className="text-xs text-muted-foreground ml-1">
-                                    {Number(r.cooperativas.calificacion_promedio).toFixed(1)}
+                          <View style={s.routeLeftContent}>
+                            <View style={s.routeBadgeRow}>
+                              {(r.cooperativas?.calificacion_promedio ?? 0) > 0 ? (
+                                <View style={s.ratingBadge}>
+                                  <Star weight="fill" color={Colors.warning} size={11} />
+                                  <Text style={s.ratingBadgeText}>
+                                    {Number(r.cooperativas.calificacion_promedio).toFixed(1)} CALIFICACIÓN
+                                  </Text>
+                                </View>
+                              ) : (
+                                <View style={[s.ratingBadge, { backgroundColor: 'rgba(138, 138, 138, 0.12)' }]}>
+                                  <Text style={[s.ratingBadgeText, { color: Colors.mutedForeground }]}>
+                                    SIN CALIFICACIÓN
                                   </Text>
                                 </View>
                               )}
                             </View>
+                            <Text style={s.routeTitle} numberOfLines={1}>
+                              {r.cooperativas?.nombre}
+                            </Text>
+                            <Text style={s.routeSubtitle}>
+                              {r.precio_pasaje ? `${r.precio_pasaje} Bs` : 'Tarifa variable'}
+                            </Text>
                           </View>
-                          <Text className="text-sm font-black text-primary">
-                            {r.precio_pasaje ? `${r.precio_pasaje} Bs` : 'Tarifa variable'}
-                          </Text>
+                          
+                          <View style={[
+                            s.routeRightPill, 
+                            isSelected ? s.routeRightPillActive : s.routeRightPillInactive
+                          ]}>
+                            <Text style={[
+                              s.routeRightPillText,
+                              { color: isSelected ? Colors.white : Colors.secondary }
+                            ]}>
+                              {r.cooperativas?.nombre ? r.cooperativas.nombre.charAt(0).toUpperCase() : 'C'}
+                            </Text>
+                          </View>
                         </Pressable>
                       );
                     })}
                   </View>
                 ) : (
                   <View style={s.alertBox}>
-                    <Warning weight="fill" color="#dc2626" size={18} />
-                    <Text style={[s.alertText, { color: '#dc2626' }]}>
+                    <Warning weight="fill" color={Colors.destructive} size={18} />
+                    <Text style={[s.alertText, { color: Colors.destructive }]}>
                       No hay rutas activas registradas para este trayecto. Por favor elige otro destino.
                     </Text>
                   </View>
@@ -359,19 +518,18 @@ export default function NuevaEncomiendaWizard() {
           <View>
             <Text style={s.sectionLabel}>Datos de quien recibe</Text>
 
-            {/* SEC-01: maxLength to prevent oversized DB inserts */}
-            <InputField
+            <BrandInput
               placeholder="Nombre Completo"
               value={nombre}
               onChangeText={(v) => setNombre(v.slice(0, 80))}
             />
-            <InputField
+            <BrandInput
               placeholder="Cédula de Identidad"
               keyboardType="number-pad"
               value={cedula}
               onChangeText={(v) => setCedula(v.slice(0, 12))}
             />
-            <InputField
+            <BrandInput
               placeholder="Teléfono (Ej: +58 414...)"
               keyboardType="phone-pad"
               value={telefono}
@@ -380,7 +538,7 @@ export default function NuevaEncomiendaWizard() {
             />
 
             <Text style={s.sectionLabel}>Descripción del paquete</Text>
-            <InputField
+            <BrandInput
               placeholder="¿Qué contiene? (Ej: Documentos, ropa, electrónica...)"
               value={descripcion}
               onChangeText={(v) => setDescripcion(v.slice(0, 300))}
@@ -390,7 +548,7 @@ export default function NuevaEncomiendaWizard() {
 
             <View className="flex-row gap-3 mb-4">
               <View className="flex-1">
-                <InputField
+                <BrandInput
                   label="Peso estimado (kg)"
                   placeholder="Ej: 5"
                   keyboardType="decimal-pad"
@@ -400,7 +558,7 @@ export default function NuevaEncomiendaWizard() {
                 />
               </View>
               <View className="flex-1">
-                <InputField
+                <BrandInput
                   label="Valor declarado ($)"
                   placeholder="Opcional"
                   keyboardType="decimal-pad"
@@ -413,7 +571,15 @@ export default function NuevaEncomiendaWizard() {
 
             {/* Calculadora de costo estimado en tiempo real */}
             {(loadingCosto || costoEstimado !== null) && (
-              <View className="mb-4 p-4 rounded-[10px] bg-secondary border border-border/30 flex-row justify-between items-center">
+              <View style={{
+                marginBottom: 16,
+                padding: 16,
+                borderRadius: Radius.md,
+                backgroundColor: Colors.surface,
+                flexDirection: 'row',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+              }}>
                 <View className="flex-1 mr-2">
                   <Text className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-0.5">Costo Estimado</Text>
                   <Text className="text-xs text-muted-foreground">Sujeto a pesaje físico en taquilla</Text>
@@ -429,32 +595,58 @@ export default function NuevaEncomiendaWizard() {
             {/* Foto de Evidencia Opcional */}
             <Text style={s.sectionLabel}>Foto del Paquete (Evidencia Opcional)</Text>
             {foto ? (
-              <View className="mb-4 bg-card border border-border p-4 rounded-[14px] items-center">
-                <Image source={{ uri: foto }} style={{ width: '100%', height: 160, borderRadius: 8, marginBottom: 12 }} resizeMode="cover" />
+              <View style={[{ marginBottom: 16, backgroundColor: Colors.white, padding: 16, borderRadius: Radius.md, alignItems: 'center' }, Shadows.card]}>
+                <Image source={{ uri: foto }} style={{ width: '100%', height: 160, borderRadius: Radius.sm, marginBottom: 12 }} resizeMode="cover" />
                 <View className="flex-row gap-3 w-full">
-                  <Pressable onPress={handleSelectPhoto} className="flex-1 bg-secondary py-2.5 rounded-[10px] items-center">
-                    <Text className="text-foreground text-xs font-bold">Cambiar foto</Text>
+                  <Pressable onPress={handleSelectPhoto} style={{ flex: 1, backgroundColor: Colors.surface, paddingVertical: 10, borderRadius: Radius.full, alignItems: 'center' }}>
+                    <Text style={{ color: Colors.foreground, fontSize: 12, fontWeight: '700' }}>Cambiar foto</Text>
                   </Pressable>
-                  <Pressable onPress={() => setFoto(null)} className="flex-1 bg-destructive/10 py-2.5 rounded-[10px] items-center">
-                    <Text className="text-destructive text-xs font-bold">Quitar foto</Text>
+                  <Pressable onPress={() => setFoto(null)} style={{ flex: 1, backgroundColor: Colors.destructiveLight, paddingVertical: 10, borderRadius: Radius.full, alignItems: 'center' }}>
+                    <Text style={{ color: Colors.destructive, fontSize: 12, fontWeight: '700' }}>Quitar foto</Text>
                   </Pressable>
                 </View>
               </View>
             ) : (
               <View className="flex-row gap-3 mb-6">
-                <Pressable onPress={handleTakePhoto} className="flex-1 bg-card border border-border p-4 rounded-[14px] items-center justify-center">
-                  <Camera size={24} color="#e2b714" weight="fill" />
-                  <Text className="text-xs font-bold text-foreground mt-2">Tomar Foto</Text>
+                <Pressable
+                  onPress={handleTakePhoto}
+                  style={[
+                    {
+                      flex: 1,
+                      backgroundColor: Colors.white,
+                      padding: 16,
+                      borderRadius: Radius.md,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    },
+                    Shadows.card,
+                  ]}
+                >
+                  <Camera size={24} color={Colors.primary} weight="fill" />
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: Colors.foreground, marginTop: 8 }}>Tomar Foto</Text>
                 </Pressable>
-                <Pressable onPress={handleSelectPhoto} className="flex-1 bg-card border border-border p-4 rounded-[14px] items-center justify-center">
-                  <ImageIcon size={24} color="#e2b714" weight="fill" />
-                  <Text className="text-xs font-bold text-foreground mt-2">Galería</Text>
+                <Pressable
+                  onPress={handleSelectPhoto}
+                  style={[
+                    {
+                      flex: 1,
+                      backgroundColor: Colors.white,
+                      padding: 16,
+                      borderRadius: Radius.md,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    },
+                    Shadows.card,
+                  ]}
+                >
+                  <ImageIcon size={24} color={Colors.primary} weight="fill" />
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: Colors.foreground, marginTop: 8 }}>Galería</Text>
                 </Pressable>
               </View>
             )}
 
             <View style={s.alertBox}>
-              <Warning weight="fill" color="#e2b714" size={18} />
+              <Warning weight="fill" color={Colors.warning} size={18} />
               <Text style={s.alertText}>
                 Límites referenciales: Peso máximo 25 kg. Dimensiones máximas 50 × 50 × 50 cm.
                 Paquetes fuera de estos límites pueden ser rechazados en taquilla.
@@ -468,7 +660,7 @@ export default function NuevaEncomiendaWizard() {
           <View>
             <View className="items-center mb-8">
               <View style={s.successCircle}>
-                <Check weight="bold" color="#16a34a" size={40} />
+                <Check weight="bold" color={Colors.success} size={40} />
               </View>
               <Text className="text-2xl font-black text-center mb-2">¡Todo Listo!</Text>
               <Text className="text-sm text-muted-foreground text-center">
@@ -489,17 +681,17 @@ export default function NuevaEncomiendaWizard() {
                 </View>
               </View>
               
-              <View style={[s.summarySection, { borderTopWidth: 1, borderTopColor: '#e5e5e5', paddingTop: 16 }]}>
+              <View style={[s.summarySection, { borderTopWidth: 1, borderTopColor: Colors.border, paddingTop: 16 }]}>
                 <Text style={s.summaryCaption}>Cooperativa</Text>
                 <Text style={s.summaryValue}>{rutaSeleccionada?.cooperativas?.nombre || 'Ninguna'}</Text>
               </View>
               
-              <View style={[s.summarySection, { borderTopWidth: 1, borderTopColor: '#e5e5e5', paddingTop: 16, marginTop: 16 }]}>
+              <View style={[s.summarySection, { borderTopWidth: 1, borderTopColor: Colors.border, paddingTop: 16, marginTop: 16 }]}>
                 <Text style={s.summaryCaption}>Destinatario</Text>
                 <Text style={s.summaryValue}>{nombre}</Text>
                 <Text style={s.summaryMeta}>C.I: {cedula} · Tel: {telefono}</Text>
               </View>
-              <View style={{ borderTopWidth: 1, borderTopColor: '#e5e5e5', paddingTop: 16, marginTop: 16 }}>
+              <View style={{ borderTopWidth: 1, borderTopColor: Colors.border, paddingTop: 16, marginTop: 16 }}>
                 <Text style={s.summaryCaption}>Paquete</Text>
                 <Text style={s.summaryValue}>{descripcion}</Text>
                 {pesoKg ? <Text style={s.summaryMeta}>Peso estimado: {pesoKg} kg</Text> : null}
@@ -507,9 +699,9 @@ export default function NuevaEncomiendaWizard() {
                 {costoEstimado !== null ? <Text style={s.summaryMeta}>Costo estimado: {costoEstimado.toFixed(2)} Bs.</Text> : null}
               </View>
               {foto ? (
-                <View style={{ borderTopWidth: 1, borderTopColor: '#e5e5e5', paddingTop: 16, marginTop: 16 }}>
+                <View style={{ borderTopWidth: 1, borderTopColor: Colors.border, paddingTop: 16, marginTop: 16 }}>
                   <Text style={s.summaryCaption}>Foto del Paquete</Text>
-                  <Image source={{ uri: foto }} style={{ width: '100%', height: 160, borderRadius: 8, marginTop: 8 }} resizeMode="cover" />
+                  <Image source={{ uri: foto }} style={{ width: '100%', height: 160, borderRadius: Radius.sm, marginTop: 8 }} resizeMode="cover" />
                 </View>
               ) : null}
             </View>
@@ -519,26 +711,60 @@ export default function NuevaEncomiendaWizard() {
             <View className="flex-row gap-3 mb-6">
               <Pressable
                 onPress={() => setModalidadPago('ORIGEN')}
-                className={`flex-1 p-4 rounded-[10px] border items-center justify-center ${modalidadPago === 'ORIGEN' ? 'bg-primary/5 border-primary' : 'bg-card border-border'}`}
+                style={{
+                  flex: 1,
+                  padding: 16,
+                  borderRadius: Radius.md,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backgroundColor: modalidadPago === 'ORIGEN' ? Colors.primaryLight : Colors.white,
+                  borderWidth: modalidadPago === 'ORIGEN' ? 1.5 : 0,
+                  borderColor: Colors.primary,
+                }}
                 accessibilityRole="radio"
                 accessibilityState={{ selected: modalidadPago === 'ORIGEN' }}
               >
-                <Text className={`font-bold text-sm ${modalidadPago === 'ORIGEN' ? 'text-primary' : 'text-foreground'}`}>
+                <Text
+                  style={{
+                    fontWeight: '700',
+                    fontSize: 14,
+                    color: Colors.foreground,
+                  }}
+                >
                   Cobro en Origen
                 </Text>
-                <Text className="text-xs text-muted-foreground mt-1 text-center">Pagas al entregar</Text>
+                <Text style={{ fontSize: 12, color: Colors.mutedForeground, marginTop: 4, textAlign: 'center' }}>
+                  Pagas al entregar
+                </Text>
               </Pressable>
               
               <Pressable
                 onPress={() => setModalidadPago('DESTINO')}
-                className={`flex-1 p-4 rounded-[10px] border items-center justify-center ${modalidadPago === 'DESTINO' ? 'bg-primary/5 border-primary' : 'bg-card border-border'}`}
+                style={{
+                  flex: 1,
+                  padding: 16,
+                  borderRadius: Radius.md,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backgroundColor: modalidadPago === 'DESTINO' ? Colors.primaryLight : Colors.white,
+                  borderWidth: modalidadPago === 'DESTINO' ? 1.5 : 0,
+                  borderColor: Colors.primary,
+                }}
                 accessibilityRole="radio"
                 accessibilityState={{ selected: modalidadPago === 'DESTINO' }}
               >
-                <Text className={`font-bold text-sm ${modalidadPago === 'DESTINO' ? 'text-primary' : 'text-foreground'}`}>
+                <Text
+                  style={{
+                    fontWeight: '700',
+                    fontSize: 14,
+                    color: Colors.foreground,
+                  }}
+                >
                   Cobro en Destino
                 </Text>
-                <Text className="text-xs text-muted-foreground mt-1 text-center">Paga al recibir</Text>
+                <Text style={{ fontSize: 12, color: Colors.mutedForeground, marginTop: 4, textAlign: 'center' }}>
+                  Paga al recibir
+                </Text>
               </Pressable>
             </View>
 
@@ -549,6 +775,7 @@ export default function NuevaEncomiendaWizard() {
             </View>
           </View>
         )}
+        </View>
       </ScrollView>
 
       {/* Footer CTA */}
@@ -576,51 +803,90 @@ const s = StyleSheet.create({
     paddingHorizontal: 24,
     paddingTop: 16,
     paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e5e5',
+    backgroundColor: Colors.background,
+  },
+  headerTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
   },
   backBtn: {
     width: 40,
     height: 40,
-    borderRadius: 20,
-    backgroundColor: '#f4f4f5',
+    borderRadius: Radius.full,
+    backgroundColor: 'transparent',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 16,
   },
-  progressBar: {
-    flex: 1,
+  stepperRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  stepperDotsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  stepperActivePill: {
+    width: 40,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: Colors.foreground,
+  },
+  stepperInactiveDot: {
+    width: 6,
     height: 6,
-    borderRadius: 99,
+    borderRadius: 3,
+    backgroundColor: Colors.border,
   },
-  progressActive: { backgroundColor: '#e2b714' },
-  progressInactive: { backgroundColor: '#f4f4f5' },
+  stepperNumber: {
+    fontSize: 14,
+    fontFamily: Typography.family,
+    fontWeight: Typography.weights.semibold,
+    color: Colors.foreground,
+  },
+  headerTitle: {
+    fontSize: Typography.sizes.xl,
+    fontFamily: Typography.family,
+    fontWeight: Typography.weights.bold,
+    color: Colors.foreground,
+    textAlign: 'center',
+    marginTop: 4,
+  },
+  formCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.xl,
+    padding: 20,
+    marginBottom: 24,
+  },
   sectionLabel: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#737373',
+    color: Colors.mutedForeground,
     textTransform: 'uppercase',
     letterSpacing: 0.8,
     marginBottom: 12,
   },
   infoBox: {
-    backgroundColor: '#f4f4f5',
-    borderRadius: 12,
+    backgroundColor: Colors.white,
+    borderRadius: Radius.md,
     padding: 14,
     marginTop: 16,
   },
   alertBox: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    backgroundColor: '#fdf5d3',
-    borderRadius: 12,
+    backgroundColor: Colors.warningLight,
+    borderRadius: Radius.md,
     padding: 14,
     gap: 10,
     marginTop: 4,
   },
   alertText: {
     fontSize: 12,
-    color: '#737373',
+    color: Colors.mutedForeground,
     flex: 1,
     lineHeight: 18,
   },
@@ -628,16 +894,14 @@ const s = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: '#dcfce7',
+    backgroundColor: Colors.successLight,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 16,
   },
   summaryCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#e5e5e5',
+    backgroundColor: Colors.white,
+    borderRadius: Radius.xl,
     padding: 20,
     marginBottom: 16,
   },
@@ -651,30 +915,133 @@ const s = StyleSheet.create({
   summaryCaption: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#a1a1aa',
+    color: Colors.mutedForeground,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     marginBottom: 4,
   },
-  summaryValue: { fontSize: 14, fontWeight: '700', color: '#171717', marginBottom: 2 },
-  summaryMeta: { fontSize: 13, color: '#737373' },
-  arrow: { fontSize: 18, color: '#a1a1aa', marginHorizontal: 12 },
+  summaryValue: { fontSize: 14, fontWeight: '700', color: Colors.foreground, marginBottom: 2 },
+  summaryMeta: { fontSize: 13, color: Colors.mutedForeground },
+  arrow: { fontSize: 18, color: Colors.mutedForeground, marginHorizontal: 12 },
   footer: {
     padding: 20,
     borderTopWidth: 1,
-    borderTopColor: '#e5e5e5',
+    borderTopColor: Colors.border,
   },
   ctaBtn: {
     height: 52,
-    borderRadius: 26,
-    backgroundColor: '#e2b714',
+    borderRadius: Radius.full,
+    backgroundColor: Colors.accent,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  ctaDisabled: { backgroundColor: '#e2b71480' },
+  ctaDisabled: {
+    opacity: 0.5,
+  },
   ctaText: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#6b4a1a',
+    color: Colors.white,
+  },
+  searchBarRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: Colors.surfaceDark,
+    padding: 6,
+    borderRadius: Radius.full,
+    marginBottom: 8,
+  },
+  compactInput: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.white,
+    height: 38,
+    borderRadius: Radius.full,
+    paddingHorizontal: 12,
+    gap: 6,
+  },
+  compactInputText: {
+    fontFamily: Typography.family,
+    fontWeight: Typography.weights.bold,
+    fontSize: 13,
+    color: Colors.foreground,
+    flex: 1,
+  },
+  arrowText: {
+    fontSize: 14,
+    fontFamily: Typography.family,
+    color: Colors.mutedForeground,
+  },
+  routeCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    backgroundColor: Colors.white,
+    borderRadius: 24,
+    borderWidth: 1.5,
+    borderColor: 'transparent',
+    marginBottom: 8,
+  },
+  routeCardActive: {
+    backgroundColor: Colors.white,
+    borderColor: Colors.accent,
+  },
+  routeLeftContent: {
+    flex: 1,
+    justifyContent: 'space-between',
+  },
+  routeBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  ratingBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: Radius.full,
+    backgroundColor: Colors.warningLight,
+    gap: 4,
+  },
+  ratingBadgeText: {
+    fontSize: 9,
+    fontFamily: Typography.family,
+    fontWeight: Typography.weights.bold,
+    color: Colors.warning,
+  },
+  routeTitle: {
+    fontSize: 16,
+    fontFamily: Typography.family,
+    fontWeight: Typography.weights.bold,
+    color: Colors.foreground,
+    marginTop: 6,
+    marginBottom: 6,
+  },
+  routeSubtitle: {
+    fontSize: 13,
+    fontFamily: Typography.family,
+    fontWeight: Typography.weights.bold,
+    color: Colors.accent,
+  },
+  routeRightPill: {
+    width: 50,
+    height: 80,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 16,
+  },
+  routeRightPillActive: {
+    backgroundColor: Colors.accent,
+  },
+  routeRightPillInactive: {
+    backgroundColor: 'rgba(255, 118, 72, 0.12)',
+  },
+  routeRightPillText: {
+    fontSize: 24,
+    fontFamily: Typography.family,
+    fontWeight: Typography.weights.bold,
   },
 });

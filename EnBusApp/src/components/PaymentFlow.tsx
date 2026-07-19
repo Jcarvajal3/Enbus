@@ -1,12 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, Pressable, ScrollView } from '@/tw';
-import { TextInput, Modal } from 'react-native';
-import { CheckCircle, CreditCard, Bank, X } from 'phosphor-react-native';
+import { View, Text, ScrollView } from '@/tw';
+import { TextInput, Modal, ActivityIndicator, StyleSheet } from 'react-native';
+import { CheckCircle, CreditCard, Bank, X, Info } from 'phosphor-react-native';
 import { Spinner } from '@/src/components/Spinner';
 import { supabase } from '@/src/utils/supabase';
 import { useAuth } from '@/src/contexts/AuthContext';
 import * as Haptics from 'expo-haptics';
 import { useToast } from '@/src/components/Toast';
+import { PressableScale } from './PressableScale';
+import { useTasaBCV, bsToUsd } from '@/src/hooks/useTasaBCV';
+import { Colors, Typography, Spacing, Radius, Shadows } from '@/src/theme';
 
 // ─── Bancos de Venezuela ──────────────────────────────────────────────────────
 const BANCOS_VE = [
@@ -38,6 +41,72 @@ interface PaymentFlowProps {
   onPaymentSuccess?: (pagoId?: string, pagoPayload?: Record<string, unknown>) => void;
 }
 
+// ─── MontoBadge ───────────────────────────────────────────────────────────────
+// Muestra el monto en Bs y, si el método es Zelle, el equivalente en USD
+// usando la tasa BCV oficial consultada en tiempo real.
+interface MontoBadgeProps {
+  monto: number;
+  montoUSD: number | null;
+  tasaBCV: number | null;
+  loadingTasa: boolean;
+  errorTasa: string | null;
+  isZelle: boolean;
+  label: string;
+  concepto?: string;
+}
+
+function MontoBadge({ monto, montoUSD, tasaBCV, loadingTasa, errorTasa, isZelle, label, concepto }: MontoBadgeProps) {
+  return (
+    <View style={s.montoBadge}>
+      <Text style={s.montoBadgeLabel}>{label}</Text>
+
+      {/* Monto en Bs — siempre visible */}
+      <Text style={s.montoBadgeAmount}>
+        {monto.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Bs
+      </Text>
+
+      {/* Equivalente USD — solo para Zelle */}
+      {isZelle && (
+        <View style={s.montoUsdContainer}>
+          {loadingTasa ? (
+            <View style={s.montoRow}>
+              <ActivityIndicator size="small" color={Colors.mutedForeground} />
+              <Text style={s.montoBadgeHint}>Consultando tasa BCV...</Text>
+            </View>
+          ) : montoUSD !== null ? (
+            <View style={s.montoUsdBlock}>
+              <Text style={s.montoBadgeUsd}>
+                ≈ {montoUSD.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD
+              </Text>
+              <View style={s.montoRow}>
+                <Info size={11} color={Colors.mutedForeground} weight="fill" />
+                <Text style={s.montoBadgeHint}>
+                  Tasa BCV oficial: {tasaBCV?.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Bs/USD
+                </Text>
+              </View>
+            </View>
+          ) : (
+            <View style={s.montoRow}>
+              <Info size={11} color={Colors.warning} weight="fill" />
+              <Text style={s.montoBadgeWarning}>
+                {errorTasa ? 'Tasa BCV no disponible. Verifica el monto con tu banco.' : 'Calculando equivalente USD...'}
+              </Text>
+            </View>
+          )}
+          <Text style={s.montoBadgeFootnote}>
+            Transfiere el equivalente en USD por Zelle
+          </Text>
+        </View>
+      )}
+
+      {/* Nota: para métodos en Bs (Pago Móvil, Transferencia) solo se muestra el monto en Bs */}
+      {!isZelle && concepto && (
+        <Text style={s.montoBadgeConcepto}>{concepto}</Text>
+      )}
+    </View>
+  );
+}
+
 export function PaymentFlow({
   monto,
   cooperativa_id,
@@ -48,6 +117,9 @@ export function PaymentFlow({
 }: PaymentFlowProps) {
   const { user } = useAuth();
   const toast = useToast();
+
+  // Tasa BCV oficial para conversión Bs → USD (Zelle)
+  const { tasa: tasaBCV, loading: loadingTasa, error: errorTasa } = useTasaBCV();
 
   const [step, setStep] = useState<FlowStep>('metodos');
   const [metodosCuentas, setMetodosCuentas] = useState<any[]>([]);
@@ -61,8 +133,6 @@ export function PaymentFlow({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [pagoId, setPagoId] = useState<string | undefined>(undefined);
   const [currentPayload, setCurrentPayload] = useState<Record<string, unknown> | undefined>(undefined);
-
-  const inputClass = 'bg-background border border-input px-4 h-12 rounded-[10px] text-base text-foreground';
 
   // ── Cargar métodos de pago reales de la cooperativa ─────────────────────────
   useEffect(() => {
@@ -95,11 +165,15 @@ export function PaymentFlow({
   }, [cooperativa_id]);
 
   // Si no se han cargado métodos en BD, proveer Efectivo como fallback
-  const metodosDisponibles = metodosCuentas.length > 0 
-    ? metodosCuentas 
+  const metodosDisponibles = metodosCuentas.length > 0
+    ? metodosCuentas
     : [{ id: 'fallback-efectivo', tipo: 'EFECTIVO', cooperativa_id }];
 
   const isEfectivo = metodoSeleccionado?.tipo === 'EFECTIVO';
+  const isZelle = metodoSeleccionado?.tipo === 'ZELLE';
+
+  // Equivalente USD para métodos en dólares (Zelle)
+  const montoUSD = bsToUsd(monto, tasaBCV);
 
   // Validate fecha format DD/MM/AAAA and that it represents a real date
   const isFechaValid = (() => {
@@ -181,9 +255,9 @@ export function PaymentFlow({
 
   if (loadingMetodos) {
     return (
-      <View className="bg-card rounded-[14px] p-8 border border-border items-center justify-center">
+      <View style={s.loadingContainer}>
         <Spinner size="large" />
-        <Text className="text-xs text-muted-foreground mt-2 font-bold">Cargando cuentas bancarias...</Text>
+        <Text style={s.loadingText}>Cargando cuentas bancarias...</Text>
       </View>
     );
   }
@@ -191,36 +265,40 @@ export function PaymentFlow({
   // Paso 3: Enviado
   if (step === 'enviado') {
     return (
-      <View className="bg-card rounded-[14px] p-8 border border-border items-center">
-        <View className="size-20 bg-success/20 rounded-full items-center justify-center mb-4">
-          <CheckCircle weight="fill" color="#16a34a" size={40} />
+      <View style={s.card}>
+        <View style={s.successIconContainer}>
+          <CheckCircle weight="fill" color={Colors.success} size={40} />
         </View>
-        <Text className="font-heading text-xl text-foreground text-center mb-2">Comprobante Enviado</Text>
-        <Text className="text-sm text-muted-foreground text-center mb-6 leading-5">
+        <Text style={s.successTitle}>Comprobante Enviado</Text>
+        <Text style={s.successSubtitle}>
           La cooperativa verificará tu pago. Una vez verificado por un taquillero, tu reserva/envío será confirmado.
         </Text>
 
         {!isEfectivo && referencia ? (
-          <View className="bg-secondary rounded-[10px] px-4 py-3 w-full mb-6">
-            <Text className="text-xs text-muted-foreground font-bold mb-1">Referencia registrada</Text>
-            <Text className="text-sm font-black text-foreground">{referencia}</Text>
+          <View style={s.referenciaContainer}>
+            <Text style={s.referenciaLabel}>Referencia registrada</Text>
+            <Text style={s.referenciaValue}>{referencia}</Text>
           </View>
         ) : null}
 
         {isEfectivo && (
-          <View className="bg-warning/10 rounded-[10px] px-4 py-3 w-full mb-6 border border-warning/20">
-            <Text className="text-xs text-warning font-bold mb-1">Pago en efectivo</Text>
-            <Text className="text-sm text-foreground">Completa tu pago al presentarte en la taquilla de la cooperativa.</Text>
+          <View style={s.efectivoNote}>
+            <Text style={s.efectivoNoteLabel}>Pago en efectivo</Text>
+            <Text style={s.efectivoNoteText}>Completa tu pago al presentarte en la taquilla de la cooperativa.</Text>
           </View>
         )}
 
         {onPaymentSuccess && (
-          <Pressable
+          <PressableScale
             onPress={() => onPaymentSuccess(pagoId, currentPayload)}
-            className="bg-primary h-12 rounded-[10px] items-center justify-center w-full"
+            haptic
+            hapticType="medium"
+            style={s.primaryButton}
+            accessibilityLabel="Continuar"
+            accessibilityRole="button"
           >
-            <Text className="text-primary-foreground font-bold">Continuar</Text>
-          </Pressable>
+            <Text style={s.primaryButtonText}>Continuar</Text>
+          </PressableScale>
         )}
       </View>
     );
@@ -230,55 +308,66 @@ export function PaymentFlow({
   if (step === 'formulario') {
     const info = METODO_INFO[metodoSeleccionado?.tipo] || { label: 'Pago', desc: '' };
     return (
-      <ScrollView className="bg-card rounded-[14px] p-6 border border-border">
+      <ScrollView
+        style={s.formScrollContainer}
+        contentContainerStyle={s.formContent}
+      >
         {/* Volver */}
-        <Pressable onPress={() => setStep('metodos')} className="flex-row items-center mb-6 gap-2">
-          <X color="#a3a3a3" size={16} weight="bold" />
-          <Text className="text-sm text-muted-foreground">Volver a métodos</Text>
-        </Pressable>
+        <PressableScale
+          onPress={() => setStep('metodos')}
+          style={s.backRow}
+          accessibilityLabel="Volver a métodos de pago"
+          accessibilityRole="button"
+        >
+          <X color={Colors.mutedForeground} size={16} weight="bold" />
+          <Text style={s.backText}>Volver a métodos</Text>
+        </PressableScale>
 
-        <Text className="font-heading text-lg text-foreground mb-1">Confirmar Pago</Text>
-        <Text className="text-sm text-muted-foreground mb-4">
+        <Text style={s.sectionTitle}>Confirmar Pago</Text>
+        <Text style={s.sectionSubtitle}>
           Método: {info.label}
         </Text>
 
         {/* Monto */}
-        <View className="bg-primary/10 rounded-[10px] px-4 py-3 mb-4 border border-primary/20 items-center">
-          <Text className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1">Monto a pagar</Text>
-          <Text className="font-heading text-3xl text-primary">{monto} Bs.</Text>
-          {concepto && <Text className="text-xs text-muted-foreground mt-1 text-center">{concepto}</Text>}
-        </View>
+        <MontoBadge
+          monto={monto}
+          montoUSD={montoUSD}
+          tasaBCV={tasaBCV}
+          loadingTasa={loadingTasa}
+          errorTasa={errorTasa}
+          isZelle={isZelle}
+          label="Monto a pagar"
+          concepto={concepto}
+        />
 
         {/* Datos reales de la Cooperativa */}
         {!isEfectivo && (
-          <View className="bg-secondary rounded-[10px] p-4 mb-6 border border-border/50">
-            <Text className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">
-              Datos de Cuenta
-            </Text>
+          <View style={s.cuentaDataContainer}>
+            <Text style={s.cuentaDataTitle}>Datos de Cuenta</Text>
             {metodoSeleccionado.tipo === 'PAGO_MOVIL' && (
-              <View className="gap-1.5">
-                {metodoSeleccionado.banco && <Text className="text-sm text-foreground"><Text className="font-bold">Banco:</Text> {metodoSeleccionado.banco}</Text>}
-                <Text className="text-sm text-foreground"><Text className="font-bold">Titular:</Text> {metodoSeleccionado.titular}</Text>
-                {metodoSeleccionado.numero_cuenta && <Text className="text-sm text-foreground"><Text className="font-bold">Teléfono PM:</Text> {metodoSeleccionado.numero_cuenta}</Text>}
-                {metodoSeleccionado.cedula_rif && <Text className="text-sm text-foreground"><Text className="font-bold">C.I. / RIF:</Text> {metodoSeleccionado.cedula_rif}</Text>}
+              <View style={s.cuentaFieldsGap}>
+                {metodoSeleccionado.banco && <Text style={s.cuentaDataRow}><Text style={s.cuentaFieldBold}>Banco:</Text> {metodoSeleccionado.banco}</Text>}
+                <Text style={s.cuentaDataRow}><Text style={s.cuentaFieldBold}>Titular:</Text> {metodoSeleccionado.titular}</Text>
+                {metodoSeleccionado.numero_cuenta && <Text style={s.cuentaDataRow}><Text style={s.cuentaFieldBold}>Teléfono PM:</Text> {metodoSeleccionado.numero_cuenta}</Text>}
+                {metodoSeleccionado.cedula_rif && <Text style={s.cuentaDataRow}><Text style={s.cuentaFieldBold}>C.I. / RIF:</Text> {metodoSeleccionado.cedula_rif}</Text>}
               </View>
             )}
             {metodoSeleccionado.tipo === 'TRANSFERENCIA_BANCARIA' && (
-              <View className="gap-1.5">
-                {metodoSeleccionado.banco && <Text className="text-sm text-foreground"><Text className="font-bold">Banco:</Text> {metodoSeleccionado.banco}</Text>}
-                <Text className="text-sm text-foreground"><Text className="font-bold">Titular:</Text> {metodoSeleccionado.titular}</Text>
-                {metodoSeleccionado.numero_cuenta && <Text className="text-sm text-foreground"><Text className="font-bold">Nro. Cuenta:</Text> {metodoSeleccionado.numero_cuenta}</Text>}
-                {metodoSeleccionado.cedula_rif && <Text className="text-sm text-foreground"><Text className="font-bold">C.I. / RIF:</Text> {metodoSeleccionado.cedula_rif}</Text>}
+              <View style={s.cuentaFieldsGap}>
+                {metodoSeleccionado.banco && <Text style={s.cuentaDataRow}><Text style={s.cuentaFieldBold}>Banco:</Text> {metodoSeleccionado.banco}</Text>}
+                <Text style={s.cuentaDataRow}><Text style={s.cuentaFieldBold}>Titular:</Text> {metodoSeleccionado.titular}</Text>
+                {metodoSeleccionado.numero_cuenta && <Text style={s.cuentaDataRow}><Text style={s.cuentaFieldBold}>Nro. Cuenta:</Text> {metodoSeleccionado.numero_cuenta}</Text>}
+                {metodoSeleccionado.cedula_rif && <Text style={s.cuentaDataRow}><Text style={s.cuentaFieldBold}>C.I. / RIF:</Text> {metodoSeleccionado.cedula_rif}</Text>}
               </View>
             )}
             {metodoSeleccionado.tipo === 'ZELLE' && (
-              <View className="gap-1.5">
-                <Text className="text-sm text-foreground"><Text className="font-bold">Titular:</Text> {metodoSeleccionado.titular}</Text>
-                {metodoSeleccionado.email_zelle && <Text className="text-sm text-foreground"><Text className="font-bold">Correo Zelle:</Text> {metodoSeleccionado.email_zelle}</Text>}
+              <View style={s.cuentaFieldsGap}>
+                <Text style={s.cuentaDataRow}><Text style={s.cuentaFieldBold}>Titular:</Text> {metodoSeleccionado.titular}</Text>
+                {metodoSeleccionado.email_zelle && <Text style={s.cuentaDataRow}><Text style={s.cuentaFieldBold}>Correo Zelle:</Text> {metodoSeleccionado.email_zelle}</Text>}
               </View>
             )}
             {metodoSeleccionado.instrucciones && (
-              <Text className="text-xs text-muted-foreground mt-2 italic border-t border-border/30 pt-2">
+              <Text style={s.cuentaInstructions}>
                 Nota: {metodoSeleccionado.instrucciones}
               </Text>
             )}
@@ -287,67 +376,76 @@ export function PaymentFlow({
 
         {/* Form Fields */}
         {isEfectivo ? (
-          <View className="bg-warning/10 border border-warning/30 rounded-[10px] p-4 mb-6">
-            <Text className="text-sm text-foreground font-bold mb-1">Pago en Taquilla</Text>
-            <Text className="text-sm text-muted-foreground leading-5">
+          <View style={s.efectivoFormNote}>
+            <Text style={s.efectivoFormTitle}>Pago en Taquilla</Text>
+            <Text style={s.efectivoFormText}>
               Al seleccionar esta opción, tu reserva quedará pendiente.
               Deberás realizar el pago directamente en la ventanilla de la cooperativa.
             </Text>
           </View>
         ) : (
-          <View className="gap-4">
+          <View style={s.formFieldsGap}>
             <View>
-              <Text className="text-sm font-medium text-foreground mb-2">Número de Referencia</Text>
+              <Text style={s.fieldLabel}>Número de Referencia</Text>
               <TextInput
-                className={inputClass}
+                style={s.textInput}
                 placeholder="Últimos 4 o más dígitos"
-                placeholderTextColor="#a3a3a3"
+                placeholderTextColor={Colors.mutedForeground}
                 keyboardType="number-pad"
                 value={referencia}
                 onChangeText={setReferencia}
+                accessibilityLabel="Número de referencia de la transacción"
               />
             </View>
 
             <View>
-              <Text className="text-sm font-medium text-foreground mb-2">Fecha de Transacción</Text>
+              <Text style={s.fieldLabel}>Fecha de Transacción</Text>
               <TextInput
-                className={inputClass}
+                style={s.textInput}
                 placeholder="DD/MM/AAAA"
-                placeholderTextColor="#a3a3a3"
+                placeholderTextColor={Colors.mutedForeground}
                 keyboardType="number-pad"
                 value={fecha}
                 onChangeText={setFecha}
+                accessibilityLabel="Fecha de la transacción en formato DD/MM/AAAA"
               />
             </View>
 
             <View>
-              <Text className="text-sm font-medium text-foreground mb-2">Banco Emisor (Tu banco)</Text>
-              <Pressable
+              <Text style={s.fieldLabel}>Banco Emisor (Tu banco)</Text>
+              <PressableScale
                 onPress={() => setIsBancoModalVisible(true)}
-                className="bg-background border border-input h-12 rounded-[10px] px-4 flex-row justify-between items-center"
+                style={s.bancoSelector}
+                accessibilityLabel={banco ? `Banco seleccionado: ${banco}` : 'Seleccionar banco emisor'}
+                accessibilityRole="button"
               >
-                <Text className={banco ? 'text-base text-foreground' : 'text-base text-muted-foreground'}>
+                <Text style={banco ? s.bancoSelectorText : s.bancoSelectorPlaceholder}>
                   {banco || 'Seleccionar banco...'}
                 </Text>
-                <Bank color="#a3a3a3" size={20} weight="bold" />
-              </Pressable>
+                <Bank color={Colors.mutedForeground} size={20} weight="bold" />
+              </PressableScale>
             </View>
           </View>
         )}
 
         {/* Submit */}
-        <Pressable
+        <PressableScale
           onPress={handleSubmitPago}
           disabled={!isFormValid || isSubmitting}
-          className={`h-12 rounded-[10px] items-center justify-center mt-6 mb-8 ${isFormValid ? 'bg-primary' : 'bg-primary/40'}`}
+          haptic
+          hapticType="medium"
+          style={[s.primaryButton, s.formSubmitButton, !isFormValid && s.primaryButtonDisabled]}
+          accessibilityLabel={isEfectivo ? 'Confirmar pago en taquilla' : 'Registrar pago'}
+          accessibilityRole="button"
+          accessibilityState={{ disabled: !isFormValid || isSubmitting }}
         >
           {isSubmitting
             ? <Spinner />
-            : <Text className={`font-bold ${isFormValid ? 'text-primary-foreground' : 'text-primary-foreground/50'}`}>
+            : <Text style={[s.primaryButtonText, !isFormValid && s.primaryButtonTextDisabled]}>
                 {isEfectivo ? 'Confirmar Pago en Taquilla' : 'Registrar Pago'}
               </Text>
           }
-        </Pressable>
+        </PressableScale>
 
         {/* Modal de selección de banco */}
         <Modal
@@ -356,28 +454,33 @@ export function PaymentFlow({
           presentationStyle="pageSheet"
           onRequestClose={() => setIsBancoModalVisible(false)}
         >
-          <View className="flex-1 bg-background pt-6">
-            <View className="flex-row justify-between items-center px-6 pb-4 border-b border-border">
-              <Text className="text-xl font-heading text-foreground">Banco Emisor</Text>
-              <Pressable
+          <View style={s.modalContainer}>
+            <View style={s.modalHeader}>
+              <Text style={s.modalTitle}>Banco Emisor</Text>
+              <PressableScale
                 onPress={() => setIsBancoModalVisible(false)}
-                className="size-10 bg-secondary rounded-full items-center justify-center"
+                style={s.modalCloseButton}
+                accessibilityLabel="Cerrar selección de banco"
+                accessibilityRole="button"
               >
-                <X color="#171717" weight="bold" size={20} />
-              </Pressable>
+                <X color={Colors.foreground} weight="bold" size={20} />
+              </PressableScale>
             </View>
-            <ScrollView className="flex-1 px-6">
+            <ScrollView style={s.modalScroll}>
               {BANCOS_VE.map((b, i) => (
-                <Pressable
+                <PressableScale
                   key={b}
                   onPress={() => { setBanco(b); setIsBancoModalVisible(false); }}
-                  className={`py-4 flex-row items-center ${i !== BANCOS_VE.length - 1 ? 'border-b border-border/30' : ''}`}
+                  haptic
+                  style={[s.bancoRow, i !== BANCOS_VE.length - 1 && s.bancoRowBorder]}
+                  accessibilityLabel={b}
+                  accessibilityRole="button"
                 >
-                  <View className="size-10 bg-primary/10 rounded-full items-center justify-center">
-                    <Bank color="#d4a017" weight="fill" size={20} />
+                  <View style={s.bancoIconContainer}>
+                    <Bank color={Colors.primary} weight="fill" size={20} />
                   </View>
-                  <Text className="text-base font-bold text-foreground ml-4">{b}</Text>
-                </Pressable>
+                  <Text style={s.bancoName}>{b}</Text>
+                </PressableScale>
               ))}
             </ScrollView>
           </View>
@@ -388,35 +491,463 @@ export function PaymentFlow({
 
   // Paso 1: Selección de método
   return (
-    <View className="bg-card rounded-[14px] p-6 border border-border">
-      <Text className="font-heading text-lg text-foreground mb-1">Método de Pago</Text>
-      {concepto && <Text className="text-sm text-muted-foreground mb-4">{concepto}</Text>}
+    <View style={s.card}>
+      <Text style={s.sectionTitle}>Método de Pago</Text>
+      {concepto && <Text style={s.sectionSubtitle}>{concepto}</Text>}
 
-      <View className="bg-primary/10 rounded-[10px] px-4 py-3 mb-6 border border-primary/20 items-center">
-        <Text className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1">Total a Transferir</Text>
-        <Text className="font-heading text-3xl text-primary">{monto} Bs.</Text>
-      </View>
+      {/* ── Monto: Paso 1 – selección de método ── */}
+      <MontoBadge
+        monto={monto}
+        montoUSD={null}
+        tasaBCV={null}
+        loadingTasa={false}
+        errorTasa={null}
+        isZelle={false}
+        label="Total a Transferir"
+      />
 
-      <View className="gap-3">
+      <View style={s.metodosList}>
         {metodosDisponibles.map((m) => {
           const info = METODO_INFO[m.tipo] || { label: m.tipo, desc: 'Cuenta de la cooperativa' };
           return (
-            <Pressable
+            <PressableScale
               key={m.id}
               onPress={() => { setMetodoSeleccionado(m); setStep('formulario'); }}
-              className="flex-row items-center p-4 bg-background border border-border rounded-[10px]"
+              haptic
+              scaleValue={0.97}
+              style={s.metodoCard}
+              accessibilityLabel={`Seleccionar método de pago: ${info.label}`}
+              accessibilityRole="button"
             >
-              <View className="size-10 bg-primary/10 rounded-full items-center justify-center mr-4">
-                <CreditCard color="#d4a017" weight="fill" size={20} />
+              <View style={s.metodoIconContainer}>
+                <CreditCard color={Colors.primary} weight="fill" size={22} />
               </View>
-              <View className="flex-1">
-                <Text className="text-sm font-bold text-foreground">{info.label}</Text>
-                <Text className="text-xs text-muted-foreground" numberOfLines={1}>{m.banco ? `${m.banco} - ` : ''}{info.desc}</Text>
+              <View style={s.metodoInfo}>
+                <Text style={s.metodoLabel}>{info.label}</Text>
+                <Text style={s.metodoDesc} numberOfLines={1}>{m.banco ? `${m.banco} - ` : ''}{info.desc}</Text>
               </View>
-            </Pressable>
+            </PressableScale>
           );
         })}
       </View>
     </View>
   );
 }
+
+// ─── StyleSheet ───────────────────────────────────────────────────────────────
+const s = StyleSheet.create({
+  // ── Card wrapper (loading, enviado, métodos) ─────────────────
+  card: {
+    backgroundColor: Colors.white,
+    borderRadius: Radius.xl,
+    padding: Spacing['2xl'],
+  },
+  loadingContainer: {
+    backgroundColor: Colors.white,
+    borderRadius: Radius.xl,
+    padding: Spacing['3xl'],
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingText: {
+    fontFamily: Typography.family,
+    fontSize: Typography.sizes.xs,
+    fontWeight: Typography.weights.bold,
+    color: Colors.mutedForeground,
+    marginTop: Spacing.sm,
+  },
+
+  // ── MontoBadge ───────────────────────────────────────────────
+  montoBadge: {
+    backgroundColor: Colors.primaryLight,
+    borderRadius: Radius.sm,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.lg - 2,
+    marginBottom: Spacing.lg,
+    borderWidth: 1,
+    borderColor: Colors.primary + '40',
+    alignItems: 'center',
+  },
+  montoBadgeLabel: {
+    fontFamily: Typography.family,
+    fontSize: Typography.sizes.xs,
+    fontWeight: Typography.weights.bold,
+    color: Colors.mutedForeground,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginBottom: Spacing.xs,
+  },
+  montoBadgeAmount: {
+    fontFamily: Typography.family,
+    fontSize: Typography.sizes['3xl'],
+    fontWeight: Typography.weights.heavy,
+    color: Colors.primary,
+  },
+  montoUsdContainer: {
+    marginTop: Spacing.sm,
+    alignItems: 'center',
+  },
+  montoUsdBlock: {
+    alignItems: 'center',
+  },
+  montoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+  },
+  montoBadgeUsd: {
+    fontFamily: Typography.family,
+    fontSize: Typography.sizes['2xl'],
+    fontWeight: Typography.weights.bold,
+    color: Colors.accent,
+  },
+  montoBadgeHint: {
+    fontFamily: Typography.family,
+    fontSize: Typography.sizes.xs - 1,
+    color: Colors.mutedForeground,
+  },
+  montoBadgeWarning: {
+    fontFamily: Typography.family,
+    fontSize: Typography.sizes.xs,
+    color: Colors.warning,
+  },
+  montoBadgeFootnote: {
+    fontFamily: Typography.family,
+    fontSize: Typography.sizes.xs - 1,
+    color: Colors.mutedForeground,
+    marginTop: Spacing.xs,
+    textAlign: 'center',
+  },
+  montoBadgeConcepto: {
+    fontFamily: Typography.family,
+    fontSize: Typography.sizes.xs,
+    color: Colors.mutedForeground,
+    marginTop: Spacing.xs,
+    textAlign: 'center',
+  },
+
+  // ── Success (enviado) ────────────────────────────────────────
+  successIconContainer: {
+    width: Spacing['4xl'] * 2,
+    height: Spacing['4xl'] * 2,
+    backgroundColor: Colors.successLight,
+    borderRadius: Radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: Spacing.lg,
+    alignSelf: 'center',
+  },
+  successTitle: {
+    fontFamily: Typography.family,
+    fontSize: Typography.sizes.xl,
+    fontWeight: Typography.weights.bold,
+    color: Colors.foreground,
+    textAlign: 'center',
+    marginBottom: Spacing.sm,
+  },
+  successSubtitle: {
+    fontFamily: Typography.family,
+    fontSize: Typography.sizes.sm,
+    color: Colors.mutedForeground,
+    textAlign: 'center',
+    marginBottom: Spacing['2xl'],
+    lineHeight: 20,
+  },
+  referenciaContainer: {
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.sm,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
+    width: '100%',
+    marginBottom: Spacing['2xl'],
+  },
+  referenciaLabel: {
+    fontFamily: Typography.family,
+    fontSize: Typography.sizes.xs,
+    color: Colors.mutedForeground,
+    fontWeight: Typography.weights.bold,
+    marginBottom: Spacing.xs,
+  },
+  referenciaValue: {
+    fontFamily: Typography.family,
+    fontSize: Typography.sizes.sm,
+    fontWeight: Typography.weights.heavy,
+    color: Colors.foreground,
+  },
+  efectivoNote: {
+    backgroundColor: Colors.primaryLight,
+    borderRadius: Radius.sm,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
+    width: '100%',
+    marginBottom: Spacing['2xl'],
+    borderWidth: 1,
+    borderColor: Colors.primary + '40',
+  },
+  efectivoNoteLabel: {
+    fontFamily: Typography.family,
+    fontSize: Typography.sizes.xs,
+    color: Colors.primary,
+    fontWeight: Typography.weights.bold,
+    marginBottom: Spacing.xs,
+  },
+  efectivoNoteText: {
+    fontFamily: Typography.family,
+    fontSize: Typography.sizes.sm,
+    color: Colors.foreground,
+  },
+
+  // ── Primary Button ───────────────────────────────────────────
+  primaryButton: {
+    height: Spacing['5xl'],
+    borderRadius: Radius.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.primary,
+    width: '100%',
+  },
+  primaryButtonDisabled: {
+    backgroundColor: Colors.primaryLight,
+  },
+  primaryButtonText: {
+    fontFamily: Typography.family,
+    fontWeight: Typography.weights.bold,
+    color: Colors.primaryForeground,
+    fontSize: Typography.sizes.base,
+  },
+  primaryButtonTextDisabled: {
+    color: Colors.mutedForeground,
+  },
+
+  // ── Formulario ───────────────────────────────────────────────
+  formScrollContainer: {
+    backgroundColor: Colors.white,
+    borderRadius: Radius.xl,
+  },
+  formContent: {
+    padding: Spacing['2xl'],
+  },
+  formSubmitButton: {
+    marginTop: Spacing['2xl'],
+    marginBottom: Spacing['3xl'],
+  },
+  backRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: Spacing['2xl'],
+    gap: Spacing.sm,
+  },
+  backText: {
+    fontFamily: Typography.family,
+    fontSize: Typography.sizes.sm,
+    color: Colors.mutedForeground,
+  },
+  sectionTitle: {
+    fontFamily: Typography.family,
+    fontSize: Typography.sizes.lg + 1,
+    fontWeight: Typography.weights.bold,
+    color: Colors.foreground,
+    marginBottom: Spacing.xs,
+  },
+  sectionSubtitle: {
+    fontFamily: Typography.family,
+    fontSize: Typography.sizes.sm,
+    color: Colors.mutedForeground,
+    marginBottom: Spacing.lg,
+  },
+  cuentaDataContainer: {
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.sm,
+    padding: Spacing.lg,
+    marginBottom: Spacing['2xl'],
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  cuentaDataTitle: {
+    fontFamily: Typography.family,
+    fontSize: Typography.sizes.xs - 1,
+    fontWeight: Typography.weights.bold,
+    color: Colors.mutedForeground,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginBottom: Spacing.sm,
+  },
+  cuentaFieldsGap: {
+    gap: Spacing.xs,
+  },
+  cuentaDataRow: {
+    fontFamily: Typography.family,
+    fontSize: Typography.sizes.sm,
+    color: Colors.foreground,
+  },
+  cuentaFieldBold: {
+    fontFamily: Typography.family,
+    fontWeight: Typography.weights.bold,
+  },
+  cuentaInstructions: {
+    fontFamily: Typography.family,
+    fontSize: Typography.sizes.xs,
+    color: Colors.mutedForeground,
+    marginTop: Spacing.sm,
+    fontStyle: 'italic',
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+    paddingTop: Spacing.sm,
+  },
+  formFieldsGap: {
+    gap: Spacing.lg,
+  },
+  fieldLabel: {
+    fontFamily: Typography.family,
+    fontSize: Typography.sizes.sm,
+    fontWeight: Typography.weights.semibold,
+    color: Colors.foreground,
+    marginBottom: Spacing.sm,
+  },
+  textInput: {
+    fontFamily: Typography.family,
+    backgroundColor: Colors.surface,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+    paddingHorizontal: Spacing.lg - 2,
+    height: Spacing['5xl'],
+    borderRadius: Radius.sm,
+    fontSize: Typography.sizes.base,
+    color: Colors.foreground,
+  },
+  bancoSelector: {
+    backgroundColor: Colors.surface,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+    height: Spacing['5xl'],
+    borderRadius: Radius.sm,
+    paddingHorizontal: Spacing.lg - 2,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  bancoSelectorText: {
+    fontFamily: Typography.family,
+    fontSize: Typography.sizes.base,
+    color: Colors.foreground,
+  },
+  bancoSelectorPlaceholder: {
+    fontFamily: Typography.family,
+    fontSize: Typography.sizes.base,
+    color: Colors.mutedForeground,
+  },
+  efectivoFormNote: {
+    backgroundColor: Colors.primaryLight,
+    borderWidth: 1,
+    borderColor: Colors.primary + '40',
+    borderRadius: Radius.sm,
+    padding: Spacing.lg,
+    marginBottom: Spacing['2xl'],
+  },
+  efectivoFormTitle: {
+    fontFamily: Typography.family,
+    fontSize: Typography.sizes.sm + 1,
+    fontWeight: Typography.weights.bold,
+    color: Colors.foreground,
+    marginBottom: Spacing.xs,
+  },
+  efectivoFormText: {
+    fontFamily: Typography.family,
+    fontSize: Typography.sizes.sm,
+    color: Colors.mutedForeground,
+    lineHeight: 20,
+  },
+
+  // ── Modal de Banco ───────────────────────────────────────────
+  modalContainer: {
+    flex: 1,
+    backgroundColor: Colors.white,
+    paddingTop: Spacing['2xl'],
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: Spacing['2xl'],
+    paddingBottom: Spacing.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  modalTitle: {
+    fontFamily: Typography.family,
+    fontSize: Typography.sizes.xl,
+    fontWeight: Typography.weights.bold,
+    color: Colors.foreground,
+  },
+  modalCloseButton: {
+    width: Spacing['4xl'],
+    height: Spacing['4xl'],
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalScroll: {
+    flex: 1,
+    paddingHorizontal: Spacing['2xl'],
+  },
+  bancoRow: {
+    paddingVertical: Spacing.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  bancoRowBorder: {
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.borderLight,
+  },
+  bancoIconContainer: {
+    width: Spacing['4xl'],
+    height: Spacing['4xl'],
+    backgroundColor: Colors.primaryLight,
+    borderRadius: Radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bancoName: {
+    fontFamily: Typography.family,
+    fontSize: Typography.sizes.base,
+    fontWeight: Typography.weights.bold,
+    color: Colors.foreground,
+    marginLeft: Spacing.lg,
+  },
+
+  // ── Selección de método (Paso 1) ────────────────────────────
+  metodosList: {
+    gap: Spacing.md,
+  },
+  metodoCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: Spacing.lg,
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.md,
+  },
+  metodoIconContainer: {
+    width: Spacing['4xl'] + Spacing.xs,
+    height: Spacing['4xl'] + Spacing.xs,
+    backgroundColor: Colors.primaryLight,
+    borderRadius: Radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: Spacing.lg,
+  },
+  metodoInfo: {
+    flex: 1,
+  },
+  metodoLabel: {
+    fontFamily: Typography.family,
+    fontSize: Typography.sizes.sm + 1,
+    fontWeight: Typography.weights.bold,
+    color: Colors.foreground,
+  },
+  metodoDesc: {
+    fontFamily: Typography.family,
+    fontSize: Typography.sizes.xs,
+    color: Colors.mutedForeground,
+  },
+});

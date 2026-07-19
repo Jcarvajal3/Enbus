@@ -1,4 +1,4 @@
-import { SafeAreaView, ScrollView, View, Text, Pressable, useCSSVariable } from '@/tw';
+import { SafeAreaView, ScrollView, View, Text } from '@/tw';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/src/contexts/AuthContext';
 import { supabase } from '@/src/utils/supabase';
@@ -10,6 +10,17 @@ import * as Haptics from 'expo-haptics';
 import { useToast } from '@/src/components/Toast';
 import type { PerfilUsuario } from '@/src/types';
 import { sanitizeText } from '@/src/utils/validation';
+import { PressableScale } from '@/src/components/PressableScale';
+import { PageTransition } from '@/src/components/PageTransition';
+import { StyleSheet } from 'react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  withDelay,
+  Easing,
+} from 'react-native-reanimated';
+import { Colors, Typography, Radius } from '@/src/theme';
 
 export default function PerfilScreen() {
   const router = useRouter();
@@ -20,18 +31,38 @@ export default function PerfilScreen() {
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
-  
+
   const [nombreCompleto, setNombreCompleto] = useState('');
   const [telefono, setTelefono] = useState('');
   const [cedulaRif, setCedulaRif] = useState('');
   const [saving, setSaving] = useState(false);
 
-  // ── Colores para los íconos (phosphor no soporta className) ──────────────
-  const mutedColor = useCSSVariable('--muted-foreground') as string || '#737373';
-  const primaryColor = useCSSVariable('--primary') as string || '#e2b714';
-  const destructiveColor = useCSSVariable('--destructive') as string || '#dc2626';
-  const foregroundColor = useCSSVariable('--foreground') as string || '#171717';
-  const successColor = '#16a34a';
+  // P2: Fade in on mount
+  const avatarOpacity = useSharedValue(0);
+  const cardOpacity = useSharedValue(0);
+  const cardY = useSharedValue(12);
+  const actionsOpacity = useSharedValue(0);
+
+  const animateIn = () => {
+    const ease = Easing.out(Easing.cubic);
+    avatarOpacity.value = withTiming(1, { duration: 350, easing: ease });
+    cardOpacity.value = withDelay(80, withTiming(1, { duration: 350, easing: ease }));
+    cardY.value = withDelay(80, withTiming(0, { duration: 350, easing: ease }));
+    actionsOpacity.value = withDelay(180, withTiming(1, { duration: 280, easing: ease }));
+  };
+
+  const avatarStyle = useAnimatedStyle(() => ({ opacity: avatarOpacity.value }));
+  const cardStyle = useAnimatedStyle(() => ({
+    opacity: cardOpacity.value,
+    transform: [{ translateY: cardY.value }],
+  }));
+  const actionsStyle = useAnimatedStyle(() => ({ opacity: actionsOpacity.value }));
+
+  const mutedColor = Colors.mutedForeground;
+  const primaryColor = Colors.primary;
+  const destructiveColor = Colors.destructive;
+  const foregroundColor = Colors.foreground;
+  const successColor = Colors.success;
 
   useEffect(() => {
     let isMounted = true;
@@ -52,9 +83,9 @@ export default function PerfilScreen() {
           setNombreCompleto(data.nombre_completo ?? '');
           setTelefono(data.telefono ?? '');
           setCedulaRif(data.cedula_rif ?? '');
+          animateIn();
         }
       } catch (err: any) {
-        // POL-01: Only log in development to avoid leaking Supabase internals in production
         if (__DEV__) console.error('Error fetching profile:', err.message);
         if (isMounted) setFetchError(err.message ?? 'No se pudo cargar el perfil.');
       } finally {
@@ -67,9 +98,6 @@ export default function PerfilScreen() {
   }, [user]);
 
   const handleLogout = async () => {
-    // Usa signOut del contexto en lugar de llamar a supabase.auth.signOut() directamente.
-    // Evita doble-navegación: el guard de auth en _layout.tsx ya redirige a /login
-    // cuando la sesión se anula, por lo que no necesitamos router.replace() manual aquí.
     await signOut();
   };
 
@@ -111,7 +139,6 @@ export default function PerfilScreen() {
         cedula_rif: sanitizeText(cedulaRif),
       }) : prev);
 
-      // Actualizar también metadatos de auth para consistencia
       await supabase.auth.updateUser({
         data: {
           nombre_completo: sanitizeText(nombreCompleto),
@@ -133,7 +160,6 @@ export default function PerfilScreen() {
   }, [user, nombreCompleto, telefono, cedulaRif, toast]);
 
   const handleCancel = () => {
-    // ACC: null-safe — profile could be null if fetch failed
     if (profile) {
       setNombreCompleto(profile.nombre ?? profile.nombre_completo ?? '');
       setTelefono(profile.telefono ?? '');
@@ -149,151 +175,282 @@ export default function PerfilScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-background">
-      <ScrollView contentContainerClassName="pb-32">
+      <PageTransition>
+        <ScrollView contentContainerStyle={{ paddingBottom: 128 }}>
 
-        {/* Header */}
-        <View className="flex-row items-center justify-between px-6 py-4 border-b border-border">
-          <View className="flex-row items-center gap-4">
-            <Pressable
-              onPress={() => router.back()}
-              className="size-10 bg-secondary rounded-full items-center justify-center"
-            >
-              <CaretLeft weight="bold" color={foregroundColor} size={22} />
-            </Pressable>
-            <Text className="font-heading text-xl text-foreground">Mi Perfil</Text>
-          </View>
-          
-          {!loading && (
-            isEditing ? (
-              <View className="flex-row gap-2">
-                <Pressable
-                  onPress={handleCancel}
-                  disabled={saving}
-                  className="size-10 bg-secondary rounded-full items-center justify-center"
-                >
-                  <X weight="bold" color={mutedColor} size={20} />
-                </Pressable>
-                <Pressable
-                  onPress={handleSave}
-                  disabled={saving}
-                  className="size-10 bg-primary/10 rounded-full items-center justify-center"
-                >
-                  {saving ? <Spinner /> : <Check weight="bold" color={successColor} size={20} />}
-                </Pressable>
-              </View>
-            ) : (
-              <Pressable
-                onPress={() => setIsEditing(true)}
-                className="size-10 bg-secondary rounded-full items-center justify-center"
+          {/* Header */}
+          <View style={styles.header}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
+              <PressableScale
+                onPress={() => router.back()}
+                style={styles.iconBtn}
               >
-                <PencilSimple weight="bold" color={foregroundColor} size={20} />
-              </Pressable>
-            )
-          )}
-        </View>
-
-        {loading ? (
-          <View className="py-20 items-center justify-center">
-            <Spinner size="large" />
-          </View>
-        ) : fetchError ? (
-          // UX-01: Visible error state with retry option
-          <View className="py-20 items-center justify-center px-8 gap-4">
-            <WarningCircle color={destructiveColor} size={48} weight="thin" />
-            <Text className="text-base font-bold text-foreground text-center">No se pudo cargar el perfil</Text>
-            <Text className="text-sm text-muted-foreground text-center">{fetchError}</Text>
-          </View>
-        ) : (
-          <>
-            {/* Avatar + Name */}
-            <View className="items-center py-8">
-              <View className="size-[88px] rounded-full bg-primary/10 items-center justify-center mb-3">
-                <UserCircle weight="fill" color={primaryColor} size={72} />
-              </View>
-              <Text className="text-[22px] font-bold text-foreground mb-1">{displayName}</Text>
-              <Text className="text-sm text-muted-foreground">{email}</Text>
+                <CaretLeft weight="bold" color={foregroundColor} size={22} />
+              </PressableScale>
+              <Text style={{ fontFamily: Typography.family }} className="font-heading text-xl text-foreground">Mi Perfil</Text>
             </View>
 
-            {/* Info Card */}
-            <View className="mx-6 bg-card border border-border rounded-[14px] p-5">
-              <Text className="text-xs font-bold text-muted-foreground uppercase tracking-[0.8px] mb-4">
-                Información Personal
-              </Text>
-
-              {isEditing ? (
-                <View className="gap-2">
-                  <InputField
-                    label="Nombre Completo"
-                    placeholder="Juan Pérez"
-                    value={nombreCompleto}
-                    onChangeText={setNombreCompleto}
-                    editable={!saving}
-                  />
-                  <InputField
-                    label="Teléfono"
-                    placeholder="04141234567"
-                    keyboardType="phone-pad"
-                    value={telefono}
-                    onChangeText={setTelefono}
-                    editable={!saving}
-                  />
-                  <InputField
-                    label="Cédula o RIF"
-                    placeholder="V-12345678"
-                    value={cedulaRif}
-                    onChangeText={setCedulaRif}
-                    editable={!saving}
-                  />
+            {!loading && (
+              isEditing ? (
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  <PressableScale
+                    onPress={handleCancel}
+                    disabled={saving}
+                    style={styles.iconBtn}
+                  >
+                    <X weight="bold" color={mutedColor} size={20} />
+                  </PressableScale>
+                  <PressableScale
+                    onPress={handleSave}
+                    disabled={saving}
+                    haptic
+                    hapticType="medium"
+                    style={styles.iconBtn}
+                  >
+                    {saving ? <Spinner /> : <Check weight="bold" color={successColor} size={20} />}
+                  </PressableScale>
                 </View>
               ) : (
-                <>
-                  {/* Correo */}
-                  <View className="flex-row items-center py-3.5">
-                    <EnvelopeSimple color={mutedColor} size={18} weight="bold" />
-                    <View className="ml-3 flex-1">
-                      <Text className="text-[11px] font-semibold text-muted-foreground mb-0.5">Correo</Text>
-                      <Text className="text-[15px] font-semibold text-foreground">{email}</Text>
-                    </View>
-                  </View>
+                <PressableScale
+                  onPress={() => {
+                    Haptics.selectionAsync();
+                    setIsEditing(true);
+                  }}
+                  style={styles.iconBtn}
+                >
+                  <PencilSimple weight="bold" color={foregroundColor} size={20} />
+                </PressableScale>
+              )
+            )}
+          </View>
 
-                  {/* Teléfono */}
-                  <View className="flex-row items-center py-3.5 border-t border-border">
-                    <Phone color={mutedColor} size={18} weight="bold" />
-                    <View className="ml-3 flex-1">
-                      <Text className="text-[11px] font-semibold text-muted-foreground mb-0.5">Teléfono</Text>
-                      <Text className="text-[15px] font-semibold text-foreground">{displayTelefono}</Text>
-                    </View>
-                  </View>
-
-                  {/* Cédula */}
-                  <View className="flex-row items-center py-3.5 border-t border-border">
-                    <IdentificationCard color={mutedColor} size={18} weight="bold" />
-                    <View className="ml-3 flex-1">
-                      <Text className="text-[11px] font-semibold text-muted-foreground mb-0.5">Cédula / RIF</Text>
-                      <Text className="text-[15px] font-semibold text-foreground">{displayCedula}</Text>
-                    </View>
-                  </View>
-                </>
-              )}
+          {loading ? (
+            <View style={{ paddingVertical: 80, alignItems: 'center', justifyContent: 'center' }}>
+              <Spinner size="large" />
             </View>
-
-            {/* Logout */}
-            <View className="px-6 mt-6">
-              <Pressable
-                onPress={handleLogout}
-                className="flex-row items-center justify-center h-[52px] rounded-full border border-destructive/30 bg-destructive/5 gap-2.5"
-              >
-                <SignOut color={destructiveColor} size={20} weight="bold" />
-                <Text className="text-[15px] font-bold text-destructive">Cerrar Sesión</Text>
-              </Pressable>
+          ) : fetchError ? (
+            <View style={{ paddingVertical: 80, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32, gap: 16 }}>
+              <WarningCircle color={destructiveColor} size={48} weight="thin" />
+              <Text style={{ fontSize: 16, fontWeight: '700', color: Colors.foreground, textAlign: 'center', fontFamily: Typography.family }}>No se pudo cargar el perfil</Text>
+              <Text style={{ fontSize: 14, color: Colors.mutedForeground, textAlign: 'center', fontFamily: Typography.family }}>{fetchError}</Text>
             </View>
+          ) : (
+            <>
+              {/* Avatar animado */}
+              <Animated.View style={[styles.avatarSection, avatarStyle]}>
+                <View style={styles.avatarCircle}>
+                  <UserCircle weight="fill" color={primaryColor} size={72} />
+                </View>
+                <Text style={styles.avatarName}>{displayName}</Text>
+                <Text style={styles.avatarEmail}>{email}</Text>
+              </Animated.View>
 
-            {/* Version */}
-            <Text className="text-center text-muted-foreground text-xs mt-8">EnBus App v1.0.0</Text>
-          </>
-        )}
+              {/* Info Card animada */}
+              <Animated.View style={[{ marginHorizontal: 24 }, cardStyle]}>
+                <View style={styles.card}>
+                  <Text style={styles.sectionLabel}>Información Personal</Text>
 
-      </ScrollView>
+                  {isEditing ? (
+                    <View style={{ gap: 8 }}>
+                      <InputField
+                        label="Nombre Completo"
+                        placeholder="Juan Pérez"
+                        value={nombreCompleto}
+                        onChangeText={setNombreCompleto}
+                        editable={!saving}
+                        inputContainerStyle={styles.inputContainer}
+                        labelStyle={styles.inputLabel}
+                        style={styles.inputText}
+                      />
+                      <InputField
+                        label="Teléfono"
+                        placeholder="04141234567"
+                        keyboardType="phone-pad"
+                        value={telefono}
+                        onChangeText={setTelefono}
+                        editable={!saving}
+                        inputContainerStyle={styles.inputContainer}
+                        labelStyle={styles.inputLabel}
+                        style={styles.inputText}
+                      />
+                      <InputField
+                        label="Cédula o RIF"
+                        placeholder="V-12345678"
+                        value={cedulaRif}
+                        onChangeText={setCedulaRif}
+                        editable={!saving}
+                        inputContainerStyle={styles.inputContainer}
+                        labelStyle={styles.inputLabel}
+                        style={styles.inputText}
+                      />
+                    </View>
+                  ) : (
+                    <>
+                      <View style={styles.infoRow}>
+                        <EnvelopeSimple color={mutedColor} size={18} weight="bold" />
+                        <View style={{ marginLeft: 12, flex: 1 }}>
+                          <Text style={styles.infoLabel}>Correo</Text>
+                          <Text style={styles.infoValue}>{email}</Text>
+                        </View>
+                      </View>
+
+                      <View style={[styles.infoRow, styles.infoRowBorder]}>
+                        <Phone color={mutedColor} size={18} weight="bold" />
+                        <View style={{ marginLeft: 12, flex: 1 }}>
+                          <Text style={styles.infoLabel}>Teléfono</Text>
+                          <Text style={styles.infoValue}>{displayTelefono}</Text>
+                        </View>
+                      </View>
+
+                      <View style={[styles.infoRow, styles.infoRowBorder]}>
+                        <IdentificationCard color={mutedColor} size={18} weight="bold" />
+                        <View style={{ marginLeft: 12, flex: 1 }}>
+                          <Text style={styles.infoLabel}>Cédula / RIF</Text>
+                          <Text style={styles.infoValue}>{displayCedula}</Text>
+                        </View>
+                      </View>
+                    </>
+                  )}
+                </View>
+              </Animated.View>
+
+              {/* Logout animado */}
+              <Animated.View style={[{ paddingHorizontal: 24, marginTop: 24 }, actionsStyle]}>
+                <PressableScale
+                  onPress={handleLogout}
+                  haptic
+                  hapticType="medium"
+                  style={styles.logoutBtn}
+                >
+                  <SignOut color={destructiveColor} size={20} weight="bold" />
+                  <Text style={styles.logoutText}>Cerrar Sesión</Text>
+                </PressableScale>
+              </Animated.View>
+
+              <Text style={styles.version}>EnBus App v1.0.0</Text>
+            </>
+          )}
+        </ScrollView>
+      </PageTransition>
     </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+    backgroundColor: Colors.white,
+  },
+  iconBtn: {
+    width: 44,
+    height: 44,
+    backgroundColor: 'transparent',
+    borderRadius: Radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarSection: {
+    alignItems: 'center',
+    paddingVertical: 32,
+  },
+  avatarCircle: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    backgroundColor: Colors.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  avatarName: {
+    fontFamily: Typography.family,
+    fontSize: 22,
+    fontWeight: '700',
+    color: Colors.foreground,
+    marginBottom: 4,
+  },
+  avatarEmail: {
+    fontFamily: Typography.family,
+    fontSize: 13,
+    color: Colors.mutedForeground,
+  },
+  card: {
+    backgroundColor: Colors.white,
+    borderRadius: 24,
+    padding: 20,
+  },
+  sectionLabel: {
+    fontFamily: Typography.family,
+    fontSize: 11,
+    fontWeight: '700',
+    color: Colors.mutedForeground,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginBottom: 16,
+  },
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+  },
+  infoRowBorder: {
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+  },
+  infoLabel: {
+    fontFamily: Typography.family,
+    fontSize: 11,
+    fontWeight: '600',
+    color: Colors.mutedForeground,
+    marginBottom: 2,
+  },
+  infoValue: {
+    fontFamily: Typography.family,
+    fontSize: 15,
+    fontWeight: '600',
+    color: Colors.foreground,
+  },
+  logoutBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 52,
+    borderRadius: Radius.full,
+    borderWidth: 1,
+    borderColor: 'rgba(220, 38, 38, 0.3)',
+    backgroundColor: 'rgba(220, 38, 38, 0.06)',
+    gap: 10,
+  },
+  logoutText: {
+    fontFamily: Typography.family,
+    fontSize: 15,
+    fontWeight: '700',
+    color: Colors.destructive,
+  },
+  version: {
+    fontFamily: Typography.family,
+    textAlign: 'center',
+    color: Colors.mutedForeground,
+    fontSize: 11,
+    marginTop: 32,
+  },
+  inputContainer: {
+    backgroundColor: Colors.white,
+    borderRadius: Radius.full,
+    borderWidth: 0,
+  },
+  inputLabel: {
+    fontFamily: Typography.family,
+    color: Colors.mutedForeground,
+  },
+  inputText: {
+    fontFamily: Typography.family,
+    color: Colors.foreground,
+  },
+});

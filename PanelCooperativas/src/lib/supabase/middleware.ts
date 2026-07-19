@@ -51,6 +51,7 @@ export async function updateSession(request: NextRequest) {
     // --- COOPERATIVAS ROUTES (lógica actual sin cambios) ---
     const publicPaths = [
       "/cooperativas/login",
+      "/cooperativas/registro",
       "/cooperativas/invite",
       "/cooperativas/recuperar",
       "/cooperativas/restablecer",

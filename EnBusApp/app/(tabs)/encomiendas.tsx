@@ -1,25 +1,30 @@
 import { SafeAreaView } from '@/tw';
-import { useState, useCallback, useMemo } from 'react';
-import { View, Text, Pressable } from '@/tw';
-import { FlatList, RefreshControl, ListRenderItem } from 'react-native';
+import { useState, useCallback, useMemo, useEffect } from 'react';
+import { View, Text } from '@/tw';
+import { FlatList, RefreshControl, ListRenderItem, StyleSheet } from 'react-native';
 import { useAuth } from '@/src/contexts/AuthContext';
 import { useEncomiendas } from '@/src/hooks/useEncomiendas';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { TransactionCard } from '@/src/components/TransactionCard';
 import { CardSkeleton } from '@/src/components/CardSkeleton';
-import { Plus } from 'phosphor-react-native';
+import { Plus, DownloadSimple, UploadSimple } from 'phosphor-react-native';
 import { formatDate } from '@/src/utils/formatters';
+import { PressableScale } from '@/src/components/PressableScale';
+import { StaggerItem } from '@/src/components/StaggerItem';
+import { Colors, Typography, Radius, Shadows, Gradients } from '@/src/theme';
+import { LinearGradient } from 'expo-linear-gradient';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  Easing,
+} from 'react-native-reanimated';
 
 export default function EncomiendasScreen() {
   const { user } = useAuth();
   const router = useRouter();
   const [tab, setTab] = useState<'recibir' | 'enviar'>('recibir');
-
-  // ── Pausa la suscripción cuando esta tab no está activa ───────────────────
-  // IMPORTANTE: ya no usamos useFocusEffect para llamar refetch() manualmente.
-  // El hook mismo se reconecta cuando enabled pasa de false a true, lo que
-  // también dispara un nuevo fetch — eliminando el doble-fetch previo.
   const [isFocused, setIsFocused] = useState(true);
 
   useFocusEffect(
@@ -45,78 +50,136 @@ export default function EncomiendasScreen() {
     }
   }, [refetch]);
 
-  // PERF-02: Memoize filtered list — only recompute when data or tab changes.
-  const historial = useMemo(() =>
-    (todasLasEncomiendas || []).filter((enc: any) => {
-      if (tab === 'enviar') return enc.sender_id === user?.id;
-      return enc.receiver_user_id === user?.id;
-    })
-  , [todasLasEncomiendas, tab, user?.id]);
+  const [trackWidth, setTrackWidth] = useState(0);
+  const indicatorWidth = useSharedValue(0);
+  const translateX = useSharedValue(0);
 
-  // PERF-02: Stable renderItem to prevent FlatList from invalidating all rows.
-  const renderItem = useCallback<ListRenderItem<any>>(({ item: enc }) => (
-    <View className="mb-4 w-full">
-      <TransactionCard
-        type={tab === 'enviar' ? "encomienda_envio" : "encomienda_recepcion"}
-        id={enc.tracking_id || enc.id}
-        estado={enc.estado}
-        titulo={tab === 'enviar' ? 'Envío Regular' : 'Paquete Entrante'}
-        subtitulo={formatDate(enc.created_at)}
-        onPress={() => router.push({
-          pathname: tab === 'enviar'
-            ? '/encomiendas/enviar/[id]' as any
-            : '/encomiendas/recibir/[id]' as any,
-          params: { id: enc.id }
-        })}
-      />
-    </View>
+  const onTrackLayout = (event: any) => {
+    const width = event.nativeEvent.layout.width;
+    setTrackWidth(width);
+    const padding = 8;
+    const usableWidth = width - padding;
+    const tabWidth = usableWidth / 2;
+    indicatorWidth.value = tabWidth;
+    translateX.value = (tab === 'recibir' ? 0 : 1) * tabWidth;
+  };
+
+  useEffect(() => {
+    if (trackWidth > 0) {
+      const padding = 8;
+      const tabWidth = (trackWidth - padding) / 2;
+      translateX.value = withTiming((tab === 'recibir' ? 0 : 1) * tabWidth, {
+        duration: 250,
+        easing: Easing.out(Easing.cubic),
+      });
+    }
+  }, [tab, trackWidth]);
+
+  const animatedIndicatorStyle = useAnimatedStyle(() => {
+    return {
+      transform: [{ translateX: translateX.value }],
+      width: indicatorWidth.value,
+    };
+  });
+
+  const historial = useMemo(
+    () =>
+      (todasLasEncomiendas || []).filter((enc: any) => {
+        if (tab === 'enviar') return enc.sender_id === user?.id;
+        return enc.receiver_user_id === user?.id;
+      }),
+    [todasLasEncomiendas, tab, user?.id]
+  );
+
+  const renderItem = useCallback<ListRenderItem<any>>(({ item: enc, index }) => (
+    <StaggerItem index={index}>
+      <View style={s.cardRow}>
+        <TransactionCard
+          type={tab === 'enviar' ? 'encomienda_envio' : 'encomienda_recepcion'}
+          id={enc.tracking_id || enc.id}
+          estado={enc.estado}
+          titulo={tab === 'enviar' ? 'Envío Regular' : 'Paquete Entrante'}
+          subtitulo={formatDate(enc.created_at)}
+          onPress={() =>
+            router.push({
+              pathname:
+                tab === 'enviar'
+                  ? '/encomiendas/enviar/[id]' as any
+                  : '/encomiendas/recibir/[id]' as any,
+              params: { id: enc.id },
+            })
+          }
+        />
+      </View>
+    </StaggerItem>
   ), [tab, router]);
 
   const keyExtractor = useCallback((item: any) => item.id, []);
 
-  const emptyComponent = useMemo(() => (
-    <View className="py-20 items-center justify-center">
-      <View className="size-24 bg-secondary rounded-full items-center justify-center mb-6">
-        <Plus color="#a3a3a3" weight="bold" size={32} />
+  const emptyComponent = useMemo(
+    () => (
+      <View style={s.empty}>
+        <View style={s.emptyIcon}>
+          <Plus color={Colors.mutedForeground} weight="bold" size={32} />
+        </View>
+        <Text style={s.emptyTitle}>Sin encomiendas</Text>
+        <Text style={s.emptySubtitle}>
+          {tab === 'enviar'
+            ? 'No tienes envíos registrados por los momentos.'
+            : 'No tienes paquetes en camino hacia ti.'}
+        </Text>
       </View>
-      <Text className="text-xl font-bold text-foreground mb-2">Sin encomiendas</Text>
-      <Text className="text-base text-muted-foreground text-center px-4">
-        {tab === 'enviar'
-          ? 'No tienes envíos registrados por los momentos.'
-          : 'No tienes paquetes en camino hacia ti.'}
-      </Text>
-    </View>
-  ), [tab]);
+    ),
+    [tab]
+  );
 
   return (
-    <SafeAreaView className="flex-1 bg-background">
-      {/* Header Tabs */}
-      <View className="px-6 pt-6 pb-4 bg-background z-10 border-b border-border">
-        <Text className="font-heading text-3xl text-foreground mb-6">Mis Paquetes</Text>
+    <SafeAreaView className="flex-1" style={{ backgroundColor: Colors.background }}>
+      <View style={s.header}>
+        <Text style={s.headerTitle}>Mis Paquetes</Text>
+        <Text style={s.headerSubtitle}>
+          Consulta y realiza el seguimiento de tus envíos
+        </Text>
+      </View>
 
-        <View className="flex-row bg-secondary p-1 rounded-2xl">
-          <Pressable
+      <View style={s.tabContainer}>
+        <View style={s.tabRow} onLayout={onTrackLayout}>
+          {trackWidth > 0 && (
+            <Animated.View style={[s.tabIndicator, animatedIndicatorStyle]} />
+          )}
+          <PressableScale
             onPress={() => setTab('recibir')}
-            className={`flex-1 py-3 rounded-xl items-center ${tab === 'recibir' ? 'bg-background shadow-sm' : ''}`}
+            haptic
+            style={s.tab}
           >
-            <Text className={`font-bold ${tab === 'recibir' ? 'text-primary' : 'text-muted-foreground'}`}>
-              Para Mí
-            </Text>
-          </Pressable>
-          <Pressable
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <DownloadSimple
+                color={tab === 'recibir' ? Colors.foreground : Colors.mutedForeground}
+                weight={tab === 'recibir' ? 'bold' : 'regular'}
+                size={15}
+              />
+              <Text style={[s.tabText, tab === 'recibir' && s.tabTextActive]}>Para Mí</Text>
+            </View>
+          </PressableScale>
+          <PressableScale
             onPress={() => setTab('enviar')}
-            className={`flex-1 py-3 rounded-xl items-center ${tab === 'enviar' ? 'bg-background shadow-sm' : ''}`}
+            haptic
+            style={s.tab}
           >
-            <Text className={`font-bold ${tab === 'enviar' ? 'text-primary' : 'text-muted-foreground'}`}>
-              Enviados
-            </Text>
-          </Pressable>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <UploadSimple
+                color={tab === 'enviar' ? Colors.foreground : Colors.mutedForeground}
+                weight={tab === 'enviar' ? 'bold' : 'regular'}
+                size={15}
+              />
+              <Text style={[s.tabText, tab === 'enviar' && s.tabTextActive]}>Enviados</Text>
+            </View>
+          </PressableScale>
         </View>
       </View>
 
-      {/* PERF-01: FlatList replaces ScrollView + .map() */}
       {loading ? (
-        <View className="p-6">
+        <View style={{ padding: 24 }}>
           <CardSkeleton count={3} />
         </View>
       ) : (
@@ -131,8 +194,8 @@ export default function EncomiendasScreen() {
             <RefreshControl
               refreshing={refreshing}
               onRefresh={onRefresh}
-              colors={['#e2b714']}
-              tintColor="#e2b714"
+              colors={[Colors.primary]}
+              tintColor={Colors.primary}
             />
           }
           removeClippedSubviews={true}
@@ -142,18 +205,137 @@ export default function EncomiendasScreen() {
         />
       )}
 
-      {/* Floating Action Button CTA */}
-      <View className="absolute bottom-6 left-6 right-6">
-        <Pressable
+      <View style={s.fab}>
+        <PressableScale
           onPress={() => router.push('/encomiendas/nueva')}
-          className="bg-primary h-12 rounded-[10px] flex-row items-center justify-center gap-2"
+          haptic
+          hapticType="medium"
+          style={s.fabButton}
         >
-          <Plus color="#6b4a1a" weight="bold" size={20} />
-          <Text className="text-primary-foreground font-bold text-lg">
-            Crear Nuevo Envío
-          </Text>
-        </Pressable>
+          <LinearGradient
+            colors={[...Gradients.warm]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={s.fabGradient}
+          >
+            <Plus color={Colors.white} weight="bold" size={20} />
+            <Text style={s.fabText}>Crear Nuevo Envío</Text>
+          </LinearGradient>
+        </PressableScale>
       </View>
     </SafeAreaView>
   );
 }
+
+const s = StyleSheet.create({
+  header: {
+    paddingHorizontal: 24,
+    paddingTop: 24,
+    paddingBottom: 12,
+    backgroundColor: Colors.background,
+    zIndex: 10,
+  },
+  headerTitle: {
+    fontFamily: Typography.family,
+    fontWeight: Typography.weights.bold,
+    fontSize: Typography.sizes['3xl'],
+    color: Colors.foreground,
+    marginBottom: 4,
+  },
+  headerSubtitle: {
+    fontFamily: Typography.family,
+    fontWeight: Typography.weights.medium,
+    fontSize: Typography.sizes.sm,
+    color: Colors.mutedForeground,
+  },
+  tabContainer: {
+    paddingHorizontal: 24,
+    paddingBottom: 16,
+    backgroundColor: Colors.background,
+  },
+  cardRow: { marginBottom: 0 },
+  tabRow: {
+    flexDirection: 'row',
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.full,
+    padding: 4,
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: Radius.full,
+    alignItems: 'center',
+    zIndex: 2,
+  },
+  tabIndicator: {
+    position: 'absolute',
+    top: 4,
+    bottom: 4,
+    backgroundColor: Colors.white,
+    borderRadius: Radius.full,
+    left: 4,
+    zIndex: 1,
+  },
+  tabText: {
+    fontSize: 14,
+    fontFamily: Typography.family,
+    fontWeight: Typography.weights.semibold,
+    color: Colors.mutedForeground,
+  },
+  tabTextActive: {
+    color: Colors.foreground,
+  },
+  empty: {
+    paddingVertical: 80,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyIcon: {
+    width: 96,
+    height: 96,
+    backgroundColor: Colors.surface,
+    borderRadius: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 24,
+  },
+  emptyTitle: {
+    fontSize: 20,
+    fontFamily: Typography.family,
+    fontWeight: Typography.weights.bold,
+    color: Colors.foreground,
+    marginBottom: 8,
+  },
+  emptySubtitle: {
+    fontSize: 15,
+    fontFamily: Typography.family,
+    color: Colors.mutedForeground,
+    textAlign: 'center',
+    paddingHorizontal: 16,
+  },
+  fab: {
+    position: 'absolute',
+    bottom: 110,
+    left: 24,
+    right: 24,
+  },
+  fabButton: {
+    borderRadius: Radius.full,
+    overflow: 'hidden',
+    ...Shadows.glow(Colors.secondary),
+  },
+  fabGradient: {
+    height: 52,
+    borderRadius: Radius.full,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+  },
+  fabText: {
+    color: Colors.white,
+    fontFamily: Typography.family,
+    fontWeight: Typography.weights.bold,
+    fontSize: 16,
+  },
+});

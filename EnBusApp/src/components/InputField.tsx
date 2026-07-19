@@ -1,8 +1,9 @@
 /**
- * InputField — Maia Preset
- * Wrapper confiable para TextInput con borde visible garantizado en Android/iOS.
- * NO usa border-* de Tailwind (falla con CSS variables en React Native).
- * Usa StyleSheet + colores hardcodeados del Maia Neutral preset.
+ * InputField — Componente de campo de entrada unificado
+ *
+ * - Estado de foco: borde animado vía Reanimated interpolateColor
+ * - Usa exclusivamente tokens de @/src/theme — sin paleta local
+ * - API pública sin cambios (compatible con todos los usos existentes)
  */
 import React from 'react';
 import {
@@ -12,70 +13,117 @@ import {
   StyleSheet,
   TextInputProps,
   ViewStyle,
+  TextStyle,
 } from 'react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  interpolateColor,
+} from 'react-native-reanimated';
+import { Colors, Typography, Spacing, Radius } from '@/src/theme';
 
 interface InputFieldProps extends TextInputProps {
   label?: string;
   containerStyle?: ViewStyle;
+  inputContainerStyle?: ViewStyle;
+  labelStyle?: TextStyle;
   multiline?: boolean;
 }
 
-// Colores del Maia Neutral preset (hardcodeados para React Native)
-const COLORS = {
-  background: '#ffffff',
-  border: '#d4d4d8',     // zinc-300 — visible en pantallas móviles
-  text: '#171717',       // foreground
-  placeholder: '#a1a1aa', // zinc-400
-  label: '#404040',      // foreground-muted
-  radius: 10,
-};
+export function InputField({
+  label,
+  containerStyle,
+  inputContainerStyle,
+  labelStyle,
+  multiline,
+  style,
+  onFocus,
+  onBlur,
+  ...props
+}: InputFieldProps) {
+  const focusProgress = useSharedValue(0);
 
-export function InputField({ label, containerStyle, multiline, style, ...props }: InputFieldProps) {
+  const animatedBorderStyle = useAnimatedStyle(() => {
+    // If border is disabled via override, don't animate the border color
+    if (inputContainerStyle && (inputContainerStyle.borderWidth === 0 || inputContainerStyle.borderWidth === null)) {
+      return {};
+    }
+    return {
+      borderColor: interpolateColor(
+        focusProgress.value,
+        [0, 1],
+        [Colors.border, Colors.primary]
+      ),
+    };
+  });
+
+  const handleFocus = (e: any) => {
+    focusProgress.value = withTiming(1, { duration: 200 });
+    onFocus?.(e);
+  };
+
+  const handleBlur = (e: any) => {
+    focusProgress.value = withTiming(0, { duration: 150 });
+    onBlur?.(e);
+  };
+
   return (
     <View style={[styles.wrapper, containerStyle]}>
-      {label && <Text style={styles.label}>{label}</Text>}
-      <View style={[styles.inputContainer, multiline && styles.multilineContainer]}>
+      {label && <Text style={[styles.label, labelStyle]}>{label}</Text>}
+      <Animated.View
+        style={[
+          styles.inputContainer,
+          multiline && styles.multilineContainer,
+          animatedBorderStyle,
+          inputContainerStyle,
+        ]}
+      >
         <RNTextInput
-          placeholderTextColor={COLORS.placeholder}
+          placeholderTextColor={Colors.mutedForeground}
           style={[styles.input, multiline && styles.multilineInput, style]}
           multiline={multiline}
+          onFocus={handleFocus}
+          onBlur={handleBlur}
           {...props}
         />
-      </View>
+      </Animated.View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   wrapper: {
-    marginBottom: 12,
+    marginBottom: Spacing.md,
   },
   label: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: COLORS.label,
-    marginBottom: 6,
+    fontFamily: Typography.family,
+    fontSize: Typography.sizes.sm,
+    fontWeight: Typography.weights.semibold,
+    color: Colors.foreground,
+    marginBottom: Spacing.xs,
     letterSpacing: 0.1,
   },
   inputContainer: {
-    backgroundColor: COLORS.background,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: COLORS.radius,
-    height: 48,
+    backgroundColor: Colors.surface,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+    borderRadius: Radius.sm,
+    height: Spacing['5xl'],
     justifyContent: 'center',
-    paddingHorizontal: 14,
+    paddingHorizontal: Spacing.lg - 2,
   },
   multilineContainer: {
     height: undefined,
     minHeight: 88,
     justifyContent: 'flex-start',
-    paddingVertical: 12,
+    paddingVertical: Spacing.md,
   },
   input: {
-    fontSize: 15,
-    color: COLORS.text,
-    padding: 0,          // Reset Android default padding
+    fontFamily: Typography.family,
+    fontSize: Typography.sizes.base,
+    color: Colors.foreground,
+    padding: 0,
     margin: 0,
     flex: 1,
   },

@@ -45,6 +45,8 @@ export function CooperativasTable({ initialCooperativas }: CooperativasTableProp
 
   const getEstadoBadge = (estado: EstadoCooperativa) => {
     switch (estado) {
+      case "PENDIENTE":
+        return <Badge className="bg-blue-500/10 text-blue-500 hover:bg-blue-500/20 border-blue-500/20">Pendiente</Badge>;
       case "ACTIVA":
         return <Badge className="bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 border-emerald-500/20">Activa</Badge>;
       case "SUSPENDIDA":
@@ -77,6 +79,7 @@ export function CooperativasTable({ initialCooperativas }: CooperativasTableProp
             </SelectTrigger>
             <SelectContent className="bg-popover border text-popover-foreground">
               <SelectItem value="ALL">Todos los estados</SelectItem>
+              <SelectItem value="PENDIENTE">Pendiente</SelectItem>
               <SelectItem value="ACTIVA">Activa</SelectItem>
               <SelectItem value="SUSPENDIDA">Suspendida</SelectItem>
               <SelectItem value="DESACTIVADA">Desactivada</SelectItem>

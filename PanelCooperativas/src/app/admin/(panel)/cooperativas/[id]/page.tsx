@@ -24,6 +24,8 @@ export default async function CooperativaDetailPage({ params }: PageProps) {
 
   const getEstadoBadge = (estado: EstadoCooperativa) => {
     switch (estado) {
+      case "PENDIENTE":
+        return <Badge className="bg-blue-500/10 text-blue-500 border-blue-500/20">Pendiente</Badge>;
       case "ACTIVA":
         return <Badge className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20">Activa</Badge>;
       case "SUSPENDIDA":

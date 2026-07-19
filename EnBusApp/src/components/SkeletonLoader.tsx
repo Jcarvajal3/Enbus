@@ -1,42 +1,48 @@
 import React, { useEffect } from 'react';
-import { View, StyleSheet, DimensionValue } from 'react-native';
+import { DimensionValue, StyleSheet } from 'react-native';
 import Animated, {
-  cancelAnimation,
   useSharedValue,
   useAnimatedStyle,
   withRepeat,
-  withTiming,
   withSequence,
+  withTiming,
+  Easing,
 } from 'react-native-reanimated';
+import { Colors } from '@/src/theme';
 
-interface SkeletonProps {
+interface SkeletonLoaderProps {
   width?: DimensionValue;
-  height?: DimensionValue;
+  height?: number;
   borderRadius?: number;
-  className?: string;
 }
 
-export function SkeletonLoader({ width = '100%', height = 20, borderRadius = 8, className }: SkeletonProps) {
-  const opacity = useSharedValue(0.3);
+/**
+ * SkeletonLoader con shimmer pulse animado (P1).
+ * Usa Reanimated withRepeat para hacer loop opacity 0.4 → 0.85 → 0.4.
+ * Cada instancia tiene un delay aleatorio para que los skeletons no pulsen en sincronía.
+ */
+export function SkeletonLoader({
+  width = '100%',
+  height = 14,
+  borderRadius = 7,
+}: SkeletonLoaderProps) {
+  const opacity = useSharedValue(0.4);
 
   useEffect(() => {
-    opacity.value = withRepeat(
-      withSequence(
-        withTiming(0.7, { duration: 800 }),
-        withTiming(0.3, { duration: 800 })
-      ),
-      -1,
-      true
-    );
-
-    // m3 Fix: las animaciones withRepeat(-1) corren en el hilo de UI de Reanimated
-    // y continúan incluso cuando el componente se desmonta (React no puede pararlas
-    // automáticamente). Sin cancelAnimation(), generan overhead innecesario de
-    // CPU/GPU en el UI thread para componentes ya inexistentes en el árbol.
-    return () => {
-      cancelAnimation(opacity);
-    };
-  }, [opacity]);
+    // Delay aleatorio entre 0-400ms para que los distintos skeletons se desfasen
+    const delay = Math.random() * 400;
+    const timer = setTimeout(() => {
+      opacity.value = withRepeat(
+        withSequence(
+          withTiming(0.85, { duration: 700, easing: Easing.inOut(Easing.ease) }),
+          withTiming(0.4, { duration: 700, easing: Easing.inOut(Easing.ease) })
+        ),
+        -1,  // infinite
+        false
+      );
+    }, delay);
+    return () => clearTimeout(timer);
+  }, []);
 
   const animatedStyle = useAnimatedStyle(() => ({
     opacity: opacity.value,
@@ -45,17 +51,11 @@ export function SkeletonLoader({ width = '100%', height = 20, borderRadius = 8, 
   return (
     <Animated.View
       style={[
-        styles.skeleton,
-        { width, height, borderRadius },
+        { width, height, borderRadius, backgroundColor: Colors.surfaceDark },
         animatedStyle,
       ]}
-      className={className}
+      accessibilityLabel="Cargando contenido..."
+      accessibilityRole="progressbar"
     />
   );
 }
-
-const styles = StyleSheet.create({
-  skeleton: {
-    backgroundColor: '#e4e4e7', // Tailwind zinc-200 / neutral background shimmer
-  },
-});

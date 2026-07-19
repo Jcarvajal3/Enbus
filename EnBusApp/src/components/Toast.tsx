@@ -3,6 +3,8 @@ import { StyleSheet, Pressable } from 'react-native';
 import { Text, View } from '@/tw';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, withSpring, runOnJS } from 'react-native-reanimated';
 import { CheckCircle, XCircle, Info } from 'phosphor-react-native';
+import * as Haptics from 'expo-haptics';
+import { Colors, Typography, Spacing, Radius, Shadows } from '@/src/theme';
 
 type ToastType = 'success' | 'error' | 'info';
 
@@ -18,6 +20,13 @@ export function useToast() {
   return context;
 }
 
+/** Icon color map — maps toast type to theme semantic colors */
+const ICON_COLORS: Record<ToastType, string> = {
+  success: Colors.success,
+  error: Colors.destructive,
+  info: Colors.info,
+};
+
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [message, setMessage] = useState('');
   const [type, setType] = useState<ToastType>('info');
@@ -32,9 +41,6 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     opacity: opacity.value,
   }));
 
-  // Cancelar el timer de auto-dismiss si el provider se desmonta.
-  // Sin este cleanup, el setTimeout intenta llamar hide() en un componente
-  // ya desmontado, causando memory leaks en hot-reload y tests.
   useEffect(() => {
     return () => {
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
@@ -42,8 +48,9 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const hide = useCallback(() => {
-    translateY.value = withTiming(-100, { duration: 300 });
-    opacity.value = withTiming(0, { duration: 250 }, (finished) => {
+    // Emil: exit DEBE ser más rápido que entry
+    translateY.value = withTiming(-100, { duration: 150 });
+    opacity.value = withTiming(0, { duration: 120 }, (finished) => {
       if (finished) {
         runOnJS(setVisible)(false);
       }
@@ -52,7 +59,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 
   const show = useCallback((toastType: ToastType, toastMessage: string) => {
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    
+
     setType(toastType);
     setMessage(toastMessage);
     setVisible(true);
@@ -60,7 +67,15 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     translateY.value = -100;
     opacity.value = 0;
 
-    translateY.value = withSpring(40, { damping: 15 });
+    // Haptic feedback según tipo
+    if (toastType === 'success') {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } else if (toastType === 'error') {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    }
+
+    // Entry: spring natural
+    translateY.value = withSpring(40, { damping: 15, stiffness: 200 });
     opacity.value = withTiming(1, { duration: 200 });
 
     timeoutRef.current = setTimeout(() => {
@@ -72,14 +87,23 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     <ToastContext.Provider value={{ show }}>
       {children}
       {visible && (
-        <Animated.View style={[styles.container, animatedStyle]}>
-          <Pressable onPress={hide} className="flex-row items-center bg-card border border-border p-4 rounded-xl shadow-lg w-[90%] self-center gap-3">
-            {type === 'success' && <CheckCircle size={22} color="#22c55e" weight="fill" />}
-            {type === 'error' && <XCircle size={22} color="#dc2626" weight="fill" />}
-            {type === 'info' && <Info size={22} color="#3b82f6" weight="fill" />}
-            
-            <View className="flex-1">
-              <Text className="text-sm font-semibold text-foreground leading-5">{message}</Text>
+        <Animated.View
+          style={[styles.container, animatedStyle]}
+          accessibilityRole="alert"
+          accessibilityLiveRegion="polite"
+          accessibilityLabel={message}
+        >
+          <Pressable
+            onPress={hide}
+            style={styles.pressable}
+            accessibilityLabel="Cerrar notificación"
+            accessibilityRole="button"
+          >
+            {type === 'success' && <CheckCircle size={22} color={ICON_COLORS.success} weight="fill" />}
+            {type === 'error' && <XCircle size={22} color={ICON_COLORS.error} weight="fill" />}
+            {type === 'info' && <Info size={22} color={ICON_COLORS.info} weight="fill" />}
+            <View style={styles.textContainer}>
+              <Text style={styles.message}>{message}</Text>
             </View>
           </Pressable>
         </Animated.View>
@@ -95,5 +119,27 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     zIndex: 9999,
+  },
+  pressable: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.white,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: Spacing.lg - 2,
+    borderRadius: Radius.md - 2,
+    marginHorizontal: Spacing.lg,
+    gap: Spacing.sm + 2,
+    ...Shadows.elevated,
+  },
+  textContainer: {
+    flex: 1,
+  },
+  message: {
+    fontFamily: Typography.family,
+    fontSize: Typography.sizes.sm,
+    fontWeight: Typography.weights.semibold,
+    color: Colors.foreground,
+    lineHeight: 20,
   },
 });

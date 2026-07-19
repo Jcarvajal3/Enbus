@@ -153,6 +153,13 @@ export default function LoginPage() {
                 {loading ? <Spinner data-icon="inline-start" /> : null}
                 Iniciar Sesión
               </Button>
+
+              <p className="text-center text-sm text-muted-foreground">
+                ¿No tienes cuenta?{" "}
+                <Link href="/cooperativas/registro" className="font-medium text-primary hover:underline">
+                  Registra tu cooperativa
+                </Link>
+              </p>
             </form>
           </CardContent>
         </Card>
