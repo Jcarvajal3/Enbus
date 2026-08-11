@@ -1,12 +1,17 @@
 import React from 'react';
 import { ActivityIndicator } from 'react-native';
-import { useCSSVariable } from '@/tw';
 import { Colors } from '@/src/theme';
 
-export function Spinner({ size = 'large' }: { size?: 'small' | 'large' }) {
-  // Obtenemos el color primario del tema
-  const primaryColor = useCSSVariable('--primary');
-  
-  // Si no se logra resolver la variable CSS en runtime, fallback al default de la marca
-  return <ActivityIndicator size={size} color={(primaryColor as string) || Colors.primary} />;
+/**
+ * Inline activity indicator. For full-block waits use `<LoadingState />` from
+ * the UI kit — it also carries a label.
+ */
+export function Spinner({
+  size = 'small',
+  color = Colors.accent,
+}: {
+  size?: 'small' | 'large';
+  color?: string;
+}) {
+  return <ActivityIndicator size={size} color={color} accessibilityLabel="Cargando" />;
 }

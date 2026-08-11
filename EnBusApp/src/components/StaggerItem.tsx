@@ -1,68 +1,59 @@
 import React, { useEffect } from 'react';
+import { ViewStyle } from 'react-native';
 import Animated, {
-  useSharedValue,
   useAnimatedStyle,
+  useSharedValue,
   withDelay,
   withTiming,
-  Easing,
 } from 'react-native-reanimated';
+import { Motion } from '@/src/theme';
 
 interface StaggerItemProps {
-  /** Índice del item en la lista. Determina el delay. */
+  /** Position in the sequence. Determines the delay. */
   index: number;
-  /** Delay base entre items en ms. Default 45. */
+  /** Delay between consecutive items, in ms. */
   delayStep?: number;
-  /** Duración de la animación en ms. Default 280. */
   duration?: number;
-  /** Distancia vertical de desplazamiento inicial. Default 14. */
+  /** Initial vertical offset. */
   translateYStart?: number;
+  style?: ViewStyle;
   children: React.ReactNode;
 }
 
 /**
- * StaggerItem — anima cada item de lista con fade-in + slide-up escalonado.
+ * StaggerItem — fade-in + slide-up entrance, offset by position.
  *
- * Uso en FlatList renderItem:
- *   ({ item, index }) => (
- *     <StaggerItem index={index}>
- *       <MyCard ... />
- *     </StaggerItem>
- *   )
+ * Used both for list rows and for staged reveals inside a screen:
  *
- * Principios:
- *   - Solo opacity + transform (GPU, sin layout thrashing)
- *   - withDelay en UI thread — sin setTimeout en JS thread
- *   - Limita el stagger máximo a 300ms total (cap en index >= 7)
+ *   ({ item, index }) => <StaggerItem index={index}><Card … /></StaggerItem>
+ *
+ * Only opacity and transform are animated (GPU, no layout thrash), the delay
+ * runs on the UI thread via `withDelay`, and items past
+ * `Motion.stagger.maxIndex` all share the same delay so off-screen rows don't
+ * wait a second to appear.
  */
 export function StaggerItem({
   index,
-  delayStep = 45,
-  duration = 280,
+  delayStep = Motion.stagger.step,
+  duration = Motion.duration.slow,
   translateYStart = 14,
+  style,
   children,
 }: StaggerItemProps) {
-  const opacity = useSharedValue(0);
-  const translateY = useSharedValue(translateYStart);
-
-  // Cap delay en 315ms para que items fuera de pantalla no esperen demasiado
-  const cappedIndex = Math.min(index, 7);
-  const delay = cappedIndex * delayStep;
-
-  const easeOut = Easing.out(Easing.cubic);
+  const progress = useSharedValue(0);
+  const delay = Math.min(index, Motion.stagger.maxIndex) * delayStep;
 
   useEffect(() => {
-    opacity.value = withDelay(delay, withTiming(1, { duration, easing: easeOut }));
-    translateY.value = withDelay(delay, withTiming(0, { duration, easing: easeOut }));
-  }, []);
+    progress.value = withDelay(
+      delay,
+      withTiming(1, { duration, easing: Motion.easing.out })
+    );
+  }, [delay, duration, progress]);
 
   const animatedStyle = useAnimatedStyle(() => ({
-    opacity: opacity.value,
-    transform: [{ translateY: translateY.value }],
+    opacity: progress.value,
+    transform: [{ translateY: (1 - progress.value) * translateYStart }],
   }));
 
-  return (
-    <Animated.View style={animatedStyle}>
-      {children}
-    </Animated.View>
-  );
+  return <Animated.View style={[style, animatedStyle]}>{children}</Animated.View>;
 }

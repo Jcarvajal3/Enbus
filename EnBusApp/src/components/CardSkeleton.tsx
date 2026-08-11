@@ -1,35 +1,52 @@
 import React, { memo } from 'react';
-import { View } from '@/tw';
+import { StyleSheet, View } from 'react-native';
 import { SkeletonLoader } from './SkeletonLoader';
+import { Colors, Radius, Sizes, Spacing } from '@/src/theme';
 
 interface CardSkeletonProps {
-  /** Number of placeholder rows to render. Defaults to 3. */
+  /** Number of placeholder rows to render. */
   count?: number;
 }
 
 /**
- * REF-01: Reusable card skeleton placeholder.
- *
- * The identical skeleton JSX was duplicated verbatim in:
- *   - app/(tabs)/index.tsx (×2 sections)
- *   - app/(tabs)/boletos.tsx
- *   - app/(tabs)/encomiendas.tsx
- *
- * Centralising it here means any future design changes to the placeholder
- * only need to happen in one place.
+ * Loading placeholder shaped like an `EntityCard`, so the list doesn't reflow
+ * when real data arrives.
  */
-export const CardSkeleton = memo(({ count = 3 }: CardSkeletonProps) => (
-  <View className="flex-col gap-3 w-full">
-    {Array.from({ length: count }, (_, i) => (
-      <View key={i} className="bg-card p-[18px] rounded-[20px] flex-row items-center gap-3">
-        <SkeletonLoader width={40} height={40} borderRadius={20} />
-        <View className="flex-1 gap-1.5">
-          <SkeletonLoader width="65%" height={14} />
-          <SkeletonLoader width="35%" height={10} />
+export const CardSkeleton = memo(function CardSkeleton({ count = 3 }: CardSkeletonProps) {
+  return (
+    <View style={s.list} accessibilityLabel="Cargando contenido">
+      {Array.from({ length: count }, (_, i) => (
+        <View key={i} style={s.card}>
+          <View style={s.body}>
+            <SkeletonLoader width={92} height={18} borderRadius={Radius.full} />
+            <SkeletonLoader width="70%" height={16} />
+            <SkeletonLoader width="45%" height={12} />
+          </View>
+          <SkeletonLoader
+            width={Sizes.iconBox.lg + Spacing.sm}
+            height={Sizes.iconBox['2xl']}
+            borderRadius={Radius.md}
+          />
         </View>
-      </View>
-    ))}
-  </View>
-));
+      ))}
+    </View>
+  );
+});
 
-CardSkeleton.displayName = 'CardSkeleton';
+const s = StyleSheet.create({
+  list: {
+    gap: Spacing.md,
+  },
+  card: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.lg,
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.xl,
+    padding: Spacing.lg,
+  },
+  body: {
+    flex: 1,
+    gap: Spacing.sm,
+  },
+});

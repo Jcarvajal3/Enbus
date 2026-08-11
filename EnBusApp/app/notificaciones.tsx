@@ -1,66 +1,34 @@
-import { SafeAreaView, View, Text } from '@/tw';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { FlatList, ListRenderItem, RefreshControl, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useCallback, useMemo, useState, useEffect } from 'react';
-import { ActivityIndicator, FlatList, ListRenderItem, RefreshControl, StyleSheet } from 'react-native';
-import { CaretLeft, Bell, CheckSquare } from 'phosphor-react-native';
+import { Bell, CheckSquare } from 'phosphor-react-native';
+import * as Haptics from 'expo-haptics';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withSequence,
+  withTiming,
+} from 'react-native-reanimated';
 import { supabase } from '@/src/utils/supabase';
 import { useAuth } from '@/src/contexts/AuthContext';
 import { useRealtime } from '@/src/hooks/useRealtime';
-import { formatDate } from '@/src/utils/formatters';
-import * as Haptics from 'expo-haptics';
 import { useToast } from '@/src/components/Toast';
 import { PressableScale } from '@/src/components/PressableScale';
 import { StaggerItem } from '@/src/components/StaggerItem';
 import { PageTransition } from '@/src/components/PageTransition';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withRepeat,
-  withSequence,
-  withTiming,
-  Easing,
-} from 'react-native-reanimated';
-import { Colors, Typography, Radius, Shadows } from '@/src/theme';
-
-/** P2: Dot pulsante para notificaciones no leidas */
-function PulseDot() {
-  const scale = useSharedValue(1);
-  const opacity = useSharedValue(1);
-
-  useEffect(() => {
-    const ease = Easing.inOut(Easing.ease);
-    scale.value = withRepeat(
-      withSequence(
-        withTiming(1.4, { duration: 600, easing: ease }),
-        withTiming(1, { duration: 600, easing: ease })
-      ),
-      -1,
-      false
-    );
-    opacity.value = withRepeat(
-      withSequence(
-        withTiming(0.4, { duration: 600, easing: ease }),
-        withTiming(1, { duration: 600, easing: ease })
-      ),
-      -1,
-      false
-    );
-  }, []);
-
-  const animStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
-    opacity: opacity.value,
-  }));
-
-  return (
-    <Animated.View
-      style={[
-        styles.pulseDot,
-        animStyle,
-      ]}
-    />
-  );
-}
+import {
+  EmptyState,
+  IconButton,
+  LoadingState,
+  Screen,
+  ScreenHeader,
+  Text,
+  scrollContent,
+} from '@/src/components/ui';
+import { formatDate } from '@/src/utils/formatters';
+import type { Notificacion } from '@/src/types';
+import { Colors, Motion, Radius, Shadows, Sizes, Spacing } from '@/src/theme';
 
 export default function NotificacionesScreen() {
   const router = useRouter();
@@ -68,8 +36,9 @@ export default function NotificacionesScreen() {
   const toast = useToast();
 
   const [refreshing, setRefreshing] = useState(false);
+  const [markingAll, setMarkingAll] = useState(false);
 
-  const { data: notificaciones, loading, setData, refetch } = useRealtime<any>(
+  const { data: notificaciones, loading, setData, refetch } = useRealtime<Notificacion>(
     'notificaciones_usuario',
     'usuario_id',
     user?.id,
@@ -86,30 +55,22 @@ export default function NotificacionesScreen() {
     }
   }, [refetch]);
 
-  const [markingAll, setMarkingAll] = useState(false);
+  const unreadCount = useMemo(
+    () => (notificaciones ?? []).filter((n) => !n.leida).length,
+    [notificaciones]
+  );
 
-  const handleMarkAsRead = async (notif: any) => {
-    if (notif.leida) {
-      handleNavigate(notif);
-      return;
-    }
-    try {
-      const { error } = await supabase
-        .from('notificaciones_usuario')
-        .update({ leida: true })
-        .eq('id', notif.id);
-      if (error) throw error;
-      handleNavigate(notif);
-    } catch (err: any) {
-      console.error('Error marking notification as read:', err.message);
-    }
-  };
+  const navigateToResource = useCallback(
+    async (notif: Notificacion) => {
+      if (!notif.recurso_tipo || !notif.recurso_id) return;
 
-  const handleNavigate = async (notif: any) => {
-    if (!notif.recurso_tipo || !notif.recurso_id) return;
-    if (notif.recurso_tipo === 'boleto') {
-      router.push({ pathname: '/boletos/[id]', params: { id: notif.recurso_id } });
-    } else if (notif.recurso_tipo === 'encomienda') {
+      if (notif.recurso_tipo === 'boleto') {
+        router.push({ pathname: '/boletos/[id]', params: { id: notif.recurso_id } });
+        return;
+      }
+
+      // Encomiendas resolve to a different screen depending on which side of the
+      // shipment the user is on.
       try {
         const { data, error } = await supabase
           .from('encomiendas')
@@ -117,21 +78,42 @@ export default function NotificacionesScreen() {
           .eq('id', notif.recurso_id)
           .single();
         if (error) throw error;
-        if (data.sender_id === user?.id) {
-          router.push({ pathname: '/encomiendas/enviar/[id]', params: { id: notif.recurso_id } });
-        } else {
-          router.push({ pathname: '/encomiendas/recibir/[id]', params: { id: notif.recurso_id } });
-        }
-      } catch (err) {
+
+        router.push({
+          pathname:
+            data.sender_id === user?.id
+              ? '/encomiendas/enviar/[id]'
+              : '/encomiendas/recibir/[id]',
+          params: { id: notif.recurso_id },
+        });
+      } catch {
         router.push({ pathname: '/encomiendas/enviar/[id]', params: { id: notif.recurso_id } });
       }
-    }
-  };
+    },
+    [router, user?.id]
+  );
 
-  const handleMarkAllAsRead = async () => {
-    if (!user) return;
-    const unread = (notificaciones ?? []).filter(n => !n.leida);
-    if (unread.length === 0) return;
+  const handleOpen = useCallback(
+    async (notif: Notificacion) => {
+      if (!notif.leida) {
+        // Optimistic: the row should stop pulsing the moment it's tapped.
+        setData((prev) => prev.map((n) => (n.id === notif.id ? { ...n, leida: true } : n)));
+        const { error } = await supabase
+          .from('notificaciones_usuario')
+          .update({ leida: true })
+          .eq('id', notif.id);
+        if (error) {
+          setData((prev) => prev.map((n) => (n.id === notif.id ? { ...n, leida: false } : n)));
+          if (__DEV__) console.error('[notificaciones] No se pudo marcar como leída:', error.message);
+        }
+      }
+      navigateToResource(notif);
+    },
+    [navigateToResource, setData]
+  );
+
+  const handleMarkAllAsRead = useCallback(async () => {
+    if (!user || unreadCount === 0) return;
     try {
       setMarkingAll(true);
       const { error } = await supabase
@@ -140,240 +122,197 @@ export default function NotificacionesScreen() {
         .eq('usuario_id', user.id)
         .eq('leida', false);
       if (error) throw error;
-      setData(prev => prev.map(n => ({ ...n, leida: true })));
+
+      setData((prev) => prev.map((n) => ({ ...n, leida: true })));
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       toast.show('success', 'Todas las notificaciones marcadas como leídas');
-    } catch (err: any) {
+    } catch {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       toast.show('error', 'No se pudieron actualizar las notificaciones.');
     } finally {
       setMarkingAll(false);
     }
-  };
+  }, [user, unreadCount, setData, toast]);
 
-  const unreadCount = useMemo(
-    () => (notificaciones ?? []).filter(n => !n.leida).length,
-    [notificaciones]
+  const renderItem = useCallback<ListRenderItem<Notificacion>>(
+    ({ item, index }) => (
+      <StaggerItem index={index} delayStep={40}>
+        <PressableScale
+          onPress={() => handleOpen(item)}
+          haptic
+          hapticType="selection"
+          scaleValue={Motion.press.card}
+          style={[s.card, item.leida ? s.cardRead : s.cardUnread]}
+          accessibilityRole="button"
+          accessibilityLabel={`${item.leida ? 'Leída' : 'Sin leer'}. ${item.titulo}. ${item.mensaje ?? ''}`}
+        >
+          <View
+            style={[
+              s.icon,
+              { backgroundColor: item.leida ? Colors.surface : Colors.primaryLight },
+            ]}
+          >
+            <Bell
+              weight={item.leida ? 'regular' : 'fill'}
+              color={item.leida ? Colors.mutedForeground : Colors.primary}
+              size={Sizes.icon.md}
+            />
+          </View>
+
+          <View style={s.body}>
+            <View style={s.titleRow}>
+              <Text
+                variant="bodyStrong"
+                size="sm"
+                weight={item.leida ? 'medium' : 'bold'}
+                numberOfLines={2}
+                style={s.title}
+              >
+                {item.titulo}
+              </Text>
+              {!item.leida && <PulseDot />}
+            </View>
+
+            {item.mensaje ? (
+              <Text variant="caption" color="muted" numberOfLines={2} style={s.message}>
+                {item.mensaje}
+              </Text>
+            ) : null}
+
+            <Text variant="caption" size="xs" color="muted" weight="semibold" compact>
+              {formatDate(item.created_at)}
+            </Text>
+          </View>
+        </PressableScale>
+      </StaggerItem>
+    ),
+    [handleOpen]
   );
 
-  const renderItem = useCallback<ListRenderItem<any>>(({ item: notif, index }) => (
-    <StaggerItem index={index} delayStep={40}>
-      <PressableScale
-        onPress={() => handleMarkAsRead(notif)}
-        scaleValue={0.98}
-        style={[
-          styles.notifCard,
-          notif.leida ? styles.notifRead : styles.notifUnread,
-        ]}
-      >
-        <View style={[
-          styles.iconCircle,
-          { backgroundColor: notif.leida ? Colors.surface : Colors.primaryLight },
-        ]}>
-          <Bell
-            weight={notif.leida ? 'regular' : 'fill'}
-            color={notif.leida ? Colors.mutedForeground : Colors.primary}
-            size={18}
-          />
-        </View>
-        <View style={{ flex: 1 }}>
-          <View style={styles.notifHeader}>
-            <Text style={[
-              styles.notifTitle,
-              { fontWeight: notif.leida ? Typography.weights.medium : Typography.weights.bold },
-            ]} numberOfLines={2}>
-              {notif.titulo}
-            </Text>
-            {!notif.leida && <PulseDot />}
-          </View>
-          <Text style={styles.notifMsg} numberOfLines={2}>
-            {notif.mensaje}
-          </Text>
-          <Text style={styles.notifDate}>
-            {formatDate(notif.created_at)}
-          </Text>
-        </View>
-      </PressableScale>
-    </StaggerItem>
-  ), [handleMarkAsRead]);
-
-  const keyExtractor = useCallback((item: any) => item.id, []);
-
-  const emptyComponent = useMemo(() => (
-    <View style={styles.empty}>
-      <Bell color={Colors.mutedForeground} size={48} weight="thin" />
-      <Text style={styles.emptyTitle}>Sin notificaciones</Text>
-      <Text style={styles.emptyMsg}>
-        Aquí aparecerán los cambios de estado de tus paquetes y viajes.
-      </Text>
-    </View>
-  ), []);
-
   return (
-    <SafeAreaView className="flex-1 bg-background">
+    <Screen>
       <PageTransition>
-        <View style={styles.header}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
-            <PressableScale
-              onPress={() => router.back()}
-              style={styles.iconBtn}
-            >
-              <CaretLeft weight="bold" color={Colors.foreground} size={22} />
-            </PressableScale>
-            <View>
-              <Text className="font-heading text-xl text-foreground" style={{ fontFamily: Typography.family }}>
-                Notificaciones
-              </Text>
-              {unreadCount > 0 && (
-                <Text style={{ fontFamily: Typography.family, fontSize: 11, color: Colors.primary, fontWeight: Typography.weights.bold, marginTop: 2 }}>
-                  {unreadCount} pendientes
-                </Text>
-              )}
-            </View>
-          </View>
-
-          {unreadCount > 0 && (
-            <PressableScale
-              onPress={handleMarkAllAsRead}
-              disabled={markingAll}
-              style={styles.iconBtn}
-            >
-              {markingAll ? (
-                <ActivityIndicator size="small" color={Colors.primary} />
-              ) : (
-                <CheckSquare weight="bold" color={Colors.foreground} size={20} />
-              )}
-            </PressableScale>
-          )}
-        </View>
+        <ScreenHeader
+          variant="compact"
+          title="Notificaciones"
+          subtitle={unreadCount > 0 ? `${unreadCount} sin leer` : undefined}
+          onBack={() => router.back()}
+          right={
+            unreadCount > 0 ? (
+              <IconButton
+                icon={CheckSquare}
+                label="Marcar todas como leídas"
+                onPress={handleMarkAllAsRead}
+                disabled={markingAll}
+              />
+            ) : undefined
+          }
+        />
 
         {loading ? (
-          <View style={{ paddingVertical: 80, alignItems: 'center' }}>
-            <ActivityIndicator size="large" color={Colors.primary} />
-          </View>
+          <LoadingState label="Cargando notificaciones…" />
         ) : (
           <FlatList
             data={notificaciones ?? []}
             renderItem={renderItem}
-            keyExtractor={keyExtractor}
-            ListEmptyComponent={emptyComponent}
-            contentContainerStyle={{ padding: 24, paddingBottom: 80 }}
+            keyExtractor={(item) => item.id}
+            ListEmptyComponent={
+              <EmptyState
+                icon={Bell}
+                title="Sin notificaciones"
+                description="Aquí aparecerán los cambios de estado de tus paquetes y viajes."
+              />
+            }
+            contentContainerStyle={scrollContent()}
             showsVerticalScrollIndicator={false}
             refreshControl={
               <RefreshControl
                 refreshing={refreshing}
                 onRefresh={onRefresh}
-                colors={[Colors.primary]}
-                tintColor={Colors.primary}
+                colors={[Colors.accent]}
+                tintColor={Colors.accent}
               />
             }
-            removeClippedSubviews={true}
+            removeClippedSubviews
             maxToRenderPerBatch={15}
             windowSize={5}
             initialNumToRender={10}
           />
         )}
       </PageTransition>
-    </SafeAreaView>
+    </Screen>
   );
 }
 
-const styles = StyleSheet.create({
-  header: {
-    paddingHorizontal: 24,
-    paddingTop: 16,
-    paddingBottom: 16,
+/** Pulsing dot marking an unread item. */
+function PulseDot() {
+  const progress = useSharedValue(0);
+
+  useEffect(() => {
+    progress.value = withRepeat(
+      withSequence(
+        withTiming(1, { duration: 600, easing: Motion.easing.inOut }),
+        withTiming(0, { duration: 600, easing: Motion.easing.inOut })
+      ),
+      -1,
+      false
+    );
+  }, [progress]);
+
+  const animStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: 1 + progress.value * 0.4 }],
+    opacity: 1 - progress.value * 0.6,
+  }));
+
+  return <Animated.View style={[s.dot, animStyle]} />;
+}
+
+const s = StyleSheet.create({
+  card: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-    backgroundColor: Colors.white,
+    alignItems: 'flex-start',
+    gap: Spacing.md,
+    padding: Spacing.lg,
+    borderRadius: Radius.lg,
+    marginBottom: Spacing.md,
+    ...Shadows.subtle,
   },
-  iconBtn: {
-    width: 44,
-    height: 44,
-    backgroundColor: 'transparent',
+  cardRead: {
+    backgroundColor: Colors.white,
+    borderWidth: Sizes.hairline,
+    borderColor: Colors.borderLight,
+  },
+  cardUnread: {
+    backgroundColor: Colors.surface,
+  },
+  icon: {
+    width: Sizes.avatar.sm,
+    height: Sizes.avatar.sm,
     borderRadius: Radius.full,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  notifCard: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
-    padding: 16,
-    borderRadius: Radius.md, // 16
-    marginBottom: 12,
-    ...Shadows.card,
-  },
-  notifRead: {
-    backgroundColor: Colors.white,
-    opacity: 0.8,
-  },
-  notifUnread: {
-    backgroundColor: Colors.surface, // warm beige (#F0EFEB)
-  },
-  iconCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: Radius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 2,
-  },
-  notifHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    gap: 8,
-    marginBottom: 4,
-  },
-  notifTitle: {
-    fontFamily: Typography.family,
-    fontSize: 14,
-    color: Colors.foreground,
+  body: {
     flex: 1,
-    lineHeight: 20,
   },
-  notifMsg: {
-    fontFamily: Typography.family,
-    fontSize: 12,
-    color: Colors.mutedForeground,
-    lineHeight: 17,
-    marginBottom: 6,
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: Spacing.sm,
   },
-  notifDate: {
-    fontFamily: Typography.family,
-    fontSize: 10,
-    color: Colors.mutedForeground,
-    fontWeight: Typography.weights.semibold,
+  title: {
+    flex: 1,
   },
-  pulseDot: {
-    width: 8,
-    height: 8,
+  message: {
+    marginTop: Spacing.xs / 2,
+    marginBottom: Spacing.xs + 2,
+  },
+  dot: {
+    width: Spacing.sm,
+    height: Spacing.sm,
     borderRadius: Radius.full,
     backgroundColor: Colors.primary,
-    marginTop: 6,
-  },
-  empty: {
-    paddingVertical: 80,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 12,
-  },
-  emptyTitle: {
-    fontFamily: Typography.family,
-    fontSize: 18,
-    fontWeight: Typography.weights.bold,
-    color: Colors.foreground,
-  },
-  emptyMsg: {
-    fontFamily: Typography.family,
-    fontSize: 14,
-    color: Colors.mutedForeground,
-    textAlign: 'center',
-    lineHeight: 22,
-    paddingHorizontal: 24,
+    marginTop: Spacing.xs + 2,
   },
 });

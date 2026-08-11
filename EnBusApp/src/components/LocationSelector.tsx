@@ -1,87 +1,33 @@
-import React, { useState, useMemo, useCallback, useRef, memo } from 'react';
-import {
-  FlatList,
-  Modal,
-  Pressable,
-  TextInput as RNTextInput,
-  View,
-  Text,
-  StyleSheet,
-  Animated,
-  PanResponder,
-  Dimensions,
-} from 'react-native';
-import { VENEZUELA_LOCATIONS, Localidad } from '../utils/venezuela';
-import { MapPin, X, MagnifyingGlass, CaretDown, CaretUp } from 'phosphor-react-native';
-import { Colors, Typography, Radius, Spacing } from '@/src/theme';
+import React, { memo, useCallback, useMemo, useState } from 'react';
+import { FlatList, StyleSheet, View } from 'react-native';
+import { CaretDown, CaretUp, MagnifyingGlass, MapPin } from 'phosphor-react-native';
 import { PressableScale } from './PressableScale';
-
-const SCREEN_HEIGHT = Dimensions.get('window').height;
-
-interface StateAccordionProps {
-  item: { estado: string; ciudades: Localidad[] };
-  search: string;
-  handleSelect: (loc: Localidad) => void;
-}
-
-// Collapsible State group component extracted to module level (P2-13 fix)
-const StateAccordion = memo(({ item, search, handleSelect }: StateAccordionProps) => {
-  const [localExpanded, setLocalExpanded] = useState(false);
-  const isExpanded = search.trim().length > 0 || localExpanded;
-
-  return (
-    <View style={s.accordionGroup}>
-      {/* State Title Row */}
-      <Pressable
-        onPress={() => setLocalExpanded(!localExpanded)}
-        style={s.accordionHeader}
-        accessibilityRole="button"
-        accessibilityLabel={`Estado ${item.estado}, ${isExpanded ? 'contraer' : 'expandir'}`}
-      >
-        <View style={s.accordionTitleLeft}>
-          <View style={s.accordionIconCircle}>
-            <MapPin color={Colors.accent} size={16} weight="fill" />
-          </View>
-          <Text style={s.stateText}>{item.estado}</Text>
-        </View>
-        {isExpanded ? (
-          <CaretUp size={18} weight="bold" color={Colors.foreground} />
-        ) : (
-          <CaretDown size={18} weight="bold" color={Colors.foreground} />
-        )}
-      </Pressable>
-
-      {/* Cities nested list */}
-      {isExpanded && (
-        <View style={s.citiesList}>
-          {item.ciudades.map((loc, idx) => (
-            <Pressable
-              key={`${loc.estado}-${loc.ciudad}`}
-              onPress={() => handleSelect(loc)}
-              style={[
-                s.cityRow,
-                idx !== item.ciudades.length - 1 && { borderBottomWidth: 1, borderBottomColor: Colors.border }
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel={`Ciudad ${loc.ciudad}`}
-            >
-              <View style={s.cityDot} />
-              <Text style={s.cityText}>{loc.ciudad}</Text>
-            </Pressable>
-          ))}
-        </View>
-      )}
-    </View>
-  );
-});
-StateAccordion.displayName = 'StateAccordion';
+import {
+  BottomSheet,
+  EmptyState,
+  Field,
+  SelectField,
+  Text,
+} from '@/src/components/ui';
+import { Localidad, VENEZUELA_LOCATIONS } from '../utils/venezuela';
+import { Colors, Layout, Motion, Radius, Sizes, Spacing } from '@/src/theme';
 
 interface LocationSelectorProps {
   label: string;
   value?: Localidad | null;
   onChange: (loc: Localidad) => void;
   placeholder?: string;
+  /** Render a custom trigger instead of the default `SelectField`. */
   customTrigger?: (openModal: () => void) => React.ReactNode;
+}
+
+/** Accent-insensitive, whitespace-insensitive comparison key. */
+function normalize(text: string): string {
+  return text
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, '')
+    .toLowerCase();
 }
 
 export function LocationSelector({
@@ -91,359 +37,230 @@ export function LocationSelector({
   placeholder,
   customTrigger,
 }: LocationSelectorProps) {
-  const [modalVisible, setModalVisible] = useState(false);
+  const [visible, setVisible] = useState(false);
   const [search, setSearch] = useState('');
-  
-  // Pan gesture for swiping down to close
-  const translateY = useRef(new Animated.Value(0)).current;
 
-  const handleClose = useCallback(() => {
-    Animated.timing(translateY, {
-      toValue: SCREEN_HEIGHT,
-      duration: 220,
-      useNativeDriver: true,
-    }).start(() => {
-      setModalVisible(false);
-    });
-  }, [translateY]);
+  const grouped = useMemo(() => {
+    const needle = normalize(search);
+    const matches = needle
+      ? VENEZUELA_LOCATIONS.filter(
+          (l) => normalize(l.ciudad).includes(needle) || normalize(l.estado).includes(needle)
+        )
+      : VENEZUELA_LOCATIONS;
 
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: (_, gestureState) => {
-        // Capture only downward swipe movements
-        return gestureState.dy > 5;
-      },
-      onPanResponderMove: (_, gestureState) => {
-        if (gestureState.dy > 0) {
-          translateY.setValue(gestureState.dy);
-        }
-      },
-      onPanResponderRelease: (_, gestureState) => {
-        if (gestureState.dy > 120 || gestureState.vy > 0.4) {
-          handleClose();
-        } else {
-          // Snap back to open position
-          Animated.spring(translateY, {
-            toValue: 0,
-            useNativeDriver: true,
-            tension: 45,
-            friction: 7,
-          }).start();
-        }
-      },
-    })
-  ).current;
-
-  const normalizeText = useCallback((text: string) =>
-    text
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/\s+/g, '')
-      .toLowerCase()
-  , []);
-
-  // Filter locations first
-  const filteredLocations = useMemo(() => {
-    const normalizedSearch = normalizeText(search);
-    if (!normalizedSearch) return VENEZUELA_LOCATIONS;
-    return VENEZUELA_LOCATIONS.filter((l) =>
-      normalizeText(l.ciudad).includes(normalizedSearch) ||
-      normalizeText(l.estado).includes(normalizedSearch)
-    );
-  }, [search, normalizeText]);
-
-  // Group by State
-  const groupedLocations = useMemo(() => {
-    const groups: { [estado: string]: Localidad[] } = {};
-    filteredLocations.forEach((loc) => {
-      if (!groups[loc.estado]) {
-        groups[loc.estado] = [];
-      }
-      groups[loc.estado].push(loc);
+    const groups = new Map<string, Localidad[]>();
+    matches.forEach((loc) => {
+      const list = groups.get(loc.estado) ?? [];
+      list.push(loc);
+      groups.set(loc.estado, list);
     });
 
-    const sortedStates = Object.keys(groups).sort((a, b) => {
-      const isCapitalA = a.toLowerCase().includes('distrito capital');
-      const isCapitalB = b.toLowerCase().includes('distrito capital');
-      if (isCapitalA) return -1;
-      if (isCapitalB) return 1;
-      return a.localeCompare(b, 'es');
-    });
-
-    return sortedStates.map((estado) => {
-      const sortedCiudades = [...groups[estado]].sort((a, b) =>
-        a.ciudad.localeCompare(b.ciudad, 'es')
-      );
-      return {
+    return Array.from(groups.keys())
+      .sort((a, b) => {
+        // Distrito Capital first — it's the most common origin/destination.
+        if (a.toLowerCase().includes('distrito capital')) return -1;
+        if (b.toLowerCase().includes('distrito capital')) return 1;
+        return a.localeCompare(b, 'es');
+      })
+      .map((estado) => ({
         estado,
-        ciudades: sortedCiudades,
-      };
-    });
-  }, [filteredLocations]);
+        ciudades: [...(groups.get(estado) ?? [])].sort((a, b) =>
+          a.ciudad.localeCompare(b.ciudad, 'es')
+        ),
+      }));
+  }, [search]);
 
-  const handleSelect = useCallback((loc: Localidad) => {
-    onChange(loc);
-    setModalVisible(false);
-  }, [onChange]);
+  const handleSelect = useCallback(
+    (loc: Localidad) => {
+      onChange(loc);
+      setVisible(false);
+      setSearch('');
+    },
+    [onChange]
+  );
 
-  const handleOpen = () => {
-    translateY.setValue(0);
-    setModalVisible(true);
-  };
+  const open = () => setVisible(true);
 
   return (
     <>
-      {customTrigger ? customTrigger(handleOpen) : (
-        <View style={s.container}>
-          <Text style={s.inputLabel}>{label}</Text>
-          <Pressable
-            onPress={handleOpen}
-            style={s.inputBox}
-            accessibilityRole="button"
-            accessibilityLabel={`${label}: ${value ? `${value.ciudad}, ${value.estado}` : placeholder || 'Seleccionar localidad'}`}
-          >
-            <MapPin color={Colors.mutedForeground} weight="bold" size={20} />
-            {value ? (
-              <Text style={s.inputValue}>
-                {value.ciudad}, {value.estado}
-              </Text>
-            ) : (
-              <Text style={s.inputPlaceholder}>
-                {placeholder || 'Seleccionar localidad...'}
-              </Text>
-            )}
-          </Pressable>
-        </View>
+      {customTrigger ? (
+        customTrigger(open)
+      ) : (
+        <SelectField
+          label={label}
+          value={value ? `${value.ciudad}, ${value.estado}` : undefined}
+          placeholder={placeholder ?? 'Seleccionar localidad'}
+          icon={MapPin}
+          onPress={open}
+        />
       )}
 
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={modalVisible}
-        onRequestClose={handleClose}
+      <BottomSheet
+        visible={visible}
+        onClose={() => setVisible(false)}
+        title={`Seleccionar ${label.toLowerCase() || 'localidad'}`}
+        height={Layout.sheetMaxHeight}
       >
-        <View style={s.overlay}>
-          <Animated.View
-            style={[
-              s.sheet,
-              { transform: [{ translateY }] },
-            ]}
-          >
-            {/* Draggable Header */}
-            <View {...panResponder.panHandlers} style={s.sheetHeader}>
-              <View style={s.dragHandle} />
-              <View style={s.headerContent}>
-                <Text style={s.headerTitle}>Seleccionar {label}</Text>
-                <PressableScale
-                  onPress={handleClose}
-                  style={s.closeButton}
-                  accessibilityRole="button"
-                  accessibilityLabel="Cerrar modal"
-                >
-                  <X color={Colors.foreground} weight="bold" size={20} />
-                </PressableScale>
-              </View>
-            </View>
-
-            {/* Search Input */}
-            <View style={s.searchSection}>
-              <View style={s.searchBox}>
-                <MagnifyingGlass color={Colors.mutedForeground} weight="bold" size={20} />
-                <RNTextInput
-                  style={s.searchInput}
-                  placeholder="Buscar ciudad o estado..."
-                  placeholderTextColor={Colors.mutedForeground}
-                  value={search}
-                  onChangeText={setSearch}
-                  autoCorrect={false}
-                  accessibilityLabel="Campo de búsqueda de localidad"
-                />
-              </View>
-            </View>
-
-            {/* Grouped Accordions list */}
-            <FlatList
-              data={groupedLocations}
-              renderItem={({ item }) => (
-                <StateAccordion
-                  item={item}
-                  search={search}
-                  handleSelect={handleSelect}
-                />
-              )}
-              keyExtractor={(item) => item.estado}
-              contentContainerStyle={s.listContent}
-              showsVerticalScrollIndicator={false}
-              keyboardShouldPersistTaps="handled"
-            />
-          </Animated.View>
+        <View style={s.search}>
+          <Field
+            icon={MagnifyingGlass}
+            placeholder="Buscar ciudad o estado…"
+            value={search}
+            onChangeText={setSearch}
+            autoCorrect={false}
+            tone="sunken"
+            containerStyle={s.searchField}
+            accessibilityLabel="Buscar localidad"
+          />
         </View>
-      </Modal>
+
+        <FlatList
+          data={grouped}
+          keyExtractor={(item) => item.estado}
+          renderItem={({ item }) => (
+            <StateGroup group={item} expandAll={search.trim().length > 0} onSelect={handleSelect} />
+          )}
+          ListEmptyComponent={
+            <EmptyState
+              icon={MapPin}
+              title="Sin resultados"
+              description={`No encontramos ciudades que coincidan con “${search}”.`}
+              compact
+            />
+          }
+          contentContainerStyle={s.list}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        />
+      </BottomSheet>
     </>
   );
 }
 
+// ─── State group ─────────────────────────────────────────────────────────────
+
+const StateGroup = memo(function StateGroup({
+  group,
+  expandAll,
+  onSelect,
+}: {
+  group: { estado: string; ciudades: Localidad[] };
+  expandAll: boolean;
+  onSelect: (loc: Localidad) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const expanded = expandAll || open;
+
+  return (
+    <View style={s.group}>
+      <PressableScale
+        onPress={() => setOpen((v) => !v)}
+        haptic
+        hapticType="selection"
+        scaleValue={Motion.press.card}
+        style={s.groupHeader}
+        accessibilityRole="button"
+        accessibilityState={{ expanded }}
+        accessibilityLabel={`Estado ${group.estado}, ${group.ciudades.length} ciudades`}
+      >
+        <View style={s.groupTitle}>
+          <View style={s.groupIcon}>
+            <MapPin color={Colors.accent} size={Sizes.icon.md} weight="fill" />
+          </View>
+          <Text variant="bodyStrong" weight="bold">
+            {group.estado}
+          </Text>
+        </View>
+
+        {expanded ? (
+          <CaretUp size={Sizes.icon.md} weight="bold" color={Colors.mutedForeground} />
+        ) : (
+          <CaretDown size={Sizes.icon.md} weight="bold" color={Colors.mutedForeground} />
+        )}
+      </PressableScale>
+
+      {expanded && (
+        <View style={s.cities}>
+          {group.ciudades.map((loc, index) => (
+            <PressableScale
+              key={`${loc.estado}-${loc.ciudad}`}
+              onPress={() => onSelect(loc)}
+              haptic
+              hapticType="selection"
+              scaleValue={Motion.press.card}
+              style={[s.city, index !== group.ciudades.length - 1 && s.cityDivided]}
+              accessibilityRole="button"
+              accessibilityLabel={`Ciudad ${loc.ciudad}`}
+            >
+              <View style={s.cityDot} />
+              <Text variant="body" weight="medium">
+                {loc.ciudad}
+              </Text>
+            </PressableScale>
+          ))}
+        </View>
+      )}
+    </View>
+  );
+});
+
 const s = StyleSheet.create({
-  container: {
-    marginBottom: Spacing.lg,
+  search: {
+    paddingHorizontal: Layout.screenPadding,
+    paddingTop: Spacing.lg,
   },
-  inputLabel: {
-    fontSize: Typography.sizes.xs,
-    fontFamily: Typography.family,
-    fontWeight: Typography.weights.bold,
-    color: Colors.mutedForeground,
+  searchField: {
     marginBottom: Spacing.sm,
-    marginLeft: Spacing.xs,
-    textTransform: 'uppercase',
   },
-  inputBox: {
-    backgroundColor: Colors.white,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: Spacing.lg,
-    height: 52,
-    borderRadius: Radius.full,
-    borderWidth: 0,
-  },
-  inputValue: {
-    fontSize: Typography.sizes.base,
-    fontFamily: Typography.family,
-    fontWeight: Typography.weights.bold,
-    color: Colors.foreground,
-    marginLeft: Spacing.md,
-  },
-  inputPlaceholder: {
-    fontSize: Typography.sizes.base,
-    fontFamily: Typography.family,
-    color: Colors.mutedForeground,
-    marginLeft: Spacing.md,
-  },
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
-    justifyContent: 'flex-end',
-  },
-  sheet: {
-    height: '85%',
-    backgroundColor: Colors.background,
-    borderTopLeftRadius: Radius['2xl'],
-    borderTopRightRadius: Radius['2xl'],
-    overflow: 'hidden',
-  },
-  sheetHeader: {
-    paddingTop: Spacing.sm,
-    paddingBottom: Spacing.lg,
-    paddingHorizontal: Spacing['2xl'],
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.borderLight,
-    backgroundColor: Colors.background,
-  },
-  dragHandle: {
-    width: 40,
-    height: 5,
-    borderRadius: 2.5,
-    backgroundColor: Colors.border,
-    alignSelf: 'center',
-    marginBottom: Spacing.md,
-  },
-  headerContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  headerTitle: {
-    fontSize: Typography.sizes.xl - 1,
-    fontFamily: Typography.family,
-    fontWeight: Typography.weights.bold,
-    color: Colors.foreground,
-  },
-  closeButton: {
-    width: 36,
-    height: 36,
-    borderRadius: Radius.md + 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'transparent',
-  },
-  searchSection: {
-    paddingHorizontal: Spacing['2xl'],
-    paddingVertical: Spacing.lg,
-  },
-  searchBox: {
-    backgroundColor: Colors.surface,
-    height: 48,
-    borderRadius: Radius.full,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: Spacing.lg,
-  },
-  searchInput: {
-    flex: 1,
-    height: '100%',
-    marginLeft: Spacing.sm + 2,
-    fontSize: Typography.sizes.base,
-    color: Colors.foreground,
-    fontFamily: Typography.family,
-  },
-  listContent: {
-    paddingHorizontal: Spacing['2xl'],
+  list: {
+    paddingHorizontal: Layout.screenPadding,
     paddingBottom: Spacing['4xl'],
   },
-  accordionGroup: {
+  group: {
     marginBottom: Spacing.md,
     backgroundColor: Colors.surface,
     borderRadius: Radius.lg,
     overflow: 'hidden',
   },
-  accordionHeader: {
+  groupHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: Spacing.lg - 2,
+    paddingVertical: Spacing.md,
     paddingHorizontal: Spacing.lg,
+    minHeight: Sizes.touchTarget + Spacing.sm,
   },
-  accordionTitleLeft: {
+  groupTitle: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.md,
   },
-  accordionIconCircle: {
-    width: 32,
-    height: 32,
+  groupIcon: {
+    width: Sizes.iconBox.sm + 2,
+    height: Sizes.iconBox.sm + 2,
     borderRadius: Radius.md,
     backgroundColor: Colors.white,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  stateText: {
-    fontSize: Typography.sizes.base,
-    fontFamily: Typography.family,
-    fontWeight: Typography.weights.bold,
-    color: Colors.foreground,
-  },
-  citiesList: {
+  cities: {
     backgroundColor: Colors.white,
     paddingHorizontal: Spacing.lg,
-    borderTopWidth: 1,
-    borderTopColor: Colors.borderLight,
   },
-  cityRow: {
+  city: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: Spacing.lg - 2,
+    gap: Spacing.md,
+    minHeight: Sizes.touchTarget,
+  },
+  cityDivided: {
+    borderBottomWidth: Sizes.hairline,
+    borderBottomColor: Colors.borderLight,
   },
   cityDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
+    width: Spacing.sm - 2,
+    height: Spacing.sm - 2,
+    borderRadius: Radius.full,
     backgroundColor: Colors.accent,
-    marginRight: Spacing.md,
-  },
-  cityText: {
-    fontSize: Typography.sizes.base,
-    fontFamily: Typography.family,
-    fontWeight: Typography.weights.medium,
-    color: Colors.foreground,
   },
 });

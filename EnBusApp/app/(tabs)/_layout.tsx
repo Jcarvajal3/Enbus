@@ -1,64 +1,78 @@
 import { Tabs } from 'expo-router';
-import { useMemo, useState, useEffect } from 'react';
-import { StyleSheet, View, Text, Pressable, Dimensions } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
-import { Colors, Typography, Radius, Shadows } from '@/src/theme';
-import { useAuth } from '@/src/contexts/AuthContext';
-import { useRealtime } from '@/src/hooks/useRealtime';
-import { useEncomiendas } from '@/src/hooks/useEncomiendas';
+import React, { useEffect, useMemo, useState } from 'react';
+import { StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { House, Package, Ticket, type IconProps } from 'phosphor-react-native';
+import * as Haptics from 'expo-haptics';
 import Animated, {
-  useSharedValue,
   useAnimatedStyle,
+  useSharedValue,
   withTiming,
-  Easing,
 } from 'react-native-reanimated';
+import { PressableScale } from '@/src/components/PressableScale';
+import { Text } from '@/src/components/ui';
+import { ActivityProvider, useActivity } from '@/src/contexts/ActivityContext';
+import { Colors, Layout, Motion, Radius, Shadows, Sizes, Spacing } from '@/src/theme';
 
-function CustomTabBar({ state, descriptors, navigation, encomiendasCount, boletosCount }: any) {
-  const [width, setWidth] = useState(0);
-  const indicatorWidth = useSharedValue(0);
-  const translateX = useSharedValue(0);
+const TAB_ICONS: Record<string, React.ComponentType<IconProps>> = {
+  index: House,
+  encomiendas: Package,
+  boletos: Ticket,
+};
 
-  const activeIndex = state.index;
-
-  const onLayout = (event: any) => {
-    const containerWidth = event.nativeEvent.layout.width;
-    setWidth(containerWidth);
-    const padding = 12; // 6px padding on left/right of indicator wrapper
-    const usableWidth = containerWidth - padding;
-    const tabWidth = usableWidth / 3;
-    indicatorWidth.value = tabWidth;
-    translateX.value = activeIndex * tabWidth;
+interface TabBarProps {
+  state: { index: number; routes: { key: string; name: string; params?: object }[] };
+  descriptors: Record<string, { options: { title?: string } }>;
+  navigation: {
+    emit: (event: { type: string; target: string; canPreventDefault: boolean }) => {
+      defaultPrevented: boolean;
+    };
+    navigate: (name: string, params?: object) => void;
   };
+  badges: Record<string, number>;
+}
+
+function CustomTabBar({ state, descriptors, navigation, badges }: TabBarProps) {
+  const insets = useSafeAreaInsets();
+  const [barWidth, setBarWidth] = useState(0);
+
+  const tabCount = state.routes.length;
+  const tabWidth =
+    barWidth > 0 ? (barWidth - Layout.tabBar.innerPadding * 2) / tabCount : 0;
+
+  const translateX = useSharedValue(0);
+  const indicatorWidth = useSharedValue(0);
 
   useEffect(() => {
-    if (width > 0) {
-      const padding = 12;
-      const tabWidth = (width - padding) / 3;
-      translateX.value = withTiming(activeIndex * tabWidth, {
-        duration: 260,
-        easing: Easing.out(Easing.cubic),
-      });
-    }
-  }, [activeIndex, width]);
+    if (tabWidth <= 0) return;
+    indicatorWidth.value = tabWidth;
+    translateX.value = withTiming(state.index * tabWidth, {
+      duration: Motion.duration.base,
+      easing: Motion.easing.out,
+    });
+  }, [state.index, tabWidth, indicatorWidth, translateX]);
 
-  const animatedIndicatorStyle = useAnimatedStyle(() => {
-    return {
-      transform: [{ translateX: translateX.value }],
-      width: indicatorWidth.value,
-    };
-  });
+  const indicatorStyle = useAnimatedStyle(() => ({
+    width: indicatorWidth.value,
+    transform: [{ translateX: translateX.value }],
+  }));
 
   return (
-    <View style={s.tabBarContainer} onLayout={onLayout}>
-      {/* Animated active pill background */}
-      {width > 0 && (
-        <Animated.View style={[s.indicator, animatedIndicatorStyle]} />
-      )}
+    <View
+      // The bar floats, so it must clear the device's own bottom inset —
+      // previously it sat at a fixed 24pt and collided with the gesture bar.
+      style={[s.bar, { bottom: Layout.tabBar.bottomOffset + insets.bottom }]}
+      onLayout={(e) => setBarWidth(e.nativeEvent.layout.width)}
+      accessibilityRole="tablist"
+    >
+      {barWidth > 0 && <Animated.View style={[s.indicator, indicatorStyle]} />}
 
-      {state.routes.map((route: any, index: any) => {
+      {state.routes.map((route, index) => {
         const { options } = descriptors[route.key];
-        const label = options.title !== undefined ? options.title : route.name;
+        const label = options.title ?? route.name;
         const isFocused = state.index === index;
+        const Icon = TAB_ICONS[route.name] ?? House;
+        const badgeCount = badges[route.name] ?? 0;
 
         const onPress = () => {
           const event = navigation.emit({
@@ -66,107 +80,65 @@ function CustomTabBar({ state, descriptors, navigation, encomiendasCount, boleto
             target: route.key,
             canPreventDefault: true,
           });
-
           if (!isFocused && !event.defaultPrevented) {
+            Haptics.selectionAsync();
             navigation.navigate(route.name, route.params);
           }
         };
 
-        // Material Icon mappings matching the brand design
-        let iconName: keyof typeof MaterialIcons.glyphMap = 'home';
-        let badgeCount = 0;
-
-        if (route.name === 'index') {
-          iconName = 'home';
-        } else if (route.name === 'encomiendas') {
-          iconName = 'local-shipping';
-          badgeCount = encomiendasCount;
-        } else if (route.name === 'boletos') {
-          iconName = 'confirmation-number';
-          badgeCount = boletosCount;
-        }
-
-        const activeColor = Colors.white;
-        const inactiveColor = Colors.tabInactive;
-
         return (
-          <Pressable
+          <PressableScale
             key={route.key}
             onPress={onPress}
-            style={s.tabItem}
-            android_ripple={{ color: 'transparent' }}
+            scaleValue={Motion.press.chip}
+            style={s.tab}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: isFocused }}
+            accessibilityLabel={badgeCount > 0 ? `${label}, ${badgeCount} activos` : label}
           >
             <View style={s.iconWrapper}>
-              <MaterialIcons
-                name={iconName}
-                size={22}
-                color={isFocused ? activeColor : inactiveColor}
+              <Icon
+                size={Sizes.icon.lg}
+                color={isFocused ? Colors.white : Colors.tabInactive}
+                weight={isFocused ? 'fill' : 'regular'}
               />
               {badgeCount > 0 && (
                 <View style={s.badge}>
-                  <Text style={s.badgeText}>
-                    {badgeCount > 9 ? '9+' : badgeCount}
+                  <Text variant="caption" size="micro" weight="heavy" color="inverse" compact>
+                    {badgeCount > 9 ? '9+' : String(badgeCount)}
                   </Text>
                 </View>
               )}
             </View>
-            <Text style={[s.tabLabel, { color: isFocused ? activeColor : inactiveColor }]}>
+            <Text
+              variant="caption"
+              size="xs"
+              weight={isFocused ? 'bold' : 'medium'}
+              color={isFocused ? 'inverse' : 'muted'}
+              compact
+              style={s.label}
+            >
               {label}
             </Text>
-          </Pressable>
+          </PressableScale>
         );
       })}
     </View>
   );
 }
 
-export default function TabLayout() {
-  const { user } = useAuth();
+function TabNavigator() {
+  const { boletosActivos, encomiendasActivas } = useActivity();
 
-  const { data: boletosActivos } = useRealtime<any>(
-    'boletos', 'comprador_id', user?.id, 'id, estado',
-    { enabled: !!user?.id, limit: 30 }
-  );
-  const { data: todasLasEncomiendas } = useEncomiendas(user?.id, {
-    enabled: !!user?.id,
-    limit: 30,
-  });
-
-  const activeBoletosCount = useMemo(
-    () =>
-      !user
-        ? 0
-        : (boletosActivos ?? []).filter(
-            (b: any) => b.estado === 'RESERVADO' || b.estado === 'PAGADO'
-          ).length,
-    [user, boletosActivos]
-  );
-
-  const activeEncomiendasCount = useMemo(
-    () =>
-      !user
-        ? 0
-        : (todasLasEncomiendas ?? []).filter(
-            (e: any) =>
-              e.estado !== 'ENTREGADA' &&
-              e.estado !== 'CANCELADA' &&
-              e.estado !== 'DEVUELTA'
-          ).length,
-    [user, todasLasEncomiendas]
+  const badges = useMemo(
+    () => ({ boletos: boletosActivos, encomiendas: encomiendasActivas }),
+    [boletosActivos, encomiendasActivas]
   );
 
   return (
     <Tabs
-      tabBar={(props) => (
-        <CustomTabBar
-          {...props}
-          encomiendasCount={activeEncomiendasCount}
-          boletosCount={activeBoletosCount}
-        />
-      )}
-      screenOptions={{
-        headerShown: false,
-      }}
+      tabBar={(props) => <CustomTabBar {...(props as unknown as TabBarProps)} badges={badges} />}
+      screenOptions={{ headerShown: false }}
     >
       <Tabs.Screen name="index" options={{ title: 'Inicio' }} />
       <Tabs.Screen name="encomiendas" options={{ title: 'Encomiendas' }} />
@@ -175,29 +147,36 @@ export default function TabLayout() {
   );
 }
 
+export default function TabLayout() {
+  return (
+    <ActivityProvider>
+      <TabNavigator />
+    </ActivityProvider>
+  );
+}
+
 const s = StyleSheet.create({
-  tabBarContainer: {
+  bar: {
     position: 'absolute',
-    bottom: 24,
-    left: 20,
-    right: 20,
-    height: 70,
-    backgroundColor: Colors.surface, // #F0EFEB
-    borderRadius: Radius.full, // 999
+    left: Layout.tabBar.sideInset,
+    right: Layout.tabBar.sideInset,
+    height: Layout.tabBar.height,
+    paddingHorizontal: Layout.tabBar.innerPadding,
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.full,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 6,
     zIndex: 100,
+    ...Shadows.elevated,
   },
   indicator: {
     position: 'absolute',
-    height: 58,
-    backgroundColor: Colors.accent, // #4A7FF8
+    left: Layout.tabBar.innerPadding,
+    height: Layout.tabBar.height - Layout.tabBar.innerPadding * 2,
+    backgroundColor: Colors.accent,
     borderRadius: Radius.full,
-    left: 6,
-    zIndex: 1,
   },
-  tabItem: {
+  tab: {
     flex: 1,
     height: '100%',
     alignItems: 'center',
@@ -206,31 +185,22 @@ const s = StyleSheet.create({
   },
   iconWrapper: {
     position: 'relative',
-    height: 24,
+    height: Sizes.icon.xl,
     justifyContent: 'center',
-  },
-  tabLabel: {
-    fontSize: Typography.sizes.xs,
-    fontFamily: Typography.family,
-    fontWeight: Typography.weights.medium,
-    marginTop: 3,
   },
   badge: {
     position: 'absolute',
-    top: -5,
-    right: -10,
-    backgroundColor: Colors.secondary, // Coral
-    borderRadius: Radius.sm - 2, // 8
-    minWidth: 16,
-    height: 16,
+    top: -Spacing.xs - 1,
+    right: -Spacing.md + 2,
+    minWidth: Spacing.lg,
+    height: Spacing.lg,
+    paddingHorizontal: Spacing.xs / 2,
+    borderRadius: Radius.full,
+    backgroundColor: Colors.secondary,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 2,
   },
-  badgeText: {
-    color: Colors.white,
-    fontSize: 8,
-    fontFamily: Typography.family,
-    fontWeight: Typography.weights.bold,
+  label: {
+    marginTop: Spacing.xs / 2,
   },
 });

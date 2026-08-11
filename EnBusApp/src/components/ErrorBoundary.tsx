@@ -1,6 +1,8 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
-import { Colors, Typography, Spacing, Radius, Shadows } from '@/src/theme';
+import { ScrollView, StyleSheet, View } from 'react-native';
+import { WarningCircle } from 'phosphor-react-native';
+import { Button, Card, Text } from '@/src/components/ui';
+import { Colors, Radius, Sizes, Spacing } from '@/src/theme';
 
 interface Props {
   children: ReactNode;
@@ -13,10 +15,7 @@ interface State {
 }
 
 export class ErrorBoundary extends Component<Props, State> {
-  public state: State = {
-    hasError: false,
-    error: null,
-  };
+  public state: State = { hasError: false, error: null };
 
   public static getDerivedStateFromError(error: Error): State {
     return { hasError: true, error };
@@ -31,43 +30,43 @@ export class ErrorBoundary extends Component<Props, State> {
   };
 
   public render() {
-    if (this.state.hasError) {
-      if (this.props.fallback) {
-        return this.props.fallback;
-      }
+    if (!this.state.hasError) return this.props.children;
+    if (this.props.fallback) return this.props.fallback;
 
-      return (
-        <View style={s.container}>
-          <View style={s.card}>
-            <View style={s.badge}>
-              <Text style={s.badgeText}>⚠️ ERROR DE APLICACIÓN</Text>
-            </View>
-            <Text style={s.title}>Algo salió mal</Text>
-            <Text style={s.message}>
-              Ocurrió un error inesperado al renderizar esta pantalla. Por favor, intenta de nuevo o regresa al inicio.
-            </Text>
-
-            {__DEV__ && this.state.error && (
-              <View style={s.debugContainer}>
-                <Text style={s.debugTitle}>Detalles técnicos (Desarrollo):</Text>
-                <Text style={s.debugText}>{this.state.error.toString()}</Text>
-              </View>
-            )}
-
-            <Pressable
-              onPress={this.handleReset}
-              style={s.button}
-              accessibilityLabel="Reintentar"
-              accessibilityRole="button"
-            >
-              <Text style={s.buttonText}>Reintentar</Text>
-            </Pressable>
+    return (
+      <View style={s.container}>
+        <Card padding="lg" style={s.card}>
+          <View style={s.icon}>
+            <WarningCircle weight="fill" color={Colors.warning} size={Sizes.icon['2xl']} />
           </View>
-        </View>
-      );
-    }
 
-    return this.props.children;
+          <Text variant="heading" size="2xl" align="center">
+            Algo salió mal
+          </Text>
+          <Text variant="secondary" color="muted" align="center" style={s.message}>
+            Ocurrió un error inesperado al mostrar esta pantalla. Intenta de nuevo; si persiste,
+            vuelve al inicio.
+          </Text>
+
+          {__DEV__ && this.state.error && (
+            <View style={s.debug}>
+              <Text variant="overline" color="muted" uppercase>
+                Detalles técnicos (desarrollo)
+              </Text>
+              <ScrollView style={s.debugScroll}>
+                <Text variant="caption" color="danger">
+                  {this.state.error.toString()}
+                </Text>
+              </ScrollView>
+            </View>
+          )}
+
+          <Button variant="primary" fullWidth onPress={this.handleReset}>
+            Reintentar
+          </Button>
+        </Card>
+      </View>
+    );
   }
 }
 
@@ -80,80 +79,33 @@ const s = StyleSheet.create({
     padding: Spacing['2xl'],
   },
   card: {
-    backgroundColor: Colors.white,
-    borderRadius: Radius.md,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    padding: Spacing['2xl'],
     width: '100%',
-    alignItems: 'center',
-    ...Shadows.card,
   },
-  badge: {
+  icon: {
+    width: Sizes.iconBox.xl,
+    height: Sizes.iconBox.xl,
+    borderRadius: Radius.full,
     backgroundColor: Colors.warningLight,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.xs,
-    borderRadius: Radius.full,
-    marginBottom: Spacing.lg,
-  },
-  badgeText: {
-    fontFamily: Typography.family,
-    fontSize: Typography.sizes.xs,
-    fontWeight: Typography.weights.bold,
-    color: Colors.warning,
-    letterSpacing: 0.5,
-  },
-  title: {
-    fontFamily: Typography.family,
-    fontSize: Typography.sizes['2xl'],
-    fontWeight: Typography.weights.bold,
-    color: Colors.foreground,
-    textAlign: 'center',
-    marginBottom: Spacing.sm,
-  },
-  message: {
-    fontFamily: Typography.family,
-    fontSize: Typography.sizes.sm,
-    fontWeight: Typography.weights.regular,
-    color: Colors.mutedForeground,
-    textAlign: 'center',
-    lineHeight: 20,
-    marginBottom: Spacing['2xl'],
-  },
-  debugContainer: {
-    backgroundColor: Colors.surface,
-    borderRadius: Radius.sm,
-    padding: Spacing.md,
-    width: '100%',
-    marginBottom: Spacing['2xl'],
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  debugTitle: {
-    fontFamily: Typography.family,
-    fontSize: Typography.sizes.xs,
-    fontWeight: Typography.weights.bold,
-    color: Colors.mutedForeground,
-    marginBottom: Spacing.xs,
-    textTransform: 'uppercase',
-  },
-  debugText: {
-    fontFamily: Typography.family,
-    fontSize: Typography.sizes.xs,
-    color: Colors.destructive,
-  },
-  button: {
-    height: Spacing['5xl'],
-    borderRadius: Radius.full,
-    backgroundColor: Colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: Spacing['3xl'],
+    alignSelf: 'center',
+    marginBottom: Spacing.lg,
   },
-  buttonText: {
-    fontFamily: Typography.family,
-    fontSize: Typography.sizes.base,
-    fontWeight: Typography.weights.bold,
-    color: Colors.primaryForeground,
+  message: {
+    marginTop: Spacing.sm,
+    marginBottom: Spacing['2xl'],
+  },
+  debug: {
+    width: '100%',
+    gap: Spacing.xs,
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.md,
+    borderWidth: Sizes.hairline,
+    borderColor: Colors.border,
+    padding: Spacing.md,
+    marginBottom: Spacing['2xl'],
+  },
+  debugScroll: {
+    maxHeight: 120,
   },
 });

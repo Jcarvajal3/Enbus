@@ -1,43 +1,33 @@
 import React, { useEffect } from 'react';
 import Animated, {
-  useSharedValue,
   useAnimatedStyle,
+  useSharedValue,
   withTiming,
-  Easing,
 } from 'react-native-reanimated';
-
-interface PageTransitionProps {
-  children: React.ReactNode;
-}
+import { Motion } from '@/src/theme';
 
 /**
- * PageTransition – Wraps screen content to provide a smooth, hardware-accelerated
- * transition on mount.
+ * PageTransition — mount animation for stacked screens.
  *
- * Emil Kowalski Principles:
- *   - Snappy entering animation: 220ms (under 300ms limit).
- *   - Custom ease-out curve (Easing.out(Easing.cubic)) for immediate visual responsiveness.
- *   - Subtle entry: offset is only 24px, avoiding scaling from 0 or long sweeps.
+ * A short fade + 24pt horizontal slide, decelerating. Kept under
+ * `Motion.duration.base` so it reads as responsiveness rather than as an
+ * animation the user has to wait through.
  */
-export function PageTransition({ children }: PageTransitionProps) {
-  const opacity = useSharedValue(0);
-  const translateX = useSharedValue(24); // Subtle right offset
+export function PageTransition({ children }: { children: React.ReactNode }) {
+  const progress = useSharedValue(0);
 
   useEffect(() => {
-    const easeOut = Easing.out(Easing.cubic);
-    opacity.value = withTiming(1, { duration: 220, easing: easeOut });
-    translateX.value = withTiming(0, { duration: 220, easing: easeOut });
-  }, []);
+    progress.value = withTiming(1, {
+      duration: Motion.duration.base,
+      easing: Motion.easing.out,
+    });
+  }, [progress]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     flex: 1,
-    opacity: opacity.value,
-    transform: [{ translateX: translateX.value }],
+    opacity: progress.value,
+    transform: [{ translateX: (1 - progress.value) * 24 }],
   }));
 
-  return (
-    <Animated.View style={animatedStyle}>
-      {children}
-    </Animated.View>
-  );
+  return <Animated.View style={animatedStyle}>{children}</Animated.View>;
 }

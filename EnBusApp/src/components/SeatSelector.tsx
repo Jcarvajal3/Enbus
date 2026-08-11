@@ -1,15 +1,16 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { StyleSheet } from 'react-native';
-import { View, Text, ScrollView } from '@/tw';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
-import { generarAsientos } from '@/src/utils/seatLayout';
 import Animated, {
-  useSharedValue,
   useAnimatedStyle,
+  useSharedValue,
+  withSequence,
   withSpring,
 } from 'react-native-reanimated';
 import { PressableScale } from './PressableScale';
-import { Colors, Typography, Radius, Shadows, Gradients } from '@/src/theme';
+import { Button, Card, Text } from '@/src/components/ui';
+import { generarAsientos } from '@/src/utils/seatLayout';
+import { Colors, Motion, Radius, Sizes, Spacing } from '@/src/theme';
 
 interface SeatSelectorProps {
   viaje_id: string;
@@ -19,74 +20,63 @@ interface SeatSelectorProps {
   onConfirm: (asientos: string[]) => void;
 }
 
-// Asiento individual con spring animation al seleccionar (P2)
+const SEAT_SIZE = Sizes.control.md - 4;
+const AISLE_WIDTH = Spacing.xl;
+
+// ─── Seat ────────────────────────────────────────────────────────────────────
+
 function SeatButton({
   seat,
-  isOcupado,
-  isSeleccionado,
+  ocupado,
+  seleccionado,
   onToggle,
 }: {
   seat: string;
-  isOcupado: boolean;
-  isSeleccionado: boolean;
+  ocupado: boolean;
+  seleccionado: boolean;
   onToggle: (seat: string) => void;
 }) {
   const scale = useSharedValue(1);
 
   const handlePress = () => {
-    if (isOcupado) return;
-    // Spring bounce al seleccionar: 0.85 → 1.1 → 1.0
-    scale.value = withSpring(isSeleccionado ? 1 : 1.12, {
-      damping: 8,
-      stiffness: 300,
-    });
-    setTimeout(() => {
-      scale.value = withSpring(1, { damping: 12, stiffness: 200 });
-    }, 100);
+    if (ocupado) return;
+    // Selecting pops; deselecting settles back without the overshoot.
+    scale.value = seleccionado
+      ? withSpring(1, Motion.spring.snappy)
+      : withSequence(withSpring(1.14, Motion.spring.bouncy), withSpring(1, Motion.spring.snappy));
     Haptics.selectionAsync();
     onToggle(seat);
   };
 
-  const animStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
-  }));
+  const animStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
 
-  let bgColor: string = Colors.white;
-  let borderColor: string = Colors.border;
-  let textColor: string = Colors.foreground;
-  let textWeight: '700' | '900' | '400' = '700';
-  let strikethrough = false;
-
-  if (isSeleccionado) {
-    bgColor = Colors.accent;
-    borderColor = Colors.accent;
-    textColor = Colors.white;
-    textWeight = '900';
-  } else if (isOcupado) {
-    bgColor = Colors.surface;
-    borderColor = Colors.border;
-    textColor = Colors.mutedForeground;
-    strikethrough = true;
-  }
+  const colors = seleccionado
+    ? { bg: Colors.accent, border: Colors.accent, fg: Colors.white }
+    : ocupado
+      ? { bg: Colors.surface, border: Colors.border, fg: Colors.mutedForeground }
+      : { bg: Colors.white, border: Colors.border, fg: Colors.foreground };
 
   return (
-    <Animated.View style={[styles.seatWrapper, animStyle]}>
+    <Animated.View style={[s.seatWrapper, animStyle]}>
       <PressableScale
         onPress={handlePress}
-        disabled={isOcupado}
+        disabled={ocupado}
         scaleValue={0.92}
-        duration={100}
-        style={[
-          styles.seat,
-          { backgroundColor: bgColor, borderColor },
-        ]}
+        duration={Motion.duration.instant}
+        style={[s.seat, { backgroundColor: colors.bg, borderColor: colors.border }]}
+        accessibilityRole="button"
+        accessibilityState={{ disabled: ocupado, selected: seleccionado }}
+        accessibilityLabel={`Asiento ${seat}${
+          ocupado ? ', ocupado' : seleccionado ? ', seleccionado' : ', disponible'
+        }`}
       >
         <Text
-          style={[
-            styles.seatText,
-            { color: textColor, fontWeight: textWeight },
-            strikethrough && styles.strikethrough,
-          ]}
+          variant="caption"
+          size="xs"
+          weight={seleccionado ? 'heavy' : 'bold'}
+          color={colors.fg}
+          compact
+          style={ocupado ? s.seatOcupado : undefined}
         >
           {seat}
         </Text>
@@ -95,8 +85,9 @@ function SeatButton({
   );
 }
 
+// ─── Selector ────────────────────────────────────────────────────────────────
+
 export function SeatSelector({
-  viaje_id,
   asientosTotales,
   asientosOcupados,
   precioUnitario,
@@ -109,259 +100,192 @@ export function SeatSelector({
     (seat: string) => {
       if (asientosOcupados.includes(seat)) return;
       setSeleccionados((prev) =>
-        prev.includes(seat)
-          ? prev.filter((s) => s !== seat)
-          : [...prev, seat]
+        prev.includes(seat) ? prev.filter((s) => s !== seat) : [...prev, seat]
       );
     },
     [asientosOcupados]
   );
 
+  // Someone else may take a seat we had picked; drop it silently.
   useEffect(() => {
-    setSeleccionados((prev) =>
-      prev.filter((s) => !asientosOcupados.includes(s))
-    );
+    setSeleccionados((prev) => prev.filter((s) => !asientosOcupados.includes(s)));
   }, [asientosOcupados]);
 
   const total = seleccionados.length * precioUnitario;
+  const ordenados = [...seleccionados].sort((a, b) => Number(a) - Number(b));
 
   return (
-    <View style={styles.container}>
-      {/* Leyenda */}
-      <View style={styles.legend}>
-        <View style={styles.legendItem}>
-          <View style={[styles.legendDot, { backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.border }]} />
-          <Text style={styles.legendText}>Libre</Text>
-        </View>
-        <View style={styles.legendItem}>
-          <View style={[styles.legendDot, { backgroundColor: Colors.accent }]} />
-          <Text style={styles.legendText}>Tu asiento</Text>
-        </View>
-        <View style={styles.legendItem}>
-          <View style={[styles.legendDot, { backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border }]} />
-          <Text style={styles.legendText}>Ocupado</Text>
-        </View>
+    <Card padding="md">
+      <View style={s.legend}>
+        <LegendItem color={Colors.white} bordered label="Libre" />
+        <LegendItem color={Colors.accent} label="Tu asiento" />
+        <LegendItem color={Colors.surface} bordered label="Ocupado" />
       </View>
 
-      {/* Bus Layout */}
-      <View style={styles.busLayout}>
-        <View style={styles.busFront}>
-          <Text style={styles.busFrontText}>FRENTE</Text>
-        </View>
-        <ScrollView style={{ maxHeight: 320 }} showsVerticalScrollIndicator={false}>
-          {filas.map((fila, i) => (
-            <View key={i} style={styles.fila}>
-              {fila.map((seat, j) => {
-                if (seat === '') {
-                  return <View key={`pasillo-${i}-${j}`} style={styles.pasillo} />;
-                }
-                return (
+      <View style={s.bus}>
+        <Text variant="overline" color="muted" align="center" uppercase style={s.busFront}>
+          Frente
+        </Text>
+
+        <ScrollView style={s.busScroll} showsVerticalScrollIndicator={false}>
+          {filas.map((fila, rowIndex) => (
+            <View key={`fila-${rowIndex}`} style={s.row}>
+              {fila.map((seat, colIndex) =>
+                seat === '' ? (
+                  <View key={`pasillo-${rowIndex}-${colIndex}`} style={s.aisle} />
+                ) : (
                   <SeatButton
                     key={seat}
                     seat={seat}
-                    isOcupado={asientosOcupados.includes(seat)}
-                    isSeleccionado={seleccionados.includes(seat)}
+                    ocupado={asientosOcupados.includes(seat)}
+                    seleccionado={seleccionados.includes(seat)}
                     onToggle={toggleSeat}
                   />
-                );
-              })}
+                )
+              )}
             </View>
           ))}
         </ScrollView>
       </View>
 
-      {/* Resumen */}
-      <View style={styles.summary}>
-        {seleccionados.length > 0 ? (
-          <View style={styles.summaryInner}>
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>
-                Asientos:{' '}
-                <Text style={styles.summaryValue}>
-                  {[...seleccionados].sort((a, b) => Number(a) - Number(b)).join(', ')}
-                </Text>
+      {seleccionados.length > 0 ? (
+        <View style={s.summary}>
+          <View style={s.summaryRow}>
+            <Text variant="secondary" color="muted">
+              {`Asiento${ordenados.length > 1 ? 's' : ''} `}
+              <Text variant="bodyStrong" size="sm">
+                {ordenados.join(', ')}
               </Text>
-              <Text style={styles.perUnit}>× {precioUnitario} Bs</Text>
-            </View>
-            <View style={styles.totalRow}>
-              <Text style={styles.totalLabel}>Total</Text>
-              <Text style={styles.totalValue}>{total.toFixed(2)} Bs</Text>
-            </View>
+            </Text>
+            <Text variant="secondary" color="muted">
+              {`× ${precioUnitario} Bs`}
+            </Text>
           </View>
-        ) : (
-          <Text style={styles.hint}>Selecciona al menos un asiento para continuar</Text>
-        )}
 
-        <PressableScale
-          onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-            onConfirm(seleccionados);
-          }}
-          disabled={seleccionados.length === 0}
-          haptic
-          hapticType="medium"
-          style={[
-            styles.confirmBtn,
-            seleccionados.length === 0 && styles.confirmBtnDisabled,
-          ]}
-        >
-          <Text
-            style={[
-              styles.confirmBtnText,
-              seleccionados.length === 0 && styles.confirmBtnTextDisabled,
-            ]}
-          >
-            Continuar al Pago
-          </Text>
-        </PressableScale>
-      </View>
+          <View style={s.totalRow}>
+            <Text variant="subheading" weight="heavy">
+              Total
+            </Text>
+            <Text variant="title" size="2xl" color="accent" compact>
+              {`${total.toFixed(2)} Bs`}
+            </Text>
+          </View>
+        </View>
+      ) : (
+        <Text variant="secondary" color="muted" align="center" style={s.hint}>
+          Toca los asientos que quieras reservar.
+        </Text>
+      )}
+
+      <Button
+        variant="accent"
+        fullWidth
+        disabled={seleccionados.length === 0}
+        onPress={() => onConfirm(seleccionados)}
+      >
+        Continuar al pago
+      </Button>
+    </Card>
+  );
+}
+
+function LegendItem({
+  color,
+  label,
+  bordered,
+}: {
+  color: string;
+  label: string;
+  bordered?: boolean;
+}) {
+  return (
+    <View style={s.legendItem}>
+      <View
+        style={[
+          s.legendDot,
+          {
+            backgroundColor: color,
+            borderWidth: bordered ? Sizes.hairline : 0,
+            borderColor: Colors.border,
+          },
+        ]}
+      />
+      <Text variant="caption" color="muted" compact>
+        {label}
+      </Text>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    backgroundColor: Colors.white,
-    borderRadius: Radius.xl, // 24
-    padding: 20,
-  },
+const s = StyleSheet.create({
   legend: {
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: 20,
-    marginBottom: 20,
+    gap: Spacing.xl,
+    marginBottom: Spacing.xl,
   },
   legendItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: Spacing.sm - 2,
   },
   legendDot: {
-    width: 14,
-    height: 14,
-    borderRadius: 4,
+    width: Spacing.lg - 2,
+    height: Spacing.lg - 2,
+    borderRadius: Radius.xs,
   },
-  legendText: {
-    fontSize: 12,
-    color: Colors.mutedForeground,
-    fontWeight: Typography.weights.medium,
-    fontFamily: Typography.family,
-  },
-  busLayout: {
+  bus: {
     backgroundColor: Colors.surface,
-    borderRadius: Radius.md, // 16
-    padding: 16,
-    marginBottom: 20,
+    borderRadius: Radius.md,
+    padding: Spacing.lg,
+    marginBottom: Spacing.xl,
   },
   busFront: {
-    alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: Spacing.lg,
   },
-  busFrontText: {
-    fontSize: 9,
-    fontWeight: Typography.weights.bold,
-    color: Colors.mutedForeground,
-    letterSpacing: 2,
-    fontFamily: Typography.family,
+  busScroll: {
+    maxHeight: 320,
   },
-  fila: {
+  row: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: Spacing.sm,
   },
   seatWrapper: {
-    marginHorizontal: 3,
+    marginHorizontal: Spacing.xs - 1,
   },
   seat: {
-    width: 40,
-    height: 40,
-    borderRadius: Radius.sm, // 10
+    width: SEAT_SIZE,
+    height: SEAT_SIZE,
+    borderRadius: Radius.sm,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
+    borderWidth: Sizes.hairline,
   },
-  seatText: {
-    fontSize: 11,
-    fontFamily: Typography.family,
-  },
-  strikethrough: {
+  seatOcupado: {
     textDecorationLine: 'line-through',
   },
-  pasillo: {
-    width: 20,
-    height: 40,
+  aisle: {
+    width: AISLE_WIDTH,
+    height: SEAT_SIZE,
   },
   summary: {
-    borderTopWidth: 0,
-    paddingTop: 16,
-  },
-  summaryInner: {
-    marginBottom: 16,
+    marginBottom: Spacing.xl,
+    gap: Spacing.sm,
   },
   summaryRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  summaryLabel: {
-    fontSize: 13,
-    color: Colors.mutedForeground,
-    fontFamily: Typography.family,
-  },
-  summaryValue: {
-    fontSize: 13,
-    fontWeight: Typography.weights.bold,
-    color: Colors.foreground,
-    fontFamily: Typography.family,
-  },
-  perUnit: {
-    fontSize: 13,
-    color: Colors.mutedForeground,
-    fontFamily: Typography.family,
+    alignItems: 'center',
+    gap: Spacing.sm,
   },
   totalRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  totalLabel: {
-    fontSize: 17,
-    fontWeight: Typography.weights.heavy,
-    color: Colors.foreground,
-    fontFamily: Typography.family,
-  },
-  totalValue: {
-    fontSize: 22,
-    fontWeight: Typography.weights.heavy,
-    color: Colors.accent,
-    fontFamily: Typography.family,
-  },
   hint: {
-    fontSize: 13,
-    color: Colors.mutedForeground,
-    textAlign: 'center',
-    marginBottom: 16,
-    fontFamily: Typography.family,
-  },
-  confirmBtn: {
-    height: 54,
-    borderRadius: Radius.full,
-    backgroundColor: Colors.accent,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  confirmBtnDisabled: {
-    backgroundColor: 'rgba(74, 127, 248, 0.35)',
-  },
-  confirmBtnText: {
-    fontSize: 16,
-    fontWeight: Typography.weights.bold,
-    color: Colors.white,
-    fontFamily: Typography.family,
-  },
-  confirmBtnTextDisabled: {
-    color: 'rgba(255, 255, 255, 0.5)',
-    fontFamily: Typography.family,
+    marginBottom: Spacing.xl,
   },
 });

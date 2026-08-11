@@ -1,10 +1,34 @@
-import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
-import { StyleSheet, Pressable } from 'react-native';
-import { Text, View } from '@/tw';
-import Animated, { useSharedValue, useAnimatedStyle, withTiming, withSpring, runOnJS } from 'react-native-reanimated';
-import { CheckCircle, XCircle, Info } from 'phosphor-react-native';
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
+import { Pressable, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { CheckCircle, Info, XCircle, type IconProps } from 'phosphor-react-native';
 import * as Haptics from 'expo-haptics';
-import { Colors, Typography, Spacing, Radius, Shadows } from '@/src/theme';
+import Animated, {
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
+import { Text } from '@/src/components/ui';
+import {
+  Colors,
+  Layout,
+  Motion,
+  Radius,
+  Shadows,
+  Sizes,
+  Spacing,
+  StatusPalette,
+  alpha,
+} from '@/src/theme';
 
 type ToastType = 'success' | 'error' | 'info';
 
@@ -20,20 +44,24 @@ export function useToast() {
   return context;
 }
 
-/** Icon color map — maps toast type to theme semantic colors */
-const ICON_COLORS: Record<ToastType, string> = {
-  success: Colors.success,
-  error: Colors.destructive,
-  info: Colors.info,
+const VISUALS: Record<ToastType, { icon: React.ComponentType<IconProps>; color: string }> = {
+  success: { icon: CheckCircle, color: StatusPalette.success.fg },
+  error: { icon: XCircle, color: StatusPalette.danger.fg },
+  info: { icon: Info, color: StatusPalette.progress.fg },
 };
 
+const AUTO_HIDE_MS = 3500;
+const HIDDEN_OFFSET = -120;
+
 export function ToastProvider({ children }: { children: React.ReactNode }) {
+  const insets = useSafeAreaInsets();
+
   const [message, setMessage] = useState('');
   const [type, setType] = useState<ToastType>('info');
   const [visible, setVisible] = useState(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const translateY = useSharedValue(-100);
+  const translateY = useSharedValue(HIDDEN_OFFSET);
   const opacity = useSharedValue(0);
 
   const animatedStyle = useAnimatedStyle(() => ({
@@ -41,70 +69,70 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     opacity: opacity.value,
   }));
 
-  useEffect(() => {
-    return () => {
-      if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    };
+  useEffect(() => () => {
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
   }, []);
 
   const hide = useCallback(() => {
-    // Emil: exit DEBE ser más rápido que entry
-    translateY.value = withTiming(-100, { duration: 150 });
-    opacity.value = withTiming(0, { duration: 120 }, (finished) => {
-      if (finished) {
-        runOnJS(setVisible)(false);
-      }
+    // The exit must feel instant — it is deliberately faster than the entrance.
+    translateY.value = withTiming(HIDDEN_OFFSET, { duration: Motion.duration.fast });
+    opacity.value = withTiming(0, { duration: Motion.duration.instant }, (finished) => {
+      if (finished) runOnJS(setVisible)(false);
     });
   }, [translateY, opacity]);
 
-  const show = useCallback((toastType: ToastType, toastMessage: string) => {
-    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+  const show = useCallback(
+    (toastType: ToastType, toastMessage: string) => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
 
-    setType(toastType);
-    setMessage(toastMessage);
-    setVisible(true);
+      setType(toastType);
+      setMessage(toastMessage);
+      setVisible(true);
 
-    translateY.value = -100;
-    opacity.value = 0;
+      translateY.value = HIDDEN_OFFSET;
+      opacity.value = 0;
 
-    // Haptic feedback según tipo
-    if (toastType === 'success') {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } else if (toastType === 'error') {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-    }
+      if (toastType === 'success') {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      } else if (toastType === 'error') {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      }
 
-    // Entry: spring natural
-    translateY.value = withSpring(40, { damping: 15, stiffness: 200 });
-    opacity.value = withTiming(1, { duration: 200 });
+      translateY.value = withSpring(0, Motion.spring.snappy);
+      opacity.value = withTiming(1, { duration: Motion.duration.base });
 
-    timeoutRef.current = setTimeout(() => {
-      hide();
-    }, 3500);
-  }, [hide, translateY, opacity]);
+      timeoutRef.current = setTimeout(hide, AUTO_HIDE_MS);
+    },
+    [hide, translateY, opacity]
+  );
+
+  const visual = VISUALS[type];
+  const Icon = visual.icon;
 
   return (
     <ToastContext.Provider value={{ show }}>
       {children}
+
       {visible && (
         <Animated.View
-          style={[styles.container, animatedStyle]}
+          style={[s.container, { top: insets.top + Spacing.sm }, animatedStyle]}
           accessibilityRole="alert"
           accessibilityLiveRegion="polite"
           accessibilityLabel={message}
+          pointerEvents="box-none"
         >
           <Pressable
             onPress={hide}
-            style={styles.pressable}
+            style={s.toast}
             accessibilityLabel="Cerrar notificación"
             accessibilityRole="button"
           >
-            {type === 'success' && <CheckCircle size={22} color={ICON_COLORS.success} weight="fill" />}
-            {type === 'error' && <XCircle size={22} color={ICON_COLORS.error} weight="fill" />}
-            {type === 'info' && <Info size={22} color={ICON_COLORS.info} weight="fill" />}
-            <View style={styles.textContainer}>
-              <Text style={styles.message}>{message}</Text>
+            <View style={[s.iconBox, { backgroundColor: alpha(visual.color, 0.12) }]}>
+              <Icon size={Sizes.icon.md} color={visual.color} weight="fill" />
             </View>
+            <Text variant="label" style={s.message} numberOfLines={3}>
+              {message}
+            </Text>
           </Pressable>
         </Animated.View>
       )}
@@ -112,34 +140,34 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
-const styles = StyleSheet.create({
+const s = StyleSheet.create({
   container: {
     position: 'absolute',
-    top: 0,
     left: 0,
     right: 0,
     zIndex: 9999,
   },
-  pressable: {
+  toast: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: Spacing.md,
+    marginHorizontal: Layout.screenPadding,
+    padding: Spacing.md,
+    paddingRight: Spacing.lg,
     backgroundColor: Colors.white,
-    borderWidth: 1,
+    borderWidth: Sizes.hairline,
     borderColor: Colors.border,
-    padding: Spacing.lg - 2,
-    borderRadius: Radius.md - 2,
-    marginHorizontal: Spacing.lg,
-    gap: Spacing.sm + 2,
+    borderRadius: Radius.lg,
     ...Shadows.elevated,
   },
-  textContainer: {
-    flex: 1,
+  iconBox: {
+    width: Sizes.iconBox.sm,
+    height: Sizes.iconBox.sm,
+    borderRadius: Radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   message: {
-    fontFamily: Typography.family,
-    fontSize: Typography.sizes.sm,
-    fontWeight: Typography.weights.semibold,
-    color: Colors.foreground,
-    lineHeight: 20,
+    flex: 1,
   },
 });

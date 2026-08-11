@@ -1,51 +1,57 @@
 /**
- * PressableScale – Wrapper de Pressable con feedback táctil animado (P0).
+ * PressableScale — the app's touch feedback primitive.
  *
- * Arquitectura:
- *   Animated.View (scale transform + layout) → Pressable (visual + press handlers)
+ * Architecture:
+ *   Animated.Pressable (scale transform) → children
  *
- * Principios Emil Kowalski:
- *   - scale(0.97) en botones funcionales, nunca menos de 0.95
- *   - 160ms ease-out: feedback inmediato, entrada suave
- *   - El restore (press out) es más rápido que el press-in
- *   - Solo transform en GPU, sin cambiar layout properties
+ * Rules encoded here (so no caller has to re-derive them):
+ *   - Scale factors come from `Motion.press`; nothing goes below 0.9.
+ *   - Press-in uses `Motion.duration.fast`, release is faster — a slow release
+ *     reads as lag.
+ *   - Only `transform` animates: no layout property is touched, so the whole
+ *     interaction stays on the UI thread.
  */
 import React from 'react';
 import { Pressable as RNPressable, StyleSheet, ViewStyle } from 'react-native';
 import Animated, {
-  useSharedValue,
   useAnimatedStyle,
+  useSharedValue,
   withTiming,
-  Easing,
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
+import { Motion, Opacity, Sizes } from '@/src/theme';
 
 interface PressableScaleProps {
-  /** Escala mínima al presionar. Default 0.97 */
+  /** Minimum scale while pressed. Defaults to `Motion.press.button` (0.97). */
   scaleValue?: number;
-  /** Duración del press-in en ms. Default 160 */
+  /** Press-in duration in ms. Defaults to `Motion.duration.fast`. */
   duration?: number;
-  /** Dispara haptic feedback al presionar. Default false */
   haptic?: boolean;
-  /** Tipo de haptic. Default 'selection' */
   hapticType?: 'selection' | 'light' | 'medium';
-  onPress?: (e: any) => void;
-  onPressIn?: (e: any) => void;
-  onPressOut?: (e: any) => void;
-  onLongPress?: (e: any) => void;
+  onPress?: (e: unknown) => void;
+  onPressIn?: (e: unknown) => void;
+  onPressOut?: (e: unknown) => void;
+  onLongPress?: (e: unknown) => void;
   disabled?: boolean;
   style?: ViewStyle | ViewStyle[] | (ViewStyle | false | undefined | null)[];
   accessibilityLabel?: string;
-  accessibilityRole?: 'button' | 'radio' | 'link' | 'tab' | 'none';
-  accessibilityState?: any;
+  accessibilityHint?: string;
+  accessibilityRole?: 'button' | 'radio' | 'link' | 'tab' | 'tablist' | 'none';
+  accessibilityState?: object;
   children?: React.ReactNode;
 }
 
 const AnimatedPressable = Animated.createAnimatedComponent(RNPressable);
 
+const HAPTIC_ACTION: Record<NonNullable<PressableScaleProps['hapticType']>, () => void> = {
+  selection: () => Haptics.selectionAsync(),
+  light: () => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light),
+  medium: () => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium),
+};
+
 export function PressableScale({
-  scaleValue = 0.97,
-  duration = 160,
+  scaleValue = Motion.press.button,
+  duration = Motion.duration.fast,
   haptic = false,
   hapticType = 'selection',
   onPress,
@@ -58,39 +64,27 @@ export function PressableScale({
   ...rest
 }: PressableScaleProps) {
   const scale = useSharedValue(1);
-  const easeOut = Easing.out(Easing.cubic);
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
   }));
 
-  const handlePressIn = (e: any) => {
+  const handlePressIn = (e: unknown) => {
     if (disabled) return;
-    scale.value = withTiming(scaleValue, { duration, easing: easeOut });
+    scale.value = withTiming(scaleValue, { duration, easing: Motion.easing.out });
     onPressIn?.(e);
   };
 
-  const handlePressOut = (e: any) => {
+  const handlePressOut = (e: unknown) => {
     scale.value = withTiming(1, {
       duration: Math.round(duration * 0.65),
-      easing: easeOut,
+      easing: Motion.easing.out,
     });
     onPressOut?.(e);
   };
 
-  const handlePress = (e: any) => {
-    if (haptic && !disabled) {
-      switch (hapticType) {
-        case 'light':
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-          break;
-        case 'medium':
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-          break;
-        default:
-          Haptics.selectionAsync();
-      }
-    }
+  const handlePress = (e: unknown) => {
+    if (haptic && !disabled) HAPTIC_ACTION[hapticType]();
     onPress?.(e);
   };
 
@@ -98,11 +92,12 @@ export function PressableScale({
     <AnimatedPressable
       {...rest}
       disabled={disabled}
+      hitSlop={Sizes.hitSlop}
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
       onPress={handlePress}
       onLongPress={onLongPress}
-      style={[style, animatedStyle, disabled && styles.disabled]}
+      style={[style, animatedStyle, disabled ? styles.disabled : null]}
     >
       {children}
     </AnimatedPressable>
@@ -111,7 +106,6 @@ export function PressableScale({
 
 const styles = StyleSheet.create({
   disabled: {
-    opacity: 0.5,
+    opacity: Opacity.disabled,
   },
 });
-

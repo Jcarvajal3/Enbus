@@ -1,17 +1,33 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView } from '@/tw';
-import { TextInput, Modal, ActivityIndicator, StyleSheet } from 'react-native';
-import { CheckCircle, CreditCard, Bank, X, Info } from 'phosphor-react-native';
-import { Spinner } from '@/src/components/Spinner';
+import React, { useEffect, useState } from 'react';
+import { ScrollView, StyleSheet, View } from 'react-native';
+import {
+  ArrowLeft,
+  Bank,
+  CheckCircle,
+  CreditCard,
+  Info,
+  Money,
+} from 'phosphor-react-native';
+import * as Haptics from 'expo-haptics';
+import { PressableScale } from './PressableScale';
+import {
+  BottomSheet,
+  Button,
+  Card,
+  Field,
+  LoadingState,
+  SectionLabel,
+  SelectField,
+  Text,
+} from '@/src/components/ui';
 import { supabase } from '@/src/utils/supabase';
 import { useAuth } from '@/src/contexts/AuthContext';
-import * as Haptics from 'expo-haptics';
 import { useToast } from '@/src/components/Toast';
-import { PressableScale } from './PressableScale';
-import { useTasaBCV, bsToUsd } from '@/src/hooks/useTasaBCV';
-import { Colors, Typography, Spacing, Radius, Shadows } from '@/src/theme';
+import { bsToUsd, useTasaBCV } from '@/src/hooks/useTasaBCV';
+import { Colors, Motion, Radius, Sizes, Spacing } from '@/src/theme';
 
-// ─── Bancos de Venezuela ──────────────────────────────────────────────────────
+// ─── Bancos de Venezuela ─────────────────────────────────────────────────────
+
 const BANCOS_VE = [
   'Banco de Venezuela', 'Bancamiga', 'Banesco', 'BBVA Provincial',
   'Mercantil', 'BNC', 'Banco Exterior', 'Bicentenario',
@@ -22,15 +38,26 @@ const BANCOS_VE = [
   'Otras', 'Zelle', 'PayPal',
 ];
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-type FlowStep = 'metodos' | 'formulario' | 'enviado';
-
 const METODO_INFO: Record<string, { label: string; desc: string }> = {
   PAGO_MOVIL: { label: 'Pago Móvil', desc: 'Transferencia instantánea en bolívares' },
-  TRANSFERENCIA_BANCARIA: { label: 'Transferencia Bancaria', desc: 'Desde tu cuenta bancaria nacional' },
+  TRANSFERENCIA_BANCARIA: { label: 'Transferencia bancaria', desc: 'Desde tu cuenta nacional' },
   ZELLE: { label: 'Zelle / Divisas', desc: 'Pago electrónico en dólares' },
-  EFECTIVO: { label: 'Efectivo en Taquilla', desc: 'Pago directo en la taquilla de la cooperativa' },
+  EFECTIVO: { label: 'Efectivo en taquilla', desc: 'Pago directo en la taquilla' },
 };
+
+type FlowStep = 'metodos' | 'formulario' | 'enviado';
+
+interface MetodoCuenta {
+  id: string;
+  tipo: string;
+  banco?: string;
+  titular?: string;
+  numero_cuenta?: string;
+  cedula_rif?: string;
+  email_zelle?: string;
+  instrucciones?: string;
+  cooperativa_id?: string;
+}
 
 interface PaymentFlowProps {
   monto: number;
@@ -41,71 +68,8 @@ interface PaymentFlowProps {
   onPaymentSuccess?: (pagoId?: string, pagoPayload?: Record<string, unknown>) => void;
 }
 
-// ─── MontoBadge ───────────────────────────────────────────────────────────────
-// Muestra el monto en Bs y, si el método es Zelle, el equivalente en USD
-// usando la tasa BCV oficial consultada en tiempo real.
-interface MontoBadgeProps {
-  monto: number;
-  montoUSD: number | null;
-  tasaBCV: number | null;
-  loadingTasa: boolean;
-  errorTasa: string | null;
-  isZelle: boolean;
-  label: string;
-  concepto?: string;
-}
-
-function MontoBadge({ monto, montoUSD, tasaBCV, loadingTasa, errorTasa, isZelle, label, concepto }: MontoBadgeProps) {
-  return (
-    <View style={s.montoBadge}>
-      <Text style={s.montoBadgeLabel}>{label}</Text>
-
-      {/* Monto en Bs — siempre visible */}
-      <Text style={s.montoBadgeAmount}>
-        {monto.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Bs
-      </Text>
-
-      {/* Equivalente USD — solo para Zelle */}
-      {isZelle && (
-        <View style={s.montoUsdContainer}>
-          {loadingTasa ? (
-            <View style={s.montoRow}>
-              <ActivityIndicator size="small" color={Colors.mutedForeground} />
-              <Text style={s.montoBadgeHint}>Consultando tasa BCV...</Text>
-            </View>
-          ) : montoUSD !== null ? (
-            <View style={s.montoUsdBlock}>
-              <Text style={s.montoBadgeUsd}>
-                ≈ {montoUSD.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD
-              </Text>
-              <View style={s.montoRow}>
-                <Info size={11} color={Colors.mutedForeground} weight="fill" />
-                <Text style={s.montoBadgeHint}>
-                  Tasa BCV oficial: {tasaBCV?.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Bs/USD
-                </Text>
-              </View>
-            </View>
-          ) : (
-            <View style={s.montoRow}>
-              <Info size={11} color={Colors.warning} weight="fill" />
-              <Text style={s.montoBadgeWarning}>
-                {errorTasa ? 'Tasa BCV no disponible. Verifica el monto con tu banco.' : 'Calculando equivalente USD...'}
-              </Text>
-            </View>
-          )}
-          <Text style={s.montoBadgeFootnote}>
-            Transfiere el equivalente en USD por Zelle
-          </Text>
-        </View>
-      )}
-
-      {/* Nota: para métodos en Bs (Pago Móvil, Transferencia) solo se muestra el monto en Bs */}
-      {!isZelle && concepto && (
-        <Text style={s.montoBadgeConcepto}>{concepto}</Text>
-      )}
-    </View>
-  );
-}
+const money = (value: number) =>
+  value.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 export function PaymentFlow({
   monto,
@@ -117,97 +81,90 @@ export function PaymentFlow({
 }: PaymentFlowProps) {
   const { user } = useAuth();
   const toast = useToast();
-
-  // Tasa BCV oficial para conversión Bs → USD (Zelle)
   const { tasa: tasaBCV, loading: loadingTasa, error: errorTasa } = useTasaBCV();
 
   const [step, setStep] = useState<FlowStep>('metodos');
-  const [metodosCuentas, setMetodosCuentas] = useState<any[]>([]);
+  const [metodos, setMetodos] = useState<MetodoCuenta[]>([]);
   const [loadingMetodos, setLoadingMetodos] = useState(true);
-  const [metodoSeleccionado, setMetodoSeleccionado] = useState<any>(null);
+  const [metodo, setMetodo] = useState<MetodoCuenta | null>(null);
 
   const [referencia, setReferencia] = useState('');
   const [fecha, setFecha] = useState('');
   const [banco, setBanco] = useState('');
-  const [isBancoModalVisible, setIsBancoModalVisible] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [pagoId, setPagoId] = useState<string | undefined>(undefined);
-  const [currentPayload, setCurrentPayload] = useState<Record<string, unknown> | undefined>(undefined);
+  const [bancoSheetVisible, setBancoSheetVisible] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [pagoId, setPagoId] = useState<string | undefined>();
+  const [payload, setPayload] = useState<Record<string, unknown> | undefined>();
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
-  // ── Cargar métodos de pago reales de la cooperativa ─────────────────────────
+  // ── Métodos de pago de la cooperativa ────────────────────────────────────
   useEffect(() => {
     if (!cooperativa_id) {
       setLoadingMetodos(false);
       return;
     }
-    let isMounted = true;
-    const fetchMetodos = async () => {
-      try {
-        setLoadingMetodos(true);
-        const { data, error } = await supabase
-          .from('metodos_pago_cooperativa')
-          .select('*')
-          .eq('cooperativa_id', cooperativa_id)
-          .eq('activo', true);
 
-        if (error) throw error;
-        if (isMounted) {
-          setMetodosCuentas(data || []);
+    let isMounted = true;
+    supabase
+      .from('metodos_pago_cooperativa')
+      .select('*')
+      .eq('cooperativa_id', cooperativa_id)
+      .eq('activo', true)
+      .then(({ data, error }) => {
+        if (error && __DEV__) {
+          console.error('[PaymentFlow] Error cargando métodos:', error.message);
         }
-      } catch (err: any) {
-        console.error('[PaymentFlow] Error cargando métodos de pago:', err.message);
-      } finally {
-        if (isMounted) setLoadingMetodos(false);
-      }
+        if (isMounted) {
+          setMetodos(data ?? []);
+          setLoadingMetodos(false);
+        }
+      });
+
+    return () => {
+      isMounted = false;
     };
-    fetchMetodos();
-    return () => { isMounted = false; };
   }, [cooperativa_id]);
 
-  // Si no se han cargado métodos en BD, proveer Efectivo como fallback
-  const metodosDisponibles = metodosCuentas.length > 0
-    ? metodosCuentas
-    : [{ id: 'fallback-efectivo', tipo: 'EFECTIVO', cooperativa_id }];
+  // Efectivo siempre está disponible como último recurso.
+  const disponibles: MetodoCuenta[] =
+    metodos.length > 0 ? metodos : [{ id: 'fallback-efectivo', tipo: 'EFECTIVO', cooperativa_id }];
 
-  const isEfectivo = metodoSeleccionado?.tipo === 'EFECTIVO';
-  const isZelle = metodoSeleccionado?.tipo === 'ZELLE';
-
-  // Equivalente USD para métodos en dólares (Zelle)
+  const isEfectivo = metodo?.tipo === 'EFECTIVO';
+  const isZelle = metodo?.tipo === 'ZELLE';
   const montoUSD = bsToUsd(monto, tasaBCV);
 
-  // Validate fecha format DD/MM/AAAA and that it represents a real date
-  const isFechaValid = (() => {
-    if (!fecha.trim()) return false;
-    const DATE_REGEX = /^\d{2}\/\d{2}\/\d{4}$/;
-    if (!DATE_REGEX.test(fecha.trim())) return false;
-    const [day, month, year] = fecha.trim().split('/').map(Number);
-    const d = new Date(year, month - 1, day);
-    return d.getFullYear() === year && d.getMonth() === month - 1 && d.getDate() === day;
-  })();
+  /** `DD/MM/AAAA` that also has to be a real calendar date. */
+  const parseFecha = (value: string): Date | null => {
+    if (!/^\d{2}\/\d{2}\/\d{4}$/.test(value.trim())) return null;
+    const [day, month, year] = value.trim().split('/').map(Number);
+    const date = new Date(year, month - 1, day);
+    const valid =
+      date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day;
+    return valid ? date : null;
+  };
 
-  const isFormValid = isEfectivo
-    ? true
-    : referencia.trim().length >= 4 && /^\d+$/.test(referencia.trim()) && isFechaValid && banco.trim().length > 0;
+  const validate = (): boolean => {
+    if (isEfectivo) return true;
 
-  const handleSubmitPago = async () => {
-    if (!isFormValid || !metodoSeleccionado || !user) return;
-    setIsSubmitting(true);
+    const next: Record<string, string> = {};
+    const ref = referencia.trim();
+    if (!/^\d{4,}$/.test(ref)) next.referencia = 'Ingresa al menos 4 dígitos numéricos.';
+    if (!parseFecha(fecha)) next.fecha = 'Usa el formato DD/MM/AAAA.';
+    if (!banco.trim()) next.banco = 'Selecciona el banco desde el que pagaste.';
 
+    setErrors(next);
+    return Object.keys(next).length === 0;
+  };
+
+  const handleSubmit = async () => {
+    if (!metodo || !user) return;
+    if (!validate()) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      return;
+    }
+
+    setSubmitting(true);
     try {
-      // Formatear fecha de DD/MM/AAAA a YYYY-MM-DD
-      let formattedDate: string | null = null;
-      if (!isEfectivo) {
-        const parts = fecha.trim().split('/');
-        if (parts.length === 3) {
-          const day = parts[0].padStart(2, '0');
-          const month = parts[1].padStart(2, '0');
-          const year = parts[2];
-          formattedDate = `${year}-${month}-${day}`;
-        } else {
-          formattedDate = fecha.trim();
-        }
-      }
-
       const pagoPayload: Record<string, unknown> = {
         pagador_id: user.id,
         monto,
@@ -217,737 +174,517 @@ export function PaymentFlow({
 
       if (cooperativa_id) pagoPayload.cooperativa_id = cooperativa_id;
       if (encomienda_id) pagoPayload.encomienda_id = encomienda_id;
-
-      // Vincular método de pago real (salvo que sea fallback)
-      if (metodoSeleccionado.id && metodoSeleccionado.id !== 'fallback-efectivo') {
-        pagoPayload.metodo_pago_id = metodoSeleccionado.id;
+      if (metodo.id && metodo.id !== 'fallback-efectivo') {
+        pagoPayload.metodo_pago_id = metodo.id;
       }
 
       if (!isEfectivo) {
+        const parsed = parseFecha(fecha);
         pagoPayload.numero_referencia = referencia.trim();
-        pagoPayload.fecha_transaccion = formattedDate;
+        pagoPayload.fecha_transaccion = parsed
+          ? `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, '0')}-${String(
+              parsed.getDate()
+            ).padStart(2, '0')}`
+          : null;
         pagoPayload.banco_emisor = banco;
       }
 
-      setCurrentPayload(pagoPayload);
+      setPayload(pagoPayload);
 
-      // Si tenemos ID de encomienda o boletos ya creados, insertamos el pago directamente
+      // Cuando el recurso ya existe insertamos el pago aquí; si no, lo hace la
+      // pantalla que crea el boleto, para no dejar pagos huérfanos.
       if (encomienda_id || (boleto_ids && boleto_ids.length > 0)) {
-        const { data: pago, error: pagoError } = await supabase
+        const { data: pago, error } = await supabase
           .from('pagos')
           .insert(pagoPayload)
           .select('id')
           .single();
-
-        if (pagoError) throw pagoError;
+        if (error) throw error;
         setPagoId(pago?.id);
       }
 
       setStep('enviado');
-    } catch (err: any) {
-      console.error('[PaymentFlow] Error al registrar pago:', err.message);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error desconocido';
+      if (__DEV__) console.error('[PaymentFlow] Error registrando pago:', message);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      toast.show('error', `No se pudo registrar el pago: ${err.message}`);
+      toast.show('error', `No se pudo registrar el pago: ${message}`);
     } finally {
-      setIsSubmitting(false);
+      setSubmitting(false);
     }
   };
 
   if (loadingMetodos) {
     return (
-      <View style={s.loadingContainer}>
-        <Spinner size="large" />
-        <Text style={s.loadingText}>Cargando cuentas bancarias...</Text>
-      </View>
+      <Card padding="lg">
+        <LoadingState label="Cargando formas de pago…" compact />
+      </Card>
     );
   }
 
-  // Paso 3: Enviado
+  // ─── Paso 3: comprobante enviado ───────────────────────────────────────────
   if (step === 'enviado') {
     return (
-      <View style={s.card}>
-        <View style={s.successIconContainer}>
-          <CheckCircle weight="fill" color={Colors.success} size={40} />
+      <Card padding="lg">
+        <View style={s.successIcon}>
+          <CheckCircle weight="fill" color={Colors.success} size={Sizes.icon['2xl']} />
         </View>
-        <Text style={s.successTitle}>Comprobante Enviado</Text>
-        <Text style={s.successSubtitle}>
-          La cooperativa verificará tu pago. Una vez verificado por un taquillero, tu reserva/envío será confirmado.
+
+        <Text variant="heading" align="center">
+          Comprobante enviado
+        </Text>
+        <Text variant="secondary" color="muted" align="center" style={s.successText}>
+          La cooperativa verificará tu pago. Tu reserva se confirma en cuanto un taquillero lo
+          valide.
         </Text>
 
         {!isEfectivo && referencia ? (
-          <View style={s.referenciaContainer}>
-            <Text style={s.referenciaLabel}>Referencia registrada</Text>
-            <Text style={s.referenciaValue}>{referencia}</Text>
+          <View style={s.receipt}>
+            <Text variant="overline" color="muted" uppercase>
+              Referencia registrada
+            </Text>
+            <Text variant="bodyStrong" weight="heavy">
+              {referencia}
+            </Text>
           </View>
         ) : null}
 
         {isEfectivo && (
-          <View style={s.efectivoNote}>
-            <Text style={s.efectivoNoteLabel}>Pago en efectivo</Text>
-            <Text style={s.efectivoNoteText}>Completa tu pago al presentarte en la taquilla de la cooperativa.</Text>
+          <View style={[s.receipt, s.receiptHighlight]}>
+            <Text variant="overline" color="primary" uppercase>
+              Pago en efectivo
+            </Text>
+            <Text variant="secondary">
+              Completa tu pago al presentarte en la taquilla de la cooperativa.
+            </Text>
           </View>
         )}
 
         {onPaymentSuccess && (
-          <PressableScale
-            onPress={() => onPaymentSuccess(pagoId, currentPayload)}
-            haptic
-            hapticType="medium"
-            style={s.primaryButton}
-            accessibilityLabel="Continuar"
-            accessibilityRole="button"
-          >
-            <Text style={s.primaryButtonText}>Continuar</Text>
-          </PressableScale>
+          <Button variant="primary" fullWidth onPress={() => onPaymentSuccess(pagoId, payload)}>
+            Continuar
+          </Button>
         )}
-      </View>
+      </Card>
     );
   }
 
-  // Paso 2: Formulario de comprobante
-  if (step === 'formulario') {
-    const info = METODO_INFO[metodoSeleccionado?.tipo] || { label: 'Pago', desc: '' };
+  // ─── Paso 2: formulario ────────────────────────────────────────────────────
+  if (step === 'formulario' && metodo) {
+    const info = METODO_INFO[metodo.tipo] ?? { label: 'Pago', desc: '' };
+
     return (
-      <ScrollView
-        style={s.formScrollContainer}
-        contentContainerStyle={s.formContent}
-      >
-        {/* Volver */}
+      <Card padding="md">
         <PressableScale
           onPress={() => setStep('metodos')}
-          style={s.backRow}
-          accessibilityLabel="Volver a métodos de pago"
+          scaleValue={Motion.press.button}
+          style={s.back}
           accessibilityRole="button"
+          accessibilityLabel="Volver a métodos de pago"
         >
-          <X color={Colors.mutedForeground} size={16} weight="bold" />
-          <Text style={s.backText}>Volver a métodos</Text>
+          <ArrowLeft color={Colors.mutedForeground} size={Sizes.icon.sm} weight="bold" />
+          <Text variant="caption" color="muted">
+            Volver a métodos
+          </Text>
         </PressableScale>
 
-        <Text style={s.sectionTitle}>Confirmar Pago</Text>
-        <Text style={s.sectionSubtitle}>
-          Método: {info.label}
+        <Text variant="heading">Confirmar pago</Text>
+        <Text variant="secondary" color="muted" style={s.subtitle}>
+          {info.label}
         </Text>
 
-        {/* Monto */}
-        <MontoBadge
-          monto={monto}
-          montoUSD={montoUSD}
-          tasaBCV={tasaBCV}
-          loadingTasa={loadingTasa}
-          errorTasa={errorTasa}
-          isZelle={isZelle}
+        <AmountBadge
           label="Monto a pagar"
-          concepto={concepto}
+          monto={monto}
+          montoUSD={isZelle ? montoUSD : null}
+          tasaBCV={tasaBCV}
+          loadingTasa={isZelle && loadingTasa}
+          errorTasa={errorTasa}
+          concepto={!isZelle ? concepto : undefined}
         />
 
-        {/* Datos reales de la Cooperativa */}
         {!isEfectivo && (
-          <View style={s.cuentaDataContainer}>
-            <Text style={s.cuentaDataTitle}>Datos de Cuenta</Text>
-            {metodoSeleccionado.tipo === 'PAGO_MOVIL' && (
-              <View style={s.cuentaFieldsGap}>
-                {metodoSeleccionado.banco && <Text style={s.cuentaDataRow}><Text style={s.cuentaFieldBold}>Banco:</Text> {metodoSeleccionado.banco}</Text>}
-                <Text style={s.cuentaDataRow}><Text style={s.cuentaFieldBold}>Titular:</Text> {metodoSeleccionado.titular}</Text>
-                {metodoSeleccionado.numero_cuenta && <Text style={s.cuentaDataRow}><Text style={s.cuentaFieldBold}>Teléfono PM:</Text> {metodoSeleccionado.numero_cuenta}</Text>}
-                {metodoSeleccionado.cedula_rif && <Text style={s.cuentaDataRow}><Text style={s.cuentaFieldBold}>C.I. / RIF:</Text> {metodoSeleccionado.cedula_rif}</Text>}
-              </View>
-            )}
-            {metodoSeleccionado.tipo === 'TRANSFERENCIA_BANCARIA' && (
-              <View style={s.cuentaFieldsGap}>
-                {metodoSeleccionado.banco && <Text style={s.cuentaDataRow}><Text style={s.cuentaFieldBold}>Banco:</Text> {metodoSeleccionado.banco}</Text>}
-                <Text style={s.cuentaDataRow}><Text style={s.cuentaFieldBold}>Titular:</Text> {metodoSeleccionado.titular}</Text>
-                {metodoSeleccionado.numero_cuenta && <Text style={s.cuentaDataRow}><Text style={s.cuentaFieldBold}>Nro. Cuenta:</Text> {metodoSeleccionado.numero_cuenta}</Text>}
-                {metodoSeleccionado.cedula_rif && <Text style={s.cuentaDataRow}><Text style={s.cuentaFieldBold}>C.I. / RIF:</Text> {metodoSeleccionado.cedula_rif}</Text>}
-              </View>
-            )}
-            {metodoSeleccionado.tipo === 'ZELLE' && (
-              <View style={s.cuentaFieldsGap}>
-                <Text style={s.cuentaDataRow}><Text style={s.cuentaFieldBold}>Titular:</Text> {metodoSeleccionado.titular}</Text>
-                {metodoSeleccionado.email_zelle && <Text style={s.cuentaDataRow}><Text style={s.cuentaFieldBold}>Correo Zelle:</Text> {metodoSeleccionado.email_zelle}</Text>}
-              </View>
-            )}
-            {metodoSeleccionado.instrucciones && (
-              <Text style={s.cuentaInstructions}>
-                Nota: {metodoSeleccionado.instrucciones}
+          <View style={s.accountBox}>
+            <SectionLabel>Datos de la cuenta</SectionLabel>
+            {metodo.banco ? <AccountRow label="Banco" value={metodo.banco} /> : null}
+            {metodo.titular ? <AccountRow label="Titular" value={metodo.titular} /> : null}
+            {metodo.tipo === 'PAGO_MOVIL' && metodo.numero_cuenta ? (
+              <AccountRow label="Teléfono PM" value={metodo.numero_cuenta} />
+            ) : null}
+            {metodo.tipo === 'TRANSFERENCIA_BANCARIA' && metodo.numero_cuenta ? (
+              <AccountRow label="Nro. de cuenta" value={metodo.numero_cuenta} />
+            ) : null}
+            {metodo.tipo === 'ZELLE' && metodo.email_zelle ? (
+              <AccountRow label="Correo Zelle" value={metodo.email_zelle} />
+            ) : null}
+            {metodo.cedula_rif ? <AccountRow label="C.I. / RIF" value={metodo.cedula_rif} /> : null}
+
+            {metodo.instrucciones ? (
+              <Text variant="caption" color="muted" style={s.instructions}>
+                {metodo.instrucciones}
               </Text>
-            )}
+            ) : null}
           </View>
         )}
 
-        {/* Form Fields */}
         {isEfectivo ? (
-          <View style={s.efectivoFormNote}>
-            <Text style={s.efectivoFormTitle}>Pago en Taquilla</Text>
-            <Text style={s.efectivoFormText}>
-              Al seleccionar esta opción, tu reserva quedará pendiente.
-              Deberás realizar el pago directamente en la ventanilla de la cooperativa.
+          <View style={[s.receipt, s.receiptHighlight, s.efectivoNote]}>
+            <Text variant="bodyStrong">Pago en taquilla</Text>
+            <Text variant="secondary" color="muted">
+              Tu reserva quedará pendiente hasta que pagues directamente en la ventanilla de la
+              cooperativa.
             </Text>
           </View>
         ) : (
-          <View style={s.formFieldsGap}>
-            <View>
-              <Text style={s.fieldLabel}>Número de Referencia</Text>
-              <TextInput
-                style={s.textInput}
-                placeholder="Últimos 4 o más dígitos"
-                placeholderTextColor={Colors.mutedForeground}
-                keyboardType="number-pad"
-                value={referencia}
-                onChangeText={setReferencia}
-                accessibilityLabel="Número de referencia de la transacción"
-              />
-            </View>
+          <>
+            <Field
+              label="Número de referencia"
+              placeholder="Últimos 4 dígitos o más"
+              keyboardType="number-pad"
+              tone="sunken"
+              value={referencia}
+              onChangeText={(v) => {
+                setReferencia(v);
+                setErrors((prev) => ({ ...prev, referencia: '' }));
+              }}
+              error={errors.referencia}
+            />
 
-            <View>
-              <Text style={s.fieldLabel}>Fecha de Transacción</Text>
-              <TextInput
-                style={s.textInput}
-                placeholder="DD/MM/AAAA"
-                placeholderTextColor={Colors.mutedForeground}
-                keyboardType="number-pad"
-                value={fecha}
-                onChangeText={setFecha}
-                accessibilityLabel="Fecha de la transacción en formato DD/MM/AAAA"
-              />
-            </View>
+            <Field
+              label="Fecha de la transacción"
+              placeholder="DD/MM/AAAA"
+              keyboardType="number-pad"
+              tone="sunken"
+              value={fecha}
+              onChangeText={(v) => {
+                setFecha(v);
+                setErrors((prev) => ({ ...prev, fecha: '' }));
+              }}
+              error={errors.fecha}
+            />
 
-            <View>
-              <Text style={s.fieldLabel}>Banco Emisor (Tu banco)</Text>
-              <PressableScale
-                onPress={() => setIsBancoModalVisible(true)}
-                style={s.bancoSelector}
-                accessibilityLabel={banco ? `Banco seleccionado: ${banco}` : 'Seleccionar banco emisor'}
-                accessibilityRole="button"
-              >
-                <Text style={banco ? s.bancoSelectorText : s.bancoSelectorPlaceholder}>
-                  {banco || 'Seleccionar banco...'}
-                </Text>
-                <Bank color={Colors.mutedForeground} size={20} weight="bold" />
-              </PressableScale>
-            </View>
-          </View>
+            <SelectField
+              label="Banco emisor"
+              placeholder="Selecciona tu banco"
+              icon={Bank}
+              tone="sunken"
+              value={banco}
+              onPress={() => setBancoSheetVisible(true)}
+              error={errors.banco}
+            />
+          </>
         )}
 
-        {/* Submit */}
-        <PressableScale
-          onPress={handleSubmitPago}
-          disabled={!isFormValid || isSubmitting}
-          haptic
-          hapticType="medium"
-          style={[s.primaryButton, s.formSubmitButton, !isFormValid && s.primaryButtonDisabled]}
-          accessibilityLabel={isEfectivo ? 'Confirmar pago en taquilla' : 'Registrar pago'}
-          accessibilityRole="button"
-          accessibilityState={{ disabled: !isFormValid || isSubmitting }}
+        <Button
+          variant="primary"
+          fullWidth
+          loading={submitting}
+          onPress={handleSubmit}
+          style={s.submit}
         >
-          {isSubmitting
-            ? <Spinner />
-            : <Text style={[s.primaryButtonText, !isFormValid && s.primaryButtonTextDisabled]}>
-                {isEfectivo ? 'Confirmar Pago en Taquilla' : 'Registrar Pago'}
-              </Text>
-          }
-        </PressableScale>
+          {isEfectivo ? 'Confirmar pago en taquilla' : 'Registrar pago'}
+        </Button>
 
-        {/* Modal de selección de banco */}
-        <Modal
-          visible={isBancoModalVisible}
-          animationType="slide"
-          presentationStyle="pageSheet"
-          onRequestClose={() => setIsBancoModalVisible(false)}
+        <BottomSheet
+          visible={bancoSheetVisible}
+          onClose={() => setBancoSheetVisible(false)}
+          title="Banco emisor"
+          height="70%"
         >
-          <View style={s.modalContainer}>
-            <View style={s.modalHeader}>
-              <Text style={s.modalTitle}>Banco Emisor</Text>
+          <ScrollView contentContainerStyle={s.bancoList} showsVerticalScrollIndicator={false}>
+            {BANCOS_VE.map((option) => (
               <PressableScale
-                onPress={() => setIsBancoModalVisible(false)}
-                style={s.modalCloseButton}
-                accessibilityLabel="Cerrar selección de banco"
+                key={option}
+                onPress={() => {
+                  setBanco(option);
+                  setErrors((prev) => ({ ...prev, banco: '' }));
+                  setBancoSheetVisible(false);
+                }}
+                haptic
+                hapticType="selection"
+                scaleValue={Motion.press.card}
+                style={s.bancoRow}
                 accessibilityRole="button"
+                accessibilityState={{ selected: banco === option }}
+                accessibilityLabel={option}
               >
-                <X color={Colors.foreground} weight="bold" size={20} />
+                <View style={s.bancoIcon}>
+                  <Bank color={Colors.primary} weight="fill" size={Sizes.icon.md} />
+                </View>
+                <Text variant="bodyStrong" weight={banco === option ? 'bold' : 'medium'}>
+                  {option}
+                </Text>
               </PressableScale>
-            </View>
-            <ScrollView style={s.modalScroll}>
-              {BANCOS_VE.map((b, i) => (
-                <PressableScale
-                  key={b}
-                  onPress={() => { setBanco(b); setIsBancoModalVisible(false); }}
-                  haptic
-                  style={[s.bancoRow, i !== BANCOS_VE.length - 1 && s.bancoRowBorder]}
-                  accessibilityLabel={b}
-                  accessibilityRole="button"
-                >
-                  <View style={s.bancoIconContainer}>
-                    <Bank color={Colors.primary} weight="fill" size={20} />
-                  </View>
-                  <Text style={s.bancoName}>{b}</Text>
-                </PressableScale>
-              ))}
-            </ScrollView>
-          </View>
-        </Modal>
-      </ScrollView>
+            ))}
+          </ScrollView>
+        </BottomSheet>
+      </Card>
     );
   }
 
-  // Paso 1: Selección de método
+  // ─── Paso 1: elegir método ─────────────────────────────────────────────────
   return (
-    <View style={s.card}>
-      <Text style={s.sectionTitle}>Método de Pago</Text>
-      {concepto && <Text style={s.sectionSubtitle}>{concepto}</Text>}
+    <Card padding="md">
+      <Text variant="heading">Método de pago</Text>
+      {concepto ? (
+        <Text variant="secondary" color="muted" style={s.subtitle} numberOfLines={2}>
+          {concepto}
+        </Text>
+      ) : null}
 
-      {/* ── Monto: Paso 1 – selección de método ── */}
-      <MontoBadge
-        monto={monto}
-        montoUSD={null}
-        tasaBCV={null}
-        loadingTasa={false}
-        errorTasa={null}
-        isZelle={false}
-        label="Total a Transferir"
-      />
+      <AmountBadge label="Total a transferir" monto={monto} />
 
-      <View style={s.metodosList}>
-        {metodosDisponibles.map((m) => {
-          const info = METODO_INFO[m.tipo] || { label: m.tipo, desc: 'Cuenta de la cooperativa' };
+      <View style={s.metodos}>
+        {disponibles.map((option) => {
+          const info = METODO_INFO[option.tipo] ?? {
+            label: option.tipo,
+            desc: 'Cuenta de la cooperativa',
+          };
+          const Icon = option.tipo === 'EFECTIVO' ? Money : CreditCard;
+
           return (
             <PressableScale
-              key={m.id}
-              onPress={() => { setMetodoSeleccionado(m); setStep('formulario'); }}
+              key={option.id}
+              onPress={() => {
+                setMetodo(option);
+                setErrors({});
+                setStep('formulario');
+              }}
               haptic
-              scaleValue={0.97}
+              hapticType="selection"
+              scaleValue={Motion.press.card}
               style={s.metodoCard}
-              accessibilityLabel={`Seleccionar método de pago: ${info.label}`}
               accessibilityRole="button"
+              accessibilityLabel={`${info.label}. ${info.desc}`}
             >
-              <View style={s.metodoIconContainer}>
-                <CreditCard color={Colors.primary} weight="fill" size={22} />
+              <View style={s.metodoIcon}>
+                <Icon color={Colors.primary} weight="fill" size={Sizes.icon.lg} />
               </View>
-              <View style={s.metodoInfo}>
-                <Text style={s.metodoLabel}>{info.label}</Text>
-                <Text style={s.metodoDesc} numberOfLines={1}>{m.banco ? `${m.banco} - ` : ''}{info.desc}</Text>
+              <View style={s.metodoBody}>
+                <Text variant="bodyStrong">{info.label}</Text>
+                <Text variant="caption" color="muted" numberOfLines={1}>
+                  {option.banco ? `${option.banco} · ${info.desc}` : info.desc}
+                </Text>
               </View>
             </PressableScale>
           );
         })}
       </View>
+    </Card>
+  );
+}
+
+// ─── Amount badge ────────────────────────────────────────────────────────────
+
+function AmountBadge({
+  label,
+  monto,
+  montoUSD,
+  tasaBCV,
+  loadingTasa,
+  errorTasa,
+  concepto,
+}: {
+  label: string;
+  monto: number;
+  montoUSD?: number | null;
+  tasaBCV?: number | null;
+  loadingTasa?: boolean;
+  errorTasa?: string | null;
+  concepto?: string;
+}) {
+  return (
+    <View style={s.amount}>
+      <Text variant="overline" color="muted" uppercase>
+        {label}
+      </Text>
+      <Text variant="display" size="3xl" color="primary" compact style={s.amountValue}>
+        {`${money(monto)} Bs`}
+      </Text>
+
+      {loadingTasa ? (
+        <Text variant="caption" color="muted" align="center">
+          Consultando tasa BCV…
+        </Text>
+      ) : montoUSD != null ? (
+        <>
+          <Text variant="heading" size="xl" color="accent" compact>
+            {`≈ ${money(montoUSD)} USD`}
+          </Text>
+          <View style={s.amountHint}>
+            <Info size={Sizes.icon.xs} color={Colors.mutedForeground} weight="fill" />
+            <Text variant="caption" size="xs" color="muted">
+              {`Tasa BCV oficial: ${tasaBCV ? money(tasaBCV) : '—'} Bs/USD`}
+            </Text>
+          </View>
+          <Text variant="caption" size="xs" color="muted" align="center">
+            Transfiere el equivalente en USD por Zelle.
+          </Text>
+        </>
+      ) : errorTasa ? (
+        <View style={s.amountHint}>
+          <Info size={Sizes.icon.xs} color={Colors.warning} weight="fill" />
+          <Text variant="caption" color="warning" align="center">
+            Tasa BCV no disponible. Verifica el monto con tu banco.
+          </Text>
+        </View>
+      ) : concepto ? (
+        <Text variant="caption" color="muted" align="center" numberOfLines={2}>
+          {concepto}
+        </Text>
+      ) : null}
     </View>
   );
 }
 
-// ─── StyleSheet ───────────────────────────────────────────────────────────────
+function AccountRow({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={s.accountRow}>
+      <Text variant="caption" color="muted">
+        {label}
+      </Text>
+      <Text variant="bodyStrong" size="sm" style={s.accountValue} numberOfLines={1}>
+        {value}
+      </Text>
+    </View>
+  );
+}
+
 const s = StyleSheet.create({
-  // ── Card wrapper (loading, enviado, métodos) ─────────────────
-  card: {
-    backgroundColor: Colors.white,
-    borderRadius: Radius.xl,
-    padding: Spacing['2xl'],
+  subtitle: {
+    marginTop: Spacing.xs,
+    marginBottom: Spacing.lg,
   },
-  loadingContainer: {
-    backgroundColor: Colors.white,
-    borderRadius: Radius.xl,
-    padding: Spacing['3xl'],
+  back: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
-  loadingText: {
-    fontFamily: Typography.family,
-    fontSize: Typography.sizes.xs,
-    fontWeight: Typography.weights.bold,
-    color: Colors.mutedForeground,
-    marginTop: Spacing.sm,
+    gap: Spacing.sm,
+    alignSelf: 'flex-start',
+    paddingVertical: Spacing.sm,
+    marginBottom: Spacing.md,
   },
 
-  // ── MontoBadge ───────────────────────────────────────────────
-  montoBadge: {
+  amount: {
+    alignItems: 'center',
+    gap: Spacing.xs,
     backgroundColor: Colors.primaryLight,
-    borderRadius: Radius.sm,
+    borderWidth: Sizes.hairline,
+    borderColor: Colors.primaryBorder,
+    borderRadius: Radius.lg,
     paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.lg - 2,
-    marginBottom: Spacing.lg,
-    borderWidth: 1,
-    borderColor: Colors.primary + '40',
-    alignItems: 'center',
+    paddingVertical: Spacing.lg,
+    marginBottom: Spacing.xl,
   },
-  montoBadgeLabel: {
-    fontFamily: Typography.family,
-    fontSize: Typography.sizes.xs,
-    fontWeight: Typography.weights.bold,
-    color: Colors.mutedForeground,
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-    marginBottom: Spacing.xs,
+  amountValue: {
+    marginVertical: Spacing.xs,
   },
-  montoBadgeAmount: {
-    fontFamily: Typography.family,
-    fontSize: Typography.sizes['3xl'],
-    fontWeight: Typography.weights.heavy,
-    color: Colors.primary,
-  },
-  montoUsdContainer: {
-    marginTop: Spacing.sm,
-    alignItems: 'center',
-  },
-  montoUsdBlock: {
-    alignItems: 'center',
-  },
-  montoRow: {
+  amountHint: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.xs,
   },
-  montoBadgeUsd: {
-    fontFamily: Typography.family,
-    fontSize: Typography.sizes['2xl'],
-    fontWeight: Typography.weights.bold,
-    color: Colors.accent,
+
+  accountBox: {
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.lg,
+    padding: Spacing.lg,
+    marginBottom: Spacing.xl,
   },
-  montoBadgeHint: {
-    fontFamily: Typography.family,
-    fontSize: Typography.sizes.xs - 1,
-    color: Colors.mutedForeground,
+  accountRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.lg,
+    paddingVertical: Spacing.xs,
   },
-  montoBadgeWarning: {
-    fontFamily: Typography.family,
-    fontSize: Typography.sizes.xs,
-    color: Colors.warning,
+  accountValue: {
+    flexShrink: 1,
+    textAlign: 'right',
   },
-  montoBadgeFootnote: {
-    fontFamily: Typography.family,
-    fontSize: Typography.sizes.xs - 1,
-    color: Colors.mutedForeground,
-    marginTop: Spacing.xs,
-    textAlign: 'center',
-  },
-  montoBadgeConcepto: {
-    fontFamily: Typography.family,
-    fontSize: Typography.sizes.xs,
-    color: Colors.mutedForeground,
-    marginTop: Spacing.xs,
-    textAlign: 'center',
+  instructions: {
+    marginTop: Spacing.md,
+    paddingTop: Spacing.md,
+    borderTopWidth: Sizes.hairline,
+    borderTopColor: Colors.border,
+    fontStyle: 'italic',
   },
 
-  // ── Success (enviado) ────────────────────────────────────────
-  successIconContainer: {
-    width: Spacing['4xl'] * 2,
-    height: Spacing['4xl'] * 2,
-    backgroundColor: Colors.successLight,
+  successIcon: {
+    width: Sizes.iconBox['2xl'],
+    height: Sizes.iconBox['2xl'],
     borderRadius: Radius.full,
+    backgroundColor: Colors.successLight,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: Spacing.lg,
     alignSelf: 'center',
+    marginBottom: Spacing.lg,
   },
-  successTitle: {
-    fontFamily: Typography.family,
-    fontSize: Typography.sizes.xl,
-    fontWeight: Typography.weights.bold,
-    color: Colors.foreground,
-    textAlign: 'center',
-    marginBottom: Spacing.sm,
+  successText: {
+    marginTop: Spacing.sm,
+    marginBottom: Spacing.xl,
   },
-  successSubtitle: {
-    fontFamily: Typography.family,
-    fontSize: Typography.sizes.sm,
-    color: Colors.mutedForeground,
-    textAlign: 'center',
-    marginBottom: Spacing['2xl'],
-    lineHeight: 20,
-  },
-  referenciaContainer: {
+  receipt: {
+    width: '100%',
+    gap: Spacing.xs,
     backgroundColor: Colors.surface,
-    borderRadius: Radius.sm,
+    borderRadius: Radius.lg,
     paddingHorizontal: Spacing.lg,
     paddingVertical: Spacing.md,
-    width: '100%',
-    marginBottom: Spacing['2xl'],
+    marginBottom: Spacing.xl,
   },
-  referenciaLabel: {
-    fontFamily: Typography.family,
-    fontSize: Typography.sizes.xs,
-    color: Colors.mutedForeground,
-    fontWeight: Typography.weights.bold,
-    marginBottom: Spacing.xs,
-  },
-  referenciaValue: {
-    fontFamily: Typography.family,
-    fontSize: Typography.sizes.sm,
-    fontWeight: Typography.weights.heavy,
-    color: Colors.foreground,
+  receiptHighlight: {
+    backgroundColor: Colors.primaryLight,
+    borderWidth: Sizes.hairline,
+    borderColor: Colors.primaryBorder,
   },
   efectivoNote: {
-    backgroundColor: Colors.primaryLight,
-    borderRadius: Radius.sm,
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
-    width: '100%',
-    marginBottom: Spacing['2xl'],
-    borderWidth: 1,
-    borderColor: Colors.primary + '40',
-  },
-  efectivoNoteLabel: {
-    fontFamily: Typography.family,
-    fontSize: Typography.sizes.xs,
-    color: Colors.primary,
-    fontWeight: Typography.weights.bold,
-    marginBottom: Spacing.xs,
-  },
-  efectivoNoteText: {
-    fontFamily: Typography.family,
-    fontSize: Typography.sizes.sm,
-    color: Colors.foreground,
-  },
-
-  // ── Primary Button ───────────────────────────────────────────
-  primaryButton: {
-    height: Spacing['5xl'],
-    borderRadius: Radius.sm,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: Colors.primary,
-    width: '100%',
-  },
-  primaryButtonDisabled: {
-    backgroundColor: Colors.primaryLight,
-  },
-  primaryButtonText: {
-    fontFamily: Typography.family,
-    fontWeight: Typography.weights.bold,
-    color: Colors.primaryForeground,
-    fontSize: Typography.sizes.base,
-  },
-  primaryButtonTextDisabled: {
-    color: Colors.mutedForeground,
-  },
-
-  // ── Formulario ───────────────────────────────────────────────
-  formScrollContainer: {
-    backgroundColor: Colors.white,
-    borderRadius: Radius.xl,
-  },
-  formContent: {
-    padding: Spacing['2xl'],
-  },
-  formSubmitButton: {
-    marginTop: Spacing['2xl'],
-    marginBottom: Spacing['3xl'],
-  },
-  backRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: Spacing['2xl'],
-    gap: Spacing.sm,
-  },
-  backText: {
-    fontFamily: Typography.family,
-    fontSize: Typography.sizes.sm,
-    color: Colors.mutedForeground,
-  },
-  sectionTitle: {
-    fontFamily: Typography.family,
-    fontSize: Typography.sizes.lg + 1,
-    fontWeight: Typography.weights.bold,
-    color: Colors.foreground,
-    marginBottom: Spacing.xs,
-  },
-  sectionSubtitle: {
-    fontFamily: Typography.family,
-    fontSize: Typography.sizes.sm,
-    color: Colors.mutedForeground,
     marginBottom: Spacing.lg,
   },
-  cuentaDataContainer: {
-    backgroundColor: Colors.surface,
-    borderRadius: Radius.sm,
-    padding: Spacing.lg,
-    marginBottom: Spacing['2xl'],
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  cuentaDataTitle: {
-    fontFamily: Typography.family,
-    fontSize: Typography.sizes.xs - 1,
-    fontWeight: Typography.weights.bold,
-    color: Colors.mutedForeground,
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-    marginBottom: Spacing.sm,
-  },
-  cuentaFieldsGap: {
-    gap: Spacing.xs,
-  },
-  cuentaDataRow: {
-    fontFamily: Typography.family,
-    fontSize: Typography.sizes.sm,
-    color: Colors.foreground,
-  },
-  cuentaFieldBold: {
-    fontFamily: Typography.family,
-    fontWeight: Typography.weights.bold,
-  },
-  cuentaInstructions: {
-    fontFamily: Typography.family,
-    fontSize: Typography.sizes.xs,
-    color: Colors.mutedForeground,
-    marginTop: Spacing.sm,
-    fontStyle: 'italic',
-    borderTopWidth: 1,
-    borderTopColor: Colors.border,
-    paddingTop: Spacing.sm,
-  },
-  formFieldsGap: {
-    gap: Spacing.lg,
-  },
-  fieldLabel: {
-    fontFamily: Typography.family,
-    fontSize: Typography.sizes.sm,
-    fontWeight: Typography.weights.semibold,
-    color: Colors.foreground,
-    marginBottom: Spacing.sm,
-  },
-  textInput: {
-    fontFamily: Typography.family,
-    backgroundColor: Colors.surface,
-    borderWidth: 1.5,
-    borderColor: Colors.border,
-    paddingHorizontal: Spacing.lg - 2,
-    height: Spacing['5xl'],
-    borderRadius: Radius.sm,
-    fontSize: Typography.sizes.base,
-    color: Colors.foreground,
-  },
-  bancoSelector: {
-    backgroundColor: Colors.surface,
-    borderWidth: 1.5,
-    borderColor: Colors.border,
-    height: Spacing['5xl'],
-    borderRadius: Radius.sm,
-    paddingHorizontal: Spacing.lg - 2,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  bancoSelectorText: {
-    fontFamily: Typography.family,
-    fontSize: Typography.sizes.base,
-    color: Colors.foreground,
-  },
-  bancoSelectorPlaceholder: {
-    fontFamily: Typography.family,
-    fontSize: Typography.sizes.base,
-    color: Colors.mutedForeground,
-  },
-  efectivoFormNote: {
-    backgroundColor: Colors.primaryLight,
-    borderWidth: 1,
-    borderColor: Colors.primary + '40',
-    borderRadius: Radius.sm,
-    padding: Spacing.lg,
-    marginBottom: Spacing['2xl'],
-  },
-  efectivoFormTitle: {
-    fontFamily: Typography.family,
-    fontSize: Typography.sizes.sm + 1,
-    fontWeight: Typography.weights.bold,
-    color: Colors.foreground,
-    marginBottom: Spacing.xs,
-  },
-  efectivoFormText: {
-    fontFamily: Typography.family,
-    fontSize: Typography.sizes.sm,
-    color: Colors.mutedForeground,
-    lineHeight: 20,
+
+  submit: {
+    marginTop: Spacing.md,
   },
 
-  // ── Modal de Banco ───────────────────────────────────────────
-  modalContainer: {
-    flex: 1,
-    backgroundColor: Colors.white,
-    paddingTop: Spacing['2xl'],
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: Spacing['2xl'],
-    paddingBottom: Spacing.lg,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
-  modalTitle: {
-    fontFamily: Typography.family,
-    fontSize: Typography.sizes.xl,
-    fontWeight: Typography.weights.bold,
-    color: Colors.foreground,
-  },
-  modalCloseButton: {
-    width: Spacing['4xl'],
-    height: Spacing['4xl'],
-    backgroundColor: Colors.surface,
-    borderRadius: Radius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  modalScroll: {
-    flex: 1,
-    paddingHorizontal: Spacing['2xl'],
-  },
-  bancoRow: {
-    paddingVertical: Spacing.lg,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  bancoRowBorder: {
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.borderLight,
-  },
-  bancoIconContainer: {
-    width: Spacing['4xl'],
-    height: Spacing['4xl'],
-    backgroundColor: Colors.primaryLight,
-    borderRadius: Radius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  bancoName: {
-    fontFamily: Typography.family,
-    fontSize: Typography.sizes.base,
-    fontWeight: Typography.weights.bold,
-    color: Colors.foreground,
-    marginLeft: Spacing.lg,
-  },
-
-  // ── Selección de método (Paso 1) ────────────────────────────
-  metodosList: {
+  metodos: {
     gap: Spacing.md,
   },
   metodoCard: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: Spacing.lg,
     padding: Spacing.lg,
     backgroundColor: Colors.surface,
-    borderRadius: Radius.md,
+    borderRadius: Radius.lg,
   },
-  metodoIconContainer: {
-    width: Spacing['4xl'] + Spacing.xs,
-    height: Spacing['4xl'] + Spacing.xs,
-    backgroundColor: Colors.primaryLight,
+  metodoIcon: {
+    width: Sizes.iconBox.lg,
+    height: Sizes.iconBox.lg,
     borderRadius: Radius.full,
+    backgroundColor: Colors.primaryLight,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: Spacing.lg,
   },
-  metodoInfo: {
+  metodoBody: {
     flex: 1,
+    gap: Spacing.xs / 2,
   },
-  metodoLabel: {
-    fontFamily: Typography.family,
-    fontSize: Typography.sizes.sm + 1,
-    fontWeight: Typography.weights.bold,
-    color: Colors.foreground,
+
+  bancoList: {
+    paddingHorizontal: Spacing['2xl'],
+    paddingVertical: Spacing.lg,
   },
-  metodoDesc: {
-    fontFamily: Typography.family,
-    fontSize: Typography.sizes.xs,
-    color: Colors.mutedForeground,
+  bancoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.lg,
+    minHeight: Sizes.touchTarget + Spacing.md,
+  },
+  bancoIcon: {
+    width: Sizes.iconBox.lg - Spacing.sm,
+    height: Sizes.iconBox.lg - Spacing.sm,
+    borderRadius: Radius.full,
+    backgroundColor: Colors.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

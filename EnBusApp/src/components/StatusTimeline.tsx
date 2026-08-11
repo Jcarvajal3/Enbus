@@ -1,17 +1,17 @@
 import { useEffect } from 'react';
-import { StyleSheet } from 'react-native';
-import { View, Text } from '@/tw';
-import { Package, Truck, CheckCircle, Clock } from 'phosphor-react-native';
+import { StyleSheet, View } from 'react-native';
+import { CheckCircle, Clock, Truck } from 'phosphor-react-native';
 import Animated, {
-  useSharedValue,
   useAnimatedStyle,
+  useSharedValue,
   withDelay,
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
-import { Colors, Typography, Radius } from '@/src/theme';
+import { Text } from '@/src/components/ui';
+import { Colors, Motion, Radius, Sizes, Spacing } from '@/src/theme';
 
-interface EstadoItem {
+export interface EstadoItem {
   estado: string;
   label: string;
   timestamp?: string | null;
@@ -20,114 +20,64 @@ interface EstadoItem {
   completado: boolean;
 }
 
-interface StatusTimelineProps {
-  estados: EstadoItem[];
-}
+const ICON_BOX = Sizes.avatar.sm;
 
-// Ícono animado con spring scale al montar (P2)
-function AnimatedTimelineIcon({
-  index,
-  completado,
-  activo,
-  iconColor,
-  bgColor,
-}: {
-  index: number;
-  completado: boolean;
-  activo: boolean;
-  iconColor: string;
-  bgColor: string;
-}) {
-  const scale = useSharedValue(0.5);
-  const opacity = useSharedValue(0);
-
-  useEffect(() => {
-    const delay = index * 80;
-    scale.value = withDelay(delay, withSpring(1, { damping: 12, stiffness: 180 }));
-    opacity.value = withDelay(delay, withTiming(1, { duration: 200 }));
-  }, []);
-
-  const animStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
-    opacity: opacity.value,
-  }));
-
-  const IconComponent = completado ? CheckCircle : activo ? Truck : Clock;
-
+/**
+ * Vertical progress of a shipment. The connector between two completed steps is
+ * drawn in the success colour so the "how far along am I" question is answerable
+ * at a glance without reading a single label.
+ */
+export function StatusTimeline({ estados }: { estados: EstadoItem[] }) {
   return (
-    <Animated.View
-      style={[
-        styles.iconCircle,
-        { backgroundColor: bgColor },
-        animStyle,
-      ]}
-    >
-      <IconComponent
-        weight={completado ? 'fill' : 'bold'}
-        color={iconColor}
-        size={20}
-      />
-    </Animated.View>
-  );
-}
-
-export function StatusTimeline({ estados }: StatusTimelineProps) {
-  return (
-    <View style={styles.container}>
+    <View style={s.container}>
       {estados.map((item, index) => {
-        const isLastItem = index === estados.length - 1;
-
-        let iconColor: string = Colors.mutedForeground;
-        let bgColor: string = Colors.surface;
-
-        if (item.completado) {
-          iconColor = Colors.success;
-          bgColor = Colors.successLight || 'rgba(34, 197, 94, 0.12)';
-        } else if (item.activo) {
-          iconColor = Colors.accent;
-          bgColor = Colors.accentLight;
-        }
+        const isLast = index === estados.length - 1;
+        const tone = item.completado
+          ? { fg: Colors.success, bg: Colors.successLight }
+          : item.activo
+            ? { fg: Colors.accent, bg: Colors.accentLight }
+            : { fg: Colors.mutedForeground, bg: Colors.surface };
 
         return (
-          <View key={item.estado} style={styles.row}>
-            {/* Línea conectora */}
-            {!isLastItem && (
+          <View key={item.estado} style={s.row}>
+            {!isLast && (
               <View
                 style={[
-                  styles.connector,
+                  s.connector,
                   { backgroundColor: item.completado ? Colors.success : Colors.border },
                 ]}
               />
             )}
 
-            <AnimatedTimelineIcon
+            <TimelineIcon
               index={index}
               completado={item.completado}
               activo={item.activo}
-              iconColor={iconColor}
-              bgColor={bgColor}
+              color={tone.fg}
+              background={tone.bg}
             />
 
-            <View style={styles.textBlock}>
-              <View style={styles.textHeader}>
+            <View style={s.body}>
+              <View style={s.header}>
                 <Text
-                  style={[
-                    styles.labelText,
-                    {
-                      color:
-                        item.activo || item.completado ? Colors.foreground : Colors.mutedForeground,
-                    },
-                  ]}
+                  variant="bodyStrong"
+                  color={item.activo || item.completado ? 'foreground' : 'muted'}
+                  style={s.label}
                 >
                   {item.label}
                 </Text>
-                {item.timestamp && (
-                  <Text style={styles.timestamp}>{item.timestamp}</Text>
-                )}
+                {item.timestamp ? (
+                  <Text variant="caption" size="xs" color="muted" weight="semibold" compact>
+                    {item.timestamp}
+                  </Text>
+                ) : null}
               </View>
-              {item.descripcion && (
-                <Text style={styles.descripcion}>{item.descripcion}</Text>
-              )}
+
+              {item.descripcion ? (
+                <Text variant="caption" color="muted" style={s.description}>
+                  {item.descripcion}
+                </Text>
+              ) : null}
             </View>
           </View>
         );
@@ -136,61 +86,82 @@ export function StatusTimeline({ estados }: StatusTimelineProps) {
   );
 }
 
-const styles = StyleSheet.create({
+function TimelineIcon({
+  index,
+  completado,
+  activo,
+  color,
+  background,
+}: {
+  index: number;
+  completado: boolean;
+  activo: boolean;
+  color: string;
+  background: string;
+}) {
+  const progress = useSharedValue(0);
+  const scale = useSharedValue(0.6);
+
+  useEffect(() => {
+    const delay = Math.min(index, Motion.stagger.maxIndex) * 80;
+    progress.value = withDelay(delay, withTiming(1, { duration: Motion.duration.base }));
+    scale.value = withDelay(delay, withSpring(1, Motion.spring.bouncy));
+  }, [index, progress, scale]);
+
+  const animStyle = useAnimatedStyle(() => ({
+    opacity: progress.value,
+    transform: [{ scale: scale.value }],
+  }));
+
+  const Icon = completado ? CheckCircle : activo ? Truck : Clock;
+
+  return (
+    <Animated.View style={[s.icon, { backgroundColor: background }, animStyle]}>
+      <Icon weight={completado ? 'fill' : 'bold'} color={color} size={Sizes.icon.lg} />
+    </Animated.View>
+  );
+}
+
+const s = StyleSheet.create({
   container: {
-    marginLeft: 8,
-    marginTop: 16,
-    marginBottom: 16,
+    marginTop: Spacing.sm,
   },
   row: {
     flexDirection: 'row',
-    marginBottom: 24,
+    marginBottom: Spacing['2xl'],
     position: 'relative',
   },
   connector: {
     position: 'absolute',
-    left: 19,
-    top: 40,
-    bottom: -24,
+    left: ICON_BOX / 2 - 1,
+    top: ICON_BOX,
+    bottom: -Spacing['2xl'],
     width: 2,
     zIndex: 0,
   },
-  iconCircle: {
-    width: 40,
-    height: 40,
+  icon: {
+    width: ICON_BOX,
+    height: ICON_BOX,
     borderRadius: Radius.full,
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 10,
+    zIndex: 1,
   },
-  textBlock: {
-    marginLeft: 16,
+  body: {
     flex: 1,
-    paddingTop: 4,
-    marginBottom: 8,
+    marginLeft: Spacing.lg,
+    paddingTop: Spacing.xs,
   },
-  textHeader: {
+  header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: Spacing.sm,
   },
-  labelText: {
-    fontSize: 15,
-    fontWeight: '700',
+  label: {
     flex: 1,
-    fontFamily: Typography.family,
   },
-  timestamp: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: Colors.mutedForeground,
-    fontFamily: Typography.family,
-  },
-  descripcion: {
-    fontSize: 13,
-    color: Colors.mutedForeground,
-    marginTop: 4,
-    lineHeight: 18,
-    fontFamily: Typography.family,
+  description: {
+    marginTop: Spacing.xs,
   },
 });

@@ -1,0 +1,44 @@
+/**
+ * EnBus UI kit.
+ *
+ * Screens import from here and nowhere else for presentation. If a screen needs
+ * a raw `View` + `StyleSheet` block to express something, that's a signal the
+ * primitive is missing — add it here rather than styling in place.
+ *
+ *   import { Screen, ScreenHeader, Card, Text, Button } from '@/src/components/ui';
+ */
+
+export { Text, fontStyle, textStyles } from './Text';
+export type { TextProps, TextColorToken } from './Text';
+
+export { Button } from './Button';
+export type { ButtonProps, ButtonVariant, ButtonSize } from './Button';
+
+export { IconButton } from './IconButton';
+export type { IconButtonProps, IconButtonVariant } from './IconButton';
+
+export { Card, SectionLabel, Divider, InfoRow } from './Card';
+export type { CardProps, CardTone, CardPadding } from './Card';
+
+export { Badge, StatusBadge, CountPill, Chip } from './Badge';
+export type { BadgeProps } from './Badge';
+
+export { SegmentedControl } from './SegmentedControl';
+export type { SegmentOption, SegmentedControlProps } from './SegmentedControl';
+
+export { ScreenHeader, StepIndicator } from './ScreenHeader';
+export type { ScreenHeaderProps, ScreenHeaderVariant } from './ScreenHeader';
+
+export { Screen, Gutter, FloatingBar, EmptyState, LoadingState, scrollContent } from './Screen';
+
+export { EntityCard } from './EntityCard';
+export type { EntityCardProps, PillTone } from './EntityCard';
+
+export { RouteSummary, cityCode } from './RouteSummary';
+export type { RouteSummaryProps } from './RouteSummary';
+
+export { BottomSheet } from './BottomSheet';
+export type { BottomSheetProps } from './BottomSheet';
+
+export { Field, SelectField } from './Field';
+export type { FieldProps, FieldTone } from './Field';

@@ -1,61 +1,57 @@
 import React, { useEffect } from 'react';
-import { DimensionValue, StyleSheet } from 'react-native';
+import { DimensionValue } from 'react-native';
 import Animated, {
-  useSharedValue,
   useAnimatedStyle,
+  useSharedValue,
   withRepeat,
   withSequence,
   withTiming,
-  Easing,
 } from 'react-native-reanimated';
-import { Colors } from '@/src/theme';
+import { Colors, Motion, Radius } from '@/src/theme';
 
 interface SkeletonLoaderProps {
   width?: DimensionValue;
   height?: number;
   borderRadius?: number;
+  /** Offsets the pulse so stacked skeletons don't breathe in unison. */
+  index?: number;
 }
 
-/**
- * SkeletonLoader con shimmer pulse animado (P1).
- * Usa Reanimated withRepeat para hacer loop opacity 0.4 → 0.85 → 0.4.
- * Cada instancia tiene un delay aleatorio para que los skeletons no pulsen en sincronía.
- */
+/** Pulsing placeholder block. Opacity only — no layout work while loading. */
 export function SkeletonLoader({
   width = '100%',
   height = 14,
-  borderRadius = 7,
+  borderRadius = Radius.xs,
+  index = 0,
 }: SkeletonLoaderProps) {
-  const opacity = useSharedValue(0.4);
+  const progress = useSharedValue(0);
 
   useEffect(() => {
-    // Delay aleatorio entre 0-400ms para que los distintos skeletons se desfasen
-    const delay = Math.random() * 400;
+    // Deterministic offset per index (a random delay made re-renders jitter).
+    const offset = (index % 4) * 120;
     const timer = setTimeout(() => {
-      opacity.value = withRepeat(
+      progress.value = withRepeat(
         withSequence(
-          withTiming(0.85, { duration: 700, easing: Easing.inOut(Easing.ease) }),
-          withTiming(0.4, { duration: 700, easing: Easing.inOut(Easing.ease) })
+          withTiming(1, { duration: 700, easing: Motion.easing.inOut }),
+          withTiming(0, { duration: 700, easing: Motion.easing.inOut })
         ),
-        -1,  // infinite
+        -1,
         false
       );
-    }, delay);
+    }, offset);
+
     return () => clearTimeout(timer);
-  }, []);
+  }, [index, progress]);
 
   const animatedStyle = useAnimatedStyle(() => ({
-    opacity: opacity.value,
+    opacity: 0.4 + progress.value * 0.45,
   }));
 
   return (
     <Animated.View
-      style={[
-        { width, height, borderRadius, backgroundColor: Colors.surfaceDark },
-        animatedStyle,
-      ]}
-      accessibilityLabel="Cargando contenido..."
+      style={[{ width, height, borderRadius, backgroundColor: Colors.surfaceDark }, animatedStyle]}
       accessibilityRole="progressbar"
+      accessibilityLabel="Cargando contenido"
     />
   );
 }

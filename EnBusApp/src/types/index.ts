@@ -27,6 +27,8 @@ export type EstadoEncomienda =
   | 'PENDIENTE_DE_ESCANEO'
   | 'EN_RECEPCION'
   | 'POR_PAGAR'
+  /** Comprobante enviado, esperando validación de la cooperativa */
+  | 'PENDIENTE_VERIFICACION'
   | 'PAGADA'
   | 'EN_TRANSITO'
   | 'EN_OFICINA_DESTINO'
@@ -34,21 +36,35 @@ export type EstadoEncomienda =
   | 'CANCELADA'
   | 'DEVUELTA';
 
+export type ModalidadPago = 'ORIGEN' | 'DESTINO';
+
 export interface Encomienda {
   id: string;
   tracking_id?: string;
   sender_id: string;
   receiver_user_id?: string;
   receiver_nombre?: string;
-  receiver_cedula?: string;
+  receiver_cedula_rif?: string;
   receiver_telefono?: string;
-  descripcion?: string;
+  /** Column name in Supabase is `descripcion_contenido` */
+  descripcion_contenido?: string;
   peso_kg?: number;
-  foto_url?: string;
+  valor_declarado?: number;
+  costo_calculado?: number;
+  modalidad_pago?: ModalidadPago;
+  pin_retiro?: string;
+  /** Storage path — resolve to a signed URL before rendering */
+  foto_evidencia_url?: string;
+  estado_origen?: string;
+  ciudad_origen?: string;
+  estado_destino?: string;
+  ciudad_destino?: string;
   estado: EstadoEncomienda;
   cooperativa_id?: string;
   created_at: string;
   updated_at?: string;
+  /** Joined when the query asks for `profiles:sender_id(*)` */
+  profiles?: PerfilUsuario;
 }
 
 export interface HistorialEncomienda {

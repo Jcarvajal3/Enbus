@@ -1,66 +1,47 @@
-import { SafeAreaView } from '@/tw';
-import { useState, useCallback, useMemo, useEffect } from 'react';
-import { View, Text } from '@/tw';
-import { FlatList, RefreshControl, ListRenderItem, StyleSheet } from 'react-native';
-import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing } from 'react-native-reanimated';
+import { useCallback, useMemo, useState } from 'react';
+import { FlatList, ListRenderItem, RefreshControl } from 'react-native';
+import { useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
+import { Bus, CheckCircle, ClockCountdown } from 'phosphor-react-native';
 import { useAuth } from '@/src/contexts/AuthContext';
 import { useRealtime } from '@/src/hooks/useRealtime';
-import { useRouter } from 'expo-router';
 import { TransactionCard } from '@/src/components/TransactionCard';
 import { CardSkeleton } from '@/src/components/CardSkeleton';
-import { Modal } from 'react-native';
-import { Ticket, Bus, X, ClockCountdown, CheckCircle } from 'phosphor-react-native';
-import { SearchForm } from '@/src/components/SearchForm';
-import { useFocusEffect } from '@react-navigation/native';
-import { formatDate, formatCity } from '@/src/utils/formatters';
-import { PressableScale } from '@/src/components/PressableScale';
 import { StaggerItem } from '@/src/components/StaggerItem';
-import { LinearGradient } from 'expo-linear-gradient';
-import { Colors, Typography, Radius, Shadows, Gradients } from '@/src/theme';
-
-// ─── Estado helpers ───────────────────────────────────────────────────────────
-const ACTIVE_STATES = ['RESERVADO', 'PAGADO'];
-const HISTORY_STATES = ['USADO', 'CANCELADO', 'EXPIRADO'];
+import {
+  Button,
+  EmptyState,
+  FloatingBar,
+  Gutter,
+  Screen,
+  ScreenHeader,
+  SegmentedControl,
+  scrollContent,
+} from '@/src/components/ui';
+import { formatCity, formatDate } from '@/src/utils/formatters';
+import {
+  BOLETO_ESTADOS_ACTIVOS,
+  BOLETO_ESTADOS_HISTORIAL,
+} from '@/src/utils/estados';
+import { Colors, Spacing } from '@/src/theme';
 
 type TabType = 'activos' | 'historial';
+
+interface BoletoRow {
+  id: string;
+  codigo_boleto?: string;
+  estado: string;
+  created_at: string;
+  viajes?: { rutas?: { ciudad_origen?: string; ciudad_destino?: string } };
+}
 
 export default function BoletosScreen() {
   const { user } = useAuth();
   const router = useRouter();
+
   const [isFocused, setIsFocused] = useState(true);
   const [activeTab, setActiveTab] = useState<TabType>('activos');
-
-  const [trackWidth, setTrackWidth] = useState(0);
-  const indicatorWidth = useSharedValue(0);
-  const translateX = useSharedValue(0);
-
-  const onTrackLayout = (event: any) => {
-    const width = event.nativeEvent.layout.width;
-    setTrackWidth(width);
-    const padding = 8;
-    const usableWidth = width - padding;
-    const tabWidth = usableWidth / 2;
-    indicatorWidth.value = tabWidth;
-    translateX.value = (activeTab === 'activos' ? 0 : 1) * tabWidth;
-  };
-
-  useEffect(() => {
-    if (trackWidth > 0) {
-      const padding = 8;
-      const tabWidth = (trackWidth - padding) / 2;
-      translateX.value = withTiming((activeTab === 'activos' ? 0 : 1) * tabWidth, {
-        duration: 250,
-        easing: Easing.out(Easing.cubic),
-      });
-    }
-  }, [activeTab, trackWidth]);
-
-  const animatedIndicatorStyle = useAnimatedStyle(() => {
-    return {
-      transform: [{ translateX: translateX.value }],
-      width: indicatorWidth.value,
-    };
-  });
+  const [refreshing, setRefreshing] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -69,9 +50,7 @@ export default function BoletosScreen() {
     }, [])
   );
 
-  const [refreshing, setRefreshing] = useState(false);
-
-  const { data: historial, loading, refetch } = useRealtime<any>(
+  const { data: historial, loading, refetch } = useRealtime<BoletoRow>(
     'boletos',
     'comprador_id',
     user?.id,
@@ -88,341 +67,131 @@ export default function BoletosScreen() {
     }
   }, [refetch]);
 
-  // ─── Filtrado por tab ────────────────────────────────────────────────────
+  const counts = useMemo(() => {
+    const rows = historial ?? [];
+    return {
+      activos: rows.filter((b) => (BOLETO_ESTADOS_ACTIVOS as readonly string[]).includes(b.estado))
+        .length,
+      historial: rows.filter((b) =>
+        (BOLETO_ESTADOS_HISTORIAL as readonly string[]).includes(b.estado)
+      ).length,
+    };
+  }, [historial]);
+
   const filteredData = useMemo(() => {
     if (!historial) return [];
-    const targetStates = activeTab === 'activos' ? ACTIVE_STATES : HISTORY_STATES;
-    return historial.filter((bol: any) => targetStates.includes(bol.estado));
+    const target =
+      activeTab === 'activos' ? BOLETO_ESTADOS_ACTIVOS : BOLETO_ESTADOS_HISTORIAL;
+    return historial.filter((b) => (target as readonly string[]).includes(b.estado));
   }, [historial, activeTab]);
 
-  const activeCount = useMemo(
-    () => (historial ?? []).filter((bol: any) => ACTIVE_STATES.includes(bol.estado)).length,
-    [historial]
-  );
-
-  const renderItem = useCallback<ListRenderItem<any>>(({ item: bol, index }) => (
-    <StaggerItem index={index}>
-      <View style={s.cardRow}>
+  const renderItem = useCallback<ListRenderItem<BoletoRow>>(
+    ({ item, index }) => (
+      <StaggerItem index={index}>
         <TransactionCard
           type="boleto"
-          id={bol.codigo_boleto || bol.id}
-          estado={bol.estado}
-          titulo={`${formatCity(bol.viajes?.rutas?.ciudad_origen) || 'Origen'} → ${formatCity(bol.viajes?.rutas?.ciudad_destino) || 'Destino'}`}
-          subtitulo={formatDate(bol.created_at)}
+          id={item.codigo_boleto || item.id}
+          estado={item.estado}
+          titulo={`${formatCity(item.viajes?.rutas?.ciudad_origen) || 'Origen'} → ${
+            formatCity(item.viajes?.rutas?.ciudad_destino) || 'Destino'
+          }`}
+          subtitulo={formatDate(item.created_at)}
           onPress={() =>
             router.push({
               pathname: '/boletos/[id]',
-              params: { id: bol.codigo_boleto || bol.id },
+              params: { id: item.codigo_boleto || item.id },
             })
           }
         />
-      </View>
-    </StaggerItem>
-  ), [router]);
-
-  const keyExtractor = useCallback((item: any) => item.id, []);
+      </StaggerItem>
+    ),
+    [router]
+  );
 
   const emptyComponent = useMemo(
-    () => (
-      <View style={s.empty}>
-        <View style={s.emptyIcon}>
-          {activeTab === 'activos' ? (
-            <CheckCircle color={Colors.mutedForeground} weight="bold" size={32} />
-          ) : (
-            <ClockCountdown color={Colors.mutedForeground} weight="bold" size={32} />
-          )}
-        </View>
-        <Text style={s.emptyTitle}>
-          {activeTab === 'activos' ? 'Sin boletos activos' : 'Sin historial aún'}
-        </Text>
-        <Text style={s.emptySubtitle}>
-          {activeTab === 'activos'
-            ? 'Aquí verás tus boletos reservados y pagados.'
-            : 'Tus viajes completados, cancelados y expirados aparecerán aquí.'}
-        </Text>
-      </View>
-    ),
-    [activeTab]
+    () =>
+      activeTab === 'activos' ? (
+        <EmptyState
+          icon={CheckCircle}
+          title="Sin boletos activos"
+          description="Aquí verás tus boletos reservados y pagados. Empieza por buscar un viaje."
+          action={{
+            children: 'Buscar Viaje',
+            icon: Bus,
+            variant: 'accent',
+            onPress: () => router.push('/boletos/buscar'),
+          }}
+        />
+      ) : (
+        <EmptyState
+          icon={ClockCountdown}
+          title="Sin historial aún"
+          description="Tus viajes completados, cancelados y expirados aparecerán aquí."
+        />
+      ),
+    [activeTab, router]
   );
 
   return (
-    <SafeAreaView className="flex-1 bg-background">
-      <View style={s.header}>
-        <Text style={s.headerTitle}>Mis Viajes</Text>
-        <Text style={s.headerSubtitle}>
-          Gestiona y consulta tus pasajes
-        </Text>
-      </View>
+    <Screen>
+      <ScreenHeader title="Mis Viajes" subtitle="Gestiona y consulta tus pasajes" />
 
-      {/* ─── Toggle Activos / Historial ─────────────────────────────── */}
-      <View style={s.toggleContainer}>
-        <View style={s.toggleTrack} onLayout={onTrackLayout}>
-          {trackWidth > 0 && (
-            <Animated.View style={[s.toggleIndicator, animatedIndicatorStyle]} />
-          )}
-          <PressableScale
-            onPress={() => setActiveTab('activos')}
-            haptic
-            hapticType="selection"
-            style={s.toggleTab}
-          >
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-              <CheckCircle
-                color={activeTab === 'activos' ? Colors.foreground : Colors.mutedForeground}
-                weight={activeTab === 'activos' ? 'bold' : 'regular'}
-                size={15}
-              />
-              <Text style={[s.toggleText, activeTab === 'activos' && s.toggleTextActive]}>Activos</Text>
-              {activeCount > 0 && (
-                <View style={[s.badge, activeTab === 'activos' ? s.badgeActiveTab : s.badgeInactive]}>
-                  <Text style={[s.badgeText, activeTab === 'activos' ? s.badgeTextActiveTab : s.badgeTextInactive]}>{activeCount}</Text>
-                </View>
-              )}
-            </View>
-          </PressableScale>
-
-          <PressableScale
-            onPress={() => setActiveTab('historial')}
-            haptic
-            hapticType="selection"
-            style={s.toggleTab}
-          >
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-              <ClockCountdown
-                color={activeTab === 'historial' ? Colors.foreground : Colors.mutedForeground}
-                weight={activeTab === 'historial' ? 'bold' : 'regular'}
-                size={15}
-              />
-              <Text style={[s.toggleText, activeTab === 'historial' && s.toggleTextActive]}>Historial</Text>
-            </View>
-          </PressableScale>
-        </View>
-      </View>
+      <Gutter style={{ paddingBottom: Spacing.lg }}>
+        <SegmentedControl<TabType>
+          value={activeTab}
+          onChange={setActiveTab}
+          options={[
+            { value: 'activos', label: 'Activos', icon: CheckCircle, badge: counts.activos },
+            { value: 'historial', label: 'Historial', icon: ClockCountdown },
+          ]}
+        />
+      </Gutter>
 
       {loading ? (
-        <View className="p-6">
+        <Gutter>
           <CardSkeleton count={3} />
-        </View>
+        </Gutter>
       ) : (
         <FlatList
           data={filteredData}
           renderItem={renderItem}
-          keyExtractor={keyExtractor}
+          keyExtractor={(item) => item.id}
           ListEmptyComponent={emptyComponent}
-          contentContainerStyle={{ padding: 24, paddingBottom: 128 }}
+          contentContainerStyle={scrollContent({
+            tabbed: true,
+            floatingAction: filteredData.length > 0,
+            top: 0,
+          })}
           showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
               onRefresh={onRefresh}
-              colors={[Colors.primary]}
-              tintColor={Colors.primary}
+              colors={[Colors.accent]}
+              tintColor={Colors.accent}
             />
           }
-          removeClippedSubviews={true}
+          removeClippedSubviews
           maxToRenderPerBatch={10}
           windowSize={5}
           initialNumToRender={8}
         />
       )}
 
-      {/* FAB con PressableScale */}
-      <View style={s.fab}>
-        <PressableScale
-          onPress={() => router.push('/boletos/buscar')}
-          haptic
-          hapticType="medium"
-          style={s.fabButton}
-        >
-          <LinearGradient
-            colors={[...Gradients.warm]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={s.fabGradient}
+      {/* Hidden on the empty state — the empty state already offers the action. */}
+      {filteredData.length > 0 && (
+        <FloatingBar tabbed>
+          <Button
+            variant="gradient"
+            icon={Bus}
+            glow
+            fullWidth
+            onPress={() => router.push('/boletos/buscar')}
           >
-            <Bus color={Colors.white} weight="bold" size={22} />
-            <Text style={s.fabText}>Buscar Viaje</Text>
-          </LinearGradient>
-        </PressableScale>
-      </View>
-    </SafeAreaView>
+            Buscar Viaje
+          </Button>
+        </FloatingBar>
+      )}
+    </Screen>
   );
 }
-
-const s = StyleSheet.create({
-  // ─── Header ──────────────────────────────────────────────────
-  header: {
-    paddingHorizontal: 24,
-    paddingTop: 24,
-    paddingBottom: 12,
-    backgroundColor: Colors.background,
-    zIndex: 10,
-  },
-  headerTitle: {
-    fontFamily: Typography.family,
-    fontWeight: Typography.weights.bold,
-    fontSize: Typography.sizes['3xl'],
-    color: Colors.foreground,
-    marginBottom: 4,
-  },
-  headerSubtitle: {
-    fontFamily: Typography.family,
-    fontWeight: Typography.weights.medium,
-    fontSize: Typography.sizes.sm,
-    color: Colors.mutedForeground,
-  },
-
-  // ─── Toggle ──────────────────────────────────────────────────
-  toggleContainer: {
-    paddingHorizontal: 24,
-    paddingBottom: 16,
-    backgroundColor: Colors.background,
-  },
-  toggleTrack: {
-    flexDirection: 'row',
-    backgroundColor: Colors.surface,
-    borderRadius: Radius.full,
-    padding: 4,
-    gap: 4,
-  },
-  toggleTab: {
-    flex: 1,
-    paddingVertical: 10,
-    borderRadius: Radius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 2,
-  },
-  toggleIndicator: {
-    position: 'absolute',
-    top: 4,
-    bottom: 4,
-    backgroundColor: Colors.white,
-    borderRadius: Radius.full,
-    left: 4,
-    zIndex: 1,
-  },
-  toggleText: {
-    fontFamily: Typography.family,
-    fontWeight: Typography.weights.semibold,
-    fontSize: Typography.sizes.sm,
-    color: Colors.mutedForeground,
-  },
-  toggleTextActive: {
-    color: Colors.foreground,
-  },
-
-  // ─── Badge (contador de activos) ─────────────────────────────
-  badge: {
-    borderRadius: Radius.full,
-    minWidth: 18,
-    height: 18,
-    paddingHorizontal: 5,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  badgeActiveTab: {
-    backgroundColor: Colors.surfaceDark,
-  },
-  badgeInactive: {
-    backgroundColor: Colors.surfaceDark,
-  },
-  badgeText: {
-    fontFamily: Typography.family,
-    fontWeight: Typography.weights.bold,
-    fontSize: 10,
-    color: Colors.mutedForeground,
-  },
-  badgeTextActiveTab: {
-    color: Colors.mutedForeground,
-  },
-  badgeTextInactive: {
-    color: Colors.mutedForeground,
-  },
-
-  // ─── List ────────────────────────────────────────────────────
-  cardRow: { marginBottom: 0 },
-
-  // ─── Empty state ─────────────────────────────────────────────
-  empty: {
-    paddingVertical: 80,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  emptyIcon: {
-    width: 96,
-    height: 96,
-    backgroundColor: Colors.surface,
-    borderRadius: 48,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 24,
-  },
-  emptyTitle: {
-    fontFamily: Typography.family,
-    fontWeight: Typography.weights.bold,
-    fontSize: Typography.sizes.xl,
-    color: Colors.foreground,
-    marginBottom: 8,
-  },
-  emptySubtitle: {
-    fontFamily: Typography.family,
-    fontWeight: Typography.weights.regular,
-    fontSize: Typography.sizes.base,
-    color: Colors.mutedForeground,
-    textAlign: 'center',
-    paddingHorizontal: 16,
-  },
-
-  // ─── FAB ─────────────────────────────────────────────────────
-  fab: {
-    position: 'absolute',
-    bottom: 110,
-    left: 24,
-    right: 24,
-  },
-  fabButton: {
-    borderRadius: Radius.full,
-    overflow: 'hidden',
-    ...Shadows.glow(Colors.secondary),
-  },
-  fabGradient: {
-    height: 52,
-    borderRadius: Radius.full,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-  },
-  fabText: {
-    fontFamily: Typography.family,
-    fontWeight: Typography.weights.bold,
-    fontSize: 16,
-    color: Colors.white,
-  },
-
-  // ─── Modal ───────────────────────────────────────────────────
-  modalHeader: {
-    paddingHorizontal: 24,
-    paddingTop: 16,
-    paddingBottom: 16,
-    backgroundColor: Colors.background,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  modalTitle: {
-    fontFamily: Typography.family,
-    fontWeight: Typography.weights.bold,
-    fontSize: Typography.sizes.xl,
-    color: Colors.foreground,
-  },
-  modalClose: {
-    width: 40,
-    height: 40,
-    backgroundColor: 'transparent',
-    borderRadius: Radius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});

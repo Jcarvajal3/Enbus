@@ -1,9 +1,8 @@
-import React, { useState, useMemo } from 'react';
-import { Modal, StyleSheet, View, Text, Pressable } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
-import { Colors, Typography, Radius, Spacing } from '@/src/theme';
-import { PressableScale } from './PressableScale';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Modal, Pressable, StyleSheet, View } from 'react-native';
+import { CaretLeft, CaretRight, X } from 'phosphor-react-native';
+import { Button, IconButton, Text } from '@/src/components/ui';
+import { Colors, Layout, Opacity, Radius, Shadows, Sizes, Spacing } from '@/src/theme';
 
 interface CalendarModalProps {
   visible: boolean;
@@ -11,211 +10,207 @@ interface CalendarModalProps {
   value: Date;
   onChange: (date: Date) => void;
   minimumDate?: Date;
+  /** `YYYY-MM-DD` keys that have departures. Days outside the list are disabled. */
   activeDates?: string[];
 }
 
 const WEEKDAYS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
 const MONTHS = [
   'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
 ];
+
+function dateKey(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function sameDay(a: Date, b: Date): boolean {
+  return (
+    a.getDate() === b.getDate() &&
+    a.getMonth() === b.getMonth() &&
+    a.getFullYear() === b.getFullYear()
+  );
+}
 
 export function CalendarModal({
   visible,
   onClose,
   value,
   onChange,
-  minimumDate = new Date(),
+  minimumDate,
   activeDates,
 }: CalendarModalProps) {
+  // Defensive: callers have passed an undefined `value` before, which produced
+  // an Invalid Date and a grid full of NaN.
+  const safeValue = useMemo(
+    () => (value instanceof Date && !Number.isNaN(value.getTime()) ? value : new Date()),
+    [value]
+  );
+
   const minDate = useMemo(() => {
-    const d = new Date(minimumDate);
+    const d = minimumDate ? new Date(minimumDate) : new Date();
     d.setHours(0, 0, 0, 0);
     return d;
   }, [minimumDate]);
 
-  const [currentMonth, setCurrentMonth] = useState(() => {
-    const d = new Date(value);
+  const [selected, setSelected] = useState(() => new Date(safeValue));
+  const [cursor, setCursor] = useState(() => {
+    const d = new Date(safeValue);
     d.setDate(1);
     return d;
   });
 
-  const [selectedDate, setSelectedDate] = useState(() => new Date(value));
+  // Re-sync when the sheet is reopened with a different value.
+  useEffect(() => {
+    if (!visible) return;
+    setSelected(new Date(safeValue));
+    const first = new Date(safeValue);
+    first.setDate(1);
+    setCursor(first);
+  }, [visible, safeValue]);
 
-  const year = currentMonth.getFullYear();
-  const month = currentMonth.getMonth();
+  const year = cursor.getFullYear();
+  const month = cursor.getMonth();
 
-  const daysGrid = useMemo(() => {
-    const firstDayIndex = new Date(year, month, 1).getDay();
-    const totalDays = new Date(year, month + 1, 0).getDate();
-    
-    const grid = [];
-    for (let i = 0; i < firstDayIndex; i++) {
-      grid.push(null);
-    }
-    for (let day = 1; day <= totalDays; day++) {
-      grid.push(new Date(year, month, day));
-    }
-    return grid;
+  const grid = useMemo(() => {
+    const leading = new Date(year, month, 1).getDay();
+    const days = new Date(year, month + 1, 0).getDate();
+    const cells: (Date | null)[] = Array.from({ length: leading }, () => null);
+    for (let day = 1; day <= days; day += 1) cells.push(new Date(year, month, day));
+    return cells;
   }, [year, month]);
-
-  const handlePrevMonth = () => {
-    setCurrentMonth(prev => {
-      const d = new Date(prev);
-      d.setMonth(d.getMonth() - 1);
-      return d;
-    });
-  };
-
-  const handleNextMonth = () => {
-    setCurrentMonth(prev => {
-      const d = new Date(prev);
-      d.setMonth(d.getMonth() + 1);
-      return d;
-    });
-  };
-
-  const handleSelectDay = (date: Date) => {
-    setSelectedDate(date);
-  };
-
-  const handleConfirm = () => {
-    onChange(selectedDate);
-    onClose();
-  };
-
-  const isToday = (date: Date) => {
-    const today = new Date();
-    return (
-      date.getDate() === today.getDate() &&
-      date.getMonth() === today.getMonth() &&
-      date.getFullYear() === today.getFullYear()
-    );
-  };
-
-  const isSelected = (date: Date) => {
-    return (
-      date.getDate() === selectedDate.getDate() &&
-      date.getMonth() === selectedDate.getMonth() &&
-      date.getFullYear() === selectedDate.getFullYear()
-    );
-  };
 
   const isDisabled = (date: Date) => {
     const d = new Date(date);
     d.setHours(0, 0, 0, 0);
     if (d.getTime() < minDate.getTime()) return true;
-
-    if (activeDates) {
-      const year = date.getFullYear();
-      const month = String(date.getMonth() + 1).padStart(2, '0');
-      const day = String(date.getDate()).padStart(2, '0');
-      const dateKey = `${year}-${month}-${day}`;
-      return !activeDates.includes(dateKey);
-    }
-
+    if (activeDates) return !activeDates.includes(dateKey(date));
     return false;
   };
 
+  const shiftMonth = (delta: number) => {
+    setCursor((prev) => {
+      const d = new Date(prev);
+      d.setMonth(d.getMonth() + delta);
+      return d;
+    });
+  };
+
+  const availableThisMonth = useMemo(() => {
+    if (!activeDates) return null;
+    return activeDates.filter((key) => key.startsWith(`${year}-${String(month + 1).padStart(2, '0')}`))
+      .length;
+  }, [activeDates, year, month]);
+
   return (
-    <Modal visible={visible} animationType="fade" transparent={true} onRequestClose={onClose}>
+    <Modal visible={visible} animationType="fade" transparent onRequestClose={onClose}>
       <View style={s.overlay}>
-        <View style={s.modalCard}>
-          {/* Header */}
+        <Pressable
+          style={StyleSheet.absoluteFill}
+          onPress={onClose}
+          accessibilityLabel="Cerrar calendario"
+          accessibilityRole="button"
+        />
+
+        <View style={s.card}>
           <View style={s.header}>
-            <Text style={s.headerTitle}>Seleccionar Fecha</Text>
-            <PressableScale
-              onPress={onClose}
-              style={s.closeBtn}
-              accessibilityLabel="Cerrar calendario"
-              accessibilityRole="button"
-            >
-              <MaterialIcons name="close" size={24} color={Colors.foreground} />
-            </PressableScale>
+            <Text variant="heading">Seleccionar fecha</Text>
+            <IconButton icon={X} label="Cerrar calendario" onPress={onClose} size="md" />
           </View>
 
-          {/* Content Wrapper inside a brand style container */}
-          <View style={s.cardBody}>
-            <View style={s.calendarCard}>
-              {/* Month Navigator */}
-              <View style={s.monthRow}>
-                <PressableScale
-                  onPress={handlePrevMonth}
-                  style={s.navBtn}
-                  accessibilityLabel="Mes anterior"
-                  accessibilityRole="button"
-                >
-                  <MaterialIcons name="chevron-left" size={24} color={Colors.foreground} />
-                </PressableScale>
-                <Text style={s.monthText}>{`${MONTHS[month]} ${year}`}</Text>
-                <PressableScale
-                  onPress={handleNextMonth}
-                  style={s.navBtn}
-                  accessibilityLabel="Mes siguiente"
-                  accessibilityRole="button"
-                >
-                  <MaterialIcons name="chevron-right" size={24} color={Colors.foreground} />
-                </PressableScale>
-              </View>
-
-              {/* Weekdays */}
-              <View style={s.weekdaysRow}>
-                {WEEKDAYS.map((day, idx) => (
-                  <Text key={idx} style={s.weekdayText}>{day}</Text>
-                ))}
-              </View>
-
-              {/* Days Grid */}
-              <View style={s.grid}>
-                {daysGrid.map((date, idx) => {
-                  if (!date) {
-                    return <View key={`empty-${idx}`} style={s.dayCell} />;
-                  }
-
-                  const active = isSelected(date);
-                  const disabled = isDisabled(date);
-                  const today = isToday(date);
-
-                  return (
-                    <Pressable
-                      key={`day-${date.getTime()}`}
-                      onPress={() => !disabled && handleSelectDay(date)}
-                      disabled={disabled}
-                      style={s.dayCell}
-                      accessibilityLabel={`Día ${date.getDate()} de ${MONTHS[month]}`}
-                      accessibilityRole="button"
-                      accessibilityState={{ disabled, selected: active }}
-                    >
-                      <View style={[
-                        s.dayButton,
-                        active && s.dayActive,
-                        today && !active && s.dayToday
-                      ]}>
-                        <Text style={[
-                          s.dayText,
-                          active && s.dayTextActive,
-                          disabled && s.dayTextDisabled
-                        ]}>
-                          {date.getDate()}
-                        </Text>
-                      </View>
-                    </Pressable>
-                  );
-                })}
-              </View>
+          <View style={s.calendar}>
+            <View style={s.monthRow}>
+              <IconButton
+                icon={CaretLeft}
+                label="Mes anterior"
+                onPress={() => shiftMonth(-1)}
+                size="md"
+                variant="inverse"
+              />
+              <Text variant="subheading" align="center">
+                {`${MONTHS[month]} ${year}`}
+              </Text>
+              <IconButton
+                icon={CaretRight}
+                label="Mes siguiente"
+                onPress={() => shiftMonth(1)}
+                size="md"
+                variant="inverse"
+              />
             </View>
+
+            <View style={s.weekdays}>
+              {WEEKDAYS.map((day) => (
+                <Text key={day} variant="caption" color="muted" align="center" style={s.weekday}>
+                  {day}
+                </Text>
+              ))}
+            </View>
+
+            <View style={s.grid}>
+              {grid.map((date, index) => {
+                if (!date) return <View key={`pad-${index}`} style={s.cell} />;
+
+                const active = sameDay(date, selected);
+                const disabled = isDisabled(date);
+                const today = sameDay(date, new Date());
+
+                return (
+                  <Pressable
+                    key={dateKey(date)}
+                    onPress={() => !disabled && setSelected(date)}
+                    disabled={disabled}
+                    style={s.cell}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${date.getDate()} de ${MONTHS[month]}${
+                      disabled ? ', sin viajes' : ''
+                    }`}
+                    accessibilityState={{ disabled, selected: active }}
+                  >
+                    <View
+                      style={[
+                        s.day,
+                        active && s.dayActive,
+                        today && !active && s.dayToday,
+                        disabled && s.dayDisabled,
+                      ]}
+                    >
+                      <Text
+                        variant="label"
+                        weight={active ? 'bold' : 'medium'}
+                        color={active ? 'inverse' : disabled ? 'muted' : 'foreground'}
+                        compact
+                      >
+                        {String(date.getDate())}
+                      </Text>
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            {availableThisMonth === 0 && (
+              <Text variant="caption" color="muted" align="center" style={s.hint}>
+                No hay salidas este mes. Prueba el mes siguiente.
+              </Text>
+            )}
           </View>
 
-          {/* CTA Confirm Button */}
           <View style={s.footer}>
-            <PressableScale
-              onPress={handleConfirm}
-              style={s.confirmBtn}
-              accessibilityLabel="Confirmar selección de fecha"
-              accessibilityRole="button"
+            <Button
+              variant="accent"
+              fullWidth
+              disabled={isDisabled(selected)}
+              onPress={() => {
+                onChange(selected);
+                onClose();
+              }}
             >
-              <Text style={s.confirmText}>Confirmar Fecha</Text>
-            </PressableScale>
+              Confirmar fecha
+            </Button>
           </View>
         </View>
       </View>
@@ -226,94 +221,58 @@ export function CalendarModal({
 const s = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
-    justifyContent: 'center',
+    backgroundColor: Colors.scrim,
     alignItems: 'center',
+    justifyContent: 'center',
     padding: Spacing.lg,
   },
-  modalCard: {
+  card: {
     width: '100%',
-    maxWidth: 360,
+    maxWidth: Layout.modalMaxWidth,
     backgroundColor: Colors.background,
     borderRadius: Radius['2xl'],
     overflow: 'hidden',
-    paddingVertical: Spacing.sm,
+    ...Shadows.overlay,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: Spacing.xl,
-    paddingVertical: Spacing.md,
+    paddingTop: Spacing.lg,
+    paddingBottom: Spacing.md,
   },
-  headerTitle: {
-    fontFamily: Typography.family,
-    fontWeight: Typography.weights.bold,
-    fontSize: Typography.sizes.xl,
-    color: Colors.foreground,
-  },
-  closeBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: Radius.full,
-    backgroundColor: 'transparent',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  cardBody: {
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.xs,
-  },
-  calendarCard: {
-    backgroundColor: Colors.surface, // #F0EFEB
-    borderRadius: Radius.xl,
+  calendar: {
+    marginHorizontal: Spacing.lg,
     padding: Spacing.lg,
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.xl,
   },
   monthRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: Spacing.xl,
+    marginBottom: Spacing.lg,
   },
-  monthText: {
-    fontFamily: Typography.family,
-    fontWeight: Typography.weights.bold,
-    fontSize: 16,
-    color: Colors.foreground,
-    textTransform: 'capitalize',
-  },
-  navBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: Radius.full,
-    backgroundColor: Colors.white,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  weekdaysRow: {
+  weekdays: {
     flexDirection: 'row',
     marginBottom: Spacing.sm,
   },
-  weekdayText: {
+  weekday: {
     flex: 1,
-    textAlign: 'center',
-    fontSize: 12,
-    fontFamily: Typography.family,
-    fontWeight: Typography.weights.semibold,
-    color: Colors.mutedForeground,
   },
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
   },
-  dayCell: {
-    width: '14.28%',
+  cell: {
+    width: `${100 / 7}%`,
     aspectRatio: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: Spacing.xs,
+    padding: Spacing.xs / 2,
   },
-  dayButton: {
+  day: {
     width: '100%',
     height: '100%',
     borderRadius: Radius.full,
@@ -321,40 +280,19 @@ const s = StyleSheet.create({
     justifyContent: 'center',
   },
   dayActive: {
-    backgroundColor: Colors.accent, // #4A7FF8
+    backgroundColor: Colors.accent,
   },
   dayToday: {
-    borderWidth: 1,
+    borderWidth: Sizes.hairline,
     borderColor: Colors.accent,
   },
-  dayText: {
-    fontFamily: Typography.family,
-    fontWeight: Typography.weights.medium,
-    fontSize: 14,
-    color: Colors.foreground,
+  dayDisabled: {
+    opacity: Opacity.disabled,
   },
-  dayTextActive: {
-    color: Colors.white,
-    fontWeight: Typography.weights.bold,
-  },
-  dayTextDisabled: {
-    color: Colors.mutedForeground + '60',
+  hint: {
+    marginTop: Spacing.md,
   },
   footer: {
-    paddingHorizontal: Spacing.xl,
-    paddingVertical: Spacing.md,
-  },
-  confirmBtn: {
-    backgroundColor: Colors.accent,
-    height: 52,
-    borderRadius: Radius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  confirmText: {
-    color: Colors.white,
-    fontFamily: Typography.family,
-    fontWeight: Typography.weights.bold,
-    fontSize: Typography.sizes.base,
+    padding: Spacing.xl,
   },
 });

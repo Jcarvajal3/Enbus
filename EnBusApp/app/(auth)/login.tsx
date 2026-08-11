@@ -1,168 +1,110 @@
-import { SafeAreaView, View, Text } from '@/tw';
-import { useState, useEffect } from 'react';
-import { StyleSheet, TextInput, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { useState } from 'react';
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { supabase } from '@/src/utils/supabase';
-import { Spinner } from '@/src/components/Spinner';
+import { GoogleLogo } from 'phosphor-react-native';
 import * as Haptics from 'expo-haptics';
-import { useToast } from '@/src/components/Toast';
-import { GoogleLogo, Eye, EyeSlash } from 'phosphor-react-native';
 import * as Linking from 'expo-linking';
+import { supabase } from '@/src/utils/supabase';
+import { useToast } from '@/src/components/Toast';
 import { PressableScale } from '@/src/components/PressableScale';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withDelay,
-  withTiming,
-  withSpring,
-  Easing,
-} from 'react-native-reanimated';
-import { Colors, Typography, Radius, Shadows, Spacing } from '@/src/theme';
+import { StaggerItem } from '@/src/components/StaggerItem';
+import {
+  Button,
+  Card,
+  Field,
+  Screen,
+  SegmentedControl,
+  Text,
+} from '@/src/components/ui';
+import { Colors, Layout, Radius, Sizes, Spacing } from '@/src/theme';
 
 type Mode = 'login' | 'register';
 
-function Field({
-  label,
-  secureTextEntry,
-  ...props
-}: React.ComponentProps<typeof TextInput> & { label: string }) {
-  const [showPassword, setShowPassword] = useState(false);
-
-  const isPassword = secureTextEntry;
-  const actualSecureTextEntry = isPassword ? !showPassword : false;
-
-  return (
-    <View style={s.fieldWrapper}>
-      <Text style={s.fieldLabel}>
-        {label}
-      </Text>
-      <View style={s.inputContainer}>
-        <TextInput
-          placeholderTextColor={Colors.mutedForeground}
-          style={s.fieldInput}
-          secureTextEntry={actualSecureTextEntry}
-          {...props}
-        />
-        {isPassword && (
-          <PressableScale
-            onPress={() => {
-              Haptics.selectionAsync();
-              setShowPassword(!showPassword);
-            }}
-            style={s.eyeButton}
-            accessibilityLabel={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
-            accessibilityRole="button"
-          >
-            {showPassword ? (
-              <EyeSlash color={Colors.mutedForeground} size={20} />
-            ) : (
-              <Eye color={Colors.mutedForeground} size={20} />
-            )}
-          </PressableScale>
-        )}
-      </View>
-    </View>
-  );
-}
+const EMPTY_FORM = {
+  email: '',
+  password: '',
+  confirmPassword: '',
+  nombre_completo: '',
+  telefono: '',
+  cedula_rif: '',
+};
 
 export default function LoginScreen() {
   const router = useRouter();
   const toast = useToast();
+
   const [mode, setMode] = useState<Mode>('login');
-  const [form, setForm] = useState({
-    email: '',
-    password: '',
-    confirmPassword: '',
-    nombre_completo: '',
-    telefono: '',
-    cedula_rif: '',
-  });
+  const [form, setForm] = useState(EMPTY_FORM);
+  const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
-  const update = (k: string, v: string) => setForm((p) => ({ ...p, [k]: v }));
 
-  // ── P2: Stagger entry animation ──────────────────────────────────────────
-  const logoOpacity = useSharedValue(0);
-  const logoScale = useSharedValue(0.88);
-  const titleOpacity = useSharedValue(0);
-  const titleY = useSharedValue(10);
-  const cardOpacity = useSharedValue(0);
-  const cardY = useSharedValue(16);
+  const update = (key: keyof typeof EMPTY_FORM, value: string) => {
+    setForm((prev) => ({ ...prev, [key]: value }));
+    setErrors((prev) => (prev[key] ? { ...prev, [key]: '' } : prev));
+  };
 
-  useEffect(() => {
-    const easeOut = Easing.out(Easing.cubic);
-    // 1. Logo
-    logoOpacity.value = withTiming(1, { duration: 320, easing: easeOut });
-    logoScale.value = withSpring(1, { damping: 14, stiffness: 140 });
-    // 2. Título
-    titleOpacity.value = withDelay(80, withTiming(1, { duration: 300, easing: easeOut }));
-    titleY.value = withDelay(80, withTiming(0, { duration: 300, easing: easeOut }));
-    // 3. Card formulario
-    cardOpacity.value = withDelay(160, withTiming(1, { duration: 340, easing: easeOut }));
-    cardY.value = withDelay(160, withTiming(0, { duration: 340, easing: easeOut }));
-  }, []);
+  /** Inline validation so the user sees which field is wrong, not just a toast. */
+  const validate = (): boolean => {
+    const next: Record<string, string> = {};
 
-  const logoStyle = useAnimatedStyle(() => ({
-    opacity: logoOpacity.value,
-    transform: [{ scale: logoScale.value }],
-  }));
-  const titleStyle = useAnimatedStyle(() => ({
-    opacity: titleOpacity.value,
-    transform: [{ translateY: titleY.value }],
-  }));
-  const cardStyle = useAnimatedStyle(() => ({
-    opacity: cardOpacity.value,
-    transform: [{ translateY: cardY.value }],
-  }));
-  // ─────────────────────────────────────────────────────────────────────────
+    if (!form.email.trim()) next.email = 'Ingresa tu correo.';
+    if (!form.password) next.password = 'Ingresa tu contraseña.';
+
+    if (mode === 'register') {
+      if (!form.nombre_completo.trim()) next.nombre_completo = 'Ingresa tu nombre completo.';
+      if (!form.telefono.trim()) next.telefono = 'Ingresa tu teléfono.';
+      if (!form.cedula_rif.trim()) next.cedula_rif = 'Ingresa tu cédula o RIF.';
+      if (form.password.length < 6) next.password = 'Usa al menos 6 caracteres.';
+      if (form.password !== form.confirmPassword) {
+        next.confirmPassword = 'Las contraseñas no coinciden.';
+      }
+    }
+
+    setErrors(next);
+    return Object.keys(next).length === 0;
+  };
 
   async function handleSubmit() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    if (mode === 'login') {
-      setLoading(true);
-      const { error } = await supabase.auth.signInWithPassword({
-        email: form.email,
-        password: form.password,
-      });
-      if (error) {
-        toast.show('error', error.message);
-      } else {
+    if (!validate()) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      return;
+    }
+
+    setLoading(true);
+    try {
+      if (mode === 'login') {
+        const { error } = await supabase.auth.signInWithPassword({
+          email: form.email.trim(),
+          password: form.password,
+        });
+        if (error) throw error;
         toast.show('success', 'Sesión iniciada con éxito');
-      }
-      setLoading(false);
-    } else {
-      if (
-        !form.nombre_completo ||
-        !form.telefono ||
-        !form.cedula_rif ||
-        !form.email ||
-        !form.password
-      ) {
-        toast.show('error', 'Todos los campos son obligatorios');
-        return;
-      }
-      if (form.password !== form.confirmPassword) {
-        toast.show('error', 'Las contraseñas no coinciden');
-        return;
-      }
-      setLoading(true);
-      const { data, error } = await supabase.auth.signUp({
-        email: form.email,
-        password: form.password,
-        options: {
-          data: {
-            nombre_completo: form.nombre_completo,
-            telefono: form.telefono,
-            cedula_rif: form.cedula_rif,
-          },
-        },
-      });
-      if (error) {
-        toast.show('error', error.message);
-      } else if (data.session) {
-        toast.show('success', 'Cuenta creada e iniciada automáticamente');
       } else {
-        toast.show('success', 'Se ha enviado un enlace de confirmación a su correo');
+        const { data, error } = await supabase.auth.signUp({
+          email: form.email.trim(),
+          password: form.password,
+          options: {
+            data: {
+              nombre_completo: form.nombre_completo.trim(),
+              telefono: form.telefono.trim(),
+              cedula_rif: form.cedula_rif.trim(),
+            },
+          },
+        });
+        if (error) throw error;
+
+        toast.show(
+          'success',
+          data.session
+            ? 'Cuenta creada e iniciada automáticamente'
+            : 'Te enviamos un enlace de confirmación a tu correo'
+        );
       }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'No se pudo completar la operación.';
+      toast.show('error', message);
+    } finally {
       setLoading(false);
     }
   }
@@ -171,111 +113,78 @@ export default function LoginScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     try {
       setLoading(true);
-      toast.show('info', 'Iniciando sesión con Google...');
-      const redirectUrl = Linking.createURL('/(tabs)');
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: redirectUrl,
+          redirectTo: Linking.createURL('/(tabs)'),
           queryParams: { access_type: 'offline', prompt: 'select_account' },
         },
       });
       if (error) throw error;
-    } catch (err: any) {
-      console.error('Google Sign-In Error:', err.message);
-      toast.show('error', 'Error al conectar con Google: ' + err.message);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error desconocido';
+      if (__DEV__) console.error('[login] Google Sign-In:', message);
+      toast.show('error', `No se pudo conectar con Google: ${message}`);
     } finally {
       setLoading(false);
     }
   }
 
+  const isRegister = mode === 'register';
+
   return (
-    <SafeAreaView style={s.safeArea}>
+    <Screen>
       <KeyboardAvoidingView
-        style={{ flex: 1 }}
+        style={s.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <ScrollView
+          contentContainerStyle={s.scroll}
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={s.scrollContent}
+          keyboardShouldPersistTaps="handled"
         >
-          {/* Logo animado */}
-          <Animated.View style={[s.logoAnimatedWrapper, logoStyle]}>
-            <View style={s.logoBubble}>
-              <Text style={s.logoText}>
+          <StaggerItem index={0} style={s.brand}>
+            <View style={s.logo}>
+              <Text variant="heading" size="2xl" weight="heavy" color="primary" compact>
                 EB
               </Text>
             </View>
-          </Animated.View>
+          </StaggerItem>
 
-          {/* Título animado */}
-          <Animated.View style={[s.titleAnimatedWrapper, titleStyle]}>
-            <Text style={s.appTitle}>
+          <StaggerItem index={1} style={s.titles}>
+            <Text variant="title" align="center">
               EnBus App
             </Text>
-            <Text style={s.appSubtitle}>
-              Rastreo y Compra de Boletos
+            <Text variant="body" color="muted" align="center" style={s.tagline}>
+              Rastreo y compra de boletos
             </Text>
-          </Animated.View>
+          </StaggerItem>
 
-          {/* Card formulario animada */}
-          <Animated.View style={cardStyle}>
-            <View style={s.card}>
-              {/* Toggle login/register */}
-              <View style={s.toggleRow}>
-                <PressableScale
-                  onPress={() => {
-                    Haptics.selectionAsync();
-                    setMode('login');
-                  }}
-                  style={[
-                    s.toggleTab,
-                    { backgroundColor: mode === 'login' ? Colors.white : 'transparent' },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      s.toggleTabText,
-                      {
-                        fontWeight: mode === 'login' ? Typography.weights.bold : Typography.weights.semibold,
-                        color: mode === 'login' ? Colors.foreground : Colors.mutedForeground,
-                      },
-                    ]}
-                  >
-                    Iniciar Sesión
-                  </Text>
-                </PressableScale>
-                <PressableScale
-                  onPress={() => {
-                    Haptics.selectionAsync();
-                    setMode('register');
-                  }}
-                  style={[
-                    s.toggleTab,
-                    { backgroundColor: mode === 'register' ? Colors.white : 'transparent' },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      s.toggleTabText,
-                      {
-                        fontWeight: mode === 'register' ? Typography.weights.bold : Typography.weights.semibold,
-                        color: mode === 'register' ? Colors.foreground : Colors.mutedForeground,
-                      },
-                    ]}
-                  >
-                    Registrarse
-                  </Text>
-                </PressableScale>
-              </View>
+          <StaggerItem index={2}>
+            <Card tone="sunken" padding="md" elevated={false}>
+              <SegmentedControl<Mode>
+                value={mode}
+                onChange={(next) => {
+                  setMode(next);
+                  setErrors({});
+                }}
+                tone="raised"
+                options={[
+                  { value: 'login', label: 'Iniciar Sesión' },
+                  { value: 'register', label: 'Registrarse' },
+                ]}
+                style={s.modeToggle}
+              />
 
-              {mode === 'register' && (
+              {isRegister && (
                 <>
                   <Field
-                    label="Nombre Completo"
+                    label="Nombre completo"
                     placeholder="Juan Pérez"
                     value={form.nombre_completo}
                     onChangeText={(v) => update('nombre_completo', v)}
+                    error={errors.nombre_completo}
+                    textContentType="name"
                   />
                   <Field
                     label="Teléfono"
@@ -283,24 +192,31 @@ export default function LoginScreen() {
                     keyboardType="phone-pad"
                     value={form.telefono}
                     onChangeText={(v) => update('telefono', v)}
+                    error={errors.telefono}
+                    textContentType="telephoneNumber"
                   />
                   <Field
                     label="Cédula o RIF"
                     placeholder="V-12345678"
                     value={form.cedula_rif}
                     onChangeText={(v) => update('cedula_rif', v)}
+                    error={errors.cedula_rif}
                   />
                 </>
               )}
 
               <Field
-                label="Correo Electrónico"
+                label="Correo electrónico"
                 placeholder="tu@correo.com"
                 keyboardType="email-address"
                 autoCapitalize="none"
+                autoComplete="email"
+                textContentType="emailAddress"
                 value={form.email}
                 onChangeText={(v) => update('email', v)}
+                error={errors.email}
               />
+
               <Field
                 label="Contraseña"
                 placeholder="••••••••"
@@ -308,258 +224,110 @@ export default function LoginScreen() {
                 autoCapitalize="none"
                 value={form.password}
                 onChangeText={(v) => update('password', v)}
+                error={errors.password}
+                helper={isRegister && !errors.password ? 'Mínimo 6 caracteres.' : undefined}
               />
 
-              {mode === 'register' && (
+              {isRegister && (
                 <Field
-                  label="Confirmar Contraseña"
+                  label="Confirmar contraseña"
                   placeholder="••••••••"
                   secureTextEntry
                   autoCapitalize="none"
                   value={form.confirmPassword}
                   onChangeText={(v) => update('confirmPassword', v)}
+                  error={errors.confirmPassword}
                 />
               )}
 
-              {mode === 'login' && (
+              {!isRegister && (
                 <PressableScale
                   onPress={() => {
                     Haptics.selectionAsync();
-                    router.push('/(auth)/recuperar' as any);
+                    router.push('/(auth)/recuperar');
                   }}
-                  style={s.forgotPasswordBtn}
+                  style={s.forgot}
+                  accessibilityRole="button"
+                  accessibilityLabel="Recuperar contraseña"
                 >
-                  <Text style={s.forgotPasswordText}>
+                  <Text variant="label" color="accent">
                     ¿Olvidaste tu contraseña?
                   </Text>
                 </PressableScale>
               )}
 
-              {/* Botón principal */}
-              <PressableScale
-                onPress={handleSubmit}
-                disabled={loading}
-                haptic
-                hapticType="medium"
-                style={[s.submitBtn, { opacity: loading ? 0.6 : 1 }]}
-              >
-                {loading ? (
-                  <Spinner />
-                ) : (
-                  <Text style={s.submitBtnText}>
-                    {mode === 'login' ? 'Entrar' : 'Crear Cuenta'}
-                  </Text>
-                )}
-              </PressableScale>
+              <Button variant="accent" fullWidth loading={loading} onPress={handleSubmit}>
+                {isRegister ? 'Crear Cuenta' : 'Entrar'}
+              </Button>
 
-              <View style={s.dividerRow}>
+              <View style={s.divider}>
                 <View style={s.dividerLine} />
-                <Text style={s.dividerText}>
+                <Text variant="overline" color="muted" uppercase>
                   O continuar con
                 </Text>
                 <View style={s.dividerLine} />
               </View>
 
-              {/* Google */}
-              <PressableScale
-                onPress={handleGoogleSignIn}
+              <Button
+                variant="outline"
+                icon={GoogleLogo}
+                fullWidth
                 disabled={loading}
-                haptic
-                style={s.googleBtn}
+                onPress={handleGoogleSignIn}
               >
-                <GoogleLogo size={20} color={Colors.foreground} weight="bold" />
-                <Text style={s.googleBtnText}>
-                  Google
-                </Text>
-              </PressableScale>
-            </View>
-          </Animated.View>
+                Google
+              </Button>
+            </Card>
+          </StaggerItem>
         </ScrollView>
       </KeyboardAvoidingView>
-    </SafeAreaView>
+    </Screen>
   );
 }
 
 const s = StyleSheet.create({
-  // ── Field component ────────────────────────────────────────────────────────
-  fieldWrapper: {
-    marginBottom: 14,
-  },
-  fieldLabel: {
-    fontSize: Typography.sizes.sm,
-    fontWeight: Typography.weights.semibold,
-    color: Colors.foreground,
-    fontFamily: Typography.family,
-    marginBottom: 6,
-    marginLeft: 2,
-  },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.white,
-    borderRadius: Radius.full,
-    height: 48,
-    paddingLeft: 20,
-    paddingRight: 8,
-  },
-  fieldInput: {
-    flex: 1,
-    height: '100%',
-    fontSize: Typography.sizes.base,
-    color: Colors.foreground,
-    fontFamily: Typography.family,
-  },
-  eyeButton: {
-    width: 36,
-    height: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  // ── Screen layout ──────────────────────────────────────────────────────────
-  safeArea: {
-    flex: 1,
-    backgroundColor: Colors.background,
-  },
-  scrollContent: {
+  flex: { flex: 1 },
+  scroll: {
     flexGrow: 1,
     justifyContent: 'center',
-    paddingHorizontal: Spacing['2xl'],
+    paddingHorizontal: Layout.screenPadding,
     paddingVertical: Spacing['5xl'],
   },
-
-  // ── Logo ───────────────────────────────────────────────────────────────────
-  logoAnimatedWrapper: {
+  brand: {
     alignItems: 'center',
-    marginBottom: 32,
+    marginBottom: Spacing.xl,
   },
-  logoBubble: {
-    width: 72,
-    height: 72,
+  logo: {
+    width: Sizes.iconBox.xl + Spacing.lg,
+    height: Sizes.iconBox.xl + Spacing.lg,
     borderRadius: Radius.full,
     backgroundColor: Colors.primaryLight,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 12,
   },
-  logoText: {
-    fontSize: Typography.sizes['2xl'],
-    fontFamily: Typography.family,
-    fontWeight: Typography.weights.bold,
-    color: Colors.primary,
+  titles: {
+    marginBottom: Spacing['3xl'],
   },
-
-  // ── Title block ────────────────────────────────────────────────────────────
-  titleAnimatedWrapper: {
-    alignItems: 'center',
-    marginBottom: 28,
+  tagline: {
+    marginTop: Spacing.xs,
   },
-  appTitle: {
-    fontSize: Typography.sizes['3xl'],
-    fontFamily: Typography.family,
-    fontWeight: Typography.weights.bold,
-    color: Colors.foreground,
+  modeToggle: {
+    marginBottom: Spacing.xl,
   },
-  appSubtitle: {
-    fontSize: 16,
-    fontFamily: Typography.family,
-    color: Colors.mutedForeground,
-    marginTop: 4,
-    textAlign: 'center',
-  },
-
-  // ── Form card ──────────────────────────────────────────────────────────────
-  card: {
-    backgroundColor: Colors.surface,
-    borderRadius: Radius['2xl'],
-    padding: 20,
-  },
-
-  // ── Login / Register toggle ────────────────────────────────────────────────
-  toggleRow: {
-    flexDirection: 'row',
-    backgroundColor: Colors.surfaceDark,
-    borderRadius: Radius.full,
-    padding: 4,
-    marginBottom: 20,
-  },
-  toggleTab: {
-    flex: 1,
-    paddingVertical: 10,
-    borderRadius: Radius.full,
-    alignItems: 'center',
-  },
-  toggleTabText: {
-    fontSize: 14,
-    fontFamily: Typography.family,
-  },
-
-  // ── Forgot password link ───────────────────────────────────────────────────
-  forgotPasswordBtn: {
+  forgot: {
     alignSelf: 'flex-end',
-    marginTop: 4,
-    marginBottom: 16,
+    paddingVertical: Spacing.sm,
+    marginBottom: Spacing.sm,
   },
-  forgotPasswordText: {
-    fontSize: 14,
-    fontFamily: Typography.family,
-    fontWeight: Typography.weights.semibold,
-    color: Colors.accent,
-  },
-
-  // ── Submit button ──────────────────────────────────────────────────────────
-  submitBtn: {
-    height: 52,
-    borderRadius: Radius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: Spacing.sm,
-    backgroundColor: Colors.accent,
-  },
-  submitBtnText: {
-    fontSize: 16,
-    fontFamily: Typography.family,
-    fontWeight: Typography.weights.bold,
-    color: Colors.white,
-  },
-
-  // ── Divider ────────────────────────────────────────────────────────────────
-  dividerRow: {
+  divider: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: 16,
+    gap: Spacing.md,
+    marginVertical: Spacing.xl,
   },
   dividerLine: {
     flex: 1,
-    height: 1,
+    height: Sizes.hairline,
     backgroundColor: Colors.border,
-  },
-  dividerText: {
-    marginHorizontal: 12,
-    fontSize: Typography.sizes.xs,
-    fontFamily: Typography.family,
-    fontWeight: Typography.weights.bold,
-    color: Colors.mutedForeground,
-    textTransform: 'uppercase',
-    letterSpacing: 1.2,
-  },
-
-  // ── Google button ──────────────────────────────────────────────────────────
-  googleBtn: {
-    height: 52,
-    borderRadius: Radius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: Colors.border,
-    backgroundColor: Colors.white,
-    flexDirection: 'row',
-    gap: 12,
-  },
-  googleBtnText: {
-    fontSize: Typography.sizes.base,
-    fontFamily: Typography.family,
-    fontWeight: Typography.weights.bold,
-    color: Colors.foreground,
   },
 });

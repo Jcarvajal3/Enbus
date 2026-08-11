@@ -1,27 +1,22 @@
-import { SafeAreaView } from '@/tw';
-import { useState, useCallback, useMemo, useEffect } from 'react';
-import { View, Text, useCSSVariable } from '@/tw';
-import { StyleSheet, StatusBar, Image } from 'react-native';
-import { useAuth } from '@/src/contexts/AuthContext';
-import { useRealtime } from '@/src/hooks/useRealtime';
-import { SearchForm } from '@/src/components/SearchForm';
-import { Bell, UserCircle } from 'phosphor-react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Image, ScrollView, StatusBar, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
+import { Bell, CaretRight, Package, Ticket, UserCircle } from 'phosphor-react-native';
+import { useAuth } from '@/src/contexts/AuthContext';
+import { useActivity } from '@/src/contexts/ActivityContext';
+import { useRealtime } from '@/src/hooks/useRealtime';
+import { SearchForm } from '@/src/components/SearchForm';
+import { StaggerItem } from '@/src/components/StaggerItem';
 import { PressableScale } from '@/src/components/PressableScale';
+import { IconButton, Screen, Text } from '@/src/components/ui';
 import { supabase } from '@/src/utils/supabase';
-import { Colors, Typography, Radius, Gradients, Spacing } from '@/src/theme';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withTiming,
-  withDelay,
-  Easing,
-} from 'react-native-reanimated';
+import { Colors, Layout, Motion, Radius, Shadows, Sizes, Spacing } from '@/src/theme';
 
 export default function HomeScreen() {
   const { user } = useAuth();
   const router = useRouter();
+  const { boletosActivos, encomiendasActivas } = useActivity();
 
   const [isFocused, setIsFocused] = useState(true);
   useFocusEffect(
@@ -31,7 +26,7 @@ export default function HomeScreen() {
     }, [])
   );
 
-  // Fetch real name from profiles table
+  // ── Nombre real para el saludo ─────────────────────────────────────────────
   const [profileName, setProfileName] = useState<string | null>(null);
   useEffect(() => {
     if (!user?.id) return;
@@ -43,50 +38,30 @@ export default function HomeScreen() {
       .single()
       .then(({ data }) => {
         if (data?.nombre_completo && isMounted) {
-          // First name only for the greeting
           setProfileName(data.nombre_completo.trim().split(' ')[0]);
         }
       });
-    return () => { isMounted = false; };
+    return () => {
+      isMounted = false;
+    };
   }, [user?.id]);
 
-  // Fallback to email prefix if profile not loaded yet
   const displayName = profileName || (user?.email ? user.email.split('@')[0] : '');
 
-  // Notification badge — only realtime subscription on this screen
-  const { data: notifNoLeidas } = useRealtime<any>(
-    'notificaciones_usuario', 'usuario_id', user?.id, 'id, leida',
+  // ── Badge de notificaciones ────────────────────────────────────────────────
+  const { data: notificaciones } = useRealtime<{ id: string; leida: boolean }>(
+    'notificaciones_usuario',
+    'usuario_id',
+    user?.id,
+    'id, leida',
     { enabled: isFocused && !!user?.id, limit: 50 }
   );
 
   const unreadCount = useMemo(
-    () => (notifNoLeidas ? notifNoLeidas.filter((n: any) => !n.leida).length : 0),
-    [notifNoLeidas]
+    () => (notificaciones ?? []).filter((n) => !n.leida).length,
+    [notificaciones]
   );
 
-  // ── Staggered entrance animations ─────────────────────────────────────────
-  const greetOpacity    = useSharedValue(0);
-  const greetY          = useSharedValue(22);
-  const subtitleOpacity = useSharedValue(0);
-  const subtitleY       = useSharedValue(22);
-  const cardOpacity     = useSharedValue(0);
-  const cardY           = useSharedValue(30);
-
-  useEffect(() => {
-    const ease = Easing.out(Easing.cubic);
-    greetOpacity.value    = withTiming(1, { duration: 520, easing: ease });
-    greetY.value          = withTiming(0, { duration: 520, easing: ease });
-    subtitleOpacity.value = withDelay(110, withTiming(1, { duration: 500, easing: ease }));
-    subtitleY.value       = withDelay(110, withTiming(0, { duration: 500, easing: ease }));
-    cardOpacity.value     = withDelay(230, withTiming(1, { duration: 560, easing: ease }));
-    cardY.value           = withDelay(230, withTiming(0, { duration: 560, easing: ease }));
-  }, []);
-
-  const greetStyle    = useAnimatedStyle(() => ({ opacity: greetOpacity.value,    transform: [{ translateY: greetY.value }] }));
-  const subtitleStyle = useAnimatedStyle(() => ({ opacity: subtitleOpacity.value, transform: [{ translateY: subtitleY.value }] }));
-  const cardStyle     = useAnimatedStyle(() => ({ opacity: cardOpacity.value,     transform: [{ translateY: cardY.value }] }));
-
-  // Context-aware greeting
   const greeting = useMemo(() => {
     const h = new Date().getHours();
     if (h < 12) return 'Buenos días';
@@ -95,73 +70,73 @@ export default function HomeScreen() {
   }, []);
 
   return (
-    <SafeAreaView style={s.root}>
+    <Screen>
       <StatusBar barStyle="dark-content" backgroundColor={Colors.background} />
 
-      {/* Header bar with EnBus logo on the left and actions on the right */}
       <View style={s.header}>
-        {/* Logo and App Name */}
-        <View style={s.logoContainer}>
+        <View style={s.brand}>
           <View style={s.logoBadge}>
-            <Text style={s.logoText}>EB</Text>
+            <Text variant="overline" size="sm" weight="heavy" color="primary" compact>
+              EB
+            </Text>
           </View>
-          <Text style={s.brandText}>EnBus</Text>
+          <Text variant="subheading" weight="heavy" compact>
+            EnBus
+          </Text>
         </View>
 
-        {/* Action icons */}
         <View style={s.headerActions}>
-          <PressableScale onPress={() => router.push('/notificaciones')} haptic style={s.iconBtn}>
-            <Bell weight="bold" size={22} color={Colors.foreground} />
-            {unreadCount > 0 && (
-              <View style={s.badge}>
-                <Text style={s.badgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
-              </View>
-            )}
-          </PressableScale>
-          <PressableScale onPress={() => router.push('/perfil')} haptic style={s.iconBtn}>
-            <UserCircle weight="fill" size={26} color={Colors.foreground} />
-          </PressableScale>
+          <IconButton
+            icon={Bell}
+            label={unreadCount > 0 ? `Notificaciones, ${unreadCount} sin leer` : 'Notificaciones'}
+            badgeCount={unreadCount}
+            onPress={() => router.push('/notificaciones')}
+          />
+          <IconButton
+            icon={UserCircle}
+            iconWeight="fill"
+            label="Mi perfil"
+            onPress={() => router.push('/perfil')}
+          />
         </View>
       </View>
 
-      {/* Body — containing the main brand layout card */}
-      <View style={s.body}>
-        <View style={s.mainCard}>
-          {/* Wave gradient image from brand assets */}
+      <ScrollView
+        contentContainerStyle={s.scroll}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        {/* ── Hero: saludo + buscador ─────────────────────────────────────── */}
+        <View style={s.hero}>
           <Image
             source={require('../../assets/images/gradient-1.png')}
-            style={s.waveImage}
+            style={s.heroWave}
             resizeMode="cover"
           />
 
-          {/* Interactive Card Content */}
-          <View style={s.cardContent}>
-            <View>
-              {/* HELLO USER! styling prefix */}
-              <Animated.View style={[greetStyle, { alignItems: 'center' }]}>
-                <Text style={s.prefixText}>
-                  {greeting.toUpperCase()}!
-                </Text>
-                <Text style={s.greetingText}>
-                  {displayName ? `¿Cómo te ayudamos hoy, ${displayName}?` : '¿Cómo te ayudamos hoy?'}
-                </Text>
-              </Animated.View>
+          <View style={s.heroContent}>
+            <StaggerItem index={0} delayStep={110} translateYStart={22}>
+              <Text variant="overline" color="muted" uppercase align="center">
+                {greeting}
+              </Text>
+              <Text variant="title" size="2xl" align="center" style={s.heroTitle}>
+                {displayName ? `¿A dónde vamos, ${displayName}?` : '¿A dónde vamos hoy?'}
+              </Text>
+            </StaggerItem>
 
-              <Animated.View style={subtitleStyle}>
-                <Text style={s.subtitleText}>
-                  ¿A dónde te diriges hoy?
-                </Text>
-              </Animated.View>
-            </View>
+            <StaggerItem index={1} delayStep={110} translateYStart={22} style={s.heroSubtitleSlot}>
+              <Text variant="secondary" color="muted" align="center">
+                Compra tu boleto o envía un paquete en menos de un minuto.
+              </Text>
+            </StaggerItem>
 
-            {/* Search Form overlaying the gradient waves at the bottom */}
-            <Animated.View style={[cardStyle, s.formWrapper]}>
+            <StaggerItem index={2} delayStep={110} translateYStart={28}>
               <SearchForm
-                showModeToggle={true}
+                showModeToggle
                 onSubmit={(data) => {
                   if (data.mode === 'boletos') {
                     router.push({
-                      pathname: '/boletos/resultados',
+                      pathname: '/boletos/buscar',
                       params: {
                         origen: data.origen.ciudad,
                         destino: data.destino.ciudad,
@@ -181,144 +156,199 @@ export default function HomeScreen() {
                   }
                 }}
               />
-            </Animated.View>
+            </StaggerItem>
           </View>
         </View>
-      </View>
-    </SafeAreaView>
+
+        {/* ── Actividad en curso ──────────────────────────────────────────── */}
+        <StaggerItem index={3} delayStep={110} style={s.activity}>
+          <Text variant="overline" color="muted" uppercase style={s.activityLabel}>
+            Tu actividad
+          </Text>
+          <View style={s.activityRow}>
+            <ActivityTile
+              icon={Ticket}
+              count={boletosActivos}
+              label="Boletos activos"
+              empty="Sin viajes en curso"
+              tint={Colors.accent}
+              tintBackground={Colors.accentLight}
+              onPress={() => router.push('/(tabs)/boletos')}
+            />
+            <ActivityTile
+              icon={Package}
+              count={encomiendasActivas}
+              label="Paquetes en camino"
+              empty="Sin envíos activos"
+              tint={Colors.secondary}
+              tintBackground={Colors.secondaryLight}
+              onPress={() => router.push('/(tabs)/encomiendas')}
+            />
+          </View>
+        </StaggerItem>
+      </ScrollView>
+    </Screen>
   );
 }
 
+// ─── Activity tile ───────────────────────────────────────────────────────────
+
+/**
+ * Compact entry point to an in-flight list. Home used to be a search form and
+ * nothing else — there was no way to reach an active trip without switching
+ * tabs first.
+ */
+function ActivityTile({
+  icon: Icon,
+  count,
+  label,
+  empty,
+  tint,
+  tintBackground,
+  onPress,
+}: {
+  icon: React.ComponentType<{ size?: number; color?: string; weight?: 'fill' | 'bold' }>;
+  count: number;
+  label: string;
+  empty: string;
+  tint: string;
+  tintBackground: string;
+  onPress: () => void;
+}) {
+  const hasItems = count > 0;
+
+  return (
+    <PressableScale
+      onPress={onPress}
+      haptic
+      hapticType="selection"
+      scaleValue={Motion.press.card}
+      style={s.tile}
+      accessibilityRole="button"
+      accessibilityLabel={hasItems ? `${count} ${label}` : `${label}. ${empty}`}
+    >
+      <View style={s.tileTop}>
+        <View style={[s.tileIcon, { backgroundColor: tintBackground }]}>
+          <Icon size={Sizes.icon.md} color={tint} weight="fill" />
+        </View>
+        <CaretRight size={Sizes.icon.sm} color={Colors.mutedForeground} weight="bold" />
+      </View>
+
+      {hasItems ? (
+        <Text variant="title" size="3xl" color={tint} compact style={s.tileCount}>
+          {String(count)}
+        </Text>
+      ) : (
+        <Text variant="title" size="3xl" color={Colors.border} compact style={s.tileCount}>
+          —
+        </Text>
+      )}
+
+      <Text variant="caption" color="muted" numberOfLines={1}>
+        {hasItems ? label : empty}
+      </Text>
+    </PressableScale>
+  );
+}
+
+const HERO_SPACER = Spacing['5xl'] * 2;
+
 const s = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: Colors.background,
-  },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: Spacing.xl,
+    paddingHorizontal: Layout.screenPaddingCompact + Spacing.xs,
     paddingTop: Spacing.sm,
     paddingBottom: Spacing.xs,
     zIndex: 10,
   },
-  logoContainer: {
+  brand: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.sm,
   },
   logoBadge: {
-    width: 36,
-    height: 36,
+    width: Sizes.iconBox.md,
+    height: Sizes.iconBox.md,
     borderRadius: Radius.sm,
     backgroundColor: Colors.primaryLight,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  logoText: {
-    fontSize: 14,
-    fontFamily: Typography.family,
-    fontWeight: Typography.weights.heavy,
-    color: Colors.primary,
-    letterSpacing: -0.2,
-  },
-  brandText: {
-    fontSize: 18,
-    fontFamily: Typography.family,
-    fontWeight: Typography.weights.heavy,
-    color: Colors.foreground,
-    letterSpacing: -0.5,
-  },
   headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.sm,
+    gap: Spacing.xs,
   },
-  iconBtn: {
-    width: 44,
-    height: 44,
-    backgroundColor: 'transparent',
-    borderRadius: Radius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative' as const,
-  },
-  badge: {
-    position: 'absolute' as const,
-    top: -2,
-    right: -2,
-    backgroundColor: Colors.secondary,
-    minWidth: 18,
-    height: 18,
-    borderRadius: Radius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 3,
-  },
-  badgeText: {
-    fontSize: 9,
-    color: Colors.white,
-    fontFamily: Typography.family,
-    fontWeight: Typography.weights.heavy,
-  },
-  body: {
-    flex: 1,
-    paddingHorizontal: Spacing.lg,
+
+  scroll: {
+    paddingHorizontal: Layout.screenPaddingCompact,
     paddingTop: Spacing.md,
-    paddingBottom: Spacing['3xl'],
-    justifyContent: 'flex-start',
-    zIndex: 5,
+    paddingBottom: Layout.scrollBottomInset,
   },
-  mainCard: {
+
+  hero: {
     backgroundColor: Colors.surface,
     borderRadius: Radius['2xl'],
     overflow: 'hidden',
-    position: 'relative' as const,
+    ...Shadows.card,
   },
-  waveImage: {
-    position: 'absolute' as const,
+  heroWave: {
+    position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
     width: '100%',
     height: 300,
-    zIndex: 1,
   },
-  cardContent: {
+  heroContent: {
     paddingHorizontal: Spacing.xl,
     paddingTop: Spacing['3xl'],
     paddingBottom: Spacing.xl,
-    gap: 100,
-    zIndex: 2,
+    // Pushes the search form down so it sits over the crest of the wave.
+    gap: HERO_SPACER,
   },
-  prefixText: {
-    fontFamily: Typography.family,
-    fontWeight: Typography.weights.bold,
-    fontSize: Typography.sizes.xs,
-    color: Colors.mutedForeground,
-    letterSpacing: 1.5,
-    textAlign: 'center' as const,
-    textTransform: 'uppercase' as const,
-    marginBottom: Spacing.sm,
+  heroTitle: {
+    marginTop: Spacing.sm,
   },
-  greetingText: {
-    fontFamily: Typography.family,
-    fontWeight: Typography.weights.bold,
-    fontSize: Typography.sizes['2xl'],
-    color: Colors.foreground,
-    textAlign: 'center' as const,
-    letterSpacing: -0.5,
-    lineHeight: 32,
+  /** Sits directly under the title, so it cancels the hero's large gap. */
+  heroSubtitleSlot: {
+    marginTop: -HERO_SPACER + Spacing.sm,
+    paddingHorizontal: Spacing.lg,
   },
-  subtitleText: {
-    fontFamily: Typography.family,
-    fontSize: Typography.sizes.base,
-    color: Colors.mutedForeground,
-    textAlign: 'center' as const,
-    marginTop: Spacing.xs,
+
+  activity: {
+    marginTop: Spacing['2xl'],
   },
-  formWrapper: {
-    width: '100%',
+  activityLabel: {
+    marginBottom: Spacing.md,
+    marginLeft: Spacing.xs,
+  },
+  activityRow: {
+    flexDirection: 'row',
+    gap: Spacing.md,
+  },
+  tile: {
+    flex: 1,
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.lg,
+    padding: Spacing.lg,
+  },
+  tileTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: Spacing.md,
+  },
+  tileIcon: {
+    width: Sizes.iconBox.sm,
+    height: Sizes.iconBox.sm,
+    borderRadius: Radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tileCount: {
+    marginBottom: Spacing.xs,
   },
 });
