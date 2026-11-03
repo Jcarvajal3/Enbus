@@ -38,6 +38,8 @@ Los CRON jobs descritos en este spec y en `Edge_Functions_Spec.md` se implementa
 | `auto_devolver_encomienda` | `0 0 * * *` (diario a medianoche) | `UPDATE encomiendas SET estado = 'DEVUELTA' WHERE estado = 'EN_OFICINA_DESTINO' AND updated_at < now() - interval '7 days';` + INSERT en `pending_notifications` |
 | `alerta_amarilla_72h` | `0 * * * *` (cada hora) | `INSERT INTO incidencias (...) SELECT ... FROM encomiendas WHERE estado = 'EN_TRANSITO' AND updated_at < now() - interval '72 hours' AND id NOT IN (SELECT encomienda_id FROM incidencias WHERE tipo = 'ALERTA_AMARILLA');` |
 
+> **Fase 4** (`20260721000002` y `03`): `activar_tarifas_programadas` (`*/5 * * * *`, `SELECT public.fn_activar_tarifas_programadas()`: activa la tarifa programada cuya `vigente_desde` ya llegó) y `limpiar_limites_uso` (`17 4 * * *`, `SELECT public.fn_limpiar_limites_uso()`: borra los contadores de `limites_uso` de más de 2 días). Ambos se reprograman al re-ejecutar la migración (`cron.unschedule` + `cron.schedule`).
+
 > **Nota**: El job `auto_devolver_encomienda` además debe disparar el trigger `log_estado_encomienda` para registrar el historial. Como es un UPDATE directo, el trigger existente en `encomiendas` lo captura automáticamente. Para las notificaciones Push que requiere, el job inserta un registro en una cola `pending_notifications` que una Edge Function procesa periódicamente, o se usa `pg_net` para llamar al endpoint de notificación.
 ## 2. Enums de Base de Datos
 
@@ -142,10 +144,11 @@ CREATE TYPE estado_viaje AS ENUM (
 | `notif_encomiendas` | BOOLEAN | NO | `true` | Preferencia de notificaciones |
 | `notif_boletos` | BOOLEAN | NO | `true` | Preferencia de notificaciones |
 | `notif_recordatorios` | BOOLEAN | NO | `true` | Preferencia de notificaciones |
+| `eliminada_at` | TIMESTAMPTZ | SÍ | NULL | Baja de la cuenta (`fn_eliminar_mi_cuenta`). El perfil queda anonimizado ("Cuenta eliminada", `telefono`/`cedula_rif` = `PENDIENTE-BAJA-<id>`, sin token push ni avisos) y la app cierra la sesión. Solo lo escriben la RPC y el Super Admin (trigger `aa_proteger_perfil`). Fase 4 |
 | `created_at` | TIMESTAMPTZ | NO | `now()` | — |
 | `updated_at` | TIMESTAMPTZ | NO | `now()` | Auto-actualizado por trigger |
 
-**Índices**: `telefono` (unique), `cedula_rif` (unique), `cooperativa_id`
+**Índices**: `telefono` (unique), `cedula_rif` (unique), `cooperativa_id`; desde la fase 4 también `uq_profiles_cedula_normalizada` (unique `normalizar_cedula(cedula_rif)`) y `uq_profiles_telefono_normalizado` (unique `normalizar_telefono(telefono)`), parciales (`WHERE … IS NOT NULL`, así los marcadores `PENDIENTE…` no chocan). La migración `20260721000003` los crea **solo si los datos lo permiten** (si no, deja un NOTICE con la consulta de duplicados) y antes pasa los perfiles antiguos a la forma única `V-12345678` / `0414-1234567` (`_cedula_para_guardar`, `_telefono_para_guardar`) cuando no chocan con otro perfil.
 
 ---
 
@@ -256,6 +259,8 @@ CREATE TYPE estado_viaje AS ENUM (
 
 **Índices**: `ruta_id`, `cooperativa_id`, `fecha_hora_salida`, `estado`
 
+**Edición (fase 4)**: `fn_editar_viaje` (solo `admin_cooperativa`, solo `PROGRAMADO`) cambia unidad, chofer, hora de salida (recalcula `fecha_hora_llegada_est` con la duración de la ruta) y asientos (no por debajo del mayor asiento ocupado); `fn_completar_viaje` marca la llegada (`EN_CURSO → COMPLETADO`). Ver `State_Machines_Spec.md` §4.
+
 ---
 
 ### 3.7 `encomiendas`
@@ -286,6 +291,8 @@ CREATE TYPE estado_viaje AS ENUM (
 | `pin_retiro` | CHAR(4) | SÍ | NULL | 4 dígitos numéricos. **Unique**. Generado al estado EN_RECEPCION. Inmutable (no se regenera). |
 | `intentos_pin` | INTEGER | NO | `0` | Intentos fallidos de PIN |
 | `pin_bloqueado` | BOOLEAN | NO | `false` | True si intentos >= 10 |
+| `pin_validado_at` | TIMESTAMPTZ | SÍ | NULL | Cuándo se validó el PIN con `fn_validar_pin_retiro`. La validación dura **15 minutos** y la consume `fn_entregar_encomienda`; un intento fallido o `fn_desbloquear_pin` la borran. Fase 4 |
+| `pin_validado_por` | UUID | SÍ | NULL | Empleado que validó el PIN (solo él puede entregar con esa validación). **Sin FK** (ver nota en §3.2). No lo lee nadie fuera de SQL. Fase 4 |
 | `qr_data` | TEXT | SÍ | NULL | Datos codificados en el QR |
 | `foto_evidencia_url` | TEXT | SÍ | NULL | *Comentario SQL*: "Foto que toma la taquilla. Ruta del objeto en el bucket privado fotos-encomiendas (se muestra con URL firmada). Filas antiguas pueden tener la URL completa." |
 | `foto_cliente_path` | TEXT | SÍ | NULL | *Comentario SQL*: "Foto que subió el remitente desde la app (ruta del objeto en fotos-encomiendas, carpeta = id del usuario)." Fase 3 |
@@ -303,11 +310,13 @@ CREATE TYPE estado_viaje AS ENUM (
 | `entrega_sin_pin_motivo` | TEXT | SÍ | NULL | Motivo de la entrega sin PIN (solo `admin_cooperativa`, ≥ 10 caracteres). Fase 3 |
 | `motivo_cancelacion` | TEXT | SÍ | NULL | Si fue cancelada ("No recibida en taquilla: …" si la rechazó la taquilla) |
 | `created_at` | TIMESTAMPTZ | NO | `now()` | — |
-| `updated_at` | TIMESTAMPTZ | NO | `now()` | Auto-actualizado (`encomiendas_updated_at_fn`); **no** lo mueven el vínculo del destinatario, las sucursales, `intentos_pin`, `pin_bloqueado` ni las fotos |
+| `updated_at` | TIMESTAMPTZ | NO | `now()` | Auto-actualizado (`encomiendas_updated_at_fn`); **no** lo mueven el vínculo del destinatario, las sucursales, `intentos_pin`, `pin_bloqueado`, la validación del PIN (`pin_validado_*`, fase 4) ni las fotos |
 
 **Índices**: `tracking_id` (unique), `sender_id`, `receiver_user_id`, `receiver_telefono`, `cooperativa_id`, `viaje_id`, `estado`, `created_at DESC`, `uq_encomiendas_idempotencia` (unique `(sender_id, idempotency_key) WHERE idempotency_key IS NOT NULL`, fase 3)
 
 **Clientes** (trigger `aa_proteger_encomiendas_cliente`): al crear desde la app el servidor fuerza `origen_registro = 'APP'`, mueve una foto enviada en `foto_evidencia_url` a `foto_cliente_path` y limpia `remitente_*`, `foto_omitida_motivo` y las columnas de entrega.
+
+**Entrega** (trigger `aa_proteger_entrega_encomienda` → `proteger_entrega_encomienda_fn`, fase 4): con el rol `authenticated`/`anon` (escrituras directas de la API) no se puede pasar una encomienda a `ENTREGADA` o `DEVUELTA` ni cambiar `pin_retiro`, `intentos_pin`, `pin_bloqueado`, `pin_validado_*`, `entregada_*`, `retiro_*` o `entrega_sin_pin_motivo` (`42501` `EB_OPERACION_NO_PERMITIDA`). Solo las RPC (`SECURITY DEFINER`), los cron y el `service_role`. Corre antes que `generar_pin_retiro` (prefijo `aa_`).
 
 ---
 
@@ -412,8 +421,13 @@ CREATE TYPE estado_viaje AS ENUM (
 | `activa` | BOOLEAN | NO | `true` | Solo una tarifa activa a la vez |
 | `creada_por` | UUID FK | NO | — | → `profiles.id` (super_admin) |
 | `created_at` | TIMESTAMPTZ | NO | `now()` | — |
+| `publicada_at` | TIMESTAMPTZ | SÍ | NULL | Cuándo la publicó `fn_publicar_tarifa`. Fase 4 |
+| `reemplazada_at` | TIMESTAMPTZ | SÍ | NULL | Cuándo dejó de ser vigente o programada (otra la reemplazó o se canceló). Fase 4 |
+| `nota` | TEXT | SÍ | NULL | Comentario de la publicación (≤ 300). Fase 4 |
 
 **Constraint**: Solo puede haber una tarifa con `activa = true`.
+
+**Estados (fase 4, sin enum)**: **vigente** `activa = true`; **programada** `activa = false AND publicada_at IS NOT NULL AND reemplazada_at IS NULL` (con `vigente_desde` futura; la activa el cron `activar_tarifas_programadas`); **histórica** `reemplazada_at IS NOT NULL`. Se publica solo con `fn_publicar_tarifa` (una transacción; fecha ≤ ahora + 1 min → vigente al instante) y se cancela con `fn_cancelar_tarifa_programada`. Una programación nueva reemplaza a la anterior. La migración marcó `publicada_at` en la vigente y `reemplazada_at` en el histórico anterior.
 
 ---
 
@@ -442,6 +456,7 @@ CREATE TYPE estado_viaje AS ENUM (
 |---|---|---|---|---|
 | `id` | UUID PK | NO | `gen_random_uuid()` | — |
 | `usuario_id` | UUID FK | NO | — | → `profiles.id` ON DELETE CASCADE |
+| `tipo` | TEXT | SÍ | NULL | Tipo del aviso para elegir icono y tono en la app (`BOLETO_CONFIRMADO`, `PAGO_APROBADO`, `PAGO_RECHAZADO`, `PAGO_EN_VERIFICACION`, `RESERVA_SIN_PAGAR`, `VIAJE_CANCELADO`, `VIAJE_REPROGRAMADO`, `REEMBOLSO_ENVIADO`, `ENCOMIENDA_PARA_TI`, `ENCOMIENDA_RECHAZADA`, `DEVOLUCION_AUTOMATICA`…). Lo llenan `_notificar_usuario` y `enviar-push`; NULL en filas antiguas (la app usa entonces `recurso_tipo`). Fase 4 |
 | `titulo` | TEXT | NO | — | — |
 | `mensaje` | TEXT | NO | — | — |
 | `leida` | BOOLEAN | NO | `false` | — |
@@ -468,6 +483,9 @@ CREATE TYPE estado_viaje AS ENUM (
 | `pagado` | BOOLEAN | NO | `false` | Si la cooperativa pagó |
 | `pagado_at` | TIMESTAMPTZ | SÍ | NULL | Cuándo pagó |
 | `created_at` | TIMESTAMPTZ | NO | `now()` | — |
+| `pago_referencia` | TEXT | SÍ | NULL | Referencia del pago de la comisión. Fase 4 |
+| `pago_metodo` | TEXT | SÍ | NULL | `CHECK (pago_metodo IS NULL OR pago_metodo IN ('PAGO_MOVIL', 'TRANSFERENCIA_BANCARIA', 'ZELLE', 'EFECTIVO'))` (`chk_comisiones_pago_metodo`). Fase 4 |
+| `pago_registrado_por` | UUID | SÍ | NULL | Super Admin que registró el pago. **Sin FK** (embeds). Fase 4 |
 
 **Índices**: `cooperativa_id`, `pagado`, `periodo_inicio`
 
@@ -502,6 +520,33 @@ Los usuarios crean reportes **solo** con `fn_reportar_problema(p_categoria, p_de
 |---|---|---|---|---|
 | `revocada_at` | TIMESTAMPTZ | SÍ | NULL | Cuándo la revocó el administrador. Una invitación revocada no es válida aunque no haya vencido. Fase 3 |
 
+---
+
+### 3.18 `bajas_cuenta` (fase 4)
+
+Solicitudes de baja de cuenta (requisito de Google Play). RLS: solo el Super Admin lee ("Super admin ve bajas"); escribe `fn_eliminar_mi_cuenta` y la edge function `eliminar-cuenta`.
+
+| Columna | Tipo | Nullable | Default | Descripción |
+|---|---|---|---|---|
+| `id` | UUID PK | NO | `gen_random_uuid()` | — |
+| `usuario_id` | UUID | NO | — | Unique. **Sin FK**: el perfil se anonimiza, no se borra |
+| `email` | TEXT | SÍ | NULL | Correo del JWT al pedir la baja |
+| `motivo` | TEXT | SÍ | NULL | Opcional (≤ 300) |
+| `solicitada_at` | TIMESTAMPTZ | NO | `now()` | — |
+| `auth_eliminada_at` | TIMESTAMPTZ | SÍ | NULL | Cuándo se borró la identidad de Auth (borrado suave). NULL = "Bajas por completar" en el admin |
+
+---
+
+### 3.19 `limites_uso` (fase 4)
+
+Contadores de ventana fija para limitar acciones públicas (`verificarCorreoRegistro`, `registrarCooperativa`, `reenviarInvitacion`). RLS activada **sin políticas** y sin permisos para `anon`/`authenticated`: solo `service_role` mediante `fn_consumir_limite`. El cron `limpiar_limites_uso` borra las filas de más de 2 días.
+
+| Columna | Tipo | Nullable | Default | Descripción |
+|---|---|---|---|---|
+| `clave` | TEXT PK | NO | — | Por ejemplo `correo:<hash de la IP>`, `invitacion:<rif>` (≤ 200) |
+| `ventana_inicio` | TIMESTAMPTZ | NO | `now()` | Inicio de la ventana actual |
+| `conteo` | INTEGER | NO | `0` | Usos en la ventana |
+
 ## 4. Triggers Principales
 
 | Trigger | Tabla | Evento | Acción |
@@ -510,6 +555,8 @@ Los usuarios crean reportes **solo** con `fn_reportar_problema(p_categoria, p_de
 | `validar_transicion_encomienda` | `encomiendas` | BEFORE UPDATE on `estado` | Valida que la transición `OLD.estado → NEW.estado` esté en la lista de transiciones permitidas (ver `State_Machines_Spec.md §1.3`). Si la transición no es válida, lanza excepción y rechaza el UPDATE. |
 | `validar_transicion_boleto` | `boletos` | BEFORE UPDATE on `estado` | Valida que la transición `OLD.estado → NEW.estado` esté en la lista de transiciones permitidas (ver `State_Machines_Spec.md §2.4`). Si la transición no es válida, lanza excepción y rechaza el UPDATE. |
 | `on_auth_user_created` | `auth.users` | AFTER INSERT | Ejecuta `handle_new_user()`: crea registro en `profiles` usando `raw_user_meta_data` (nombre, teléfono, cédula; marcador `PENDIENTE-<id>` si faltan o están repetidos). `SECURITY DEFINER`. Versionado en `20260720000002`. Ver §4.1. |
+| `aa_proteger_entrega_encomienda` | `encomiendas` | BEFORE UPDATE | `proteger_entrega_encomienda_fn`: la API no entrega ni devuelve encomiendas ni toca el PIN y los datos de retiro (`EB_OPERACION_NO_PERMITIDA`). Fase 4 |
+| `aa_proteger_perfil` | `profiles` | BEFORE UPDATE | `proteger_perfil_fn`: el usuario no cambia su `role`, `cooperativa_id`, `sucursal_id` ni (fase 4) `eliminada_at` (`EB_SIN_PERMISO`) |
 | `aa_proteger_cooperativa` | `cooperativas` | BEFORE UPDATE | `proteger_cooperativa_fn`: estado, comisión y calificación solo los cambia el Super Admin; nombre y RIF solo en `PENDIENTE`/`RECHAZADA` (`EB_SIN_PERMISO`). Fase 3 |
 | `log_estado_encomienda` | `encomiendas` | AFTER UPDATE on `estado` | Inserta en `encomienda_estado_historial` (`SECURITY DEFINER`) |
 | `generar_tracking_id` | `encomiendas` | BEFORE INSERT | Genera `EB-YYMMDD-XXXXX` auto |
@@ -558,6 +605,7 @@ END $$;
 - `ON CONFLICT (id) DO NOTHING`: compatible con el onboarding de empleados (invitaciones), que crea o ajusta el perfil por su cuenta.
 - La función usa `SECURITY DEFINER` para poder escribir en `profiles` sin depender de RLS.
 - Solo aplica `role = 'user'`. Los roles `taquillero`, `admin_cooperativa` y `super_admin` se crean mediante funciones de invitación independientes que asignan el rol y `cooperativa_id` correctos.
+- **Fase 4** (`20260721000003`): guarda el teléfono y la cédula en la forma única (`_telefono_para_guardar`: `+58 416 7778899` → `0416-7778899`; `_cedula_para_guardar`: `v-9.876.543` → `V-9876543`) y compara con los perfiles existentes **por valor normalizado** (`normalizar_telefono`, `normalizar_cedula`): `V12345678` y `V-12345678` ya chocan y dejan el marcador. Una cédula o un teléfono liberados por una baja (`PENDIENTE-BAJA-…`) se pueden reutilizar.
 
 **Trigger** (la migración lo crea **solo si** no existe ya un trigger en `auth.users` que llame a `handle_new_user()`):
 ```sql
@@ -602,6 +650,9 @@ WHERE NOT EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = u.id);
 - Foto del remitente (app): `<id del usuario>/<archivo>` → `encomiendas.foto_cliente_path` (políticas "Usuario sube fotos de sus envios" y "Usuario reemplaza fotos de sus envios", ver `RLS_Policies_Spec.md`).
 - Foto de la taquilla (panel): `<id de la encomienda>/<ts>.jpg` → `encomiendas.foto_evidencia_url`; si se omite, `foto_omitida_motivo`.
 - La migración `20260720000002` movió a `foto_cliente_path` las fotos del remitente que la app anterior guardaba en `foto_evidencia_url`.
+- Guía PDF (fase 4, lleva el PIN de retiro): `guias/<cooperativa_id>/<tracking>_guia_<ts>.pdf`, subida por `generar-guia-pdf` con el `service_role` y entregada con URL firmada de 1 hora. Solo la lee el personal de esa cooperativa y el Super Admin (política restrictiva, `20260721000004`).
+
+**`logos-cooperativas` (fase 4)**: además del Super Admin, el `admin_cooperativa` sube y reemplaza el logo de su cooperativa en `<cooperativa_id>/logo.<ext>` (upsert).
 
 ## 7. RPC de la fase 3
 
@@ -615,3 +666,18 @@ Contratos completos en `Audits/fase3_spec.md` §3.2. Todas son `SECURITY DEFINER
 | `20260720000005_fase3_rpc_cuenta_soporte.sql` | `fn_reportar_problema`, `fn_cambiar_estado_cooperativa`, `fn_solicitar_revision_cooperativa`, `fn_checklist_cooperativa`, `fn_email_registrado` (solo `service_role`) |
 
 Las funciones internas (`_…`) no tienen `EXECUTE` para `anon` ni `authenticated`.
+
+## 8. RPC de la fase 4
+
+Contratos completos en `Audits/fase4_spec.md` §3.2. Mismo formato de errores; nuevos: `EB_PIN_NO_VALIDADO` (`{campo:'pin'}`) y `EB_CUENTA_CON_ACTIVIDAD` (`{boletos, pagos, encomiendas_enviadas, encomiendas_por_recibir, reembolsos}`).
+
+| Migración | RPC |
+|---|---|
+| `20260721000001_fase4_seguridad_entrega.sql` | `fn_validar_pin_retiro`, `fn_entregar_encomienda`, `fn_desbloquear_pin` (redefinidas, mismas firmas: validación de 15 minutos, ver `State_Machines_Spec.md` §1.5) |
+| `20260721000002_fase4_operacion.sql` | `fn_bandeja_cooperativa`, `fn_editar_viaje`, `fn_completar_viaje`, `fn_publicar_tarifa`, `fn_cancelar_tarifa_programada`, `fn_activar_tarifas_programadas` (cron), `fn_remitente_de_encomienda` (añade `origen_registro`; en altas de taquilla devuelve `remitente_*`), `fn_rutas_populares` (solo cooperativas `ACTIVA`); `_notificar_usuario` guarda `tipo` |
+| `20260721000003_fase4_cuenta_limites.sql` | `fn_consumir_limite(p_clave, p_maximo, p_ventana_segundos)` → `{permitido, restantes, reintentar_en_segundos}` y `fn_limpiar_limites_uso` (solo `service_role`), `fn_eliminar_mi_cuenta(p_motivo)` → `{eliminada_at, ya_procesado?}`; internas `_cedula_para_guardar`, `_telefono_para_guardar`; `handle_new_user` y `proteger_perfil_fn` redefinidas |
+| `20260721000004_fase4_guias_privadas.sql` | Sin RPC: política restrictiva de Storage para `fotos-encomiendas/guias/` |
+
+`fn_bandeja_cooperativa()` (staff) devuelve en una llamada `{pagos_por_verificar, reembolsos_por_devolver, reembolsos_usd, encomiendas_por_vencer, dias_minimos_para_devolucion, encomiendas_por_despachar, encomiendas_en_camino, proxima_salida: {…} | null, generado_at}`, filtrado por la sucursal del empleado si la tiene.
+
+`EB_DEMASIADOS_INTENTOS` no sale de SQL: lo devuelven las server actions cuando `fn_consumir_limite` responde `permitido: false`.

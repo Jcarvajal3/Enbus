@@ -485,3 +485,10 @@ enabled = true
 verify_jwt = false
 import_map = "./functions/actualizar-tasa-bcv/deno.json"
 entrypoint = "./functions/actualizar-tasa-bcv/index.ts"
+
+[functions.eliminar-cuenta]
+enabled = true
+# La llama la app con el JWT del usuario después de fn_eliminar_mi_cuenta.
+verify_jwt = true
+import_map = "./functions/eliminar-cuenta/deno.json"
+entrypoint = "./functions/eliminar-cuenta/index.ts"

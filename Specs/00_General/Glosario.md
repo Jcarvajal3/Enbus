@@ -18,7 +18,7 @@ Fuente única de los términos que ven pasajeros y operadores en la app, el pane
 | **Viaje / Salida** | Un bus de una ruta en una fecha y hora. "Viaje" en general; "Salida" cuando importa la hora ("Salidas de hoy"). | — |
 | **Encomienda** | Paquete enviado entre oficinas de una cooperativa. | No "paquete" en títulos ("Mis encomiendas", no "Mis paquetes"). |
 | **Código de seguimiento** | Identificador de la encomienda: `EB-AAMMDD-NNNNN`. Es lo que codifica el QR y lo que se rastrea. | No "tracking" ni "guía" ante el pasajero ("guía" solo en el ticket impreso de la taquilla). |
-| **PIN de retiro** | 4 dígitos que se generan cuando la taquilla recibe la encomienda; quien recibe lo presenta con su cédula para retirarla. | Se bloquea tras 10 intentos fallidos. |
+| **PIN de retiro** | 4 dígitos que se generan cuando la taquilla recibe la encomienda; quien recibe lo presenta con su cédula para retirarla. Viene en la guía impresa ("dáselo solo a quien recibe"). | Se bloquea tras 10 intentos fallidos. Validarlo deja 15 minutos para confirmar la entrega; si vence: "Vuelve a validar el PIN de retiro: la validación vence a los 15 minutos." |
 | **Paga al enviar** | Modalidad `ORIGEN`. Largo: "Paga quien envía, al entregar el paquete". | — |
 | **Paga al retirar** | Modalidad `DESTINO`. Largo: "Paga quien recibe, al retirarlo". | — |
 | **Taquilla** | Oficina o mostrador de la cooperativa donde se venden boletos y se reciben y entregan encomiendas. | "Taquilla de boletos", "Taquilla de encomiendas". |
@@ -30,6 +30,10 @@ Fuente única de los términos que ven pasajeros y operadores en la app, el pane
 | **Pagado · Pendiente** | **Estado** del cobro. | No mezclar acción y estado ("Pagar" no es un estado). |
 | **Reembolso** | Devolución del dinero de un boleto cancelado: 95 % si cancela el pasajero, 100 % si la cooperativa cancela el viaje. La cooperativa devuelve el dinero y lo registra en "Reembolsos". | Pasajero: "Reembolso pendiente" / "Reembolsado". Operador: "Por devolver" / "Devuelto". |
 | **Apartar** | Reservar un asiento sin pagar (30 minutos, o hasta que la cooperativa verifique el pago). | "Apartar y pagar en taquilla". |
+| **Requiere tu atención** | Bandeja del Resumen del panel (`fn_bandeja_cooperativa`): pagos por verificar, reembolsos por devolver, encomiendas por vencer en oficina, listas para despachar, en camino y la próxima salida. | Título de la tarjeta del Resumen. |
+| **Marcar llegada** | Acción del panel que cierra un viaje en ruta (`EN_CURSO → COMPLETADO`). | Botón en "Viajes". |
+| **Tarifa vigente · programada** | Tarifa de encomiendas en uso · publicada con fecha futura, que entra en vigor sola a esa hora. | Panel de EnBus › "Tarifas". |
+| **Eliminar cuenta** | Baja de la cuenta del pasajero desde la app (Perfil) o la web (`/eliminar-cuenta`). Se pide que no queden boletos por usar, pagos en verificación, encomiendas en curso ni reembolsos pendientes. | El perfil queda como "Cuenta eliminada"; los boletos y encomiendas se conservan para la cooperativa. |
 | **Tasa BCV** | Bolívares por 1 USD publicada por el BCV para el día. Los precios de referencia están en USD y se cobran en Bs a la tasa BCV del día. | "≈ USD 12,40 · BCV 02/10". |
 
 Métodos de pago: **Pago Móvil** · **Transferencia** · **Zelle** · **Efectivo**.
@@ -65,6 +69,7 @@ Tonos: `pendiente`, `info`, `exito`, `peligro`, `neutro`, `terminado` (los color
 | cooperativa · PENDIENTE / RECHAZADA / ACTIVA / SUSPENDIDA / DESACTIVADA | — | En revisión / Rechazada / Activa / Suspendida / Desactivada | pendiente / peligro / exito / pendiente / neutro |
 | incidencia · ABIERTA / EN_PROCESO / RESUELTA | Recibido / En revisión / Resuelto | Abierta / En proceso / Resuelta | peligro / pendiente / exito |
 | ciclo · pagado=false / true | — | Pendiente / Pagado el dd/mm | pendiente / exito |
+| tarifa · vigente / programada / histórica | — | Vigente / Programada / Anterior | exito / info / neutro |
 
 Los subestados del boleto (`RESERVA_SIN_PAGAR`, `PAGO_EN_VERIFICACION`, `PAGO_RECHAZADO`) salen de `estado_ui_boleto(estado, pago.estado_verificacion)`; ver `State_Machines_Spec.md` §2.2. El reembolso no es un estado del enum: es un boleto `CANCELADO` con `monto_reembolso > 0` y `reembolso_procesado` falso o verdadero.
 

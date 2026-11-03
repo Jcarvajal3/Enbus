@@ -15,6 +15,8 @@ Definir qué tablas emiten eventos en tiempo real, qué canales se suscriben y q
 | `notificaciones_usuario` | INSERT | `usuario_id = user.id` | App Móvil: badge de notificaciones en header |
 | `pagos` | INSERT | `cooperativa_id = user.cooperativa_id` | Panel Cooperativas: alerta de nuevo pago pendiente de verificar |
 
+**Publicación (fase 4)**: la migración `20260721000002` añade a `supabase_realtime` las tablas `boletos`, `encomiendas`, `viajes`, `pagos` y `notificaciones_usuario` si faltan (antes `viajes` y `pagos` dependían de un paso manual: los asientos y "Pagos por verificar (n)" no se movían solos). Si la publicación no existe deja un NOTICE ("actívala en Database > Publications y vuelve a ejecutar este archivo"); si es `FOR ALL TABLES` no toca nada. Realtime respeta la RLS de cada tabla, así que cada cliente solo recibe las filas que puede leer.
+
 ## 3. Implementación por Plataforma
 
 ### 3.1 App Móvil (React Native)

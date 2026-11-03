@@ -1,6 +1,7 @@
-import { useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Stack, useRouter, useSegments } from 'expo-router';
+import * as Notifications from 'expo-notifications';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { useFonts } from 'expo-font';
@@ -12,11 +13,13 @@ import Animated, {
   withRepeat,
   withSequence,
   withTiming,
+  useReducedMotion,
 } from 'react-native-reanimated';
 import { AuthProvider, useAuth } from '@/src/contexts/AuthContext';
 import { ErrorBoundary } from '@/src/components/ErrorBoundary';
 import { ToastProvider, useToast } from '@/src/components/Toast';
 import { usePushNotifications } from '@/src/hooks/usePushNotifications';
+import { abrirRecurso } from '@/src/utils/notificaciones';
 import { Text } from '@/src/components/ui';
 import { Colors, Motion, Radius, Sizes, Spacing } from '@/src/theme';
 
@@ -24,9 +27,12 @@ SplashScreen.preventAutoHideAsync();
 
 /** Branded splash shown while the session is being restored. */
 function LoadingScreen() {
-  const pulse = useSharedValue(0);
+  const reduceMotion = useReducedMotion();
+  const pulse = useSharedValue(reduceMotion ? 1 : 0);
 
   useEffect(() => {
+    // Con "reducir movimiento" el logo queda quieto.
+    if (reduceMotion) return;
     pulse.value = withRepeat(
       withSequence(
         withTiming(1, { duration: Motion.duration.ambient, easing: Motion.easing.inOut }),
@@ -35,7 +41,7 @@ function LoadingScreen() {
       -1,
       false
     );
-  }, [pulse]);
+  }, [pulse, reduceMotion]);
 
   const animStyle = useAnimatedStyle(() => ({
     opacity: 0.6 + pulse.value * 0.4,
@@ -69,20 +75,95 @@ function OfflineBanner() {
   );
 }
 
+/** `data` de la push (`enviar-push`): `{ recurso_tipo, recurso_id, tipo }`; `url` en las antiguas. */
+type DatosPush = { recurso_tipo?: unknown; recurso_id?: unknown; tipo?: unknown; url?: unknown };
+
+const texto = (v: unknown) => (typeof v === 'string' ? v : null);
+
+/** Identifica una respuesta a una push para no abrirla dos veces. */
+const claveRespuesta = (r: Notifications.NotificationResponse) =>
+  `${r.notification.request.identifier}:${r.actionIdentifier}`;
+
 function RootLayoutNav() {
   const { session, initialized, isOffline } = useAuth();
   const segments = useSegments();
   const router = useRouter();
   const toast = useToast();
 
-  usePushNotifications(session?.user?.id, {
+  const userId = session?.user?.id;
+  const userIdRef = useRef(userId);
+  userIdRef.current = userId;
+
+  /** Abre el boleto, la encomienda o el viaje de una push; sin recurso, la lista. */
+  const abrirDesdePush = useCallback(
+    async (datos: DatosPush | undefined) => {
+      if (!userIdRef.current) return; // sin sesión, el login se encarga
+      const abierto = await abrirRecurso(
+        router,
+        { recurso_tipo: texto(datos?.recurso_tipo), recurso_id: texto(datos?.recurso_id) },
+        userIdRef.current
+      );
+      if (abierto) return;
+      const url = texto(datos?.url);
+      if (url?.startsWith('/')) {
+        // Pushes antiguas con un enlace interno.
+        router.push(url as Parameters<typeof router.push>[0]);
+      } else {
+        router.push('/notificaciones');
+      }
+    },
+    [router]
+  );
+
+  // Respuestas ya abiertas: el listener y `getLastNotificationResponseAsync`
+  // pueden entregar la misma al abrir la app desde una push.
+  const respuestasAbiertasRef = useRef(new Set<string>());
+  const abrirRespuesta = useCallback(
+    (response: Notifications.NotificationResponse) => {
+      // Sin sesión todavía (arranque en frío) no se marca: la abre
+      // `getLastNotificationResponseAsync` cuando la sesión esté lista.
+      if (!userIdRef.current) return;
+      const clave = claveRespuesta(response);
+      if (respuestasAbiertasRef.current.has(clave)) return;
+      respuestasAbiertasRef.current.add(clave);
+      void abrirDesdePush(response.notification.request.content.data as DatosPush | undefined);
+    },
+    [abrirDesdePush]
+  );
+
+  usePushNotifications(userId, {
+    // En primer plano: aviso propio con "Ver" (no el banner del sistema).
     onNotificationReceived: (notification) => {
       const title = notification.request.content.title ?? 'Notificación';
       const body = notification.request.content.body ?? '';
-      toast.show('info', body ? `${title}: ${body}` : title);
+      const datos = notification.request.content.data as DatosPush | undefined;
+      toast.show('info', body ? `${title}: ${body}` : title, {
+        accion: { label: 'Ver', onPress: () => void abrirDesdePush(datos) },
+      });
     },
-    onNotificationResponse: () => router.push('/notificaciones'),
+    onNotificationResponse: abrirRespuesta,
   });
+
+  // App abierta desde una push estando cerrada: se mira una sola vez, cuando
+  // la sesión está lista (antes no hay a quién abrirle el boleto).
+  const ultimaRespuestaRevisadaRef = useRef(false);
+  useEffect(() => {
+    if (!initialized || !userId || ultimaRespuestaRevisadaRef.current) return;
+    ultimaRespuestaRevisadaRef.current = true;
+    let vigente = true;
+    Notifications.getLastNotificationResponseAsync()
+      .then((response) => {
+        if (!vigente || !response) return;
+        // Después de la redirección inicial (login → pestañas).
+        setTimeout(() => abrirRespuesta(response), 0);
+      })
+      .catch(() => {
+        // Sin acceso al módulo nativo (p. ej. en web) no hay push que abrir.
+      });
+    return () => {
+      vigente = false;
+    };
+  }, [initialized, userId, abrirRespuesta]);
 
   useEffect(() => {
     if (!initialized) return;
@@ -91,7 +172,7 @@ function RootLayoutNav() {
     // de ahí (empieza sin sesión y termina con ella; él mismo redirige).
     const enCallback = segments[0] === 'auth';
     // Con la sesión de recuperación hay que poder crear la contraseña nueva.
-    const pantallaAuth = segments[1] as string | undefined;
+    const pantallaAuth = (segments as string[])[1];
     const permitidaConSesion = inAuthGroup && pantallaAuth === 'restablecer';
 
     if (enCallback) return;
@@ -114,6 +195,9 @@ function RootLayoutNav() {
         <Stack.Screen name="perfil" options={{ animation: 'slide_from_bottom' }} />
         <Stack.Screen name="notificaciones" options={{ animation: 'slide_from_bottom' }} />
         <Stack.Screen name="ayuda" options={{ animation: 'slide_from_bottom' }} />
+        {/* Fase 4 (#50): las pantallas las crea W2-APP-CUENTA */}
+        <Stack.Screen name="cuenta/contrasena" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="cuenta/eliminar" options={{ animation: 'slide_from_right' }} />
       </Stack>
     </>
   );

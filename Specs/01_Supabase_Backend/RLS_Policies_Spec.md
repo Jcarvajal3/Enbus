@@ -37,6 +37,8 @@ $$ LANGUAGE sql SECURITY DEFINER STABLE;
 | UPDATE | Solo propio perfil | `id = auth.uid()` |
 | INSERT | Automático via Supabase Auth trigger | — |
 
+> **Columnas protegidas**: el trigger `aa_proteger_perfil` (`proteger_perfil_fn`) impide que el usuario cambie su `role`, `cooperativa_id`, `sucursal_id` y, desde la fase 4, `eliminada_at` (`EB_SIN_PERMISO`): la baja solo se marca con `fn_eliminar_mi_cuenta` y no se puede deshacer con un UPDATE directo.
+
 ### 3.2 `cooperativas`
 | Operación | Política | Condición |
 |---|---|---|
@@ -87,6 +89,8 @@ $$ LANGUAGE sql SECURITY DEFINER STABLE;
 
 > **Fase 3**: al crear desde la app, el trigger `aa_proteger_encomiendas_cliente` fuerza `origen_registro = 'APP'`, guarda la foto en `foto_cliente_path` y limpia `remitente_*` y las columnas de entrega. Operaciones que van **solo por RPC** (`SECURITY DEFINER`): alta presencial (`fn_registrar_encomienda_taquilla`), no recibir (`fn_rechazar_encomienda_origen`), validar PIN (`fn_validar_pin_retiro`), entregar (`fn_entregar_encomienda`) y desbloquear el PIN (`fn_desbloquear_pin`, admin de la cooperativa o Super Admin: el Super Admin no tiene política UPDATE en `encomiendas`). El rastreo público (`fn_rastrear_encomienda_publico`) solo lo ejecuta `service_role` (server action de la landing).
 
+> **Fase 4**: la política UPDATE del taquillero sigue existiendo, pero el trigger `aa_proteger_entrega_encomienda` impide que una escritura directa (`authenticated`/`anon`) pase la encomienda a `ENTREGADA` o `DEVUELTA` o cambie `pin_retiro`, `intentos_pin`, `pin_bloqueado`, `pin_validado_*`, `entregada_*`, `retiro_*` o `entrega_sin_pin_motivo` (`EB_OPERACION_NO_PERMITIDA`). Así el PIN no se puede probar con un UPDATE ni contra `fn_entregar_encomienda`, que exige la validación previa de `fn_validar_pin_retiro` (15 minutos, mismo empleado).
+
 ### 3.8 `boletos`
 | Operación | Política | Condición |
 |---|---|---|
@@ -122,6 +126,8 @@ $$ LANGUAGE sql SECURITY DEFINER STABLE;
 |---|---|---|
 | SELECT | Todos los autenticados | `auth.uid() IS NOT NULL` |
 | INSERT/UPDATE | Solo Super Admin | `public.is_super_admin()` |
+
+> **Fase 4**: el panel de EnBus publica y programa tarifas con `fn_publicar_tarifa` / `fn_cancelar_tarifa_programada` (una transacción) en lugar de dos escrituras directas.
 
 ### 3.12 `notificaciones_usuario`
 | Operación | Política | Condición |
@@ -174,7 +180,24 @@ El bucket es privado: se guarda la **ruta** del objeto y se muestra con URL firm
 | INSERT | **Usuario sube fotos de sus envios** (fase 3) | `bucket_id = 'fotos-encomiendas' AND public.user_role() = 'user' AND (storage.foldername(name))[1] = auth.uid()::text` |
 | UPDATE | **Usuario reemplaza fotos de sus envios** (fase 3) | Misma condición que el INSERT |
 
-El remitente sube la foto de su paquete en su carpeta (`<id del usuario>/…`) y la ruta se guarda en `encomiendas.foto_cliente_path`; la taquilla la sube en `<id de la encomienda>/…` y la guarda en `foto_evidencia_url`.
+| SELECT (**restrictiva**) | **Guias solo para el personal de su cooperativa** (fase 4) | Fuera de `guias/` no restringe nada. En `guias/<cooperativa_id>/…`: `public.is_super_admin()` o `public.user_role() IN ('taquillero', 'admin_cooperativa')` de esa cooperativa; las guías antiguas `guias/<archivo>` (sin PIN) quedan para el personal |
+
+El remitente sube la foto de su paquete en su carpeta (`<id del usuario>/…`) y la ruta se guarda en `encomiendas.foto_cliente_path`; la taquilla la sube en `<id de la encomienda>/…` y la guarda en `foto_evidencia_url`. Desde la fase 4 la guía PDF lleva el PIN de retiro: `generar-guia-pdf` la sube con el `service_role` a `guias/<cooperativa_id>/…` y devuelve una URL firmada; la política restrictiva evita que cualquier usuario autenticado la liste.
+
+### 3.19 Storage: `logos-cooperativas` (`storage.objects`)
+Bucket público para lectura. Escriben el Super Admin (políticas de `20260414000007`) y, desde la fase 4, el administrador de la cooperativa en su carpeta:
+
+| Operación | Política | Condición |
+|---|---|---|
+| INSERT | **Admin de cooperativa sube su logo** | `bucket_id = 'logos-cooperativas' AND public.user_role() = 'admin_cooperativa' AND (storage.foldername(name))[1] = public.user_cooperativa_id()::text` |
+| UPDATE | **Admin de cooperativa reemplaza su logo** | Misma condición en `USING` y `WITH CHECK` (upsert de `<cooperativa_id>/logo.<ext>`) |
+
+### 3.20 `bajas_cuenta` y `limites_uso` (fase 4)
+| Tabla | Operación | Política | Condición |
+|---|---|---|---|
+| `bajas_cuenta` | SELECT | Super admin ve bajas | `public.is_super_admin()` |
+| `bajas_cuenta` | INSERT/UPDATE | Solo `fn_eliminar_mi_cuenta` (`SECURITY DEFINER`) y la edge function `eliminar-cuenta` (`service_role`) | — |
+| `limites_uso` | ALL | RLS sin políticas y `REVOKE ALL` para `anon`/`authenticated` | Solo `service_role` vía `fn_consumir_limite` |
 
 ## 4. Permisos de ejecución de las RPC (fase 3)
 | Quién | RPC |
@@ -183,3 +206,11 @@ El remitente sube la foto de su paquete en su carpeta (`<id del usuario>/…`) y
 | `anon`, `authenticated`, `service_role` | `fn_cotizar_envio_publico`, `fn_rutas_populares`, `fn_estadisticas_publicas` |
 | Solo `service_role` | `fn_rastrear_encomienda_publico`, `fn_email_registrado` |
 | Nadie desde el cliente | Funciones internas `_…` (por ejemplo `_fecha_hora_ve`, `_resumen_compra`, `_asegurar_asientos`): sin `EXECUTE` para `anon` ni `authenticated` |
+
+## 5. Permisos de ejecución de las RPC (fase 4)
+| Quién | RPC |
+|---|---|
+| `authenticated` | `fn_bandeja_cooperativa`, `fn_editar_viaje`, `fn_completar_viaje`, `fn_publicar_tarifa`, `fn_cancelar_tarifa_programada`, `fn_remitente_de_encomienda`, `fn_eliminar_mi_cuenta` (cada una valida el rol dentro); siguen `fn_validar_pin_retiro`, `fn_entregar_encomienda`, `fn_desbloquear_pin` |
+| `anon`, `authenticated`, `service_role` | `fn_rutas_populares` (sin cambios) |
+| Solo `service_role` | `fn_consumir_limite`, `fn_limpiar_limites_uso` |
+| Nadie desde el cliente | `fn_activar_tarifas_programadas` (cron) y las internas `_cedula_para_guardar`, `_telefono_para_guardar`, `_notificar_usuario` |

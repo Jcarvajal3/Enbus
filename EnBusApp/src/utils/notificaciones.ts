@@ -143,7 +143,7 @@ const ORDEN_GRUPOS: TituloGrupoDia[] = ['Hoy', 'Ayer', 'Esta semana', 'Anteriore
 export function agruparPorDia<T extends { created_at: string }>(
   items: T[],
   ahora: Date = new Date()
-): Array<{ titulo: TituloGrupoDia; data: T[] }> {
+): { titulo: TituloGrupoDia; data: T[] }[] {
   const hoy = diaVE(ahora.getTime());
   const grupos = new Map<TituloGrupoDia, T[]>();
   for (const item of items) {
