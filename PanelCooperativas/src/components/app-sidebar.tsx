@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import { SignOut, Sun, Moon, Monitor } from "@phosphor-icons/react";
-import { toast } from "sonner";
+import { avisarError } from "@/lib/avisos";
 import { useUser } from "@/hooks/use-user";
 import { esRutaActiva, navParaRol, NAV_PIE, type ClaveContador, type NavItem, type RolPanel } from "@/lib/navigation";
 import { contadoresCooperativa } from "@/lib/data/contadores-menu";
@@ -134,7 +134,7 @@ export function MenuUsuario({ nombre, rol, login }: { nombre: string; rol: strin
     // Sin red, signOut falla y la sesión sigue abierta: decirlo en vez de ir al login.
     const { error } = await createClient().auth.signOut();
     if (error) {
-      toast.error(humanizeError(error, "cerrar la sesión"), { duration: Infinity });
+      avisarError(humanizeError(error, "cerrar la sesión"));
       return;
     }
     router.push(login);

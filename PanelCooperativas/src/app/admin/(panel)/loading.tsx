@@ -1,21 +1,15 @@
 import { Skeleton } from "@/components/ui/skeleton";
+import { TablaSkeleton } from "@/components/tabla-skeleton";
 
+// Carga de una sección: misma forma y ancho que la página que llega
+// (PageHeader + filtros + tabla a ancho completo; PN-25, AD5-42). Sin animación de entrada.
 export default function AdminPanelLoading() {
   return (
-    <div role="status" aria-live="polite" className="flex flex-col gap-6 w-full max-w-6xl mx-auto motion-safe:animate-in motion-safe:fade-in motion-safe:duration-500">
-      <span className="sr-only">Cargando…</span>
-      <div className="space-y-2">
-        <Skeleton className="h-10 w-64" />
-        <Skeleton className="h-4 w-96" />
+    <div className="flex w-full flex-col gap-6">
+      <div className="flex flex-col gap-2" aria-hidden>
+        <Skeleton className="h-8 w-56" />
       </div>
-
-      <div className="grid gap-6 md:grid-cols-3">
-        <Skeleton className="h-32 w-full rounded-xl" />
-        <Skeleton className="h-32 w-full rounded-xl" />
-        <Skeleton className="h-32 w-full rounded-xl" />
-      </div>
-
-      <Skeleton className="h-64 w-full rounded-xl" />
+      <TablaSkeleton columnas={6} conFiltros />
     </div>
   );
 }
