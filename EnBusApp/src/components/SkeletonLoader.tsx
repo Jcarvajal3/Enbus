@@ -6,6 +6,7 @@ import Animated, {
   withRepeat,
   withSequence,
   withTiming,
+  useReducedMotion,
 } from 'react-native-reanimated';
 import { Colors, Motion, Radius } from '@/src/theme';
 
@@ -17,16 +18,24 @@ interface SkeletonLoaderProps {
   index?: number;
 }
 
-/** Pulsing placeholder block. Opacity only — no layout work while loading. */
+/**
+ * Pulsing placeholder block. Opacity only — no layout work while loading.
+ * Con "reducir movimiento" el bloque queda fijo, sin pulso.
+ */
 export function SkeletonLoader({
   width = '100%',
   height = 14,
   borderRadius = Radius.xs,
   index = 0,
 }: SkeletonLoaderProps) {
-  const progress = useSharedValue(0);
+  const reduceMotion = useReducedMotion();
+  const progress = useSharedValue(reduceMotion ? 0.5 : 0);
 
   useEffect(() => {
+    if (reduceMotion) {
+      progress.value = 0.5;
+      return;
+    }
     // Deterministic offset per index (a random delay made re-renders jitter).
     const offset = (index % 4) * 120;
     const timer = setTimeout(() => {
@@ -41,7 +50,7 @@ export function SkeletonLoader({
     }, offset);
 
     return () => clearTimeout(timer);
-  }, [index, progress]);
+  }, [index, progress, reduceMotion]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     opacity: 0.4 + progress.value * 0.45,

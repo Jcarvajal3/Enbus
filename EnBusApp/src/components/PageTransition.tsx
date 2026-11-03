@@ -3,6 +3,7 @@ import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withTiming,
+  useReducedMotion,
 } from 'react-native-reanimated';
 import { Motion } from '@/src/theme';
 
@@ -11,17 +12,23 @@ import { Motion } from '@/src/theme';
  *
  * A short fade + 24pt horizontal slide, decelerating. Kept under
  * `Motion.duration.base` so it reads as responsiveness rather than as an
- * animation the user has to wait through.
+ * animation the user has to wait through. Con "reducir movimiento" la pantalla
+ * aparece sin desplazarse ni fundirse.
  */
 export function PageTransition({ children }: { children: React.ReactNode }) {
-  const progress = useSharedValue(0);
+  const reduceMotion = useReducedMotion();
+  const progress = useSharedValue(reduceMotion ? 1 : 0);
 
   useEffect(() => {
+    if (reduceMotion) {
+      progress.value = 1;
+      return;
+    }
     progress.value = withTiming(1, {
       duration: Motion.duration.base,
       easing: Motion.easing.out,
     });
-  }, [progress]);
+  }, [progress, reduceMotion]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     flex: 1,

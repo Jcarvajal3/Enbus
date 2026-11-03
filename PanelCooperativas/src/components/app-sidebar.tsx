@@ -67,7 +67,7 @@ export function AppSidebar() {
       <SidebarHeader className="p-4">
         <div className="flex items-center gap-2">
           <div className="flex size-8 items-center justify-center rounded-lg bg-primary">
-            <Bus weight="fill" className="size-5 text-primary-foreground" />
+            <Bus weight="fill" className="size-5 text-primary-foreground" aria-hidden />
           </div>
           <div className="flex flex-col">
             <span className="font-bold tracking-tight">EnBus</span>
@@ -94,7 +94,7 @@ export function AppSidebar() {
                       isActive={activo}
                       tooltip={item.title}
                     >
-                      <item.icon />
+                      <item.icon aria-hidden />
                       <span>{item.title}</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
@@ -144,24 +144,24 @@ export function AppSidebar() {
               <DropdownMenuGroup>
                 <DropdownMenuLabel className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">Tema</DropdownMenuLabel>
               <DropdownMenuItem onClick={() => setTheme("light")} className="cursor-pointer">
-                <Sun className="size-4 mr-2" />
+                <Sun className="size-4 mr-2" aria-hidden />
                 <span>Claro</span>
                 {mounted && theme === "light" && <span className="ml-auto text-xs text-primary-text"><span aria-hidden="true">✓</span><span className="sr-only">(seleccionado)</span></span>}
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setTheme("dark")} className="cursor-pointer">
-                <Moon className="size-4 mr-2" />
+                <Moon className="size-4 mr-2" aria-hidden />
                 <span>Oscuro</span>
                 {mounted && theme === "dark" && <span className="ml-auto text-xs text-primary-text"><span aria-hidden="true">✓</span><span className="sr-only">(seleccionado)</span></span>}
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setTheme("system")} className="cursor-pointer">
-                <Monitor className="size-4 mr-2" />
+                <Monitor className="size-4 mr-2" aria-hidden />
                 <span>Sistema</span>
                 {mounted && theme === "system" && <span className="ml-auto text-xs text-primary-text"><span aria-hidden="true">✓</span><span className="sr-only">(seleccionado)</span></span>}
               </DropdownMenuItem>
               </DropdownMenuGroup>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={handleSignOut} className="cursor-pointer text-destructive-text focus:text-destructive-text">
-                <SignOut />
+                <SignOut aria-hidden />
                 <span>Cerrar sesión</span>
               </DropdownMenuItem>
             </DropdownMenuContent>

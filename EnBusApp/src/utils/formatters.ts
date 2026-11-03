@@ -7,6 +7,8 @@
  * constructions per frame.
  */
 
+import { formatCiudad } from './ve.generated';
+
 // ─── Date formatters ──────────────────────────────────────────────────────────
 
 const LOCALE = 'es-VE';
@@ -80,73 +82,33 @@ export function toDateKey(date: Date): string {
   return `${y}-${m}-${d}`;
 }
 
-// PERF-06: Replace 45+ if/else chain with a O(1) Map lookup.
-// Previously every formatCity() call iterated through all branches in the worst case.
-// With a Map, the lookup is O(1) regardless of the number of entries.
-const CITY_MAP = new Map<string, string>([
-  ['merida', 'Mérida'],
-  ['falcon', 'Falcón'],
-  ['bolivar', 'Bolívar'],
-  ['tachira', 'Táchira'],
-  ['anzoategui', 'Anzoátegui'],
-  ['guarico', 'Guárico'],
-  ['portuguesa', 'Portuguesa'],
-  ['nueva esparta', 'Nueva Esparta'],
-  ['la guaira', 'La Guaira'],
-  ['apure', 'Apure'],
-  ['cojedes', 'Cojedes'],
-  ['trujillo', 'Trujillo'],
-  ['miranda', 'Miranda'],
-  ['caracas', 'Caracas'],
-  ['valencia', 'Valencia'],
-  ['maracay', 'Maracay'],
-  ['barquisimeto', 'Barquisimeto'],
-  ['maracaibo', 'Maracaibo'],
-  ['maturin', 'Maturín'],
-  ['cumana', 'Cumaná'],
-  ['tovar', 'Tovar'],
-  ['bocono', 'Boconó'],
-  ['tariba', 'Táriba'],
-  ['socopo', 'Socopó'],
-  ['san fernando', 'San Fernando de Apure'],
-  ['san juan', 'San Juan de los Morros'],
-  ['puerto ayacucho', 'Puerto Ayacucho'],
-  ['puerto la cruz', 'Puerto La Cruz'],
-  ['lecheria', 'Lechería'],
-  ['el tigre', 'El Tigre'],
-  ['la victoria', 'La Victoria'],
-  ['ciudad bolivar', 'Ciudad Bolívar'],
-  ['puerto ordaz', 'Puerto Ordaz'],
-  ['san felix', 'San Félix'],
-  ['puerto cabello', 'Puerto Cabello'],
-  ['san diego', 'San Diego'],
-  ['san carlos', 'San Carlos'],
-  ['punto fijo', 'Punto Fijo'],
-  ['valle de la pascua', 'Valle de la Pascua'],
-  ['el vigia', 'El Vigía'],
-  ['los teques', 'Los Teques'],
-  ['punta de mata', 'Punta de Mata'],
-  ['la asuncion', 'La Asunción'],
-  ['san cristobal', 'San Cristóbal'],
-  ['maiquetia', 'Maiquetía'],
-  ['catia la mar', 'Catia La Mar'],
-  ['san felipe', 'San Felipe'],
-  ['yaritagua', 'Yaritagua'],
-  ['chivacoa', 'Chivacoa'],
-  ['ciudad ojeda', 'Ciudad Ojeda'],
-]);
+// ─── Ciudades ────────────────────────────────────────────────────────────────
+// La fuente es shared/ve.ts (copiada en ./ve.generated.ts por shared/generar.mjs),
+// la misma que usan el panel y la landing: "merida" → "Mérida",
+// "puerto_la_cruz" → "Puerto La Cruz", "san_juan" → "San Juan de los Morros".
 
-/** Formats a db-friendly city/state name (e.g. "puerto_la_cruz" -> "Puerto La Cruz", "merida" -> "Mérida") */
+/** Formats a db-friendly city/state name (e.g. "puerto_la_cruz" -> "Puerto La Cruz", "merida" -> "Mérida"); "—" if empty */
 export function formatCity(val: string | null | undefined): string {
-  if (!val) return '—';
-
-  // Replace underscores with spaces and capitalize each word
-  const formatted = val
-    .split('_')
-    .map(w => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(' ');
-
-  // O(1) lookup for special accent/format cases
-  const lower = formatted.toLowerCase();
-  return CITY_MAP.get(lower) ?? formatted;
+  return formatCiudad(val) || '—';
 }
+
+// Formatos venezolanos compartidos (hora de Venezuela, duraciones, ciudades): mismos
+// nombres que en el panel. Ver shared/README.md.
+export {
+  formatCiudad,
+  formatRuta,
+  normalizarCiudad,
+  mismaCiudad,
+  ZONA_VE,
+  fechaVE,
+  hoyVE,
+  sumarDiasVE,
+  fechaHoraVEaISO,
+  rangoDiaVE,
+  formatFechaVE,
+  formatHoraVE,
+  formatFechaHoraVE,
+  formatFechaCalendario,
+  formatHaceTiempo,
+  formatDuracion,
+} from './ve.generated';

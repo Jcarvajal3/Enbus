@@ -1,5 +1,7 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+/* Colores, --radius y --duration-*: fuente shared/tokens.json (node shared/generar.mjs). No escribir hex aquí. */
+@import "./tokens.generated.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -27,6 +29,8 @@
   --color-input: var(--input);
   --color-input-border: var(--input-border);
   --color-border: var(--border);
+  /* Borde de controles (≥ 3:1): border-border-strong */
+  --color-border-strong: var(--border-strong);
   --color-destructive: var(--destructive);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
@@ -57,6 +61,18 @@
   --color-info-light: var(--info-light);
   --color-destructive-light: var(--destructive-light);
 
+  /* Texto de estado accesible (≥ 4,5:1 sobre --background y --card) */
+  --color-success-text: var(--success-text);
+  --color-warning-text: var(--warning-text);
+  --color-info-text: var(--info-text);
+  --color-destructive-text: var(--destructive-text);
+
+  /* Texto sobre los fondos suaves *-light (≥ 6:1): text-success-deep, text-warning-deep… */
+  --color-success-deep: var(--success-deep);
+  --color-warning-deep: var(--warning-deep);
+  --color-info-deep: var(--info-deep);
+  --color-destructive-deep: var(--destructive-deep);
+
   /* Precise border radius overrides */
   --radius-sm: 10px;
   --radius-md: 16px;
@@ -66,16 +82,6 @@
   --radius-3xl: 32px;
   --radius-4xl: 40px;
   --radius-full: 9999px;
-
-  /* ── Custom keyframes ── */
-  @keyframes accordion-down {
-    from { height: 0; }
-    to { height: var(--radix-accordion-content-height, var(--accordion-panel-height, auto)); }
-  }
-  @keyframes accordion-up {
-    from { height: var(--radix-accordion-content-height, var(--accordion-panel-height, auto)); }
-    to { height: 0; }
-  }
 }
 
 /* ── Custom variants (from shadcn) ── */
@@ -131,74 +137,6 @@
   &::-webkit-scrollbar { display: none; }
 }
 
-/* ─── EnBus Color Palette ─────────────────────────────────────────────── */
-/* Yellow (#FFC757) as primary, coral (#FF7648) as secondary              */
-
-:root {
-  --primary: #FFC757;
-  --primary-foreground: #202020;
-  /* Marca como texto (≥4.5:1 sobre blanco): el amarillo es superficie, nunca texto */
-  --primary-text: #8A5A00;
-
-  --background: #FFFFFF;
-  --foreground: #202020;
-
-  --card: #FFFFFF;
-  --card-foreground: #202020;
-  --popover: #FFFFFF;
-  --popover-foreground: #202020;
-
-  --secondary: #FF7648;
-  --secondary-foreground: #FFFFFF;
-
-  --accent: #4A7FF8;
-  --accent-foreground: #FFFFFF;
-
-  --muted: #F0EFEB;
-  --muted-foreground: #666666;
-
-  --destructive: #dc2626;
-  --border: #E8E6E1;
-  --input: #E8E6E1;
-  /* Borde de campos de formulario: ≥ 3:1 sobre blanco (LP-07) */
-  --input-border: #8C8C8C;
-  /* Foco visible en todo el sitio, también sobre el amarillo de marca (LP-07) */
-  --ring: #202020;
-
-  --chart-1: #FFC757;
-  --chart-2: #FF7648;
-  --chart-3: #4A7FF8;
-  --chart-4: #8A8A8A;
-  --chart-5: #202020;
-
-  --radius: 16px;
-
-  /* Custom EnBus tokens */
-  --primary-light: rgba(255, 199, 87, 0.15);
-  --secondary-light: rgba(255, 118, 72, 0.12);
-  --accent-light: rgba(74, 127, 248, 0.12);
-  
-  --surface: #F0EFEB;
-  --surface-dark: #E8E6E1;
-  
-  --success: #22c55e;
-  --success-light: #dcfce7;
-  --warning: #f59e0b;
-  --warning-light: #fef3c7;
-  --info: #3b82f6;
-  --info-light: #dbeafe;
-  --destructive-light: #fee2e2;
-
-  --sidebar: #F0EFEB;
-  --sidebar-foreground: #202020;
-  --sidebar-primary: #FFC757;
-  --sidebar-primary-foreground: #202020;
-  --sidebar-accent: #E8E6E1;
-  --sidebar-accent-foreground: #202020;
-  --sidebar-border: #E8E6E1;
-  --sidebar-ring: #202020;
-}
-
 @layer base {
   * {
     @apply border-border outline-ring;
@@ -219,7 +157,8 @@
 }
 
 /* ─── Formularios (LP-07) ───────────────────────────────────────────────── */
-/* Etiqueta 14 px en foreground, ayuda ≥ 12 px en #666, borde #8C8C8C y foco */
+/* Etiqueta 14 px en foreground, ayuda ≥ 12 px en muted-foreground, borde     */
+/* --input-border (= border-strong, ≥ 3:1) y foco                             */
 /* oscuro con separación (también sobre secciones bg-primary).              */
 @layer components {
   .campo-etiqueta {
@@ -236,7 +175,7 @@
   .campo-error {
     font-size: 0.8125rem;
     line-height: 1.25rem;
-    color: #b91c1c;
+    color: var(--destructive-text);
   }
   .campo-control {
     width: 100%;
@@ -262,7 +201,7 @@
     border-color: var(--foreground);
   }
   .campo-control[aria-invalid="true"] {
-    border-color: #b91c1c;
+    border-color: var(--destructive-text);
   }
   .campo-control:disabled {
     cursor: not-allowed;
@@ -270,26 +209,15 @@
   }
 }
 
-/* ─── Landing page section animations ───────────────────────────────────── */
-@keyframes fade-in-up {
-  from {
-    opacity: 0;
-    transform: translateY(24px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
+/* Reducir movimiento (#59): sin animaciones ni transiciones (ni scroll suave) si el
+   sistema lo pide. Las animaciones nuevas usan además `motion-safe:`. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
-
-.animate-fade-in-up {
-  animation: fade-in-up 0.6s ease-out forwards;
-  opacity: 0;
-}
-
-.stagger-1 { animation-delay: 0.1s; }
-.stagger-2 { animation-delay: 0.2s; }
-.stagger-3 { animation-delay: 0.3s; }
-.stagger-4 { animation-delay: 0.4s; }
-.stagger-5 { animation-delay: 0.5s; }
-.stagger-6 { animation-delay: 0.6s; }

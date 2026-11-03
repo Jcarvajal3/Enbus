@@ -8,29 +8,29 @@ import type { EstadoUiBoleto } from "@/lib/types/pagos";
 /** @deprecated usar EstadoEncomienda de lib/types/encomiendas. */
 export type EncomiendaEstado = EstadoEncomienda;
 
-// Colores accesibles (≥ 4,5:1 en claro y en oscuro): fondo suave y texto oscuro
-// del mismo matiz. Nunca texto blanco sobre verde o azul (2,5–3,7:1).
+// Tokens del sistema (≥ 6:1 en claro y en oscuro): fondo `*-light` y texto
+// `*-deep` del mismo matiz. Nunca texto blanco sobre verde o azul (2,5–3,7:1).
 const CLASES: Record<Tono, { variant: "outline" | "secondary"; className?: string }> = {
   neutro: { variant: "outline" },
   pendiente: {
     variant: "secondary",
-    className: "bg-amber-100 text-amber-900 dark:bg-amber-400/15 dark:text-amber-200",
+    className: "bg-warning-light text-warning-deep",
   },
   exito: {
     variant: "secondary",
-    className: "bg-emerald-100 text-emerald-900 dark:bg-emerald-400/15 dark:text-emerald-200",
+    className: "bg-success-light text-success-deep",
   },
   info: {
     variant: "secondary",
-    className: "bg-blue-100 text-blue-900 dark:bg-blue-400/15 dark:text-blue-200",
+    className: "bg-info-light text-info-deep",
   },
   terminado: {
     variant: "secondary",
-    className: "bg-slate-200 text-slate-800 dark:bg-slate-400/15 dark:text-slate-200",
+    className: "bg-muted text-foreground",
   },
   peligro: {
     variant: "secondary",
-    className: "bg-red-100 text-red-900 dark:bg-red-400/15 dark:text-red-200",
+    className: "bg-destructive-light text-destructive-deep",
   },
 };
 

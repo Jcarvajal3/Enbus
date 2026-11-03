@@ -6,6 +6,9 @@
  * instead). Each had its own drag handle size, close-threshold and spring, so
  * the same gesture behaved differently in each place. One implementation now
  * owns the gesture, the scrim, the entrance and the header.
+ *
+ * Con "reducir movimiento" la hoja aparece y se cierra sin deslizarse (solo el
+ * fundido del fondo).
  */
 import React, { useCallback, useEffect, useRef } from 'react';
 import {
@@ -19,6 +22,7 @@ import {
   ViewStyle,
 } from 'react-native';
 import { X } from 'phosphor-react-native';
+import { useReducedMotion } from 'react-native-reanimated';
 import { IconButton } from './IconButton';
 import { Text } from './Text';
 import { Colors, Layout, Radius, Shadows, Sizes, Spacing } from '@/src/theme';
@@ -48,8 +52,29 @@ export function BottomSheet({
   children,
 }: BottomSheetProps) {
   const translateY = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
+  const reduceMotion = useReducedMotion();
+  // El PanResponder se crea una vez: lee la preferencia por ref.
+  const reduceMotionRef = useRef(reduceMotion);
+  reduceMotionRef.current = reduceMotion;
+
+  const settle = useCallback(() => {
+    if (reduceMotionRef.current) {
+      translateY.setValue(0);
+      return;
+    }
+    Animated.spring(translateY, {
+      toValue: 0,
+      useNativeDriver: true,
+      tension: 45,
+      friction: 9,
+    }).start();
+  }, [translateY]);
 
   const animateOut = useCallback(() => {
+    if (reduceMotionRef.current) {
+      onClose();
+      return;
+    }
     Animated.timing(translateY, {
       toValue: SCREEN_HEIGHT,
       duration: 220,
@@ -61,15 +86,16 @@ export function BottomSheet({
 
   useEffect(() => {
     if (visible) {
-      translateY.setValue(SCREEN_HEIGHT);
-      Animated.spring(translateY, {
-        toValue: 0,
-        useNativeDriver: true,
-        tension: 45,
-        friction: 9,
-      }).start();
+      translateY.setValue(reduceMotionRef.current ? 0 : SCREEN_HEIGHT);
+      settle();
     }
-  }, [visible, translateY]);
+  }, [visible, translateY, settle]);
+
+  // El PanResponder se crea una vez: llama a la versión más reciente.
+  const animateOutRef = useRef(animateOut);
+  animateOutRef.current = animateOut;
+  const settleRef = useRef(settle);
+  settleRef.current = settle;
 
   const panResponder = useRef(
     PanResponder.create({
@@ -80,14 +106,9 @@ export function BottomSheet({
       },
       onPanResponderRelease: (_, gesture) => {
         if (gesture.dy > DISMISS_DISTANCE || gesture.vy > DISMISS_VELOCITY) {
-          animateOut();
+          animateOutRef.current();
         } else {
-          Animated.spring(translateY, {
-            toValue: 0,
-            useNativeDriver: true,
-            tension: 45,
-            friction: 9,
-          }).start();
+          settleRef.current();
         }
       },
     })

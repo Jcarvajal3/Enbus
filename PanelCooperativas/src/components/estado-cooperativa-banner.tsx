@@ -31,16 +31,14 @@ import { cn } from "@/lib/utils";
 type Tono = "aviso" | "peligro";
 
 const ESTILOS: Record<Tono, { caja: string; boton: string }> = {
-  // Contraste ≥ 4,5:1 en claro y en oscuro.
+  // Tokens del sistema: texto `*-deep` sobre `*-light` (≥ 6:1 en claro y en oscuro).
   aviso: {
-    caja: "border-amber-300 bg-amber-100 text-amber-950 dark:border-amber-400/30 dark:bg-amber-400/15 dark:text-amber-100",
-    boton:
-      "border-amber-950/25 bg-white/70 text-amber-950 hover:bg-white dark:border-amber-100/30 dark:bg-transparent dark:text-amber-100 dark:hover:bg-amber-400/20",
+    caja: "border-warning/40 bg-warning-light text-warning-deep",
+    boton: "border-warning/40 bg-background/70 text-warning-deep hover:bg-background hover:text-warning-deep",
   },
   peligro: {
-    caja: "border-red-300 bg-red-100 text-red-950 dark:border-red-400/30 dark:bg-red-400/15 dark:text-red-100",
-    boton:
-      "border-red-950/25 bg-white/70 text-red-950 hover:bg-white dark:border-red-100/30 dark:bg-transparent dark:text-red-100 dark:hover:bg-red-400/20",
+    caja: "border-destructive/40 bg-destructive-light text-destructive-deep",
+    boton: "border-destructive/40 bg-background/70 text-destructive-deep hover:bg-background hover:text-destructive-deep",
   },
 };
 
@@ -285,7 +283,7 @@ function FormularioRevision({
             Cancelar
           </Button>
           <Button type="submit" disabled={enviando} aria-busy={enviando || undefined}>
-            {enviando && <SpinnerIcon className="animate-spin" aria-hidden />}
+            {enviando && <SpinnerIcon className="motion-safe:animate-spin" aria-hidden />}
             {enviando ? "Enviando…" : "Pedir nueva revisión"}
           </Button>
         </DialogFooter>

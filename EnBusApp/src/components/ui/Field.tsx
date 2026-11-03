@@ -9,6 +9,12 @@
  * The rule encoded here: single-line inputs are pills, multiline inputs use the
  * large radius, the focused border is always the accent colour, and errors are
  * shown inline rather than only as a toast.
+ *
+ * Accesibilidad (APP-57): el `TextInput` lleva la etiqueta como
+ * `accessibilityLabel` y la ayuda como `accessibilityHint` (TalkBack leía el
+ * placeholder); el error se anuncia solo (`accessibilityLiveRegion` +
+ * `role="alert"`). En tono `light` el campo tiene borde en reposo (≥ 3:1 sobre
+ * blanco), así se distingue del fondo.
  */
 import React, { useState } from 'react';
 import {
@@ -23,12 +29,13 @@ import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withTiming,
+  useReducedMotion,
 } from 'react-native-reanimated';
 import { CaretDown, Eye, EyeSlash, type IconProps } from 'phosphor-react-native';
 import * as Haptics from 'expo-haptics';
 import { PressableScale } from '../PressableScale';
 import { Text, fontStyle } from './Text';
-import { Colors, Motion, Opacity, Radius, Sizes, Spacing } from '@/src/theme';
+import { Colors, Motion, Opacity, Radius, Sizes, Spacing, alpha } from '@/src/theme';
 
 export type FieldTone = 'light' | 'sunken';
 
@@ -50,6 +57,40 @@ const BACKGROUNDS: Record<FieldTone, string> = {
   sunken: Colors.surface,
 };
 
+/**
+ * Borde en reposo. `light` va sobre fondos blancos o beige: sin borde no se
+ * ve el control (WCAG 1.4.11, ≥ 3:1). `sunken` ya se distingue por el relleno.
+ */
+const RESTING_BORDERS: Record<FieldTone, string> = {
+  light: alpha(Colors.foreground, 0.45),
+  sunken: Colors.transparent,
+};
+
+/** Error visible y anunciado en cuanto aparece; si no, la ayuda. */
+function FieldMessage({ error, helper }: { error?: string; helper?: string }) {
+  if (error) {
+    return (
+      <Text
+        variant="caption"
+        color="danger"
+        style={s.message}
+        accessibilityRole="alert"
+        accessibilityLiveRegion="assertive"
+      >
+        {error}
+      </Text>
+    );
+  }
+  if (helper) {
+    return (
+      <Text variant="caption" color="muted" style={s.message}>
+        {helper}
+      </Text>
+    );
+  }
+  return null;
+}
+
 export function Field({
   label,
   error,
@@ -62,33 +103,48 @@ export function Field({
   editable = true,
   onFocus,
   onBlur,
+  accessibilityLabel,
+  accessibilityHint,
   ...rest
 }: FieldProps) {
   const [revealed, setRevealed] = useState(false);
   const focus = useSharedValue(0);
+  const reduceMotion = useReducedMotion();
 
   const isPassword = !!secureTextEntry;
+  const restingBorder = RESTING_BORDERS[tone];
 
   const borderStyle = useAnimatedStyle(() => ({
     borderColor: error
       ? Colors.destructive
-      : interpolateColor(focus.value, [0, 1], [Colors.transparent, Colors.accent]),
+      : interpolateColor(focus.value, [0, 1], [restingBorder, Colors.accent]),
   }));
 
   const handleFocus: TextInputProps['onFocus'] = (e) => {
-    focus.value = withTiming(1, { duration: Motion.duration.fast });
+    focus.value = reduceMotion ? 1 : withTiming(1, { duration: Motion.duration.fast });
     onFocus?.(e);
   };
 
   const handleBlur: TextInputProps['onBlur'] = (e) => {
-    focus.value = withTiming(0, { duration: Motion.duration.instant });
+    focus.value = reduceMotion ? 0 : withTiming(0, { duration: Motion.duration.instant });
     onBlur?.(e);
   };
+
+  // La etiqueta visible es el nombre del campo; el error (si hay) y la ayuda
+  // se leen como pista, así quien vuelve al campo sabe qué corregir.
+  const a11yLabel = accessibilityLabel ?? label;
+  const a11yHint = accessibilityHint ?? ([error, helper].filter(Boolean).join('. ') || undefined);
 
   return (
     <View style={[s.wrapper, containerStyle]}>
       {label ? (
-        <Text variant="label" style={s.label}>
+        // El `TextInput` ya lleva la etiqueta: aquí se oculta para no leerla dos veces.
+        <Text
+          variant="label"
+          style={s.label}
+          importantForAccessibility="no-hide-descendants"
+          accessibilityElementsHidden
+        >
           {label}
         </Text>
       ) : null}
@@ -109,6 +165,9 @@ export function Field({
 
         <TextInput
           {...rest}
+          accessibilityLabel={a11yLabel}
+          accessibilityHint={a11yHint}
+          accessibilityState={{ disabled: !editable }}
           editable={editable}
           multiline={multiline}
           secureTextEntry={isPassword && !revealed}
@@ -138,15 +197,7 @@ export function Field({
         )}
       </Animated.View>
 
-      {error ? (
-        <Text variant="caption" color="danger" style={s.message}>
-          {error}
-        </Text>
-      ) : helper ? (
-        <Text variant="caption" color="muted" style={s.message}>
-          {helper}
-        </Text>
-      ) : null}
+      <FieldMessage error={error} helper={helper} />
     </View>
   );
 }
@@ -184,7 +235,12 @@ export function SelectField({
   return (
     <View style={[s.wrapper, containerStyle]}>
       {label ? (
-        <Text variant="label" style={s.label}>
+        <Text
+          variant="label"
+          style={s.label}
+          importantForAccessibility="no-hide-descendants"
+          accessibilityElementsHidden
+        >
           {label}
         </Text>
       ) : null}
@@ -197,13 +253,14 @@ export function SelectField({
         scaleValue={Motion.press.button}
         accessibilityRole="button"
         accessibilityLabel={`${label ?? placeholder}: ${value || placeholder}`}
+        accessibilityHint={[error, helper].filter(Boolean).join('. ') || undefined}
         accessibilityState={{ disabled: !!disabled }}
         style={[
           s.box,
           {
             backgroundColor: BACKGROUNDS[tone],
             borderRadius: Radius.full,
-            borderColor: error ? Colors.destructive : Colors.transparent,
+            borderColor: error ? Colors.destructive : RESTING_BORDERS[tone],
             opacity: disabled ? Opacity.dimmed : Opacity.full,
           },
         ]}
@@ -228,15 +285,7 @@ export function SelectField({
         <CaretDown size={Sizes.icon.sm} color={Colors.mutedForeground} weight="bold" />
       </PressableScale>
 
-      {error ? (
-        <Text variant="caption" color="danger" style={s.message}>
-          {error}
-        </Text>
-      ) : helper ? (
-        <Text variant="caption" color="muted" style={s.message}>
-          {helper}
-        </Text>
-      ) : null}
+      <FieldMessage error={error} helper={helper} />
     </View>
   );
 }

@@ -47,14 +47,16 @@ Deno.serve(async (req) => {
             // Router por tipo de notificación
             let invokeError: unknown = null;
             if (notif.tipo_notificacion.includes('DEVOLUCION')) {
-                // Invoca enviar-push
+                // Devolución automática (cron auto_devolver_encomienda): la bandeja la escribe enviar-push.
+                const tracking = notif.payload?.tracking_id ? ` ${notif.payload.tracking_id}` : '';
                 const { error: errDevolucion } = await supabase.functions.invoke('enviar-push', {
                     body: {
                         user_id: notif.destinatario_id,
-                        titulo: "Encomienda Devuelta",
-                        mensaje: `Estimado remitente, su encomienda ${notif.payload?.tracking_id} ha sido devuelta a origen por falta de retiro.`,
+                        titulo: "Tu encomienda volvió a origen",
+                        mensaje: `Nadie retiró la encomienda${tracking} a tiempo y la devolvimos a la oficina de origen. Pasa a buscarla con tu cédula.`,
                         recurso_tipo: notif.recurso_tipo,
-                        recurso_id: notif.recurso_id
+                        recurso_id: notif.recurso_id,
+                        tipo: notif.tipo_notificacion
                     }
                 });
                 invokeError = errDevolucion;
@@ -68,7 +70,8 @@ Deno.serve(async (req) => {
                         mensaje: notif.payload.mensaje,
                         recurso_tipo: notif.recurso_tipo,
                         recurso_id: notif.recurso_id,
-                        sin_bandeja: notif.payload.sin_bandeja === true
+                        sin_bandeja: notif.payload.sin_bandeja === true,
+                        tipo: notif.tipo_notificacion
                     }
                 });
                 invokeError = errGenerica;

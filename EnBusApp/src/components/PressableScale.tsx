@@ -10,6 +10,8 @@
  *     reads as lag.
  *   - Only `transform` animates: no layout property is touched, so the whole
  *     interaction stays on the UI thread.
+ *   - Con "reducir movimiento" no hay escala: el toque solo da la vibración
+ *     (si se pidió) y el resultado.
  */
 import React from 'react';
 import { Pressable as RNPressable, StyleSheet, ViewStyle } from 'react-native';
@@ -17,6 +19,7 @@ import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withTiming,
+  useReducedMotion,
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { Motion, Opacity, Sizes } from '@/src/theme';
@@ -64,6 +67,7 @@ export function PressableScale({
   ...rest
 }: PressableScaleProps) {
   const scale = useSharedValue(1);
+  const reduceMotion = useReducedMotion();
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
@@ -71,15 +75,19 @@ export function PressableScale({
 
   const handlePressIn = (e: unknown) => {
     if (disabled) return;
-    scale.value = withTiming(scaleValue, { duration, easing: Motion.easing.out });
+    if (!reduceMotion) {
+      scale.value = withTiming(scaleValue, { duration, easing: Motion.easing.out });
+    }
     onPressIn?.(e);
   };
 
   const handlePressOut = (e: unknown) => {
-    scale.value = withTiming(1, {
-      duration: Math.round(duration * 0.65),
-      easing: Motion.easing.out,
-    });
+    scale.value = reduceMotion
+      ? 1
+      : withTiming(1, {
+          duration: Math.round(duration * 0.65),
+          easing: Motion.easing.out,
+        });
     onPressOut?.(e);
   };
 

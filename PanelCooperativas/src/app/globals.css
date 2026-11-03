@@ -1,6 +1,8 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
+/* Colores, --radius y --duration-*: fuente shared/tokens.json (node shared/generar.mjs). No escribir hex aquí. */
+@import "./tokens.generated.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -27,6 +29,9 @@
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
+  /* Borde de controles (≥ 3:1): border-border-strong */
+  --color-border-strong: var(--border-strong);
+  --color-input-border: var(--input-border);
   --color-destructive: var(--destructive);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
@@ -63,6 +68,12 @@
   --color-info-text: var(--info-text);
   --color-destructive-text: var(--destructive-text);
 
+  /* Texto sobre los fondos suaves *-light (≥ 6:1): text-success-deep, text-warning-deep… */
+  --color-success-deep: var(--success-deep);
+  --color-warning-deep: var(--warning-deep);
+  --color-info-deep: var(--info-deep);
+  --color-destructive-deep: var(--destructive-deep);
+
   /* Precise border radius overrides */
   --radius-sm: 10px;
   --radius-md: 16px;
@@ -72,145 +83,6 @@
   --radius-3xl: 32px;
   --radius-4xl: 40px;
   --radius-full: 9999px;
-}
-
-:root {
-  --background: #FFFFFF;
-  --foreground: #202020;
-  
-  --card: #FFFFFF;
-  --card-foreground: #202020;
-  
-  --popover: #FFFFFF;
-  --popover-foreground: #202020;
-  
-  --primary: #FFC757;
-  --primary-foreground: #202020;
-  /* El amarillo es superficie; como texto usar `text-primary-text` (≥ 4,5:1 sobre blanco).
-     En botones `bg-primary` el texto es `text-primary-foreground`. */
-  --primary-text: #8A5A00;
-
-  --secondary: #FF7648;
-  --secondary-foreground: #FFFFFF;
-
-  --accent: #4A7FF8;
-  --accent-foreground: #FFFFFF;
-
-  --muted: #F0EFEB;
-  --muted-foreground: #666666;
-  
-  --destructive: #dc2626;
-  --border: #E8E6E1;
-  --input: #E8E6E1;
-  /* Foco visible sobre fondos claros (el amarillo no se ve sobre blanco) */
-  --ring: #202020;
-  
-  --chart-1: #FFC757;
-  --chart-2: #FF7648;
-  --chart-3: #4A7FF8;
-  --chart-4: #8A8A8A;
-  --chart-5: #202020;
-  
-  --radius: 16px;
-  
-  /* Custom EnBus tokens */
-  --primary-light: rgba(255, 199, 87, 0.15);
-  --secondary-light: rgba(255, 118, 72, 0.12);
-  --accent-light: rgba(74, 127, 248, 0.12);
-  
-  --surface: #F0EFEB;
-  --surface-dark: #E8E6E1;
-  
-  --success: #22c55e;
-  --success-light: #dcfce7;
-  --warning: #f59e0b;
-  --warning-light: #fef3c7;
-  --info: #3b82f6;
-  --info-light: #dbeafe;
-  --destructive-light: #fee2e2;
-
-  /* Texto de estado (≥ 4,5:1 sobre blanco y --card) */
-  --success-text: #15803D;
-  --warning-text: #B45309;
-  --info-text: #1D4ED8;
-  --destructive-text: #B91C1C;
-
-  /* Sidebar styling - Light Mode */
-  --sidebar: #F0EFEB;
-  --sidebar-foreground: #202020;
-  --sidebar-primary: #FFC757;
-  --sidebar-primary-foreground: #202020;
-  --sidebar-accent: #E8E6E1;
-  --sidebar-accent-foreground: #202020;
-  --sidebar-border: #E8E6E1;
-  --sidebar-ring: #202020;
-}
-
-.dark {
-  --background: #141414;
-  --foreground: #F0EFEB;
-  
-  --card: #1E1E1E;
-  --card-foreground: #F0EFEB;
-  
-  --popover: #1E1E1E;
-  --popover-foreground: #F0EFEB;
-  
-  --primary: #FFC757;
-  --primary-foreground: #202020;
-  --primary-text: #FFC757;
-
-  --secondary: #FF7648;
-  --secondary-foreground: #FFFFFF;
-
-  --accent: #4A7FF8;
-  --accent-foreground: #FFFFFF;
-
-  --muted: #2A2A2A;
-  --muted-foreground: #9A9A9A;
-  
-  --destructive: #dc2626;
-  --border: #2E2E2E;
-  --input: #2E2E2E;
-  --ring: #FFC757;
-  
-  --chart-1: #FFC757;
-  --chart-2: #FF7648;
-  --chart-3: #4A7FF8;
-  --chart-4: #8A8A8A;
-  --chart-5: #202020;
-
-  /* Custom EnBus tokens - Dark Mode */
-  --primary-light: rgba(255, 199, 87, 0.15);
-  --secondary-light: rgba(255, 118, 72, 0.12);
-  --accent-light: rgba(74, 127, 248, 0.12);
-  
-  --surface: #202020;
-  --surface-dark: #2A2A2A;
-  
-  --success: #22c55e;
-  --success-light: #14532d;
-  --warning: #f59e0b;
-  --warning-light: #78350f;
-  --info: #3b82f6;
-  --info-light: #1e3a8a;
-  --destructive-light: #7f1d1d;
-
-  /* Texto de estado (≥ 4,5:1 sobre --background y --card oscuros) */
-  --success-text: #4ADE80;
-  --warning-text: #FBBF24;
-  --info-text: #93C5FD;
-  --destructive-text: #F87171;
-
-  /* Sidebar styling - Dark Mode */
-  --sidebar: #1E1E1E;
-  --sidebar-foreground: #F0EFEB;
-  --sidebar-primary: #FFC757;
-  --sidebar-primary-foreground: #202020;
-  --sidebar-accent: #2A2A2A;
-  --sidebar-accent-foreground: #F0EFEB;
-  --sidebar-border: #2E2E2E;
-  --sidebar-ring: #FFC757;
 }
 
 @layer base {
@@ -235,4 +107,17 @@
 .animate-scan-line {
   position: absolute;
   animation: scan-line 2s ease-in-out infinite;
+}
+
+/* Reducir movimiento (#59): sin animaciones ni transiciones si el sistema lo pide.
+   Las animaciones nuevas usan además `motion-safe:`. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

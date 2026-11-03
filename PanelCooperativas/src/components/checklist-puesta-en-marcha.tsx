@@ -91,7 +91,7 @@ export function ChecklistPuestaEnMarcha({ checklist }: { checklist: ChecklistCoo
           aria-valuenow={hechos}
         >
           <div
-            className="h-full rounded-full bg-primary transition-all"
+            className="h-full rounded-full bg-primary motion-safe:transition-all"
             style={{ width: `${(hechos / obligatorios.length) * 100}%` }}
           />
         </div>
@@ -119,7 +119,7 @@ export function ChecklistPuestaEnMarcha({ checklist }: { checklist: ChecklistCoo
                 </span>
                 {!p.hecho && (
                   <ArrowRight
-                    className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5"
+                    className="size-4 shrink-0 text-muted-foreground motion-safe:transition-transform motion-safe:group-hover:translate-x-0.5"
                     aria-hidden
                   />
                 )}

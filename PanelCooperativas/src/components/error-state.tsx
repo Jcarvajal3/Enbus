@@ -48,7 +48,7 @@ export function ErrorState({ titulo, descripcion, onReintentar, compacto = false
       aria-busy={reintentando || undefined}
     >
       {reintentando ? (
-        <SpinnerIcon className="animate-spin" aria-hidden />
+        <SpinnerIcon className="motion-safe:animate-spin" aria-hidden />
       ) : (
         <ArrowClockwise aria-hidden />
       )}
@@ -61,15 +61,15 @@ export function ErrorState({ titulo, descripcion, onReintentar, compacto = false
       <div
         role="alert"
         className={cn(
-          "flex flex-col gap-3 rounded-xl border border-destructive/30 bg-destructive/5 p-4 sm:flex-row sm:items-center sm:justify-between",
+          "flex flex-col gap-3 rounded-xl border border-destructive/40 bg-destructive-light p-4 sm:flex-row sm:items-center sm:justify-between",
           className
         )}
       >
         <div className="flex items-start gap-2">
-          <CloudWarning className="mt-0.5 size-5 shrink-0 text-destructive-text" weight="duotone" aria-hidden />
+          <CloudWarning className="mt-0.5 size-5 shrink-0 text-destructive-deep" weight="duotone" aria-hidden />
           <div className="text-sm">
-            <p className="font-medium text-foreground">{titulo}</p>
-            {descripcion && <p className="text-muted-foreground">{descripcion}</p>}
+            <p className="font-medium text-destructive-deep">{titulo}</p>
+            {descripcion && <p className="text-destructive-deep">{descripcion}</p>}
           </div>
         </div>
         {boton}
@@ -82,8 +82,8 @@ export function ErrorState({ titulo, descripcion, onReintentar, compacto = false
       role="alert"
       className={cn("flex flex-col items-center justify-center p-12 text-center", className)}
     >
-      <div className="mb-4 flex size-16 items-center justify-center rounded-full bg-destructive/10">
-        <CloudWarning className="size-8 text-destructive-text" weight="duotone" aria-hidden />
+      <div className="mb-4 flex size-16 items-center justify-center rounded-full bg-destructive-light">
+        <CloudWarning className="size-8 text-destructive-deep" weight="duotone" aria-hidden />
       </div>
       <h3 className="text-lg font-medium">{titulo}</h3>
       {descripcion && <p className="mt-1 mb-6 max-w-sm text-sm text-muted-foreground">{descripcion}</p>}

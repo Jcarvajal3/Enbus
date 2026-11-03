@@ -16,7 +16,9 @@ Deno.serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { user_id, titulo, mensaje, recurso_tipo, recurso_id, sin_bandeja } = await req.json();
+    const { user_id, titulo, mensaje, recurso_tipo, recurso_id, sin_bandeja, tipo } = await req.json();
+    // tipo (opcional): BOLETO_CONFIRMADO, VIAJE_REPROGRAMADO, DEVOLUCION_AUTOMATICA… La app elige icono y tono.
+    const tipoNotificacion = typeof tipo === 'string' && tipo.trim() !== '' ? tipo.trim() : null;
 
     if (!user_id || !titulo || !mensaje) {
         return new Response(JSON.stringify({ error: "Missing parameters" }), { status: 400, headers: corsHeaders });
@@ -61,7 +63,7 @@ Deno.serve(async (req) => {
                     sound: 'default',
                     title: titulo,
                     body: mensaje,
-                    data: { recurso_tipo, recurso_id },
+                    data: { recurso_tipo, recurso_id, tipo: tipoNotificacion },
                 }),
             });
             const expoData = await expoResponse.json();
@@ -77,6 +79,7 @@ Deno.serve(async (req) => {
     if (sin_bandeja !== true) {
         await supabase.from('notificaciones_usuario').insert({
             usuario_id: user_id,
+            tipo: tipoNotificacion,
             titulo: titulo,
             mensaje: mensaje,
             recurso_tipo: recurso_tipo,

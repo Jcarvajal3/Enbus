@@ -5,6 +5,7 @@ import Animated, {
   useSharedValue,
   withDelay,
   withTiming,
+  useReducedMotion,
 } from 'react-native-reanimated';
 import { Motion } from '@/src/theme';
 
@@ -31,6 +32,9 @@ interface StaggerItemProps {
  * runs on the UI thread via `withDelay`, and items past
  * `Motion.stagger.maxIndex` all share the same delay so off-screen rows don't
  * wait a second to appear.
+ *
+ * Con "reducir movimiento" activado en el teléfono el contenido aparece ya en
+ * su sitio, sin animación.
  */
 export function StaggerItem({
   index,
@@ -40,15 +44,20 @@ export function StaggerItem({
   style,
   children,
 }: StaggerItemProps) {
-  const progress = useSharedValue(0);
+  const reduceMotion = useReducedMotion();
+  const progress = useSharedValue(reduceMotion ? 1 : 0);
   const delay = Math.min(index, Motion.stagger.maxIndex) * delayStep;
 
   useEffect(() => {
+    if (reduceMotion) {
+      progress.value = 1;
+      return;
+    }
     progress.value = withDelay(
       delay,
       withTiming(1, { duration, easing: Motion.easing.out })
     );
-  }, [delay, duration, progress]);
+  }, [delay, duration, progress, reduceMotion]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     opacity: progress.value,

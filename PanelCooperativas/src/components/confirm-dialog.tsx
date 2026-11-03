@@ -307,11 +307,12 @@ function Contenido({
             disabled={enCurso}
             aria-busy={enCurso || undefined}
             className={cn(
+              // Texto de fondo sobre `destructive-text`: ≥ 6:1 en claro y en oscuro.
               destructivo &&
-                "bg-red-700 text-white hover:bg-red-800 dark:bg-red-600 dark:hover:bg-red-700"
+                "bg-destructive-text text-background hover:bg-destructive-text/90 focus-visible:ring-destructive/40"
             )}
           >
-            {enCurso && <SpinnerIcon className="animate-spin" aria-hidden />}
+            {enCurso && <SpinnerIcon className="motion-safe:animate-spin" aria-hidden />}
             {enCurso ? verboCargando ?? "Procesando…" : verbo}
           </Button>
         </AlertDialogFooter>

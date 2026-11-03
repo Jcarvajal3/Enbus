@@ -126,7 +126,7 @@ export function ConnectivityBanner() {
     return () => clearTimeout(timer);
   }, [wasOffline, clearWasOffline]);
 
-  // ── Offline — red, cannot be dismissed ──────────────────────────────────
+  // ── Sin conexión: tono peligro, no se puede cerrar ──────────────────────────────────
   if (!online) {
     return (
       <div
@@ -134,18 +134,18 @@ export function ConnectivityBanner() {
         aria-live="assertive"
         className="
           flex items-center justify-center gap-2
-          bg-destructive text-destructive-foreground
+          border-b border-destructive/40 bg-destructive-light text-destructive-deep
           px-4 py-2 text-sm font-medium text-center
-          animate-in slide-in-from-top duration-300
+          motion-safe:animate-in motion-safe:slide-in-from-top motion-safe:duration-300
         "
       >
         <WifiSlash size={16} weight="bold" aria-hidden />
-        Sin conexión a internet. Funcionalidad limitada.
+        Sin conexión a internet. No podrás guardar cambios hasta que vuelva la conexión.
       </div>
     );
   }
 
-  // ── Restored — green, auto-hides ─────────────────────────────────────────
+  // ── Restaurada: tono éxito, se oculta sola ─────────────────────────────────────────
   if (wasOffline) {
     return (
       <div
@@ -153,13 +153,13 @@ export function ConnectivityBanner() {
         aria-live="polite"
         className="
           flex items-center justify-center gap-2
-          bg-emerald-600 text-white
+          border-b border-success/40 bg-success-light text-success-deep
           px-4 py-2 text-sm font-medium text-center
-          animate-in slide-in-from-top duration-300
+          motion-safe:animate-in motion-safe:slide-in-from-top motion-safe:duration-300
         "
       >
         <WifiHigh size={16} weight="bold" aria-hidden />
-        Conexión restaurada. Sincronizando...
+        Conexión restaurada.
       </div>
     );
   }

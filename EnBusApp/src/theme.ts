@@ -1,9 +1,12 @@
 /**
  * EnBus Design System — Brand Manual Tokens
  *
- * Single source of truth for all visual constants.
  * Every screen and component imports from here. Nothing visual should be a
- * literal number or colour in a screen file.
+ * literal number or colour in a screen file (lint: no hex/rgba outside this file).
+ *
+ * Colours, radii and motion durations come from `shared/tokens.json` (the same
+ * source as the panel and the landing) through `./tokens.generated.ts`, which
+ * `node shared/generar.mjs` writes. Edit the JSON, never the generated file.
  *
  * Palette:
  *   Primary   #FFC757  (warm yellow)
@@ -32,6 +35,8 @@
 
 import { Easing } from 'react-native-reanimated';
 
+import { palette, tokens } from './tokens.generated';
+
 // ─── Alpha helper ────────────────────────────────────────────────────────────
 
 /**
@@ -59,44 +64,10 @@ export function alpha(color: string, a: number): string {
   return color;
 }
 
-// ─── Palette (raw values — prefer the semantic Colors below) ─────────────────
-
-const palette = {
-  yellow: '#FFC757',
-  coral: '#FF7648',
-  blue: '#4A7FF8',
-  /** Darker blue for white text on blue (5.7:1) */
-  blueDark: '#2F5FD0',
-  beige: '#F0EFEB',
-  beigeDark: '#E8E6E1',
-  ink: '#202020',
-  grey: '#8A8A8A',
-  /** Text grey: 5.7:1 on white, 5.0:1 on surface, 4.6:1 on surfaceDark */
-  greyText: '#666666',
-  white: '#FFFFFF',
-  green: '#22c55e',
-  greenSoft: '#dcfce7',
-  amber: '#f59e0b',
-  amberSoft: '#fef3c7',
-  sky: '#3b82f6',
-  skySoft: '#dbeafe',
-  red: '#dc2626',
-  redSoft: '#fee2e2',
-
-  // Text-safe darks — ≥ 4.5:1 on white, surface and surfaceDark
-  amberText: '#8A5A00',
-  greenText: '#147638',
-  orangeText: '#A34B08',
-  blueText: '#1D4ED8',
-  redText: '#B91C1C',
-
-  // Badge foregrounds — ≥ 6:1 on their matching *Soft background
-  amberDeep: '#92400E',
-  greenDeep: '#166534',
-  blueDeep: '#1E40AF',
-  redDeep: '#991B1B',
-  coralDeep: '#9A3412',
-} as const;
+// ─── Palette ─────────────────────────────────────────────────────────────────
+// Raw values (prefer the semantic Colors below) live in shared/tokens.json →
+// `palette` in ./tokens.generated.ts: yellow, coral, blue, blueDark, beige, ink,
+// grey, greyText, white, black, *Soft, *Text (≥ 4.5:1) and *Deep (≥ 6:1 on *Soft).
 
 // ─── Colors ──────────────────────────────────────────────────────────────────
 
@@ -153,10 +124,12 @@ export const Colors = {
   // Borders
   border: palette.beigeDark,
   borderLight: palette.beige,
+  /** Control borders that must read at ≥ 3:1 (inputs, checkboxes at rest) */
+  borderStrong: palette.borderStrong,
 
   // Overlays (modals, bottom sheets)
-  scrim: alpha('#000000', 0.4),
-  scrimStrong: alpha('#000000', 0.55),
+  scrim: alpha(palette.black, 0.4),
+  scrimStrong: alpha(palette.black, 0.55),
 
   // Misc
   white: palette.white,
@@ -326,23 +299,15 @@ export const Sizes = {
 
 // ─── Radius ──────────────────────────────────────────────────────────────────
 
-export const Radius = {
-  xs: 6,
-  sm: 10,
-  md: 16,
-  lg: 20,
-  xl: 24,
-  '2xl': 28,
-  '3xl': 36,
-  full: 999,
-} as const;
+/** xs 6 · sm 10 · md 16 · lg 20 · xl 24 · 2xl 28 · 3xl 36 · full 999 (shared/tokens.json → radio) */
+export const Radius = tokens.radio;
 
 // ─── Shadows ─────────────────────────────────────────────────────────────────
 
 export const Shadows = {
   /** Barely-there separation — use on surfaces already tinted */
   subtle: {
-    shadowColor: '#000',
+    shadowColor: palette.black,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.03,
     shadowRadius: 6,
@@ -350,7 +315,7 @@ export const Shadows = {
   },
   /** Subtle card elevation */
   card: {
-    shadowColor: '#000',
+    shadowColor: palette.black,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 12,
@@ -358,7 +323,7 @@ export const Shadows = {
   },
   /** Floating elements (FABs, tab bars) */
   elevated: {
-    shadowColor: '#000',
+    shadowColor: palette.black,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.08,
     shadowRadius: 16,
@@ -366,7 +331,7 @@ export const Shadows = {
   },
   /** Modals and bottom sheets */
   overlay: {
-    shadowColor: '#000',
+    shadowColor: palette.black,
     shadowOffset: { width: 0, height: -6 },
     shadowOpacity: 0.12,
     shadowRadius: 24,
@@ -382,7 +347,7 @@ export const Shadows = {
   }),
   /** Tab bar floating shadow */
   tabBar: {
-    shadowColor: '#000',
+    shadowColor: palette.black,
     shadowOffset: { width: 0, height: -4 },
     shadowOpacity: 0.06,
     shadowRadius: 16,
@@ -394,9 +359,9 @@ export const Shadows = {
 
 export const Gradients = {
   /** Hero gradient: warm yellow → coral */
-  warm: ['#FFC757', '#FF7648'] as const,
+  warm: [palette.yellow, palette.coral] as const,
   /** Accent CTA gradient — subtle depth on the blue */
-  accent: ['#5C8DFA', '#4A7FF8'] as const,
+  accent: [palette.blueBright, palette.blue] as const,
   /** Ambient background glow */
   ambientGlow: [
     alpha(palette.yellow, 0.22),
@@ -404,7 +369,7 @@ export const Gradients = {
     palette.white,
   ] as const,
   /** Subtle surface gradient for cards */
-  surfaceSubtle: ['#FFFFFF', '#F0EFEB'] as const,
+  surfaceSubtle: [palette.white, palette.beige] as const,
   /** Fade used to let content scroll out under a floating bar */
   fadeToBackground: [
     alpha(palette.white, 0),
@@ -424,20 +389,16 @@ export const Gradients = {
  *   - Press feedback is `fast`; screen/content transitions are `base`.
  */
 export const Motion = {
-  duration: {
-    /** Press feedback release */
-    instant: 110,
-    /** Press-in, toggles, micro-interactions */
-    fast: 160,
-    /** Default: content entering, indicators sliding */
-    base: 240,
-    /** Screen-level entrances, larger surfaces */
-    slow: 340,
-    /** Hero / staged reveals */
-    slower: 520,
-    /** Looping ambient pulses */
-    ambient: 800,
-  },
+  /**
+   * From shared/tokens.json → movimiento.duration:
+   *   instant 110 — press feedback release
+   *   fast    160 — press-in, toggles, micro-interactions
+   *   base    240 — default: content entering, indicators sliding
+   *   slow    340 — screen-level entrances, larger surfaces
+   *   slower  520 — hero / staged reveals
+   *   ambient 800 — looping ambient pulses
+   */
+  duration: tokens.movimiento.duration,
 
   easing: {
     /** Decelerate — the default for anything entering */

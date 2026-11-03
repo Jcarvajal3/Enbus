@@ -58,7 +58,7 @@ export function useTasaBCV(): TasaBCV | null {
   return useContext(TasaBCVContext);
 }
 
-/** Chip con la tasa del día: "BCV 02/10: 100,81 Bs/USD" (ámbar si está desactualizada). */
+/** Chip con la tasa del día: "BCV 02/10: 100,81 Bs/USD" (tono aviso si está desactualizada). */
 export function TasaBCVChip({ className }: { className?: string }) {
   const tasa = useTasaBCV();
   const desactualizada = esTasaDesactualizada(tasa);
@@ -82,14 +82,14 @@ export function TasaBCVChip({ className }: { className?: string }) {
       className={cn(
         "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium tabular-nums whitespace-nowrap",
         desactualizada
-          ? "border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-300"
+          ? "border-warning/40 bg-warning-light text-warning-deep"
           : "border-border bg-muted/50 text-muted-foreground",
         className
       )}
     >
       <span
         aria-hidden
-        className={cn("size-1.5 rounded-full", desactualizada ? "bg-amber-500" : "bg-emerald-500")}
+        className={cn("size-1.5 rounded-full", desactualizada ? "bg-warning" : "bg-success")}
       />
       {texto}
       <span className="sr-only">. {ayuda}</span>
