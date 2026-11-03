@@ -1,77 +1,57 @@
+import { Warning } from "@phosphor-icons/react/dist/ssr";
 import { CeldaEnlace } from "@/components/celda-enlace";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { StatusBadge } from "@/components/status-badge";
+import { FilaVacia } from "@/components/fila-vacia";
+import { TarjetaTabla, Vacio } from "@/components/admin/detalle";
 import { etiquetaTipoIncidencia } from "@/lib/estados";
 import { formatHaceTiempo } from "@/lib/fechas";
-import { IncidenciaReciente } from "@/lib/types/admin-dashboard";
+import type { IncidenciaReciente } from "@/lib/types/admin-dashboard";
+import { codigoIncidencia } from "@/lib/types/admin-incidencias";
 
 interface IncidenciasRecientesTableProps {
   data: IncidenciaReciente[];
 }
 
-/** Mismo código que ve el usuario al reportar ("INC-1A2B3C"). */
-function codigoIncidencia(id: string): string {
-  return `INC-${id.replace(/-/g, "").slice(0, 6).toUpperCase()}`;
-}
-
 export function IncidenciasRecientesTable({ data }: IncidenciasRecientesTableProps) {
   return (
-    <Card className="col-span-1">
-      <CardHeader>
-        <CardTitle>Incidencias recientes</CardTitle>
-        <CardDescription>Las últimas 10 abiertas o en proceso.</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="overflow-hidden rounded-md border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Incidencia</TableHead>
-                <TableHead>Tipo</TableHead>
-                <TableHead>Encomienda</TableHead>
-                <TableHead>Estado</TableHead>
-                <TableHead className="text-right">Fecha</TableHead>
+    <TarjetaTabla titulo="Incidencias recientes" descripcion="Las últimas 10 abiertas o en proceso.">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Incidencia</TableHead>
+            <TableHead className="hidden sm:table-cell">Tipo</TableHead>
+            <TableHead className="hidden xl:table-cell">Encomienda</TableHead>
+            <TableHead>Estado</TableHead>
+            <TableHead>Antigüedad</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {data.length === 0 ? (
+            <FilaVacia colSpan={5} icon={Warning} titulo="No hay incidencias abiertas" />
+          ) : (
+            data.map((item) => (
+              <TableRow key={item.id} className="relative">
+                <CeldaEnlace
+                  href={`/admin/incidencias/${item.id}`}
+                  etiqueta={`Ver incidencia ${codigoIncidencia(item.id)}`}
+                  className="font-mono text-sm"
+                >
+                  {codigoIncidencia(item.id)}
+                </CeldaEnlace>
+                <TableCell className="hidden sm:table-cell">{etiquetaTipoIncidencia(item.tipo)}</TableCell>
+                <TableCell className="hidden font-mono text-sm xl:table-cell">
+                  {item.encomienda_tracking_id || <Vacio />}
+                </TableCell>
+                <TableCell>
+                  <StatusBadge status={item.estado} dominio="incidencia" />
+                </TableCell>
+                <TableCell className="text-muted-foreground">{formatHaceTiempo(item.created_at)}</TableCell>
               </TableRow>
-            </TableHeader>
-            <TableBody>
-              {data.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
-                    No hay incidencias abiertas.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                data.map((item) => (
-                  <TableRow key={item.id} className="relative motion-safe:transition-colors hover:bg-muted/50">
-                    <CeldaEnlace
-                      href={`/admin/incidencias/${item.id}`}
-                      etiqueta={`Ver incidencia ${codigoIncidencia(item.id)}`}
-                      className="font-mono text-xs"
-                    >
-                      {codigoIncidencia(item.id)}
-                    </CeldaEnlace>
-                    <TableCell className="text-sm">{etiquetaTipoIncidencia(item.tipo)}</TableCell>
-                    <TableCell>
-                      {item.encomienda_tracking_id ? (
-                        <span className="font-mono text-xs">{item.encomienda_tracking_id}</span>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">—</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <StatusBadge status={item.estado} dominio="incidencia" />
-                    </TableCell>
-                    <TableCell className="text-right text-xs text-muted-foreground">
-                      {formatHaceTiempo(item.created_at)}
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </div>
-      </CardContent>
-    </Card>
+            ))
+          )}
+        </TableBody>
+      </Table>
+    </TarjetaTabla>
   );
 }

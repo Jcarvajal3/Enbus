@@ -1,5 +1,7 @@
 "use client";
 
+import { ChartLine } from "@phosphor-icons/react";
+import { EmptyState } from "@/components/empty-state";
 import { Line, LineChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import {
   Card,
@@ -17,13 +19,14 @@ import {
   ChartTooltipContent,
 } from "@/components/ui/chart";
 
+// Colores de dominio (D20): Boletos = chart-3 (azul), Encomiendas = chart-2 (coral).
 const chartConfig = {
-  encomiendas: {
-    label: "Encomiendas",
-    color: "var(--color-chart-1)",
-  },
   boletos: {
     label: "Boletos",
+    color: "var(--color-chart-3)",
+  },
+  encomiendas: {
+    label: "Encomiendas",
     color: "var(--color-chart-2)",
   },
 } satisfies ChartConfig;
@@ -44,15 +47,18 @@ export function ActivityChart({ data }: ActivityChartProps) {
   });
 
   return (
-    <Card className="col-span-1 lg:col-span-3">
+    <Card>
       <CardHeader>
         <CardTitle>Actividad de los últimos 30 días</CardTitle>
-        <CardDescription>Encomiendas registradas y boletos pagados por día</CardDescription>
+        <CardDescription>Boletos pagados y encomiendas registradas por día</CardDescription>
       </CardHeader>
       <CardContent>
+        {data.every((d) => !d.boletos && !d.encomiendas) ? (
+          <EmptyState compacto icon={ChartLine} title="Sin actividad en estos 30 días" />
+        ) : (
         <ChartContainer config={chartConfig} className="min-h-[300px] w-full">
           <LineChart accessibilityLayer data={formattedData} margin={{ left: 10, right: 10, top: 10, bottom: 10 }}>
-            <CartesianGrid vertical={false} strokeDasharray="3 3" className="stroke-muted/40" />
+            <CartesianGrid vertical={false} strokeDasharray="3 3" className="stroke-border" />
             <XAxis
               dataKey="displayDate"
               tickLine={false}
@@ -65,22 +71,23 @@ export function ActivityChart({ data }: ActivityChartProps) {
             <ChartLegend content={<ChartLegendContent />} />
             <Line
               type="monotone"
-              dataKey="encomiendas"
-              stroke="var(--color-chart-1)"
+              dataKey="boletos"
+              stroke="var(--color-boletos)"
               strokeWidth={2}
-              dot={{ r: 3 }}
-              activeDot={{ r: 5 }}
+              dot={false}
+              activeDot={{ r: 4 }}
             />
             <Line
               type="monotone"
-              dataKey="boletos"
-              stroke="var(--color-chart-2)"
+              dataKey="encomiendas"
+              stroke="var(--color-encomiendas)"
               strokeWidth={2}
-              dot={{ r: 3 }}
-              activeDot={{ r: 5 }}
+              dot={false}
+              activeDot={{ r: 4 }}
             />
           </LineChart>
         </ChartContainer>
+        )}
       </CardContent>
     </Card>
   );

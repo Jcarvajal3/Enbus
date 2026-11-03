@@ -138,9 +138,9 @@ export default function HomeScreen() {
   );
 }
 
-// ─── Mosaico de actividad ────────────────────────────────────────────────────
+// ─── Fila de actividad ───────────────────────────────────────────────────────
 
-/** Acceso a una lista con algo en curso: icono del dominio, número y nombre. */
+/** Acceso a una lista con algo en curso: icono del dominio, nombre y cuántos hay. */
 function Mosaico({
   icono: Icono,
   cantidad,
@@ -166,18 +166,16 @@ function Mosaico({
       accessibilityRole="button"
       accessibilityLabel={`${cantidad} ${etiqueta.toLowerCase()}`}
     >
-      <View style={s.mosaicoArriba}>
-        <View style={[s.mosaicoIcono, { backgroundColor: fondoTinte }]}>
-          <Icono size={Sizes.icon.md} color={tinte} weight="bold" />
-        </View>
-        <CaretRight size={Sizes.icon.md} color={Colors.mutedForeground} weight="bold" />
+      <View style={[s.mosaicoIcono, { backgroundColor: fondoTinte }]}>
+        <Icono size={Sizes.icon.md} color={tinte} weight="bold" />
       </View>
-      <Text variant="title" compact>
-        {String(cantidad)}
-      </Text>
-      <Text variant="caption" color="muted" numberOfLines={2}>
+      <Text variant="bodyStrong" numberOfLines={1} style={s.mosaicoEtiqueta}>
         {etiqueta}
       </Text>
+      <Text variant="heading" compact>
+        {String(cantidad)}
+      </Text>
+      <CaretRight size={Sizes.icon.md} color={Colors.mutedForeground} weight="bold" />
     </PressableScale>
   );
 }
@@ -196,24 +194,22 @@ const s = StyleSheet.create({
     marginBottom: Spacing.lg,
   },
   actividad: {
-    marginTop: Spacing['3xl'],
+    marginTop: Spacing['2xl'],
   },
   mosaicos: {
-    flexDirection: 'row',
     gap: Spacing.md,
   },
   mosaico: {
-    flex: 1,
-    gap: Spacing.xs,
-    backgroundColor: Colors.surface,
-    borderRadius: Radius.xl,
-    padding: Spacing.lg,
-  },
-  mosaicoArriba: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: Spacing.sm,
+    gap: Spacing.md,
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.xl,
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.lg,
+  },
+  mosaicoEtiqueta: {
+    flex: 1,
   },
   mosaicoIcono: {
     width: Sizes.iconBox.md,

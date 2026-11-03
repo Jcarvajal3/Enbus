@@ -1,22 +1,26 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo, useRef } from "react";
-import Link from "next/link";
+// ─── Taquilla de boletos ────────────────────────────────────────────────────
+// Embarque (escáner + resultado), venta y lista de boletos. La pestaña de
+// estado (`?estado=`), el día (`?fecha=`), la página y el viaje abierto en su
+// hoja (`?viaje=`) viven en la URL.
+
+import { Suspense, useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge } from "@/components/status-badge";
 import { Spinner } from "@/components/ui/spinner";
+import { Badge } from "@/components/ui/badge";
+import { Card } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Button, buttonVariants } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { useUser } from "@/hooks/use-user";
+import { useCambiarParams, useParamUrl } from "@/hooks/use-param-url";
 import { createClient } from "@/lib/supabase/client";
-import { toast } from "sonner";
-import {
-  ArrowClockwise, CheckCircle, Ticket, Users, Warning, XCircle, Clock, Bus, Printer,
-} from "@phosphor-icons/react";
+import { ArrowClockwise, CheckCircle, Plus, Warning, XCircle } from "@phosphor-icons/react";
 import type { Boleto, EstadoBoleto } from "@/lib/types/boletos";
 import {
   getEstadoUiBoleto,
@@ -27,21 +31,29 @@ import {
 import { VentaFlow, CobrarReservaDialog } from "@/components/boletos/venta-flow";
 import { ScanInput } from "@/components/scan-input";
 import { UltimoEscaneo, useUltimoEscaneo, type ResultadoEscaneo } from "@/components/ultimo-escaneo";
-import { useImpresora } from "@/hooks/use-impresora";
-import { PasajerosViajeSheet } from "@/components/boletos/pasajeros-viaje-sheet";
+import { ViajeSheet } from "@/components/viajes/viaje-sheet";
 import { VerificarPagoDialog } from "@/components/pagos/verificar-pago-dialog";
 import { Monto } from "@/components/monto";
+import { CeldaEnlace } from "@/components/celda-enlace";
+import { ErrorState } from "@/components/error-state";
+import { FilaVacia } from "@/components/fila-vacia";
+import { TablaSkeleton } from "@/components/tabla-skeleton";
+import { BarraFiltros, TabsUrl } from "@/components/barra-filtros";
+import { PaginacionTabla, usePaginacion } from "@/components/paginacion-tabla";
 import { requireOnline } from "@/components/connectivity-banner";
-import { Pagination } from "@/components/ui/pagination";
+import { avisarError } from "@/lib/avisos";
 import { humanizeError } from "@/lib/errores";
-import { formatFechaVE, formatHoraVE, hoyVE, rangoDiaVE } from "@/lib/fechas";
+import { etiquetaEstado } from "@/lib/estados";
+import { formatDiaVE, formatFechaHoraCortaVE, formatHoraVE, hoyVE, rangoDiaVE } from "@/lib/fechas";
+import { ICONO_SECCION } from "@/lib/navigation";
 import { formatCiudad } from "@/lib/ciudades";
 import { formatCedula } from "@/lib/ve";
 import { formatCodigoBoleto, normalizarCodigoBoleto } from "@/lib/artefactos.generated";
 import { cn } from "@/lib/utils";
 import { confirmarEmbarque, validarEmbarque } from "./actions";
 
-const LIMITE = 50;
+const LIMITE = 100;
+const COLUMNAS = 7;
 
 type BoletoRow = Boleto & {
   comprador?: { nombre_completo: string } | null;
@@ -59,14 +71,23 @@ type ViajeHoy = {
 type Escaneo = { codigo: string; resultado: ResultadoEmbarque };
 
 const SIN_BUS = "todos";
+const FECHA_RE = /^\d{4}-\d{2}-\d{2}$/;
 
-const FILTROS_ESTADO: Record<string, string> = {
-  todos: "Todos",
-  RESERVADO: "Apartados (sin pagar o por verificar)",
-  PAGADO: "Pagados",
-  USADO: "Embarcados",
-  CANCELADO: "Cancelados",
-  EXPIRADO: "Vencidos",
+/** Pestañas de estado (PN-08): valor = estado visible del boleto. */
+const PESTANAS_ESTADO: Array<{ valor: string; etiqueta: string }> = [
+  { valor: "todos", etiqueta: "Todos" },
+  ...(["RESERVA_SIN_PAGAR", "PAGO_EN_VERIFICACION", "PAGADO", "USADO"] as const).map((e) => ({
+    valor: e,
+    etiqueta: etiquetaEstado("boleto", e),
+  })),
+];
+
+/** Estado guardado en la base para cada pestaña (las dos de reserva se separan por el pago). */
+const ESTADO_BD: Record<string, EstadoBoleto> = {
+  RESERVA_SIN_PAGAR: "RESERVADO",
+  PAGO_EN_VERIFICACION: "RESERVADO",
+  PAGADO: "PAGADO",
+  USADO: "USADO",
 };
 
 const MSG_SIN_CONEXION = "Esta operación requiere conexión a internet.";
@@ -84,27 +105,22 @@ function estadoUiDe(b: BoletoRow): EstadoUiBoleto {
   return getEstadoUiBoleto(b.estado as EstadoBoleto, pagoDe(b)?.estado_verificacion ?? null);
 }
 
-/** "08:00" (24 h, hora de Venezuela). */
+/** "2:30 p. m." (hora de Venezuela, D4). */
 function hora24(iso: string) {
-  return formatFechaVE(iso, { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+  return formatHoraVE(iso);
 }
 
-/** "HOY 08:00", "MAÑANA 06:00", "AYER 08:00" o "sáb 05/10 06:00". */
+/** "Hoy · 8:00 a. m.", "Mañana · 6:00 a. m.", "Ayer · …" o "05/10 · 6:00 a. m.". */
 function diaYHora(iso: string, dias: number) {
-  const dia =
-    dias === 0
-      ? "HOY"
-      : dias === 1
-        ? "MAÑANA"
-        : dias === -1
-          ? "AYER"
-          : formatFechaVE(iso, { weekday: "short", day: "2-digit", month: "2-digit" }).replace(",", "");
-  return `${dia} ${hora24(iso)}`;
+  if (dias === 0) return `Hoy · ${hora24(iso)}`;
+  if (dias === 1) return `Mañana · ${hora24(iso)}`;
+  if (dias === -1) return `Ayer · ${hora24(iso)}`;
+  return formatFechaHoraCortaVE(iso);
 }
 
-/** "03/10 a las 7:52 a. m." */
+/** "03/10 · 7:52 a. m." */
 function fechaYHora(iso: string) {
-  return `${formatFechaVE(iso, { day: "2-digit", month: "2-digit" })} a las ${formatHoraVE(iso)}`;
+  return formatFechaHoraCortaVE(iso);
 }
 
 /** "V12345678" / "v-12.345.678" -> "V-12.345.678" (para leer en voz alta en el andén). */
@@ -164,7 +180,7 @@ function ResultadoEmbarqueDialog({
   let cuerpo: React.ReactNode = null;
   let acciones: React.ReactNode = (
     <Button variant="outline" onClick={onCerrar} autoFocus ref={principalRef}>
-      Entendido
+      Cerrar
     </Button>
   );
 
@@ -174,8 +190,8 @@ function ResultadoEmbarqueDialog({
       <p className="text-sm">
         {r.resultado === "NO_ENCONTRADO" ? (
           <>
-            No encontramos ningún boleto con el código <span className="font-mono font-medium">{formatCodigoBoleto(r.codigo)}</span>. Revisa
-            que esté completo o escanéalo de nuevo.
+            No encontramos el boleto <span className="font-mono font-medium">{formatCodigoBoleto(r.codigo)}</span>. Revisa que esté
+            completo o escanéalo de nuevo.
           </>
         ) : (
           <>
@@ -190,7 +206,7 @@ function ResultadoEmbarqueDialog({
     const ruta = `${formatCiudad(viaje.origen)} → ${formatCiudad(viaje.destino)}`;
     const pasajero = [boleto.pasajero_nombre || "Sin nombre", cedulaLegible(boleto.pasajero_cedula)].filter(Boolean).join(" · ");
     const resumen = (
-      <div className="rounded-xl bg-muted/50 p-3 text-sm space-y-1">
+      <div className="flex flex-col gap-1 rounded-md bg-muted/50 p-3 text-sm">
         <p className="font-medium">
           {ruta} · {diaYHora(viaje.salida, r.dias_diferencia)}
           {viaje.unidad ? ` · Unidad ${viaje.unidad}` : ""}
@@ -211,7 +227,7 @@ function ResultadoEmbarqueDialog({
         tono = "ok";
         titulo = "Boleto válido";
         cuerpo = (
-          <div className="space-y-2">
+          <div className="flex flex-col gap-2">
             <p className="text-lg font-semibold">
               Sale {diaYHora(viaje.salida, r.dias_diferencia)} · {ruta}
               {viaje.unidad ? ` · Unidad ${viaje.unidad}` : ""}
@@ -233,7 +249,7 @@ function ResultadoEmbarqueDialog({
               onClick={() => onConfirmar(boleto.id)}
               disabled={confirmando}
             >
-              {confirmando && <Spinner className="mr-2 h-4 w-4" />}
+              {confirmando && <Spinner size="sm" />}
               {confirmando ? "Embarcando…" : "Confirmar embarque"}
             </Button>
           </>
@@ -243,11 +259,11 @@ function ResultadoEmbarqueDialog({
       case "OTRO_DIA":
         titulo = "Este boleto es para otro día";
         cuerpo = (
-          <div className="space-y-3">
+          <div className="flex flex-col gap-3">
             <p className="text-base font-medium">
               {r.dias_diferencia > 0
-                ? `Viaje del ${r.dias_diferencia === 1 ? "MAÑANA" : formatFechaVE(viaje.salida, { weekday: "short", day: "2-digit", month: "2-digit" }).replace(",", "")} a las ${hora24(viaje.salida)}. No lo embarques en este bus.`
-                : `Este boleto era para el viaje del ${formatFechaVE(viaje.salida, { day: "2-digit", month: "2-digit" })} ${hora24(viaje.salida)}, que ya salió. No lo embarques en este bus.`}
+                ? `Es para el viaje de ${r.dias_diferencia === 1 ? "mañana" : `el ${formatDiaVE(viaje.salida)}`} a las ${hora24(viaje.salida)}. No lo embarques en este bus.`
+                : `Era para el viaje del ${formatDiaVE(viaje.salida)} a las ${hora24(viaje.salida)}, que ya salió. No lo embarques.`}
             </p>
             {resumen}
           </div>
@@ -258,7 +274,7 @@ function ResultadoEmbarqueDialog({
         titulo = "Este boleto es de otro bus";
         const suBus = viajesHoy.find((v) => v.id === viaje.id);
         cuerpo = (
-          <div className="space-y-3">
+          <div className="flex flex-col gap-3">
             <p className="text-base font-medium">
               Es para {ruta} · {diaYHora(viaje.salida, r.dias_diferencia)}
               {viaje.unidad ? ` · Unidad ${viaje.unidad}` : ""}.
@@ -270,10 +286,10 @@ function ResultadoEmbarqueDialog({
         if (suBus) {
           acciones = (
             <>
-              <Button variant="outline" onClick={onCerrar} autoFocus ref={principalRef}>
-                Entendido
+              <Button variant="outline" onClick={onCerrar}>
+                Cerrar
               </Button>
-              <Button variant="secondary" onClick={() => onCambiarBus(suBus.id)} disabled={revalidando}>
+              <Button autoFocus ref={principalRef} onClick={() => onCambiarBus(suBus.id)} disabled={revalidando}>
                 Cambiar a ese bus
               </Button>
             </>
@@ -286,11 +302,8 @@ function ResultadoEmbarqueDialog({
         tono = "alerta";
         titulo = "Pago por verificar";
         cuerpo = (
-          <div className="space-y-3">
-            <p className="text-sm">
-              El pasajero registró un pago desde la app que todavía nadie verificó. Compáralo con tu banco: si lo
-              apruebas, podrás embarcarlo de inmediato.
-            </p>
+          <div className="flex flex-col gap-3">
+            <p className="text-sm">Compáralo con tu banco: si lo apruebas, lo embarcas de inmediato.</p>
             {resumen}
             {pago && (
               <VerificarPagoDialog
@@ -314,7 +327,7 @@ function ResultadoEmbarqueDialog({
           </div>
         );
         acciones = (
-          <Button variant="ghost" onClick={onCerrar}>
+          <Button variant="outline" onClick={onCerrar}>
             Cerrar sin embarcar
           </Button>
         );
@@ -324,7 +337,7 @@ function ResultadoEmbarqueDialog({
         tono = "alerta";
         titulo = "Reserva sin pagar";
         cuerpo = (
-          <div className="space-y-3">
+          <div className="flex flex-col gap-3">
             <p className="text-base font-medium">
               El pasajero apartó el asiento pero no ha pagado.
               {boleto.reserva_expira_at ? ` Vence a las ${hora24(boleto.reserva_expira_at)}.` : ""}
@@ -347,7 +360,7 @@ function ResultadoEmbarqueDialog({
       case "PAGO_RECHAZADO":
         titulo = "Pago rechazado";
         cuerpo = (
-          <div className="space-y-3">
+          <div className="flex flex-col gap-3">
             <p className="text-base font-medium">{pago?.motivo_rechazo || "La cooperativa rechazó el pago que registró el pasajero."}</p>
             <p className="text-sm text-muted-foreground">Cobra el pasaje en taquilla para poder embarcarlo.</p>
             {resumen}
@@ -368,10 +381,8 @@ function ResultadoEmbarqueDialog({
       case "EXPIRADO":
         titulo = "Reserva vencida";
         cuerpo = (
-          <div className="space-y-3">
-            <p className="text-base font-medium">
-              Reserva vencida: el asiento se liberó. Si el pasajero aún quiere viajar, véndele un boleto nuevo.
-            </p>
+          <div className="flex flex-col gap-3">
+            <p className="text-base font-medium">El asiento se liberó. Si aún quiere viajar, véndele un boleto nuevo.</p>
             {resumen}
           </div>
         );
@@ -390,7 +401,7 @@ function ResultadoEmbarqueDialog({
       case "CANCELADO":
         titulo = "Boleto cancelado";
         cuerpo = (
-          <div className="space-y-3">
+          <div className="flex flex-col gap-3">
             <p className="text-base font-medium">
               Este boleto se canceló{boleto.updated_at ? ` el ${fechaYHora(boleto.updated_at)}` : ""}. No lo embarques.
             </p>
@@ -408,7 +419,7 @@ function ResultadoEmbarqueDialog({
         const cuando = boleto.embarcado_at ?? boleto.updated_at;
         titulo = "Boleto ya usado";
         cuerpo = (
-          <div className="space-y-3">
+          <div className="flex flex-col gap-3">
             <p className="text-base font-medium">
               Este boleto ya se usó para embarcar{cuando ? ` el ${fechaYHora(cuando)}` : ""}.
             </p>
@@ -421,10 +432,10 @@ function ResultadoEmbarqueDialog({
       case "VIAJE_CANCELADO":
         titulo = "Viaje cancelado";
         cuerpo = (
-          <div className="space-y-3">
+          <div className="flex flex-col gap-3">
             <p className="text-base font-medium">
-              El viaje de este boleto fue cancelado. No lo embarques: envía al pasajero a la taquilla para cambiar su
-              boleto o devolverle el dinero.
+              El viaje de este boleto se canceló. No lo embarques: envíalo a la taquilla para cambiar el boleto o
+              devolverle el dinero.
             </p>
             {resumen}
           </div>
@@ -440,27 +451,27 @@ function ResultadoEmbarqueDialog({
       <DialogContent
         initialFocus={principalRef}
         className={cn(
-          "max-h-[92vh] overflow-y-auto sm:max-w-lg",
           tono === "ok" && "border-success/40",
           tono === "error" && "border-destructive/40",
           tono === "alerta" && "border-warning/40"
         )}
       >
         <DialogHeader>
-          <DialogTitle className={cn("flex items-center gap-2 text-xl", clase)}>
+          <DialogTitle className={cn("flex items-center gap-2 text-lg", clase)}>
             <Icono weight="fill" className="size-6 shrink-0" aria-hidden />
             {titulo}
           </DialogTitle>
           <DialogDescription className="sr-only">Resultado del escaneo del boleto</DialogDescription>
         </DialogHeader>
         {revalidando ? (
-          <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
-            <Spinner size="sm" /> Revisando el boleto de nuevo…
+          <div className="flex flex-col gap-2" role="status" aria-label="Revisando el boleto de nuevo">
+            <Skeleton className="h-5 w-3/4" />
+            <Skeleton className="h-16 w-full rounded-md" />
           </div>
         ) : (
           cuerpo
         )}
-        <DialogFooter className="flex-col-reverse gap-2 sm:flex-row">{acciones}</DialogFooter>
+        <DialogFooter>{acciones}</DialogFooter>
       </DialogContent>
     </Dialog>
   );
@@ -506,6 +517,23 @@ function escaneoDeResultado(codigo: string, r: ResultadoEmbarque): Omit<Resultad
 // ─── Página ─────────────────────────────────────────────────────────────────
 
 export default function TaquillaBoletosPage() {
+  // useSearchParams (?estado=, ?fecha=, ?viaje=) necesita un límite de Suspense (Next.js 16).
+  return (
+    <Suspense
+      fallback={
+        <div className="flex flex-col gap-6">
+          <Skeleton className="h-8 w-56" />
+          <Skeleton className="h-48 w-full rounded-md" />
+          <TablaSkeleton columnas={COLUMNAS} conFiltros />
+        </div>
+      }
+    >
+      <TaquillaBoletos />
+    </Suspense>
+  );
+}
+
+function TaquillaBoletos() {
   const { user } = useUser();
   const cooperativaId = user.cooperativa_id!;
   const supabase = useMemo(() => createClient(), []);
@@ -514,19 +542,19 @@ export default function TaquillaBoletosPage() {
   const [loading, setLoading] = useState(true);
   const [errorCarga, setErrorCarga] = useState<string | null>(null);
 
-  // Filtros
-  const [filtroEstado, setFiltroEstado] = useState<string>("todos");
-  const [filtroFecha, setFiltroFecha] = useState<string>("");
+  // Filtros y viaje abierto en la URL
+  const [estadoUrl] = useParamUrl("estado", "todos");
+  const filtroEstado = PESTANAS_ESTADO.some((p) => p.valor === estadoUrl) ? estadoUrl : "todos";
+  const [fechaUrl] = useParamUrl("fecha");
+  const filtroFecha = FECHA_RE.test(fechaUrl) ? fechaUrl : "";
+  const [viajeAbierto] = useParamUrl("viaje");
+  const cambiarParams = useCambiarParams();
+  const abrirViaje = (id: string | null) => cambiarParams({ viaje: id }, { conservarPagina: true });
 
   const [showVentaFlow, setShowVentaFlow] = useState(false);
   const [ventaViajeInicial, setVentaViajeInicial] = useState<string | null>(null);
   const [pagoAVerificar, setPagoAVerificar] = useState<string | null>(null);
   const [reservaACobrar, setReservaACobrar] = useState<string | null>(null);
-
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 10;
-
-  const [pasajerosSheetViaje, setPasajerosSheetViaje] = useState<{ id: string; ruta: string; salida: string | null } | null>(null);
 
   // Embarque
   const [viajesHoy, setViajesHoy] = useState<ViajeHoy[]>([]);
@@ -537,14 +565,11 @@ export default function TaquillaBoletosPage() {
   const [revalidando, setRevalidando] = useState(false);
   const [confirmando, setConfirmando] = useState(false);
   const { ultimo, registrar } = useUltimoEscaneo();
-  // Reconecta la impresora guardada al abrir la taquilla (#53).
-  const impresora = useImpresora();
   const validandoRef = useRef(false);
 
   const fetchBoletos = useCallback(async () => {
     setLoading(true);
     setErrorCarga(null);
-    setCurrentPage(1);
     try {
       let query = supabase
         .from("boletos")
@@ -565,7 +590,7 @@ export default function TaquillaBoletosPage() {
         .limit(LIMITE);
 
       if (filtroEstado !== "todos") {
-        query = query.eq("estado", filtroEstado);
+        query = query.eq("estado", ESTADO_BD[filtroEstado]);
       }
 
       if (filtroFecha) {
@@ -590,9 +615,13 @@ export default function TaquillaBoletosPage() {
 
       const { data, error } = await query;
       if (error) throw error;
-      setBoletos(data as unknown as BoletoRow[]);
+      let filas = data as unknown as BoletoRow[];
+      // "Reserva sin pagar" y "Pago por verificar" comparten estado en la base: los separa el pago.
+      if (filtroEstado === "RESERVA_SIN_PAGAR" || filtroEstado === "PAGO_EN_VERIFICACION") {
+        filas = filas.filter((b) => estadoUiDe(b) === filtroEstado);
+      }
+      setBoletos(filas);
     } catch (err) {
-      console.error(err);
       setErrorCarga(humanizeError(err, "cargar los boletos"));
     } finally {
       setLoading(false);
@@ -622,8 +651,7 @@ export default function TaquillaBoletosPage() {
         return proximo?.id ?? SIN_BUS;
       });
     } catch (err) {
-      console.error(err);
-      toast.error(humanizeError(err, "cargar los viajes de hoy"));
+      avisarError(humanizeError(err, "cargar los viajes de hoy"));
     } finally {
       setCargandoViajesHoy(false);
     }
@@ -656,18 +684,15 @@ export default function TaquillaBoletosPage() {
             const resumen = escaneoDeResultado(codigo, res.data);
             if (resumen) registrar(resumen);
           }
+        } else if (esRevalidacion) {
+          avisarError(res.error);
+          setEscaneo(null);
         } else {
-          if (esRevalidacion) {
-            toast.error(res.error);
-            setEscaneo(null);
-          } else {
-            registrar({ codigo: formatCodigoBoleto(codigo), tono: "error", titulo: "No pudimos revisar el boleto", detalle: res.error });
-          }
+          registrar({ codigo: formatCodigoBoleto(codigo), tono: "error", titulo: "No pudimos revisar el boleto", detalle: res.error });
         }
       } catch (err) {
-        console.error(err);
         const mensaje = mensajeExcepcion(err, "revisar el boleto");
-        if (esRevalidacion) toast.error(mensaje);
+        if (esRevalidacion) avisarError(mensaje);
         else registrar({ codigo: formatCodigoBoleto(codigo), tono: "error", titulo: "No pudimos revisar el boleto", detalle: mensaje });
       } finally {
         validandoRef.current = false;
@@ -706,14 +731,13 @@ export default function TaquillaBoletosPage() {
         // Dejó de ser válido entre el escaneo y la confirmación: mostrar la causa.
         const resumen = escaneoDeResultado(escaneo.codigo, res.resultado);
         if (resumen) registrar(resumen);
-        else toast.error(res.error);
+        else avisarError(res.error);
         setEscaneo({ codigo: escaneo.codigo, resultado: res.resultado });
       } else {
-        toast.error(res.error);
+        avisarError(res.error);
       }
     } catch (err) {
-      console.error(err);
-      toast.error(mensajeExcepcion(err, "confirmar el embarque"));
+      avisarError(mensajeExcepcion(err, "confirmar el embarque"));
     } finally {
       setConfirmando(false);
     }
@@ -724,59 +748,40 @@ export default function TaquillaBoletosPage() {
     setShowVentaFlow(true);
   };
 
-  const formatDate = (dateString: string) =>
-    formatFechaVE(dateString, { day: "2-digit", month: "short", hour: "numeric", minute: "2-digit", hour12: true }) || dateString;
-
-  const totalPages = Math.ceil(boletos.length / itemsPerPage);
-  const paginatedBoletos = boletos.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
-  const algunDialogo = showVentaFlow || !!escaneo || !!pagoAVerificar || !!reservaACobrar || !!pasajerosSheetViaje;
+  const { visibles, pagina, paginas, ir } = usePaginacion(boletos);
+  const algunDialogo = showVentaFlow || !!escaneo || !!pagoAVerificar || !!reservaACobrar || !!viajeAbierto;
+  const hayFiltros = filtroEstado !== "todos" || Boolean(filtroFecha);
+  const IconoEmbarque = ICONO_SECCION.escanear;
 
   return (
-    <div className="space-y-6 flex flex-col h-full animate-in fade-in duration-300">
-      <PageHeader title="Taquilla de boletos" description="Vende boletos, cobra reservas de la app y embarca pasajeros.">
-        <div className="flex flex-wrap gap-2">
-          <Button onClick={() => abrirVenta()}>
-            <Ticket className="w-4 h-4 mr-2" aria-hidden />
-            Vender boletos
-          </Button>
-          {impresora.estado !== "no-soportado" && (
-            <Link href="/cooperativas/hardware" className={buttonVariants({ variant: "outline" })}>
-              <Printer className="w-4 h-4 mr-2" aria-hidden />
-              {impresora.estado === "conectada"
-                ? "Impresora conectada"
-                : impresora.estado === "reconectando"
-                  ? "Reconectando impresora…"
-                  : "Conectar impresora"}
-            </Link>
-          )}
-        </div>
+    <div className="flex flex-col gap-6">
+      <PageHeader title="Taquilla de boletos">
+        <Button onClick={() => abrirVenta()}>
+          <ICONO_SECCION.taquillaBoletos aria-hidden />
+          Vender boletos
+        </Button>
       </PageHeader>
 
       {/* Embarque */}
-      <section aria-labelledby="titulo-embarque" className="rounded-2xl border bg-card p-4 space-y-3">
+      <Card role="region" aria-labelledby="titulo-embarque" className="gap-4 p-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <h2 id="titulo-embarque" className="font-semibold flex items-center gap-2">
-              <Bus className="size-5" aria-hidden />
-              Embarque
-            </h2>
-            <p className="text-sm text-muted-foreground">Escanea el boleto de cada pasajero antes de que suba al bus.</p>
-          </div>
-          <div className="space-y-1.5 w-full sm:w-[360px]">
-            <Label htmlFor="bus-embarque" className="text-sm text-muted-foreground">
-              ¿Qué bus estás embarcando?
-            </Label>
+          <h2 id="titulo-embarque" className="flex items-center gap-2 text-lg font-semibold">
+            <IconoEmbarque className="size-5 text-muted-foreground" aria-hidden />
+            Embarque
+          </h2>
+          <div className="flex w-full flex-col gap-2 sm:w-[360px]">
+            <Label htmlFor="bus-embarque">¿Qué bus estás embarcando?</Label>
             <div className="flex gap-2">
               <Select
                 value={viajeEmbarque}
                 onValueChange={(v) => setViajeEmbarque(v ?? SIN_BUS)}
                 items={{
-                  [SIN_BUS]: "Cualquier bus de hoy (sin comparar)",
+                  [SIN_BUS]: "Cualquier bus de hoy",
                   ...Object.fromEntries(viajesHoy.map((v) => [v.id, etiquetaViaje(v)])),
                 }}
               >
                 <SelectTrigger id="bus-embarque" className="w-full" disabled={cargandoViajesHoy}>
-                  <SelectValue placeholder={cargandoViajesHoy ? "Cargando viajes de hoy…" : "Elige el bus"} />
+                  <SelectValue placeholder="Elige el bus" />
                 </SelectTrigger>
                 <SelectContent>
                   {viajesHoy.map((v) => (
@@ -784,7 +789,7 @@ export default function TaquillaBoletosPage() {
                       {etiquetaViaje(v)}
                     </SelectItem>
                   ))}
-                  <SelectItem value={SIN_BUS}>Cualquier bus de hoy (sin comparar)</SelectItem>
+                  <SelectItem value={SIN_BUS}>Cualquier bus de hoy</SelectItem>
                 </SelectContent>
               </Select>
               <Button
@@ -795,20 +800,17 @@ export default function TaquillaBoletosPage() {
                 aria-label="Actualizar los viajes de hoy"
                 title="Actualizar los viajes de hoy"
               >
-                <ArrowClockwise />
+                {cargandoViajesHoy ? <Spinner size="sm" /> : <ArrowClockwise aria-hidden />}
               </Button>
             </div>
+            {!cargandoViajesHoy && viajesHoy.length === 0 && (
+              <p className="text-sm text-muted-foreground">No hay viajes por embarcar hoy.</p>
+            )}
           </div>
         </div>
 
-        {!cargandoViajesHoy && viajesHoy.length === 0 && (
-          <p className="text-sm text-muted-foreground">
-            No hay viajes de hoy por embarcar. Puedes escanear igual: verás para qué viaje es cada boleto.
-          </p>
-        )}
-
         <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
-          <div className="space-y-2">
+          <div className="flex flex-col gap-2">
             <ScanInput onCodigo={handleCodigo} cooperativaId={cooperativaId} mode="boletos" disabled={algunDialogo || validando} />
             <div className="min-h-5 text-sm text-muted-foreground" aria-live="polite">
               {validando && (
@@ -820,184 +822,136 @@ export default function TaquillaBoletosPage() {
           </div>
           <UltimoEscaneo resultado={ultimo} />
         </div>
-      </section>
+      </Card>
 
-      <div className="flex flex-col sm:flex-row gap-4 items-end">
-        <div className="space-y-1.5 w-full sm:w-[280px]">
-          <Label htmlFor="filtro-estado" className="text-sm font-medium text-muted-foreground">Estado</Label>
-          <Select value={filtroEstado} onValueChange={(val) => setFiltroEstado(val ?? "todos")} items={FILTROS_ESTADO}>
-            <SelectTrigger id="filtro-estado" className="w-full">
-              <SelectValue placeholder="Estado" />
-            </SelectTrigger>
-            <SelectContent>
-              {Object.entries(FILTROS_ESTADO).map(([valor, texto]) => (
-                <SelectItem key={valor} value={valor}>{texto}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <TabsUrl param="estado" defecto="todos" opciones={PESTANAS_ESTADO} />
+          <BarraFiltros fechas={[{ param: "fecha", etiqueta: "Fecha del viaje" }]} />
         </div>
 
-        <div className="space-y-1.5 w-full sm:w-[200px]">
-          <Label htmlFor="filtro-fecha-viaje" className="text-sm font-medium text-muted-foreground">Fecha del viaje</Label>
-          <Input
-            id="filtro-fecha-viaje"
-            type="date"
-            value={filtroFecha}
-            onChange={(e) => setFiltroFecha(e.target.value)}
-          />
-        </div>
-
-        {(filtroEstado !== "todos" || filtroFecha) && (
-          <Button
-            variant="ghost"
-            onClick={() => {
-              setFiltroEstado("todos");
-              setFiltroFecha("");
-            }}
-          >
-            Limpiar filtros
-          </Button>
-        )}
-      </div>
-
-      <div className="flex-1 space-y-4">
-        <div className="rounded-md border bg-card">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Código</TableHead>
-                <TableHead>Viaje</TableHead>
-                <TableHead>Pasajero</TableHead>
-                <TableHead>Asiento</TableHead>
-                <TableHead>Estado</TableHead>
-                <TableHead className="text-right">Precio</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="h-32 text-center">
-                    <div className="flex items-center justify-center">
-                      <Spinner size="md" />
-                      <span className="ml-3 text-muted-foreground font-medium">Cargando boletos…</span>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ) : errorCarga ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="h-32 text-center">
-                    <div className="flex flex-col items-center gap-3">
-                      <span className="text-sm text-destructive-text">{errorCarga}</span>
-                      <Button variant="outline" size="sm" onClick={() => void fetchBoletos()}>
-                        <ArrowClockwise className="mr-2" />
-                        Reintentar
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ) : boletos.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="h-32 text-center text-muted-foreground">
-                    {filtroEstado !== "todos" || filtroFecha
-                      ? "No hay boletos con estos filtros."
-                      : "Todavía no hay boletos. Usa «Vender boletos» para emitir el primero."}
-                  </TableCell>
-                </TableRow>
-              ) : (
-                paginatedBoletos.map((boleto) => {
-                  const origen = formatCiudad(boleto.viaje?.ruta?.ciudad_origen);
-                  const destino = formatCiudad(boleto.viaje?.ruta?.ciudad_destino);
-                  const rutaString = origen && destino ? `${origen} → ${destino}` : "Ruta desconocida";
-                  const salida = boleto.viaje?.fecha_hora_salida ?? null;
-                  const nombrePasajero = boleto.pasajero_nombre || boleto.comprador?.nombre_completo || "Sin nombre";
-                  const ui = estadoUiDe(boleto);
-                  const pago = pagoDe(boleto);
-
-                  return (
-                    <TableRow key={boleto.id} className="hover:bg-muted/50 transition-colors">
-                      <TableCell className="font-mono font-medium text-primary-text">
-                        {formatCodigoBoleto(boleto.codigo_boleto)}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-col">
-                          <span className="font-medium">{rutaString}</span>
-                          <span className="text-xs text-muted-foreground mb-1">{salida ? formatDate(salida) : ""}</span>
-                          {boleto.viaje?.id && (
-                            <button
-                              type="button"
-                              className="text-xs text-primary-text hover:underline text-left inline-flex items-center"
-                              onClick={() => setPasajerosSheetViaje({ id: boleto.viaje!.id, ruta: rutaString, salida })}
-                            >
-                              <Users className="w-3 h-3 mr-1" aria-hidden />
-                              Ver pasajeros
-                            </button>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-col">
-                          <span>{nombrePasajero}</span>
-                          {boleto.pasajero_cedula && (
-                            <span className="text-xs text-muted-foreground">{formatCedula(boleto.pasajero_cedula)}</span>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <span className="font-medium bg-muted px-2 py-1 rounded-md text-xs tabular-nums">
-                          {boleto.asiento}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-col gap-2 items-start">
-                          <StatusBadge status={ui} dominio="boleto" />
-                          {ui === "RESERVA_SIN_PAGAR" && boleto.reserva_expira_at && (
-                            <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                              <Clock className="size-3" aria-hidden />
-                              Vence {formatHoraVE(boleto.reserva_expira_at)}
-                            </span>
-                          )}
-                          {ui === "PAGO_EN_VERIFICACION" && pago && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="h-7 text-xs border-primary/50 text-primary-text hover:bg-primary/10"
-                              onClick={() => setPagoAVerificar(pago.id)}
-                            >
-                              Validar pago
-                            </Button>
-                          )}
-                          {(ui === "RESERVA_SIN_PAGAR" || ui === "PAGO_RECHAZADO") && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="h-7 text-xs"
-                              onClick={() => setReservaACobrar(boleto.id)}
-                            >
-                              Cobrar
-                            </Button>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Monto usd={boleto.precio} align="right" size="sm" />
-                      </TableCell>
+        {loading && boletos.length === 0 ? (
+          <TablaSkeleton columnas={COLUMNAS} />
+        ) : (
+          <Card className="gap-0 overflow-hidden p-0">
+            {errorCarga ? (
+              <ErrorState titulo="No pudimos cargar los boletos" descripcion={errorCarga} onReintentar={fetchBoletos} />
+            ) : (
+              <>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Código</TableHead>
+                      <TableHead>Viaje</TableHead>
+                      <TableHead>Pasajero</TableHead>
+                      <TableHead>Asiento</TableHead>
+                      <TableHead>Estado</TableHead>
+                      <TableHead className="hidden text-right lg:table-cell">Precio</TableHead>
+                      <TableHead className="text-right">Acciones</TableHead>
                     </TableRow>
-                  );
-                })
-              )}
-            </TableBody>
-          </Table>
-        </div>
+                  </TableHeader>
+                  <TableBody>
+                    {boletos.length === 0 ? (
+                      <FilaVacia
+                        colSpan={COLUMNAS}
+                        icon={ICONO_SECCION.taquillaBoletos}
+                        titulo={hayFiltros ? "No hay boletos con estos filtros" : "Todavía no hay boletos"}
+                        accion={
+                          hayFiltros ? undefined : (
+                            <Button onClick={() => abrirVenta()}>
+                              <Plus aria-hidden />
+                              Vender boletos
+                            </Button>
+                          )
+                        }
+                      />
+                    ) : (
+                      visibles.map((boleto) => {
+                        const origen = formatCiudad(boleto.viaje?.ruta?.ciudad_origen);
+                        const destino = formatCiudad(boleto.viaje?.ruta?.ciudad_destino);
+                        const rutaString = origen && destino ? `${origen} → ${destino}` : "Ruta desconocida";
+                        const salida = boleto.viaje?.fecha_hora_salida ?? null;
+                        const nombrePasajero = boleto.pasajero_nombre || boleto.comprador?.nombre_completo || "Sin nombre";
+                        const ui = estadoUiDe(boleto);
+                        const pago = pagoDe(boleto);
+                        const codigo = formatCodigoBoleto(boleto.codigo_boleto);
+                        const viajeId = boleto.viaje?.id ?? null;
+
+                        return (
+                          <TableRow key={boleto.id} className={cn(viajeId && "relative")}>
+                            {viajeId ? (
+                              <CeldaEnlace
+                                onAbrir={() => abrirViaje(viajeId)}
+                                etiqueta={`Ver el viaje del boleto ${codigo}`}
+                                className="font-mono text-sm"
+                              >
+                                {codigo}
+                              </CeldaEnlace>
+                            ) : (
+                              <TableCell className="font-mono text-sm text-foreground">{codigo}</TableCell>
+                            )}
+                            <TableCell>
+                              <div className="flex flex-col">
+                                <span className="font-medium">{rutaString}</span>
+                                {salida && (
+                                  <span className="text-xs text-muted-foreground tabular-nums">{formatFechaHoraCortaVE(salida)}</span>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex flex-col">
+                                <span>{nombrePasajero}</span>
+                                {boleto.pasajero_cedula && (
+                                  <span className="text-xs text-muted-foreground">{formatCedula(boleto.pasajero_cedula)}</span>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant="outline" className="font-mono tabular-nums">
+                                {boleto.asiento}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex flex-col items-start gap-1">
+                                <StatusBadge status={ui} dominio="boleto" />
+                                {ui === "RESERVA_SIN_PAGAR" && boleto.reserva_expira_at && (
+                                  <span className="text-xs text-muted-foreground tabular-nums">
+                                    Vence {formatHoraVE(boleto.reserva_expira_at)}
+                                  </span>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell className="hidden text-right lg:table-cell">
+                              <Monto usd={boleto.precio} align="right" size="sm" />
+                            </TableCell>
+                            <TableCell className="text-right">
+                              {ui === "PAGO_EN_VERIFICACION" && pago && (
+                                <Button size="sm" variant="outline" className="relative z-10" onClick={() => setPagoAVerificar(pago.id)}>
+                                  Verificar pago
+                                </Button>
+                              )}
+                              {(ui === "RESERVA_SIN_PAGAR" || ui === "PAGO_RECHAZADO") && (
+                                <Button size="sm" variant="outline" className="relative z-10" onClick={() => setReservaACobrar(boleto.id)}>
+                                  Cobrar
+                                </Button>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })
+                    )}
+                  </TableBody>
+                </Table>
+                <PaginacionTabla pagina={pagina} paginas={paginas} onCambio={ir} />
+              </>
+            )}
+          </Card>
+        )}
         {!loading && boletos.length >= LIMITE && (
-          <p className="text-xs text-muted-foreground">
-            Se muestran los {LIMITE} boletos más recientes. Usa los filtros para encontrar otros.
+          <p className="text-sm text-muted-foreground">
+            Últimos {LIMITE} boletos{filtroFecha ? ` del ${formatDiaVE(filtroFecha)}` : ""}. Filtra por fecha para ver otros.
           </p>
         )}
-        <Pagination
-          currentPage={currentPage}
-          totalPages={totalPages}
-          onPageChange={setCurrentPage}
-        />
       </div>
 
       <VentaFlow
@@ -1006,7 +960,7 @@ export default function TaquillaBoletosPage() {
         onClose={() => {
           setShowVentaFlow(false);
           setVentaViajeInicial(null);
-          void fetchBoletos(); // Refresh table when flow closes
+          void fetchBoletos();
         }}
       />
 
@@ -1053,12 +1007,10 @@ export default function TaquillaBoletosPage() {
         />
       )}
 
-      <PasajerosViajeSheet
-        isOpen={!!pasajerosSheetViaje}
-        onClose={() => setPasajerosSheetViaje(null)}
-        viajeId={pasajerosSheetViaje?.id || null}
-        rutaString={pasajerosSheetViaje?.ruta || ""}
-        salida={pasajerosSheetViaje?.salida ?? null}
+      <ViajeSheet
+        viajeId={viajeAbierto || null}
+        onOpenChange={(abierto) => !abierto && abrirViaje(null)}
+        onCambio={() => void fetchBoletos()}
       />
     </div>
   );

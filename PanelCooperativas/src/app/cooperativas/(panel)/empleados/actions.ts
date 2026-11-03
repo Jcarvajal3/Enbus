@@ -240,7 +240,7 @@ export async function toggleEmpleado(
   if (!admin.ok) return { error: admin.error };
 
   if (admin.userId === targetId) {
-    return { error: "No puedes desactivar tu propia cuenta." };
+    return { error: "No puedes suspender tu propia cuenta." };
   }
 
   // El empleado debe ser de la misma cooperativa

@@ -1,5 +1,7 @@
 "use client";
 
+import { Package } from "@phosphor-icons/react";
+import { EmptyState } from "@/components/empty-state";
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import {
   Card,
@@ -15,10 +17,11 @@ import {
   ChartTooltipContent,
 } from "@/components/ui/chart";
 
+// Dominio Encomiendas = chart-2 (D20).
 const chartConfig = {
   total: {
     label: "Encomiendas",
-    color: "var(--color-chart-4)",
+    color: "var(--color-chart-2)",
   },
 } satisfies ChartConfig;
 
@@ -28,16 +31,14 @@ interface RutasChartProps {
 
 export function RutasChart({ data }: RutasChartProps) {
   return (
-    <Card className="col-span-1">
+    <Card>
       <CardHeader>
         <CardTitle>Rutas con más encomiendas</CardTitle>
         <CardDescription>Encomiendas registradas en los últimos 30 días</CardDescription>
       </CardHeader>
       <CardContent>
         {data.length === 0 ? (
-          <div className="flex h-[250px] items-center justify-center text-muted-foreground text-sm">
-            Sin envíos registrados.
-          </div>
+          <EmptyState compacto icon={Package} title="Sin encomiendas en estos 30 días" />
         ) : (
           <ChartContainer config={chartConfig} className="min-h-[250px] w-full">
             <BarChart
@@ -46,7 +47,7 @@ export function RutasChart({ data }: RutasChartProps) {
               layout="vertical"
               margin={{ left: 10, right: 10, top: 10, bottom: 10 }}
             >
-              <CartesianGrid horizontal={false} className="stroke-muted/40" />
+              <CartesianGrid horizontal={false} className="stroke-border" />
               {/* Barras horizontales: los nombres de las rutas no se solapan (AD-08). */}
               <YAxis
                 dataKey="ruta_nombre"
@@ -60,7 +61,7 @@ export function RutasChart({ data }: RutasChartProps) {
               <ChartTooltip content={<ChartTooltipContent />} />
               <Bar
                 dataKey="total"
-                fill="var(--color-chart-4)"
+                fill="var(--color-total)"
                 radius={[0, 4, 4, 0]}
                 barSize={20}
               />

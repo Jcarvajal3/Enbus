@@ -2,18 +2,22 @@
 
 import { useEffect, useRef, useState, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
-import { toast } from "sonner";
-import { Truck, Package, ArrowLeft } from "@phosphor-icons/react";
+import { CaretRight } from "@phosphor-icons/react";
 import { recibirLote } from "./actions";
 import { requireOnline } from "@/components/connectivity-banner";
+import { AvisoError } from "@/components/aviso-error";
+import { EmptyState } from "@/components/empty-state";
+import { TonoBadge } from "@/components/status-badge";
+import { avisarExito, avisarInfo } from "@/lib/avisos";
 import { humanizeError } from "@/lib/errores";
 import { ErrorState } from "@/components/error-state";
-import { formatFechaVE } from "@/lib/fechas";
+import { formatFechaHoraCortaVE } from "@/lib/fechas";
+import { ICONO_SECCION } from "@/lib/navigation";
 import { vaASucursal, type SucursalRecepcion } from "./sucursal";
 import { formatCiudad } from "@/lib/ciudades";
 
@@ -92,6 +96,7 @@ export function RecepcionLoteModal({ isOpen, onClose, cooperativaId, sucursal, o
   const [selectedViaje, setSelectedViaje] = useState<ViajeData | null>(null);
   const [selectedEncomiendaIds, setSelectedEncomiendaIds] = useState<Set<string>>(new Set());
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorEnvio, setErrorEnvio] = useState<string | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -135,6 +140,7 @@ export function RecepcionLoteModal({ isOpen, onClose, cooperativaId, sucursal, o
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setSelectedViaje(null);
       setSelectedEncomiendaIds(new Set());
+      setErrorEnvio(null);
     }
 
     return () => {
@@ -153,6 +159,7 @@ export function RecepcionLoteModal({ isOpen, onClose, cooperativaId, sucursal, o
   const encomiendasPendientes = selectedViaje?.encomiendas.filter(e => e.estado === "EN_TRANSITO") || [];
 
   const handleViajeSelect = (viaje: ViajeData) => {
+    setErrorEnvio(null);
     setSelectedViaje(viaje);
     // Nada marcado de antemano (PC-36): se marca lo que de verdad llegó.
     setSelectedEncomiendaIds(new Set());
@@ -178,191 +185,148 @@ export function RecepcionLoteModal({ isOpen, onClose, cooperativaId, sucursal, o
 
   const handleConfirmar = async () => {
     if (selectedEncomiendaIds.size === 0) return;
-    
+
     setIsSubmitting(true);
+    setErrorEnvio(null);
     try {
       const ids = Array.from(selectedEncomiendaIds);
       const result = await requireOnline(() => recibirLote(ids))();
-      
+
       if (result.success && result.count === 0) {
         // Ninguna seguía en camino (otro usuario ya las recibió)
-        toast.error("No se recibió ninguna encomienda: ya habían sido recibidas. Actualiza la lista.");
+        avisarInfo("Ya las habían recibido: no se recibió ninguna.");
         onSuccess();
         onClose();
       } else if (result.success) {
-        if (result.count < ids.length) {
-          toast.warning(`Se recibieron ${result.count} de ${ids.length} encomiendas. Las demás ya habían sido recibidas. Ya puedes entregarlas desde «Entrega».`);
-        } else {
-          toast.success(
-            `${result.count === 1 ? "1 encomienda recibida. Ya puedes entregarla" : `${result.count} encomiendas recibidas. Ya puedes entregarlas`} desde «Entrega».`
-          );
-        }
+        const n = result.count === 1 ? "1 encomienda recibida" : `${result.count} encomiendas recibidas`;
+        if (result.count < ids.length) avisarInfo(`${n} de ${ids.length}. Las demás ya estaban recibidas.`);
+        else avisarExito(`${n}.`);
         onSuccess();
         onClose();
       } else {
-        toast.error(result.error || humanizeError(null, "recibir el lote"));
+        setErrorEnvio(result.error || humanizeError(null, "recibir el lote"));
       }
     } catch (err) {
-      toast.error(humanizeError(err, "recibir el lote"));
+      setErrorEnvio(humanizeError(err, "recibir el lote"));
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const formatDate = (dateString: string) =>
-    formatFechaVE(dateString, { day: "2-digit", month: "short", hour: "numeric", minute: "numeric" });
+  const rutaDe = (v: ViajeData) =>
+    v.ruta ? `${formatCiudad(v.ruta.ciudad_origen)} → ${formatCiudad(v.ruta.ciudad_destino)}` : "Sin viaje asignado";
+  const marcadas = selectedEncomiendaIds.size;
 
   return (
     // Esc o clic fuera cierran, salvo mientras se recibe el lote.
     <Dialog open={isOpen} onOpenChange={(open) => !open && !isSubmitting && onClose()}>
-      <DialogContent className="max-w-2xl sm:max-w-xl">
+      <DialogContent tamano="flujo" showCloseButton={!isSubmitting}>
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            {selectedViaje && (
-              <Button 
-                variant="ghost" 
-                size="icon" 
-                className="h-8 w-8 -ml-2 rounded-full"
-                onClick={() => setSelectedViaje(null)}
-                aria-label="Volver a la lista de viajes"
-              >
-                <ArrowLeft size={18} aria-hidden />
-              </Button>
-            )}
-            <Truck size={24} className="text-primary-text" weight="duotone" aria-hidden />
-            {selectedViaje ? "Confirmar lote" : "Elegir viaje"}
-          </DialogTitle>
+          <DialogTitle>{selectedViaje ? "Marca las que llegaron" : "Recibir lote del viaje"}</DialogTitle>
           <DialogDescription>
-            {selectedViaje 
-              ? "Marca una por una las encomiendas que llegaron en este viaje. Las que no marques siguen «En tránsito»."
-              : "Elige el viaje en que llegaron las encomiendas. Aparecen todos los viajes con encomiendas en camino, aunque no se haya marcado su salida."}
+            {selectedViaje
+              ? `${rutaDe(selectedViaje)}${selectedViaje.fecha_hora_salida ? ` · ${formatFechaHoraCortaVE(selectedViaje.fecha_hora_salida)}` : ""}. Las que no marques siguen «En tránsito».`
+              : "Paso 1 de 2 · Elige el viaje"}
           </DialogDescription>
         </DialogHeader>
 
-        <div className="min-h-[300px] mt-4">
-          {loading ? (
-            <div className="flex flex-col items-center justify-center h-[300px]">
-              <Spinner size="md" />
-              <span className="text-muted-foreground mt-4">Buscando encomiendas en camino…</span>
-            </div>
-          ) : errorCarga ? (
-            <ErrorState
-              titulo="No pudimos cargar las encomiendas en camino"
-              descripcion={errorCarga}
-              onReintentar={() => setRecarga((n) => n + 1)}
-            />
-          ) : !selectedViaje ? (
-            /* PASO 1: SELECCIONAR VIAJE */
-            viajes.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-[300px] text-center px-4">
-                <Truck size={48} className="text-muted-foreground mb-4" aria-hidden />
-                <h3 className="font-medium text-lg">No hay encomiendas en camino</h3>
-                <p className="text-muted-foreground mt-2">
-                  {sucursal
-                    ? `Ahora no hay encomiendas en camino hacia tu sucursal ${sucursal.nombre}.`
-                    : "Ahora no hay encomiendas en camino hacia tu cooperativa."}
-                </p>
-              </div>
-            ) : (
-              <ScrollArea className="h-[400px] pr-4">
-                <div className="space-y-3">
-                  {viajes.map((viaje, i) => {
-                    const pendientes = viaje.encomiendas.filter(e => e.estado === "EN_TRANSITO").length;
-                    return (
-                      <button
-                        type="button"
-                        key={viaje.id}
-                        // El primer viaje queda enfocado: Enter lo elige.
-                        autoFocus={i === 0}
-                        aria-label={`${viaje.ruta ? `Viaje ${formatCiudad(viaje.ruta.ciudad_origen)} a ${formatCiudad(viaje.ruta.ciudad_destino)}` : "Sin viaje asignado"}: ${pendientes} pendientes`}
-                        className="w-full rounded-xl border bg-card p-4 text-left cursor-pointer hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors flex justify-between items-center group"
-                        onClick={() => handleViajeSelect(viaje)}
-                      >
-                        <div>
-                          <div className="font-semibold text-base mb-1 group-hover:text-primary-text transition-colors">
-                            {viaje.ruta ? `${formatCiudad(viaje.ruta.ciudad_origen)} → ${formatCiudad(viaje.ruta.ciudad_destino)}` : "Sin viaje asignado"}
-                          </div>
-                          <div className="text-sm text-muted-foreground flex gap-3">
-                            {viaje.fecha_hora_salida && <span>{formatDate(viaje.fecha_hora_salida)}</span>}
-                            {viaje.numero_unidad && (
-                              <>
-                                <span>•</span>
-                                <span>Unidad {viaje.numero_unidad}</span>
-                              </>
-                            )}
-                          </div>
-                          {viaje.estado === "PROGRAMADO" && (
-                            <div className="mt-1 text-xs text-warning-text">
-                              En origen no se marcó la salida de este bus.
-                            </div>
-                          )}
-                        </div>
-                        <div className="flex flex-col items-end">
-                          <span className="text-2xl font-bold text-primary-text">{pendientes}</span>
-                          <span className="text-xs text-muted-foreground uppercase font-medium">Pendientes</span>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </ScrollArea>
-            )
+        {loading ? (
+          <div className="flex flex-col gap-2" role="status" aria-label="Buscando encomiendas en camino">
+            {[0, 1, 2].map((i) => (
+              <Skeleton key={i} className="h-20 w-full rounded-md" />
+            ))}
+          </div>
+        ) : errorCarga ? (
+          <ErrorState
+            compacto
+            titulo="No pudimos cargar las encomiendas en camino"
+            descripcion={errorCarga}
+            onReintentar={() => setRecarga((n) => n + 1)}
+          />
+        ) : !selectedViaje ? (
+          /* PASO 1: ELEGIR VIAJE */
+          viajes.length === 0 ? (
+            <EmptyState compacto icon={ICONO_SECCION.recepcion} title="No hay encomiendas en camino" />
           ) : (
-            /* PASO 2: CONFIRMAR ENCOMIENDAS */
-            <div className="space-y-4">
-              <div className="bg-muted/40 p-3 rounded-md mb-4 flex items-center justify-between border">
-                <div className="flex items-center gap-2">
-                  <Checkbox 
-                    id="select-all" 
-                    ref={todasRef}
-                    checked={selectedEncomiendaIds.size === encomiendasPendientes.length && encomiendasPendientes.length > 0}
-                    onCheckedChange={(c) => handleToggleAll(c === true)}
-                  />
-                  <label htmlFor="select-all" className="text-sm font-medium cursor-pointer">
-                    Llegaron todas ({encomiendasPendientes.length})
-                  </label>
-                </div>
-                <div className="text-sm text-muted-foreground">
-                  {selectedViaje.ruta ? `Viaje desde ${formatCiudad(selectedViaje.ruta.ciudad_origen)}` : "Sin viaje asignado"}
-                </div>
-              </div>
-
-              <ScrollArea className="h-[320px] border rounded-md p-4">
-                <div className="space-y-3">
-                  {encomiendasPendientes.map((encomienda) => (
-                    <div key={encomienda.id} className="flex items-center space-x-3 p-2 rounded-md hover:bg-muted/50 transition-colors">
-                      <Checkbox 
-                        id={encomienda.id} 
-                        checked={selectedEncomiendaIds.has(encomienda.id)}
-                        onCheckedChange={(c) => handleToggleEncomienda(encomienda.id, c === true)}
-                      />
-                      <label htmlFor={encomienda.id} className="flex-1 flex justify-between items-center cursor-pointer">
-                        <span className="font-mono font-medium">{encomienda.tracking_id}</span>
-                        <span className="text-sm text-muted-foreground max-w-[150px] truncate">{encomienda.receiver_nombre}</span>
-                      </label>
-                    </div>
-                  ))}
-                </div>
-              </ScrollArea>
-
-              <div className="flex justify-end gap-3 pt-2">
-                <Button variant="outline" onClick={() => setSelectedViaje(null)} disabled={isSubmitting}>
-                  Volver
-                </Button>
-                <Button 
-                  onClick={handleConfirmar} 
-                  disabled={selectedEncomiendaIds.size === 0 || isSubmitting}
-                  className="gap-2"
-                >
-                  {isSubmitting ? <Spinner className="h-4 w-4" /> : <Package weight="bold" size={18} aria-hidden />}
-                  {selectedEncomiendaIds.size === 0
-                    ? "Marca las que llegaron"
-                    : `Recibir ${selectedEncomiendaIds.size === 1 ? "1 encomienda" : `${selectedEncomiendaIds.size} encomiendas`} de ${encomiendasPendientes.length}`}
-                </Button>
-              </div>
+            <ul className="flex flex-col gap-2">
+              {viajes.map((viaje, i) => {
+                const pendientes = viaje.encomiendas.filter((e) => e.estado === "EN_TRANSITO").length;
+                return (
+                  <li key={viaje.id}>
+                    <button
+                      type="button"
+                      // El primer viaje queda enfocado: Enter lo elige.
+                      autoFocus={i === 0}
+                      aria-label={`${rutaDe(viaje)}: ${pendientes} en camino`}
+                      className="flex w-full items-center justify-between gap-4 rounded-md border border-border bg-card p-4 text-left transition-colors outline-none hover:border-input-border hover:bg-muted/50 focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                      onClick={() => handleViajeSelect(viaje)}
+                    >
+                      <span className="flex min-w-0 flex-col gap-1">
+                        <span className="text-base font-semibold">{rutaDe(viaje)}</span>
+                        <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground tabular-nums">
+                          {viaje.fecha_hora_salida && <span>{formatFechaHoraCortaVE(viaje.fecha_hora_salida)}</span>}
+                          {viaje.numero_unidad && <span>· Unidad {viaje.numero_unidad}</span>}
+                          {viaje.estado === "PROGRAMADO" && <TonoBadge tono="pendiente">Sin salida marcada</TonoBadge>}
+                        </span>
+                      </span>
+                      <span className="flex shrink-0 items-center gap-2 text-sm text-muted-foreground">
+                        <span className="tabular-nums">
+                          <span className="font-semibold text-foreground">{pendientes}</span> en camino
+                        </span>
+                        <CaretRight className="size-4" aria-hidden />
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )
+        ) : (
+          /* PASO 2: MARCAR LAS QUE LLEGARON */
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center gap-3 rounded-md bg-muted/50 px-4 py-3">
+              <Checkbox
+                id="select-all"
+                ref={todasRef}
+                checked={marcadas === encomiendasPendientes.length && encomiendasPendientes.length > 0}
+                onCheckedChange={(c) => handleToggleAll(c === true)}
+              />
+              <label htmlFor="select-all" className="cursor-pointer text-sm font-medium">
+                Llegaron todas ({encomiendasPendientes.length})
+              </label>
             </div>
-          )}
-        </div>
+
+            <ul className="flex flex-col divide-y divide-border rounded-md border border-border">
+              {encomiendasPendientes.map((encomienda) => (
+                <li key={encomienda.id} className="flex items-center gap-3 px-4 py-3">
+                  <Checkbox
+                    id={encomienda.id}
+                    checked={selectedEncomiendaIds.has(encomienda.id)}
+                    onCheckedChange={(c) => handleToggleEncomienda(encomienda.id, c === true)}
+                  />
+                  <label htmlFor={encomienda.id} className="flex flex-1 cursor-pointer items-center justify-between gap-3">
+                    <span className="font-mono text-sm text-foreground">{encomienda.tracking_id}</span>
+                    <span className="max-w-48 truncate text-sm text-muted-foreground">{encomienda.receiver_nombre}</span>
+                  </label>
+                </li>
+              ))}
+            </ul>
+
+            {errorEnvio && <AvisoError>{errorEnvio}</AvisoError>}
+          </div>
+        )}
+
+        {selectedViaje && !loading && !errorCarga && (
+          <DialogFooter className="sm:justify-between">
+            <Button variant="outline" onClick={() => setSelectedViaje(null)} disabled={isSubmitting}>
+              Atrás
+            </Button>
+            <Button onClick={handleConfirmar} disabled={marcadas === 0 || isSubmitting} aria-busy={isSubmitting || undefined}>
+              {isSubmitting && <Spinner size="sm" />}
+              {marcadas === 0 ? "Recibir" : `Recibir ${marcadas} de ${encomiendasPendientes.length}`}
+            </Button>
+          </DialogFooter>
+        )}
       </DialogContent>
     </Dialog>
   );

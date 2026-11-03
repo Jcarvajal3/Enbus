@@ -1,5 +1,7 @@
 "use client";
 
+import { Buildings } from "@phosphor-icons/react";
+import { EmptyState } from "@/components/empty-state";
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import {
   Card,
@@ -15,10 +17,11 @@ import {
   ChartTooltipContent,
 } from "@/components/ui/chart";
 
+// Serie sin dominio (boletos + encomiendas) = chart-5 (D20).
 const chartConfig = {
   total_transacciones: {
     label: "Transacciones",
-    color: "var(--color-chart-3)",
+    color: "var(--color-chart-5)",
   },
 } satisfies ChartConfig;
 
@@ -28,16 +31,14 @@ interface TopCooperativasChartProps {
 
 export function TopCooperativasChart({ data }: TopCooperativasChartProps) {
   return (
-    <Card className="col-span-1">
+    <Card>
       <CardHeader>
         <CardTitle>Cooperativas con más movimiento</CardTitle>
-        <CardDescription>Encomiendas y boletos pagados en los últimos 30 días</CardDescription>
+        <CardDescription>Boletos y encomiendas pagados en los últimos 30 días</CardDescription>
       </CardHeader>
       <CardContent>
         {data.length === 0 ? (
-          <div className="flex h-[250px] items-center justify-center text-muted-foreground text-sm">
-            Sin transacciones registradas.
-          </div>
+          <EmptyState compacto icon={Buildings} title="Sin movimiento en estos 30 días" />
         ) : (
           <ChartContainer config={chartConfig} className="min-h-[250px] w-full">
             <BarChart
@@ -46,7 +47,7 @@ export function TopCooperativasChart({ data }: TopCooperativasChartProps) {
               layout="vertical"
               margin={{ left: 10, right: 10, top: 10, bottom: 10 }}
             >
-              <CartesianGrid horizontal={false} className="stroke-muted/40" />
+              <CartesianGrid horizontal={false} className="stroke-border" />
               <YAxis
                 dataKey="nombre"
                 type="category"
@@ -59,7 +60,7 @@ export function TopCooperativasChart({ data }: TopCooperativasChartProps) {
               <ChartTooltip content={<ChartTooltipContent />} />
               <Bar
                 dataKey="total_transacciones"
-                fill="var(--color-chart-3)"
+                fill="var(--color-total_transacciones)"
                 radius={[0, 4, 4, 0]}
                 barSize={20}
               />

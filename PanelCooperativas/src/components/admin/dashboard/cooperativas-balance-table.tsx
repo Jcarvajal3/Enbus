@@ -1,10 +1,12 @@
+import { Buildings } from "@phosphor-icons/react/dist/ssr";
 import { CeldaEnlace } from "@/components/celda-enlace";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Monto } from "@/components/monto";
+import { TonoBadge } from "@/components/status-badge";
+import { FilaVacia } from "@/components/fila-vacia";
+import { TarjetaTabla } from "@/components/admin/detalle";
 import type { TasaRef } from "@/lib/dinero";
-import { CooperativaBalance } from "@/lib/types/admin-dashboard";
-import { cn } from "@/lib/utils";
+import type { CooperativaBalance } from "@/lib/types/admin-dashboard";
 
 interface CooperativasBalanceTableProps {
   data: CooperativaBalance[];
@@ -12,69 +14,54 @@ interface CooperativasBalanceTableProps {
   tasa?: TasaRef | null;
 }
 
+/** 10 → "10 %", 7.5 → "7,5 %". */
+function porcentaje(n: number | string): string {
+  return `${String(Number(n)).replace(".", ",")} %`;
+}
+
 export function CooperativasBalanceTable({ data, tasa = null }: CooperativasBalanceTableProps) {
   return (
-    <Card className="col-span-1">
-      <CardHeader>
-        <CardTitle>Comisiones pendientes por cooperativa</CardTitle>
-        <CardDescription>En USD de referencia; se pagan en Bs a la tasa BCV del día del pago.</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="rounded-md border overflow-hidden">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Cooperativa</TableHead>
-                <TableHead className="text-right">Comisión %</TableHead>
-                <TableHead className="text-right">Pendiente (USD)</TableHead>
-                <TableHead className="text-right">Ciclos sin pagar</TableHead>
+    <TarjetaTabla titulo="Comisiones pendientes" descripcion="En USD de referencia; se pagan en Bs a la tasa del día.">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Cooperativa</TableHead>
+            <TableHead className="hidden text-right sm:table-cell">Comisión</TableHead>
+            <TableHead className="text-right">Pendiente</TableHead>
+            <TableHead>Ciclos sin pagar</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {data.length === 0 ? (
+            <FilaVacia colSpan={4} icon={Buildings} titulo="No hay cooperativas registradas" />
+          ) : (
+            data.map((item) => (
+              <TableRow key={item.cooperativa_id} className="relative">
+                <CeldaEnlace
+                  href={`/admin/cooperativas/${item.cooperativa_id}?tab=balance`}
+                  etiqueta={`Ver el balance de ${item.nombre}`}
+                >
+                  {item.nombre}
+                </CeldaEnlace>
+                <TableCell className="hidden text-right tabular-nums sm:table-cell">
+                  {porcentaje(item.comision_porcentaje)}
+                </TableCell>
+                <TableCell className="text-right">
+                  <Monto usd={item.monto_pendiente} tasa={tasa} moneda="USD" size="sm" align="right" />
+                </TableCell>
+                <TableCell>
+                  {/* El significado no depende solo del color (AD5-29). */}
+                  {item.ciclos_impagos >= 2 ? (
+                    <TonoBadge tono="peligro">{item.ciclos_impagos} ciclos sin pagar</TonoBadge>
+                  ) : (
+                    <span className="tabular-nums">{item.ciclos_impagos}</span>
+                  )}
+                </TableCell>
               </TableRow>
-            </TableHeader>
-            <TableBody>
-              {data.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">
-                    No hay cooperativas registradas.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                data.map((item) => {
-                  const isOverdue = item.ciclos_impagos >= 2;
-                  return (
-                    <TableRow
-                      key={item.cooperativa_id}
-                      className={cn(
-                        "relative hover:bg-muted/50 motion-safe:transition-colors",
-                        isOverdue && "bg-destructive/5 hover:bg-destructive/10 dark:bg-destructive/10 dark:hover:bg-destructive/15"
-                      )}
-                    >
-                      <CeldaEnlace
-                        href={`/admin/cooperativas/${item.cooperativa_id}?tab=balance`}
-                        etiqueta={`Ver el balance de ${item.nombre}`}
-                      >
-                        {item.nombre}
-                      </CeldaEnlace>
-                      <TableCell className="text-right font-mono text-xs">{item.comision_porcentaje} %</TableCell>
-                      <TableCell className={cn(
-                        "text-right font-semibold font-mono",
-                        isOverdue ? "text-destructive-text" : (item.monto_pendiente > 0 ? "text-warning-text" : "text-muted-foreground")
-                      )}>
-                        <Monto usd={item.monto_pendiente} tasa={tasa} moneda="USD" size="sm" align="right" />
-                      </TableCell>
-                      <TableCell className={cn(
-                        "text-right font-semibold",
-                        isOverdue ? "text-destructive-text" : (item.ciclos_impagos > 0 ? "text-warning-text" : "text-muted-foreground")
-                      )}>
-                        {item.ciclos_impagos}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })
-              )}
-            </TableBody>
-          </Table>
-        </div>
-      </CardContent>
-    </Card>
+            ))
+          )}
+        </TableBody>
+      </Table>
+    </TarjetaTabla>
   );
 }

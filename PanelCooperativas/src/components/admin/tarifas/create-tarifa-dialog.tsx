@@ -8,25 +8,25 @@
 
 import { useId, useMemo, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { toast } from "sonner";
+import { ArrowLeft, ArrowRight, Plus } from "@phosphor-icons/react";
 import {
-  ArrowLeft,
-  ArrowRight,
-  CalendarBlank,
-  CurrencyDollar,
-  NotePencil,
-  Plus,
-  Ruler,
-  Scales,
-  SpinnerIcon,
-  Timer,
-  WarningCircle,
-} from "@phosphor-icons/react";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Field, FieldDescription, FieldError, FieldLabel, FieldSet, FieldLegend } from "@/components/ui/field";
+import { AvisoError } from "@/components/aviso-error";
+import { avisarExito } from "@/lib/avisos";
 import { createTarifa } from "@/app/admin/(panel)/tarifas/actions";
 import { humanizeError } from "@/lib/errores";
 import { formatNumeroVE, formatUsd } from "@/lib/dinero";
@@ -90,15 +90,15 @@ function esFuturo(iso: string): boolean {
   return new Date(iso).getTime() > Date.now();
 }
 
-/** Ahora en Venezuela + 1 hora, redondeado a la hora: valor inicial de "Programar". */
+/** Ahora en Venezuela (UTC-4 fijo) + 1 hora, redondeado a la hora: valor inicial de "Programar". */
 function horaSugerida(): string {
-  const partes = new Intl.DateTimeFormat("en-GB", {
-    timeZone: "America/Caracas",
-    hour: "2-digit",
-    hourCycle: "h23",
-  }).format(new Date());
-  const h = (Number(partes) + 1) % 24;
+  const h = (new Date(Date.now() - 4 * 3_600_000).getUTCHours() + 1) % 24;
   return `${String(h).padStart(2, "0")}:00`;
+}
+
+/** "Paso 1 de 2" sobre el título del diálogo (AD5-38, D22). */
+function Paso({ n }: { n: 1 | 2 }) {
+  return <p className="text-xs font-medium text-muted-foreground tabular-nums">Paso {n} de 2</p>;
 }
 
 interface CreateTarifaDialogProps {
@@ -121,10 +121,10 @@ export function CreateTarifaDialog({ vigente, rutas }: CreateTarifaDialogProps) 
     >
       <DialogTrigger asChild>
         <Button>
-          <Plus className="size-4" aria-hidden /> Nueva tarifa
+          <Plus aria-hidden /> Nueva tarifa
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-xl">
+      <DialogContent tamano="flujo">
         {/* Se monta al abrir: cada vez empieza desde la tarifa vigente. */}
         {open && (
           <Formulario
@@ -237,9 +237,9 @@ function Formulario({
         return;
       }
       if (res.data?.estado === "PROGRAMADA") {
-        toast.success(`Tarifa programada para el ${formatFechaProgramada(res.data.vigente_desde)}.`);
+        avisarExito(`Tarifa programada para el ${formatFechaProgramada(res.data.vigente_desde)}.`);
       } else {
-        toast.success("Tarifa publicada. Ya es la vigente.");
+        avisarExito("Tarifa publicada. Ya es la vigente.");
       }
       onCerrar();
       router.refresh();
@@ -272,80 +272,100 @@ function Formulario({
     ];
 
     return (
-      <div className="space-y-5">
+      <div className="flex flex-col gap-6">
         <DialogHeader>
+          <Paso n={2} />
           <DialogTitle>Revisa los cambios</DialogTitle>
           <DialogDescription>
             {programada
-              ? `La tarifa nueva empieza a regir el ${programada}. Hasta entonces se sigue cobrando la vigente.`
+              ? `Empieza a regir el ${programada}. Hasta entonces se cobra la vigente.`
               : vigente
-                ? "La tarifa nueva reemplaza a la vigente en cuanto la publiques; la actual pasa a «Anterior»."
-                : "Esta será la primera tarifa: las cooperativas podrán cotizar y cobrar encomiendas en cuanto la publiques."}
+                ? "Reemplaza a la vigente al publicarla; la actual pasa a «Anterior»."
+                : "Será la primera tarifa: las cooperativas podrán cobrar encomiendas al publicarla."}
           </DialogDescription>
         </DialogHeader>
 
-        <div className="overflow-x-auto rounded-lg border">
-          <table className="w-full text-sm">
+        <div className="overflow-hidden rounded-md border border-border">
+          <Table>
             <caption className="sr-only">Valores antes y después del cambio</caption>
-            <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
-              <tr>
-                <th scope="col" className="p-2.5 font-medium">Concepto</th>
-                <th scope="col" className="p-2.5 font-medium">Antes</th>
-                <th scope="col" className="p-2.5 font-medium">Después</th>
-                <th scope="col" className="p-2.5 text-right font-medium">Cambio</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
+            <TableHeader>
+              <TableRow>
+                <TableHead>Concepto</TableHead>
+                <TableHead className="text-right">Antes</TableHead>
+                <TableHead className="text-right">Después</TableHead>
+                <TableHead className="text-right">Cambio</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {filas.map((f) => (
-                <tr key={f.etiqueta}>
-                  <th scope="row" className="p-2.5 text-left font-medium">{f.etiqueta}</th>
-                  <td className="p-2.5 tabular-nums text-muted-foreground">{f.antes === null ? "—" : f.formato(f.antes)}</td>
-                  <td className="p-2.5 font-semibold tabular-nums">{f.formato(f.despues)}</td>
-                  <td className="p-2.5 text-right tabular-nums">{f.antes === null ? "Nuevo" : textoCambio(f.antes, f.despues)}</td>
-                </tr>
+                <TableRow key={f.etiqueta}>
+                  <TableCell className="font-medium">{f.etiqueta}</TableCell>
+                  <TableCell className="text-right text-muted-foreground tabular-nums">
+                    {f.antes === null ? "—" : f.formato(f.antes)}
+                  </TableCell>
+                  <TableCell className="text-right font-medium tabular-nums">{f.formato(f.despues)}</TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {f.antes === null ? "Nuevo" : textoCambio(f.antes, f.despues)}
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
 
-        <section aria-labelledby={id("ejemplos")} className="space-y-2">
-          <h3 id={id("ejemplos")} className="text-sm font-semibold">Ejemplos</h3>
+        <section aria-labelledby={id("ejemplos")} className="flex flex-col gap-3">
+          <h3 id={id("ejemplos")} className="text-sm font-semibold">
+            Ejemplos
+          </h3>
           {ejemplos.length === 0 ? (
-            <p className="text-xs text-muted-foreground">No hay rutas activas para mostrar ejemplos.</p>
+            <p className="text-sm text-muted-foreground">No hay rutas activas para mostrar ejemplos.</p>
           ) : (
-            <ul className="space-y-2 text-sm">
-              {ejemplos.map((r) => {
-                const ruta = `${formatCiudad(r.ciudad_origen)} → ${formatCiudad(r.ciudad_destino)}`;
-                return (
-                  <li key={r.id} className="rounded-lg border bg-muted/30 p-3">
-                    <p className="font-medium">{ruta}</p>
-                    <ul className="mt-1 space-y-0.5 text-xs tabular-nums text-foreground">
-                      {PESOS_EJEMPLO.map((kg) => {
-                        const despues = costoEncomiendaUsd(kg, nueva, r.duracion_estimada_min);
-                        const antes = vigente ? costoEncomiendaUsd(kg, vigente, r.duracion_estimada_min) : null;
-                        const excede = kg > nueva.peso_max_kg;
-                        return (
-                          <li key={kg}>
-                            {`${ruta}, ${kg} kg: `}
-                            {excede ? (
-                              <span className="text-warning-text">supera el peso máximo nuevo ({formatNumeroVE(nueva.peso_max_kg, 1)} kg)</span>
-                            ) : antes === null ? (
-                              formatUsd(despues)
-                            ) : (
-                              `${formatUsd(antes)} → ${formatUsd(despues)} (${textoCambio(antes, despues)})`
-                            )}
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  </li>
-                );
-              })}
-            </ul>
+            ejemplos.map((r) => (
+              <div key={r.id} className="overflow-hidden rounded-md border border-border">
+                <p className="border-b border-border bg-muted/50 px-3 py-2 text-sm font-medium">
+                  {formatCiudad(r.ciudad_origen)} → {formatCiudad(r.ciudad_destino)}
+                </p>
+                <Table>
+                  <TableHeader className="bg-transparent">
+                    <TableRow>
+                      <TableHead className="text-right">kg</TableHead>
+                      <TableHead className="text-right">Antes</TableHead>
+                      <TableHead className="text-right">Después</TableHead>
+                      <TableHead className="text-right">Cambio</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {PESOS_EJEMPLO.map((kg) => {
+                      const despues = costoEncomiendaUsd(kg, nueva, r.duracion_estimada_min);
+                      const antes = vigente ? costoEncomiendaUsd(kg, vigente, r.duracion_estimada_min) : null;
+                      const excede = kg > nueva.peso_max_kg;
+                      return (
+                        <TableRow key={kg}>
+                          <TableCell className="text-right tabular-nums">{kg}</TableCell>
+                          <TableCell className="text-right text-muted-foreground tabular-nums">
+                            {antes === null ? "—" : formatUsd(antes)}
+                          </TableCell>
+                          {excede ? (
+                            <TableCell colSpan={2} className="text-right text-warning-text">
+                              Supera el peso máximo
+                            </TableCell>
+                          ) : (
+                            <>
+                              <TableCell className="text-right font-medium tabular-nums">{formatUsd(despues)}</TableCell>
+                              <TableCell className="text-right tabular-nums">
+                                {antes === null ? "Nuevo" : textoCambio(antes, despues)}
+                              </TableCell>
+                            </>
+                          )}
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            ))
           )}
-          <p className="text-xs text-muted-foreground">
-            Precios de referencia en USD; el cliente paga en bolívares a la tasa BCV del día.
-          </p>
+          <p className="text-xs text-muted-foreground">En USD de referencia; se cobra en Bs a la tasa BCV del día.</p>
         </section>
 
         {nota.trim() && (
@@ -355,22 +375,14 @@ function Formulario({
           </p>
         )}
 
-        {errorGeneral && (
-          <div
-            role="alert"
-            className="flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive-light p-3 text-sm text-destructive-deep"
-          >
-            <WarningCircle className="mt-0.5 size-4 shrink-0" weight="fill" aria-hidden />
-            <p>{errorGeneral}</p>
-          </div>
-        )}
+        {errorGeneral && <AvisoError>{errorGeneral}</AvisoError>}
 
-        <div className="flex flex-col-reverse gap-2 border-t pt-4 sm:flex-row sm:justify-between">
+        <DialogFooter className="sm:justify-between">
           <Button type="button" variant="outline" onClick={() => setPaso(1)} disabled={publicando}>
-            <ArrowLeft className="size-4" aria-hidden /> Volver a editar
+            <ArrowLeft aria-hidden /> Atrás
           </Button>
           <Button type="button" onClick={publicar} disabled={publicando} aria-busy={publicando || undefined} autoFocus>
-            {publicando && <SpinnerIcon className="motion-safe:animate-spin" aria-hidden />}
+            {publicando && <Spinner size="sm" aria-hidden />}
             {publicando
               ? programada
                 ? "Programando…"
@@ -379,7 +391,7 @@ function Formulario({
                 ? "Programar tarifa"
                 : "Publicar tarifa"}
           </Button>
-        </div>
+        </DialogFooter>
       </div>
     );
   }
@@ -392,147 +404,93 @@ function Formulario({
   });
 
   const errorCampo = (campo: Campo) =>
-    errores[campo] ? (
-      <p id={id(`${campo}-error`)} className="text-xs font-medium text-destructive-text">
-        {errores[campo]}
-      </p>
-    ) : null;
+    errores[campo] ? <FieldError id={id(`${campo}-error`)}>{errores[campo]}</FieldError> : null;
+
+  const campoNumero = (
+    campo: Exclude<Campo, "vigente_desde">,
+    etiqueta: string,
+    valor: string,
+    setValor: (v: string) => void,
+    placeholder: string,
+    ayuda?: string,
+    inputMode: "decimal" | "numeric" = "decimal"
+  ) => (
+    <Field data-invalid={errores[campo] ? true : undefined}>
+      <FieldLabel htmlFor={id(campo)}>{etiqueta}</FieldLabel>
+      <Input
+        {...campoProps(campo, ayuda ? id(`${campo}-ayuda`) : undefined)}
+        inputMode={inputMode}
+        autoComplete="off"
+        placeholder={placeholder}
+        value={valor}
+        onChange={(e) => {
+          setValor(e.target.value);
+          limpiarError(campo);
+        }}
+        className="tabular-nums"
+      />
+      {errores[campo]
+        ? errorCampo(campo)
+        : ayuda && (
+            <FieldDescription id={id(`${campo}-ayuda`)} aria-live="polite">
+              {ayuda}
+            </FieldDescription>
+          )}
+    </Field>
+  );
 
   return (
-    <form onSubmit={irARevision} noValidate className="space-y-5">
+    <form onSubmit={irARevision} noValidate className="flex flex-col gap-6">
       <DialogHeader>
+        <Paso n={1} />
         <DialogTitle>Nueva tarifa</DialogTitle>
-        <DialogDescription>
-          Precio de las encomiendas para todas las cooperativas, en USD de referencia. En el siguiente paso verás cómo
-          cambian los precios antes de publicarla.
-        </DialogDescription>
+        <DialogDescription>Precio de las encomiendas para todas las cooperativas, en USD de referencia.</DialogDescription>
       </DialogHeader>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <div className="space-y-1.5">
-          <Label htmlFor={id("tarifa_por_kg")} className="flex items-center gap-1.5">
-            <CurrencyDollar className="size-4 text-muted-foreground" aria-hidden /> Precio por kilo (USD)
-          </Label>
-          <Input
-            {...campoProps("tarifa_por_kg")}
-            inputMode="decimal"
-            autoComplete="off"
-            placeholder="Ej: 2,50"
-            value={porKg}
-            onChange={(e) => {
-              setPorKg(e.target.value);
-              limpiarError("tarifa_por_kg");
-            }}
-            className="tabular-nums"
-          />
-          {errorCampo("tarifa_por_kg")}
-        </div>
-
-        <div className="space-y-1.5">
-          <Label htmlFor={id("factor_distancia_por_min")} className="flex items-center gap-1.5">
-            <Timer className="size-4 text-muted-foreground" aria-hidden /> Recargo por minuto de viaje
-          </Label>
-          <Input
-            {...campoProps("factor_distancia_por_min", id("factor-ayuda"))}
-            inputMode="decimal"
-            autoComplete="off"
-            placeholder="Ej: 0,0010"
-            value={factor}
-            onChange={(e) => {
-              setFactor(e.target.value);
-              limpiarError("factor_distancia_por_min");
-            }}
-            className="tabular-nums"
-          />
-          {errores.factor_distancia_por_min ? errorCampo("factor_distancia_por_min") : (
-            <p id={id("factor-ayuda")} className="text-xs text-muted-foreground" aria-live="polite">
-              {recargo8h === null
-                ? "Se suma al precio base por cada minuto que dura el viaje."
-                : `Para un viaje de 8 h: +${formatNumeroVE(recargo8h, 0)} %`}
-            </p>
-          )}
-        </div>
-
-        <div className="space-y-1.5">
-          <Label htmlFor={id("peso_max_kg")} className="flex items-center gap-1.5">
-            <Scales className="size-4 text-muted-foreground" aria-hidden /> Peso máximo (kg)
-          </Label>
-          <Input
-            {...campoProps("peso_max_kg")}
-            inputMode="decimal"
-            autoComplete="off"
-            placeholder="Ej: 25"
-            value={pesoMax}
-            onChange={(e) => {
-              setPesoMax(e.target.value);
-              limpiarError("peso_max_kg");
-            }}
-            className="tabular-nums"
-          />
-          {errorCampo("peso_max_kg")}
-        </div>
-
-        <div className="space-y-1.5">
-          <Label htmlFor={id("dimensiones_max_cm")} className="flex items-center gap-1.5">
-            <Ruler className="size-4 text-muted-foreground" aria-hidden /> Medida máxima (cm)
-          </Label>
-          <Input
-            {...campoProps("dimensiones_max_cm", id("medida-ayuda"))}
-            inputMode="numeric"
-            autoComplete="off"
-            placeholder="Ej: 50"
-            value={medidaMax}
-            onChange={(e) => {
-              setMedidaMax(e.target.value);
-              limpiarError("dimensiones_max_cm");
-            }}
-            className="tabular-nums"
-          />
-          {errores.dimensiones_max_cm ? errorCampo("dimensiones_max_cm") : (
-            <p id={id("medida-ayuda")} className="text-xs text-muted-foreground">
-              El lado más largo del paquete.
-            </p>
-          )}
-        </div>
+        {campoNumero("tarifa_por_kg", "Precio por kilo (USD)", porKg, setPorKg, "Ej. 2,50")}
+        {campoNumero(
+          "factor_distancia_por_min",
+          "Recargo por minuto de viaje",
+          factor,
+          setFactor,
+          "Ej. 0,0010",
+          recargo8h === null ? "Se suma por cada minuto de viaje." : `Viaje de 8 h: +${formatNumeroVE(recargo8h, 0)} %`
+        )}
+        {campoNumero("peso_max_kg", "Peso máximo (kg)", pesoMax, setPesoMax, "Ej. 25")}
+        {campoNumero(
+          "dimensiones_max_cm",
+          "Medida máxima (cm)",
+          medidaMax,
+          setMedidaMax,
+          "Ej. 50",
+          "El lado más largo del paquete.",
+          "numeric"
+        )}
       </div>
 
-      <fieldset className="space-y-2">
-        <legend className="mb-1 flex items-center gap-1.5 text-sm font-medium">
-          <CalendarBlank className="size-4 text-muted-foreground" aria-hidden /> ¿Desde cuándo?
-        </legend>
-        <div className="flex flex-wrap gap-4">
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="radio"
-              name={id("cuando")}
-              value="ahora"
-              checked={cuando === "ahora"}
-              onChange={() => {
-                setCuando("ahora");
-                limpiarError("vigente_desde");
-              }}
-              disabled={publicando}
-              className="size-4 accent-primary"
-            />
-            Ahora
-          </label>
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="radio"
-              name={id("cuando")}
-              value="programar"
-              checked={cuando === "programar"}
-              onChange={() => setCuando("programar")}
-              disabled={publicando}
-              className="size-4 accent-primary"
-            />
-            Programar
-          </label>
-        </div>
+      <FieldSet className="gap-3">
+        <FieldLegend variant="label" className="mb-0">Desde cuándo</FieldLegend>
+        <Tabs
+          value={cuando}
+          onValueChange={(v) => {
+            setCuando(v === "programar" ? "programar" : "ahora");
+            limpiarError("vigente_desde");
+          }}
+        >
+          <TabsList aria-label="Desde cuándo rige">
+            <TabsTrigger value="ahora" className="flex-none" disabled={publicando}>
+              Ahora
+            </TabsTrigger>
+            <TabsTrigger value="programar" className="flex-none" disabled={publicando}>
+              Programar
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
         {cuando === "programar" && (
-          <div className="grid gap-3 rounded-lg border bg-muted/30 p-3 sm:grid-cols-2">
-            <div className="space-y-1.5">
-              <Label htmlFor={id("vigente_desde")}>Fecha</Label>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field data-invalid={errores.vigente_desde ? true : undefined}>
+              <FieldLabel htmlFor={id("vigente_desde")}>Fecha</FieldLabel>
               <Input
                 {...campoProps("vigente_desde", id("programar-ayuda"))}
                 type="date"
@@ -542,10 +500,11 @@ function Formulario({
                   setFecha(e.target.value);
                   limpiarError("vigente_desde");
                 }}
+                className="tabular-nums"
               />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor={id("hora")}>Hora (Venezuela)</Label>
+            </Field>
+            <Field data-invalid={errores.vigente_desde ? true : undefined}>
+              <FieldLabel htmlFor={id("hora")}>Hora (Venezuela)</FieldLabel>
               <Input
                 id={id("hora")}
                 type="time"
@@ -558,44 +517,45 @@ function Formulario({
                   setHora(e.target.value);
                   limpiarError("vigente_desde");
                 }}
+                className="tabular-nums"
               />
-            </div>
+            </Field>
             <div className="sm:col-span-2">
-              {errores.vigente_desde ? errorCampo("vigente_desde") : (
-                <p id={id("programar-ayuda")} className="text-xs text-muted-foreground">
-                  {programada
-                    ? `Empieza a regir el ${programada}. Hasta entonces se cobra la vigente.`
-                    : "Elige la fecha y la hora."}
-                </p>
-              )}
+              {errores.vigente_desde
+                ? errorCampo("vigente_desde")
+                : programada && (
+                    <FieldDescription id={id("programar-ayuda")}>
+                      Empieza a regir el {programada}. Hasta entonces se cobra la vigente.
+                    </FieldDescription>
+                  )}
             </div>
           </div>
         )}
-      </fieldset>
+      </FieldSet>
 
-      <div className="space-y-1.5">
-        <Label htmlFor={id("nota")} className="flex items-center gap-1.5">
-          <NotePencil className="size-4 text-muted-foreground" aria-hidden /> Nota (opcional)
-        </Label>
+      <Field>
+        <FieldLabel htmlFor={id("nota")}>
+          Nota <span className="font-normal text-muted-foreground">(opcional)</span>
+        </FieldLabel>
         <Textarea
           id={id("nota")}
           rows={2}
           maxLength={300}
-          placeholder="Por ejemplo: ajuste por el aumento del combustible."
+          placeholder="Ej. Ajuste por el aumento del combustible."
           value={nota}
           onChange={(e) => setNota(e.target.value)}
           disabled={publicando}
         />
-      </div>
+      </Field>
 
-      <div className="flex justify-end gap-2 border-t pt-4">
+      <DialogFooter>
         <Button type="button" variant="outline" onClick={onCerrar} disabled={publicando}>
           Cancelar
         </Button>
         <Button type="submit" disabled={publicando}>
-          Revisar los cambios <ArrowRight className="size-4" aria-hidden />
+          Continuar <ArrowRight aria-hidden />
         </Button>
-      </div>
+      </DialogFooter>
     </form>
   );
 }

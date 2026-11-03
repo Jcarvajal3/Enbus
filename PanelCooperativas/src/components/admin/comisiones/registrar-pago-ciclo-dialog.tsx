@@ -2,27 +2,49 @@
 
 import { useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { toast } from "sonner";
-import { SpinnerIcon, WarningCircle } from "@phosphor-icons/react";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Spinner } from "@/components/ui/spinner";
+import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { AvisoError } from "@/components/aviso-error";
+import { Monto } from "@/components/monto";
 import { marcarCicloComoPagado } from "@/app/admin/(panel)/comisiones/actions";
 import { humanizeError } from "@/lib/errores";
-import { formatUsd } from "@/lib/dinero";
+import { avisarExito } from "@/lib/avisos";
 import { formatFechaVE, hoyVE } from "@/lib/fechas";
 import { etiquetaMetodoPago } from "@/lib/estados";
+import type { TasaBCV } from "@/lib/types/pagos";
 import { METODOS_PAGO_COMISION, type ComisionCiclo, type MetodoPagoComision } from "@/lib/types/admin-comisiones";
 
+type CampoError = "fecha" | "metodo" | "referencia";
+
 /** "Registrar pago" de un ciclo: método, referencia (salvo efectivo) y fecha en que pagó la cooperativa. */
-export function RegistrarPagoCicloDialog({ ciclo, onClose }: { ciclo: ComisionCiclo | null; onClose: () => void }) {
+export function RegistrarPagoCicloDialog({
+  ciclo,
+  tasa,
+  onClose,
+}: {
+  ciclo: ComisionCiclo | null;
+  tasa?: TasaBCV | null;
+  onClose: () => void;
+}) {
   const [guardando, setGuardando] = useState(false);
   return (
     <Dialog open={ciclo !== null} onOpenChange={(v) => !v && !guardando && onClose()}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent>
         {/* key: cada ciclo empieza con el formulario limpio. */}
-        {ciclo && <Formulario key={ciclo.id} ciclo={ciclo} onClose={onClose} guardando={guardando} setGuardando={setGuardando} />}
+        {ciclo && (
+          <Formulario
+            key={ciclo.id}
+            ciclo={ciclo}
+            tasa={tasa ?? null}
+            onClose={onClose}
+            guardando={guardando}
+            setGuardando={setGuardando}
+          />
+        )}
       </DialogContent>
     </Dialog>
   );
@@ -30,11 +52,13 @@ export function RegistrarPagoCicloDialog({ ciclo, onClose }: { ciclo: ComisionCi
 
 function Formulario({
   ciclo,
+  tasa,
   onClose,
   guardando,
   setGuardando,
 }: {
   ciclo: ComisionCiclo;
+  tasa: TasaBCV | null;
   onClose: () => void;
   guardando: boolean;
   setGuardando: (v: boolean) => void;
@@ -44,31 +68,37 @@ function Formulario({
   const [fecha, setFecha] = useState(hoyVE());
   const [metodo, setMetodo] = useState<MetodoPagoComision | "">("");
   const [referencia, setReferencia] = useState("");
-  const [error, setError] = useState<{ campo?: "fecha" | "metodo" | "referencia"; mensaje: string } | null>(null);
+  const [errorCampo, setErrorCampo] = useState<{ campo: CampoError; mensaje: string } | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const conReferencia = metodo !== "EFECTIVO";
   const enCurso = useRef(false);
+
+  const limpiar = () => {
+    setErrorCampo(null);
+    setError(null);
+  };
 
   const enviar = async (e: React.FormEvent) => {
     e.preventDefault();
     if (enCurso.current) return;
     if (!metodo) {
-      setError({ campo: "metodo", mensaje: "Elige cómo pagó la cooperativa." });
+      setErrorCampo({ campo: "metodo", mensaje: "Elige cómo pagó la cooperativa." });
       document.getElementById(`${uid}-metodo`)?.focus();
       return;
     }
     if (conReferencia && referencia.trim().length < 4) {
-      setError({ campo: "referencia", mensaje: "Escribe la referencia del pago (mínimo 4 caracteres)." });
+      setErrorCampo({ campo: "referencia", mensaje: "Escribe la referencia del pago (mínimo 4 caracteres)." });
       document.getElementById(`${uid}-referencia`)?.focus();
       return;
     }
     if (!fecha || fecha > hoyVE()) {
-      setError({ campo: "fecha", mensaje: "Elige la fecha en que la cooperativa pagó (no puede ser futura)." });
+      setErrorCampo({ campo: "fecha", mensaje: "Elige la fecha en que pagó (no puede ser futura)." });
       document.getElementById(`${uid}-fecha`)?.focus();
       return;
     }
     enCurso.current = true;
     setGuardando(true);
-    setError(null);
+    limpiar();
     try {
       const res = await marcarCicloComoPagado(ciclo.id, {
         fecha,
@@ -76,116 +106,126 @@ function Formulario({
         referencia: conReferencia ? referencia.trim() : null,
       });
       if (!res.success) {
-        setError({ campo: res.campo, mensaje: res.error || "No pudimos registrar el pago. Intenta de nuevo." });
+        const mensaje = res.error || "No pudimos registrar el pago. Intenta de nuevo.";
+        if (res.campo) setErrorCampo({ campo: res.campo, mensaje });
+        else setError(mensaje);
         return;
       }
-      toast.success(`Pago de ${ciclo.cooperativa_nombre} registrado.`);
+      avisarExito(`Pago de ${ciclo.cooperativa_nombre} registrado.`);
       onClose();
       router.refresh();
     } catch (err) {
-      setError({ mensaje: humanizeError(err, "registrar el pago") });
+      setError(humanizeError(err, "registrar el pago"));
     } finally {
       enCurso.current = false;
       setGuardando(false);
     }
   };
 
+  const errorDe = (campo: CampoError) => (errorCampo?.campo === campo ? errorCampo.mensaje : null);
+
   return (
-          <form onSubmit={enviar} noValidate className="space-y-4">
-            <DialogHeader>
-              <DialogTitle>Registrar pago</DialogTitle>
-              <DialogDescription>
-                {ciclo.cooperativa_nombre} pagó la comisión de <strong>{formatUsd(ciclo.monto_comision)}</strong> del{" "}
-                {formatFechaVE(ciclo.periodo_inicio)} al {formatFechaVE(ciclo.periodo_fin)}.
-              </DialogDescription>
-            </DialogHeader>
+    <form onSubmit={enviar} noValidate className="flex flex-col gap-6">
+      <DialogHeader>
+        <DialogTitle>Registrar pago</DialogTitle>
+        <DialogDescription>
+          {ciclo.cooperativa_nombre} · del {formatFechaVE(ciclo.periodo_inicio)} al {formatFechaVE(ciclo.periodo_fin)}
+        </DialogDescription>
+      </DialogHeader>
 
-            <div className="space-y-2">
-              <Label htmlFor={`${uid}-metodo`}>Método</Label>
-              <select
-                id={`${uid}-metodo`}
-                value={metodo}
-                autoFocus
-                onChange={(e) => {
-                  setMetodo(e.target.value as MetodoPagoComision | "");
-                  if (error) setError(null);
-                }}
-                disabled={guardando}
-                required
-                aria-invalid={error?.campo === "metodo" || undefined}
-                aria-describedby={error?.campo === "metodo" ? `${uid}-error` : undefined}
-                className="h-9 w-full rounded-md border border-border-strong bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                <option value="">Elige el método</option>
-                {METODOS_PAGO_COMISION.map((m) => (
-                  <option key={m} value={m}>
-                    {etiquetaMetodoPago(m)}
-                  </option>
-                ))}
-              </select>
-            </div>
+      <div className="flex items-start justify-between gap-4 rounded-md bg-muted p-4">
+        <span className="text-sm text-muted-foreground">Comisión del ciclo</span>
+        <Monto usd={ciclo.monto_comision} tasa={tasa} moneda="USD" size="md" align="right" />
+      </div>
 
-            {conReferencia && (
-              <div className="space-y-2">
-                <Label htmlFor={`${uid}-referencia`}>Referencia</Label>
-                <Input
-                  id={`${uid}-referencia`}
-                  value={referencia}
-                  autoComplete="off"
-                  placeholder="Por ejemplo: 00123456"
-                  onChange={(e) => {
-                    setReferencia(e.target.value);
-                    if (error) setError(null);
-                  }}
-                  disabled={guardando}
-                  required
-                  aria-invalid={error?.campo === "referencia" || undefined}
-                  aria-describedby={error?.campo === "referencia" ? `${uid}-error` : `${uid}-referencia-ayuda`}
-                />
-                <p id={`${uid}-referencia-ayuda`} className="text-xs text-muted-foreground">
-                  Número de la operación con que pagó la cooperativa.
-                </p>
-              </div>
+      <FieldGroup className="gap-4">
+        <Field data-invalid={errorDe("metodo") ? true : undefined}>
+          <FieldLabel htmlFor={`${uid}-metodo`}>Método</FieldLabel>
+          <Select
+            value={metodo || null}
+            onValueChange={(v) => {
+              setMetodo((v ?? "") as MetodoPagoComision | "");
+              limpiar();
+            }}
+            items={Object.fromEntries(METODOS_PAGO_COMISION.map((m) => [m, etiquetaMetodoPago(m)]))}
+            disabled={guardando}
+          >
+            <SelectTrigger
+              id={`${uid}-metodo`}
+              className="w-full"
+              aria-invalid={errorDe("metodo") ? true : undefined}
+              aria-describedby={errorDe("metodo") ? `${uid}-metodo-error` : undefined}
+            >
+              <SelectValue placeholder="Elige el método" />
+            </SelectTrigger>
+            <SelectContent>
+              {METODOS_PAGO_COMISION.map((m) => (
+                <SelectItem key={m} value={m}>
+                  {etiquetaMetodoPago(m)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {errorDe("metodo") && <FieldError id={`${uid}-metodo-error`}>{errorDe("metodo")}</FieldError>}
+        </Field>
+
+        {conReferencia && (
+          <Field data-invalid={errorDe("referencia") ? true : undefined}>
+            <FieldLabel htmlFor={`${uid}-referencia`}>Referencia</FieldLabel>
+            <Input
+              id={`${uid}-referencia`}
+              value={referencia}
+              autoComplete="off"
+              placeholder="Ej. 00123456"
+              inputMode="numeric"
+              onChange={(e) => {
+                setReferencia(e.target.value);
+                limpiar();
+              }}
+              disabled={guardando}
+              aria-invalid={errorDe("referencia") ? true : undefined}
+              aria-describedby={`${uid}-referencia-ayuda`}
+              className="tabular-nums"
+            />
+            {errorDe("referencia") ? (
+              <FieldError id={`${uid}-referencia-ayuda`}>{errorDe("referencia")}</FieldError>
+            ) : (
+              <FieldDescription id={`${uid}-referencia-ayuda`}>Número de la operación con que pagó.</FieldDescription>
             )}
+          </Field>
+        )}
 
-            <div className="space-y-2">
-              <Label htmlFor={`${uid}-fecha`}>Fecha del pago</Label>
-              <Input
-                id={`${uid}-fecha`}
-                type="date"
-                value={fecha}
-                max={hoyVE()}
-                onChange={(e) => {
-                  setFecha(e.target.value);
-                  if (error) setError(null);
-                }}
-                disabled={guardando}
-                required
-                aria-invalid={error?.campo === "fecha" || undefined}
-                aria-describedby={error?.campo === "fecha" ? `${uid}-error` : undefined}
-              />
-            </div>
+        <Field data-invalid={errorDe("fecha") ? true : undefined}>
+          <FieldLabel htmlFor={`${uid}-fecha`}>Fecha del pago</FieldLabel>
+          <Input
+            id={`${uid}-fecha`}
+            type="date"
+            value={fecha}
+            max={hoyVE()}
+            onChange={(e) => {
+              setFecha(e.target.value);
+              limpiar();
+            }}
+            disabled={guardando}
+            aria-invalid={errorDe("fecha") ? true : undefined}
+            aria-describedby={errorDe("fecha") ? `${uid}-fecha-error` : undefined}
+            className="tabular-nums"
+          />
+          {errorDe("fecha") && <FieldError id={`${uid}-fecha-error`}>{errorDe("fecha")}</FieldError>}
+        </Field>
+      </FieldGroup>
 
-            {error && (
-              <div
-                id={`${uid}-error`}
-                role="alert"
-                className="flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive-light p-3 text-sm text-destructive-deep"
-              >
-                <WarningCircle className="mt-0.5 size-4 shrink-0" weight="fill" aria-hidden />
-                <p>{error.mensaje}</p>
-              </div>
-            )}
+      {error && <AvisoError>{error}</AvisoError>}
 
-            <div className="flex justify-end gap-2 pt-2">
-              <Button type="button" variant="outline" onClick={onClose} disabled={guardando}>
-                Cancelar
-              </Button>
-              <Button type="submit" disabled={guardando} aria-busy={guardando || undefined}>
-                {guardando && <SpinnerIcon className="motion-safe:animate-spin" aria-hidden />}
-                {guardando ? "Registrando…" : "Registrar pago"}
-              </Button>
-            </div>
-          </form>
+      <DialogFooter>
+        <Button type="button" variant="outline" onClick={onClose} disabled={guardando}>
+          Cancelar
+        </Button>
+        <Button type="submit" disabled={guardando} aria-busy={guardando || undefined}>
+          {guardando && <Spinner size="sm" aria-hidden />}
+          {guardando ? "Registrando…" : "Registrar pago"}
+        </Button>
+      </DialogFooter>
+    </form>
   );
 }

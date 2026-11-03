@@ -1,25 +1,37 @@
 "use client";
 
+// ─── Generar ciclos de comisión (AD5-21, AD5-37, AD5-46) ────────────────────
+// Período y cooperativa → vista previa → generar. Los errores se leen dentro
+// del diálogo; el éxito cierra con "Listo".
+
 import { useState } from "react";
-import { 
-  Dialog, 
-  DialogContent, 
-  DialogDescription, 
-  DialogHeader, 
-  DialogTitle, 
+import { useRouter } from "next/navigation";
+import { Plus } from "@phosphor-icons/react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
   DialogTrigger,
-  DialogFooter
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import { Plus, Spinner, ShieldCheck, Warning, Calendar, ArrowRight } from "@phosphor-icons/react";
-import { toast } from "sonner";
-import { humanizeError } from "@/lib/errores";
-import { useRouter } from "next/navigation";
-import { previewCiclosComision, generarCiclosComision } from "@/app/admin/(panel)/comisiones/actions";
-import { CicloPreview } from "@/lib/types/admin-comisiones";
-import { formatFechaVE, hoyVE, sumarDiasVE } from "@/lib/fechas";
+import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
+import { Field, FieldLabel } from "@/components/ui/field";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { AvisoError } from "@/components/aviso-error";
+import { TonoBadge } from "@/components/status-badge";
 import { Monto } from "@/components/monto";
+import { ExitoDialogo } from "@/components/admin/cooperativas/create-cooperativa-dialog";
+import { formatPorcentaje } from "@/components/admin/cooperativas/cooperativas-table";
+import { humanizeError } from "@/lib/errores";
+import { avisarExito } from "@/lib/avisos";
+import { previewCiclosComision, generarCiclosComision } from "@/app/admin/(panel)/comisiones/actions";
+import type { CicloPreview } from "@/lib/types/admin-comisiones";
+import { formatFechaVE, hoyVE, sumarDiasVE } from "@/lib/fechas";
 import type { TasaBCV } from "@/lib/types/pagos";
 import { useTasaBCVAdmin } from "@/components/admin/dashboard/use-tasa-bcv-admin";
 
@@ -29,345 +41,309 @@ interface GenerarCicloDialogProps {
   tasa?: TasaBCV | null;
 }
 
+const TODAS = "all";
+
+type Resumen = { generated: string[]; skippedOverlap: string[]; skippedZeroSales: string[] };
+
 export function GenerarCicloDialog({ cooperativas, tasa: tasaServidor }: GenerarCicloDialogProps) {
   const router = useRouter();
   const tasa = useTasaBCVAdmin(tasaServidor);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
-  
-  // Form states
-  // Default dates: last 7 days (from 7 days ago to yesterday), contados en el día de Venezuela
-  const hoy = hoyVE();
-  const defaultStartDate = sumarDiasVE(hoy, -7);
-  const defaultEndDate = sumarDiasVE(hoy, -1);
-  
-  const [periodoInicio, setPeriodoInicio] = useState(defaultStartDate);
-  const [periodoFin, setPeriodoFin] = useState(defaultEndDate);
-  const [cooperativaId, setCooperativaId] = useState("all");
+  const [error, setError] = useState<string | null>(null);
 
+  // Por defecto, los últimos 7 días completos (de hace 7 días a ayer), en el día de Venezuela.
+  const hoy = hoyVE();
+  const inicioPorDefecto = sumarDiasVE(hoy, -7);
+  const finPorDefecto = sumarDiasVE(hoy, -1);
+
+  const [periodoInicio, setPeriodoInicio] = useState(inicioPorDefecto);
+  const [periodoFin, setPeriodoFin] = useState(finPorDefecto);
+  const [cooperativaId, setCooperativaId] = useState(TODAS);
   const [previews, setPreviews] = useState<CicloPreview[] | null>(null);
-  const [generationSummary, setGenerationSummary] = useState<{
-    generated: string[];
-    skippedOverlap: string[];
-    skippedZeroSales: string[];
-  } | null>(null);
+  const [resumen, setResumen] = useState<Resumen | null>(null);
+
+  const ocupado = loading || previewLoading;
+  const generables = previews?.filter((p) => !p.se_solapa && p.total_boletos + p.total_encomiendas > 0) ?? [];
+
+  const resetForm = () => {
+    setPeriodoInicio(inicioPorDefecto);
+    setPeriodoFin(finPorDefecto);
+    setCooperativaId(TODAS);
+    setPreviews(null);
+    setResumen(null);
+    setError(null);
+  };
+
+  /** Cambiar un dato invalida la vista previa: hay que recalcularla antes de generar. */
+  const cambiar = (fn: () => void) => {
+    fn();
+    setPreviews(null);
+    setError(null);
+  };
 
   const handlePreview = async () => {
     if (!periodoInicio || !periodoFin) {
-      toast.error("Elige las fechas de inicio y fin.");
+      setError("Elige las fechas de inicio y fin.");
       return;
     }
-
-    if (new Date(periodoInicio) > new Date(periodoFin)) {
-      toast.error("La fecha de inicio no puede ser posterior a la fecha de fin.");
+    if (periodoInicio > periodoFin) {
+      setError("La fecha de inicio no puede ser posterior a la de fin.");
       return;
     }
-
     setPreviewLoading(true);
     setPreviews(null);
-    setGenerationSummary(null);
-
+    setError(null);
     try {
       const res = await previewCiclosComision({
         periodo_inicio: periodoInicio,
         periodo_fin: periodoFin,
-        cooperativa_id: cooperativaId
+        cooperativa_id: cooperativaId,
       });
-
-      if (!res.success) {
-        toast.error(res.error || "No pudimos calcular la vista previa. Intenta de nuevo.");
-      } else {
-        setPreviews(res.previews || []);
-        
-      }
+      if (!res.success) setError(res.error || "No pudimos calcular la vista previa. Intenta de nuevo.");
+      else setPreviews(res.previews || []);
     } catch (err) {
-      toast.error(humanizeError(err, "calcular la vista previa"));
+      setError(humanizeError(err, "calcular la vista previa"));
     } finally {
       setPreviewLoading(false);
     }
   };
 
   const handleGenerate = async () => {
-    if (loading || !previews || previews.length === 0) return;
-
-    // Verificar si hay al menos uno que se pueda generar
-    const canGenerateAny = previews.some(p => !p.se_solapa && (p.total_boletos + p.total_encomiendas) > 0);
-    if (!canGenerateAny) {
-      toast.error("No hay ciclos para generar: todas las cooperativas ya tienen ciclo en esas fechas o no vendieron.");
-      return;
-    }
-
+    if (loading || generables.length === 0) return;
     setLoading(true);
+    setError(null);
     try {
       const res = await generarCiclosComision({
         periodo_inicio: periodoInicio,
         periodo_fin: periodoFin,
-        cooperativa_id: cooperativaId
+        cooperativa_id: cooperativaId,
       });
-
       if (!res.success) {
-        toast.error(res.error || "No pudimos generar los ciclos. Intenta de nuevo.");
+        setError(res.error || "No pudimos generar los ciclos. Intenta de nuevo.");
       } else {
-        toast.success("Ciclos de comisiones generados.");
-        setGenerationSummary(res.summary || null);
+        avisarExito("Ciclos de comisiones generados.");
+        setResumen(res.summary || { generated: [], skippedOverlap: [], skippedZeroSales: [] });
         setPreviews(null);
         router.refresh();
       }
     } catch (err) {
-      toast.error(humanizeError(err, "generar los ciclos"));
+      setError(humanizeError(err, "generar los ciclos"));
     } finally {
       setLoading(false);
     }
   };
 
-  const resetForm = () => {
-    setPeriodoInicio(defaultStartDate);
-    setPeriodoFin(defaultEndDate);
-    setCooperativaId("all");
-    setPreviews(null);
-    setGenerationSummary(null);
+  const itemsCooperativa: Record<string, string> = {
+    [TODAS]: "Todas",
+    ...Object.fromEntries(
+      cooperativas.map((c) => [c.id, `${c.nombre} (${formatPorcentaje(c.comision_porcentaje)})`])
+    ),
   };
 
   return (
-    <Dialog open={open} onOpenChange={(v) => {
-      if (!loading && !previewLoading) {
+    <Dialog
+      open={open}
+      onOpenChange={(v) => {
+        if (ocupado) return;
         setOpen(v);
         if (!v) resetForm();
-      }
-    }}>
+      }}
+    >
       <DialogTrigger asChild>
-        <Button className="gap-2">
-          <Plus className="h-4 w-4" /> Generar ciclo
+        <Button>
+          <Plus aria-hidden /> Generar ciclo
         </Button>
       </DialogTrigger>
 
-      <DialogContent className="max-w-2xl overflow-hidden flex flex-col max-h-[85vh]">
-        <DialogHeader>
-          <DialogTitle className="text-xl text-foreground flex items-center gap-2">
-            <Calendar className="h-5 w-5 text-success-text" /> Generar ciclos de comisión
-          </DialogTitle>
-          <DialogDescription className="text-muted-foreground">
-            Calcula la comisión de cada cooperativa por sus ventas de boletos y encomiendas en un período.
-          </DialogDescription>
-        </DialogHeader>
-
-        {generationSummary ? (
-          // Vista de resumen de generación exitosa
-          <div className="space-y-6 py-4 flex-1 overflow-y-auto">
-            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-success-light text-success-deep">
-              <ShieldCheck className="h-8 w-8" />
-            </div>
-            <div className="space-y-2 text-center">
-              <h3 className="text-lg font-medium text-foreground">Ciclos procesados</h3>
-              <p className="text-sm text-muted-foreground">
-                Procesamos los ciclos del período del <strong>{formatFechaVE(periodoInicio)}</strong> al <strong>{formatFechaVE(periodoFin)}</strong>.
-              </p>
-            </div>
-
-            <div className="space-y-3 bg-muted/50 border border-border p-4 rounded-lg text-sm">
-              {generationSummary.generated.length > 0 && (
-                <div>
-                  <h4 className="font-semibold text-success-text mb-1">Ciclos generados ({generationSummary.generated.length}):</h4>
-                  <p>{generationSummary.generated.join(", ")}</p>
+      <DialogContent tamano="flujo">
+        {resumen ? (
+          <ExitoDialogo
+            titulo="Ciclos procesados"
+            descripcion={`Del ${formatFechaVE(periodoInicio)} al ${formatFechaVE(periodoFin)}.`}
+            onListo={() => {
+              // setOpen directo no pasa por onOpenChange: se limpia aquí para no reabrir en este resumen.
+              setOpen(false);
+              resetForm();
+            }}
+          >
+            <dl className="flex flex-col gap-4 rounded-md bg-muted p-4 text-sm">
+              {resumen.generated.length > 0 && (
+                <div className="flex flex-col gap-1">
+                  <dt className="font-medium">Generados ({resumen.generated.length})</dt>
+                  <dd className="text-muted-foreground">{resumen.generated.join(", ")}</dd>
                 </div>
               )}
-
-              {generationSummary.skippedOverlap.length > 0 && (
-                <div className="pt-2 border-t border-border/60">
-                  <h4 className="font-semibold text-warning-text mb-1">Omitidos porque ya hay un ciclo en esas fechas ({generationSummary.skippedOverlap.length}):</h4>
-                  <p className="text-muted-foreground text-xs">{generationSummary.skippedOverlap.join(", ")}</p>
+              {resumen.skippedOverlap.length > 0 && (
+                <div className="flex flex-col gap-1">
+                  <dt className="font-medium">Ya tenían ciclo en esas fechas ({resumen.skippedOverlap.length})</dt>
+                  <dd className="text-muted-foreground">{resumen.skippedOverlap.join(", ")}</dd>
                 </div>
               )}
-
-              {generationSummary.skippedZeroSales.length > 0 && (
-                <div className="pt-2 border-t border-border/60">
-                  <h4 className="font-semibold text-muted-foreground mb-1">Omitidos por no tener ventas ({generationSummary.skippedZeroSales.length}):</h4>
-                  <p className="text-muted-foreground text-xs">{generationSummary.skippedZeroSales.join(", ")}</p>
+              {resumen.skippedZeroSales.length > 0 && (
+                <div className="flex flex-col gap-1">
+                  <dt className="font-medium">Sin ventas ({resumen.skippedZeroSales.length})</dt>
+                  <dd className="text-muted-foreground">{resumen.skippedZeroSales.join(", ")}</dd>
                 </div>
               )}
-            </div>
-
-            <DialogFooter>
-              <Button
-                onClick={() => {
-                  // setOpen directo no pasa por onOpenChange: limpiar aquí para que al reabrir no se vea este resumen.
-                  setOpen(false);
-                  resetForm();
-                }}
-                className="w-full"
-              >
-                Entendido
-              </Button>
-            </DialogFooter>
-          </div>
+            </dl>
+          </ExitoDialogo>
         ) : (
-          // Formulario + vista previa
-          <div className="flex-1 overflow-y-auto space-y-4 pr-1 py-2">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="space-y-1.5">
-                <Label htmlFor="periodo_inicio">Desde</Label>
-                <input
+          <div className="flex flex-col gap-6">
+            <DialogHeader>
+              <DialogTitle>Generar ciclos de comisión</DialogTitle>
+              <DialogDescription>Comisión de cada cooperativa por sus ventas en un período.</DialogDescription>
+            </DialogHeader>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <Field>
+                <FieldLabel htmlFor="periodo_inicio">Desde</FieldLabel>
+                <Input
                   id="periodo_inicio"
                   type="date"
                   value={periodoInicio}
-                  onChange={(e) => {
-                    setPeriodoInicio(e.target.value);
-                    // Cambiar el período invalida la vista previa: hay que recalcularla antes de generar
-                    setPreviews(null);
-                  }}
-                  className="w-full bg-background border border-input rounded-md px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  max={periodoFin || undefined}
+                  disabled={ocupado}
+                  onChange={(e) => cambiar(() => setPeriodoInicio(e.target.value))}
+                  className="tabular-nums"
                 />
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="periodo_fin">Hasta</Label>
-                <input
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="periodo_fin">Hasta</FieldLabel>
+                <Input
                   id="periodo_fin"
                   type="date"
                   value={periodoFin}
-                  onChange={(e) => {
-                    setPeriodoFin(e.target.value);
-                    setPreviews(null);
-                  }}
-                  className="w-full bg-background border border-input rounded-md px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  min={periodoInicio || undefined}
+                  disabled={ocupado}
+                  onChange={(e) => cambiar(() => setPeriodoFin(e.target.value))}
+                  className="tabular-nums"
                 />
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="cooperativa_id">Cooperativa</Label>
-                <select
-                  id="cooperativa_id"
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="cooperativa_id">Cooperativa</FieldLabel>
+                <Select
                   value={cooperativaId}
-                  onChange={(e) => {
-                    setCooperativaId(e.target.value);
-                    setPreviews(null);
-                  }}
-                  className="w-full bg-background border border-input rounded-md px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  onValueChange={(v) => cambiar(() => setCooperativaId(v ? String(v) : TODAS))}
+                  items={itemsCooperativa}
+                  disabled={ocupado}
                 >
-                  <option value="all">Todas las cooperativas</option>
-                  {cooperativas.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.nombre} ({c.comision_porcentaje} %)
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div className="flex justify-end pt-1">
-              <Button 
-                onClick={handlePreview} 
-                disabled={previewLoading || loading}
-                variant="secondary"
-                className="gap-2"
-              >
-                {previewLoading ? (
-                  <>
-                    <Spinner className="motion-safe:animate-spin h-4 w-4" aria-hidden /> Calculando…
-                  </>
-                ) : (
-                  "Ver vista previa"
-                )}
-              </Button>
+                  <SelectTrigger id="cooperativa_id" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={TODAS}>Todas</SelectItem>
+                    {cooperativas.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {itemsCooperativa[c.id]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field>
             </div>
 
             {previews && previews.length === 0 && (
-              <p role="status" className="rounded-lg border bg-muted/30 p-3 text-sm text-muted-foreground">
+              <p role="status" className="text-sm text-muted-foreground">
                 No hay cooperativas activas para calcular en ese período.
               </p>
             )}
 
             {previews && previews.length > 0 && (
-              <div className="space-y-3 pt-2">
-                <div className="text-sm font-semibold text-foreground flex items-center gap-2">
-                  Vista previa <ArrowRight className="h-3 w-3" aria-hidden />
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  Período previsualizado: del <strong className="text-foreground">{formatFechaVE(periodoInicio)}</strong> al{" "}
-                  <strong className="text-foreground">{formatFechaVE(periodoFin)}</strong>. Si cambias las fechas, vuelve a calcular.
-                </p>
-                <div className="border border-border rounded-lg overflow-hidden max-h-60 overflow-y-auto">
-                  <table className="w-full text-left text-xs border-collapse">
-                    <thead>
-                      <tr className="bg-muted/80 border-b border-border text-muted-foreground font-medium">
-                        <th className="p-3">Cooperativa</th>
-                        <th className="p-3 text-right">Boletos (USD)</th>
-                        <th className="p-3 text-right">Encomiendas (USD)</th>
-                        <th className="p-3 text-right">Comisión (USD)</th>
-                        <th className="p-3 text-center">Estado</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border">
+              <section aria-labelledby="vista-previa" className="flex flex-col gap-3">
+                <h3 id="vista-previa" className="text-sm font-semibold">
+                  Vista previa
+                </h3>
+                <div className="max-h-72 overflow-y-auto rounded-md border border-border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Cooperativa</TableHead>
+                        <TableHead className="text-right">Boletos</TableHead>
+                        <TableHead className="text-right">Encomiendas</TableHead>
+                        <TableHead className="text-right">Comisión</TableHead>
+                        <TableHead>Resultado</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
                       {previews.map((p) => {
-                        const totalVentas = p.total_boletos + p.total_encomiendas;
+                        const sinVentas = p.total_boletos + p.total_encomiendas === 0;
                         return (
-                          <tr key={p.cooperativa_id} className="hover:bg-muted/40 text-foreground">
-                            <td className="p-3 font-medium">{p.cooperativa_nombre}</td>
-                            <td className="p-3 text-right text-muted-foreground"><Monto usd={p.total_boletos} tasa={tasa} moneda="USD" size="sm" align="right" /></td>
-                            <td className="p-3 text-right text-muted-foreground"><Monto usd={p.total_encomiendas} tasa={tasa} moneda="USD" size="sm" align="right" /></td>
-                            <td className="p-3 text-right font-semibold text-foreground">
+                          <TableRow key={p.cooperativa_id}>
+                            <TableCell className="font-medium">
+                              {p.cooperativa_nombre}
+                              <span className="block text-xs font-normal text-muted-foreground tabular-nums">
+                                {formatPorcentaje(p.comision_porcentaje)}
+                              </span>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <Monto usd={p.total_boletos} tasa={tasa} moneda="USD" size="sm" align="right" />
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <Monto usd={p.total_encomiendas} tasa={tasa} moneda="USD" size="sm" align="right" />
+                            </TableCell>
+                            <TableCell className="text-right">
                               <Monto usd={p.monto_comision} tasa={tasa} moneda="USD" size="sm" align="right" />
-                              <span className="text-xs text-muted-foreground ml-1">({p.comision_porcentaje} %)</span>
-                            </td>
-                            <td className="p-3 text-center">
+                            </TableCell>
+                            <TableCell>
                               {p.se_solapa ? (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-destructive-light text-destructive-deep">
-                                  <Warning className="h-3 w-3" /> Ya tiene ciclo
-                                </span>
-                              ) : totalVentas === 0 ? (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-muted text-muted-foreground">
-                                  Sin ventas
-                                </span>
+                                <TonoBadge tono="peligro">Ya tiene ciclo</TonoBadge>
+                              ) : sinVentas ? (
+                                <TonoBadge tono="neutro">Sin ventas</TonoBadge>
                               ) : (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-success-light text-success-deep">
-                                  Se generará
-                                </span>
+                                <TonoBadge tono="exito">Se generará</TonoBadge>
                               )}
-                            </td>
-                          </tr>
+                            </TableCell>
+                          </TableRow>
                         );
                       })}
-                    </tbody>
-                  </table>
+                    </TableBody>
+                  </Table>
                 </div>
-
-                <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/30 p-2 rounded border border-border/40">
-                  <Warning className="h-4 w-4 text-warning-text flex-shrink-0" aria-hidden />
-                  <span>
-                    Solo se generan los ciclos marcados «Se generará».
-                    Se omiten las cooperativas que ya tienen un ciclo en esas fechas o que no vendieron.
-                  </span>
-                </div>
-
-                <DialogFooter className="pt-2">
-                  <Button 
-                    onClick={() => {
-                      setPreviews(null);
-                      resetForm();
-                    }}
-                    variant="ghost" 
-                    className="text-muted-foreground hover:text-foreground"
-                    disabled={loading}
-                  >
-                    Cancelar
-                  </Button>
-                  <Button
-                    onClick={handleGenerate}
-                    disabled={loading || !previews.some(p => !p.se_solapa && (p.total_boletos + p.total_encomiendas) > 0)}
-                    className="gap-2 font-medium"
-                  >
-                    {loading ? (
-                      <>
-                        <Spinner className="motion-safe:animate-spin h-4 w-4" /> Generando…
-                      </>
-                    ) : (
-                      "Generar ciclos"
-                    )}
-                  </Button>
-                </DialogFooter>
-              </div>
+                <p className="text-xs text-muted-foreground">
+                  Solo se generan los marcados «Se generará». Si cambias las fechas, vuelve a calcular.
+                </p>
+              </section>
             )}
+
+            {error && <AvisoError>{error}</AvisoError>}
+
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setOpen(false);
+                  resetForm();
+                }}
+                disabled={ocupado}
+              >
+                Cancelar
+              </Button>
+              {previews && previews.length > 0 ? (
+                <Button
+                  type="button"
+                  onClick={handleGenerate}
+                  disabled={loading || generables.length === 0}
+                  aria-busy={loading || undefined}
+                >
+                  {loading && <Spinner size="sm" aria-hidden />}
+                  {loading
+                    ? "Generando…"
+                    : generables.length === 0
+                      ? "Generar ciclos"
+                      : generables.length === 1
+                      ? "Generar 1 ciclo"
+                      : `Generar ${generables.length} ciclos`}
+                </Button>
+              ) : (
+                <Button type="button" onClick={handlePreview} disabled={ocupado} aria-busy={previewLoading || undefined}>
+                  {previewLoading && <Spinner size="sm" aria-hidden />}
+                  {previewLoading ? "Calculando…" : "Ver vista previa"}
+                </Button>
+              )}
+            </DialogFooter>
           </div>
         )}
       </DialogContent>

@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { DownloadSimple } from "@phosphor-icons/react";
 import { ComisionCiclo } from "@/lib/types/admin-comisiones";
 import { toast } from "sonner";
+import { avisarError, avisarExito } from "@/lib/avisos";
 import { fechaVE } from "@/lib/fechas";
 import { etiquetaMetodoPago } from "@/lib/estados";
 
@@ -27,7 +28,7 @@ interface ExportCSVButtonProps {
 export function ExportCSVButton({ data, filename = "ciclos_comisiones.csv" }: ExportCSVButtonProps) {
   const handleExport = () => {
     if (!data || data.length === 0) {
-      toast.warning("No hay ciclos para exportar con estos filtros.");
+      toast.warning("No hay ciclos para exportar con estos filtros.", { duration: 3000 });
       return;
     }
 
@@ -38,8 +39,8 @@ export function ExportCSVButton({ data, filename = "ciclos_comisiones.csv" }: Ex
         "Cooperativa",
         "Período Inicio",
         "Período Fin",
-        "Total Ventas Encomiendas (USD)",
         "Total Ventas Boletos (USD)",
+        "Total Ventas Encomiendas (USD)",
         "Comisión %",
         "Monto Comisión (USD)",
         "Estado Pago",
@@ -55,8 +56,8 @@ export function ExportCSVButton({ data, filename = "ciclos_comisiones.csv" }: Ex
         textoCsv(item.cooperativa_nombre || "Desconocida"),
         item.periodo_inicio,
         item.periodo_fin,
-        decimalCsv(item.total_encomiendas),
         decimalCsv(item.total_boletos),
+        decimalCsv(item.total_encomiendas),
         decimalCsv(item.comision_porcentaje),
         decimalCsv(item.monto_comision),
         item.pagado ? "Pagado" : "Pendiente",
@@ -88,21 +89,16 @@ export function ExportCSVButton({ data, filename = "ciclos_comisiones.csv" }: Ex
       document.body.removeChild(link);
       URL.revokeObjectURL(url); // Liberar el blob de memoria
       
-      toast.success("Descargamos el archivo CSV.");
+      avisarExito("Descargamos el archivo CSV.");
     } catch (error) {
       console.error("Error al exportar CSV:", error);
-      toast.error("No pudimos generar el archivo CSV. Intenta de nuevo.");
+      avisarError("No pudimos generar el archivo CSV. Intenta de nuevo.");
     }
   };
 
   return (
-    <Button 
-      onClick={handleExport}
-      variant="outline" 
-      size="sm"
-      className="gap-1.5 h-9"
-    >
-      <DownloadSimple className="h-4 w-4" aria-hidden /> Exportar CSV
+    <Button type="button" onClick={handleExport} variant="outline">
+      <DownloadSimple aria-hidden /> Exportar CSV
     </Button>
   );
 }

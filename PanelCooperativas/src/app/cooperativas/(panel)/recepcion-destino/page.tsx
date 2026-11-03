@@ -1,29 +1,51 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback, useMemo } from "react";
+// ─── Recepción en destino ───────────────────────────────────────────────────
+// Escanea (o recibe en lote) las encomiendas que llegaron a la sucursal. Cada
+// fila abre su detalle; la encomienda abierta vive en `?encomienda=`.
+
+import { Suspense, useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { PageHeader } from "@/components/page-header";
 import { ScanInput } from "@/components/scan-input";
 import { UltimoEscaneo, useUltimoEscaneo } from "@/components/ultimo-escaneo";
-import { EmptyState } from "@/components/empty-state";
+import { CeldaEnlace } from "@/components/celda-enlace";
+import { FilaVacia } from "@/components/fila-vacia";
+import { TablaSkeleton } from "@/components/tabla-skeleton";
+import { PaginacionTabla, usePaginacion } from "@/components/paginacion-tabla";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useUser } from "@/hooks/use-user";
+import { useParamUrl } from "@/hooks/use-param-url";
 import { createClient } from "@/lib/supabase/client";
-import { toast } from "sonner";
-import { Spinner } from "@/components/ui/spinner";
-import { Package, Truck } from "@phosphor-icons/react";
 import { useEncomiendasRealtime } from "@/hooks/use-encomiendas-realtime";
 import { recibirEncomienda, obtenerSucursalRecepcion } from "./actions";
 import type { Encomienda } from "@/lib/types/encomiendas";
 import { RecepcionLoteModal } from "./recepcion-lote-modal";
 import { requireOnline } from "@/components/connectivity-banner";
+import { avisarError } from "@/lib/avisos";
 import { humanizeError } from "@/lib/errores";
 import { etiquetaEstado } from "@/lib/estados";
 import { ErrorState } from "@/components/error-state";
-import { remitenteDe } from "@/components/encomiendas/detalle-sheet";
-import { formatFechaVE } from "@/lib/fechas";
+import { DetalleSheet, remitenteDe } from "@/components/encomiendas/detalle-sheet";
+import { formatFechaHoraCortaVE } from "@/lib/fechas";
 import { formatCiudad } from "@/lib/ciudades";
+import { ICONO_SECCION } from "@/lib/navigation";
 import { vaASucursal, type SucursalRecepcion } from "./sucursal";
+
+const COLUMNAS = 5;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Datos que pide el detalle de una encomienda (igual que la Taquilla de encomiendas). */
+const SELECT_DETALLE = `
+  id, tracking_id, estado, modalidad_pago, peso_kg, costo_calculado, cooperativa_id,
+  created_at, updated_at, estado_origen, ciudad_origen, estado_destino, ciudad_destino,
+  sucursal_origen_id, receiver_nombre, receiver_telefono, receiver_cedula_rif,
+  descripcion_contenido, valor_declarado, foto_evidencia_url, foto_cliente_path, foto_omitida_motivo,
+  origen_registro, remitente_nombre, remitente_cedula, remitente_telefono,
+  sender:profiles!sender_id(nombre_completo)
+`;
 
 type ViajeData = {
   id: string;
@@ -50,6 +72,24 @@ type EncomiendaTransito = {
 };
 
 export default function RecepcionDestinoPage() {
+  // useSearchParams (?encomienda=) necesita un límite de Suspense (Next.js 16).
+  return (
+    <Suspense
+      fallback={
+        <div className="flex flex-col gap-6">
+          <Skeleton className="h-8 w-56" />
+          <Skeleton className="h-24 w-full rounded-md" />
+          <TablaSkeleton columnas={COLUMNAS} />
+        </div>
+      }
+    >
+      <RecepcionDestino />
+    </Suspense>
+  );
+}
+
+function RecepcionDestino() {
+
   const { user } = useUser();
   const cooperativaId = user.cooperativa_id!;
   const supabase = useMemo(() => createClient(), []);
@@ -63,6 +103,9 @@ export default function RecepcionDestinoPage() {
   const [alcanceCargado, setAlcanceCargado] = useState(false);
 
   const [isLoteModalOpen, setIsLoteModalOpen] = useState(false);
+  // Detalle abierto (`?encomienda=`)
+  const [encomiendaAbierta, setEncomiendaAbierta] = useParamUrl("encomienda");
+  const [detalle, setDetalle] = useState<Encomienda | null>(null);
   const [recibiendo, setRecibiendo] = useState(false);
   const { ultimo, registrar } = useUltimoEscaneo();
 
@@ -71,11 +114,11 @@ export default function RecepcionDestinoPage() {
     obtenerSucursalRecepcion()
       .then((res) => {
         if (!isMounted) return;
-        if (res.error) toast.error(res.error);
+        if (res.error) avisarError(res.error);
         setSucursal(res.sucursal ?? null);
       })
       .catch((err) => {
-        if (isMounted) toast.error(humanizeError(err, "cargar tu sucursal"));
+        if (isMounted) avisarError(humanizeError(err, "cargar tu sucursal"));
       })
       .finally(() => {
         if (isMounted) setAlcanceCargado(true);
@@ -130,6 +173,40 @@ export default function RecepcionDestinoPage() {
   const alCambiar = useCallback(() => void fetchRef.current(), []);
   useEncomiendasRealtime(cooperativaId, alCambiar);
 
+  // Carga la encomienda de `?encomienda=` para su detalle.
+  useEffect(() => {
+    // Al cerrar se conserva la última para que la hoja salga con su animación.
+    if (!encomiendaAbierta) return;
+    if (!UUID_RE.test(encomiendaAbierta)) {
+      setEncomiendaAbierta(null);
+      return;
+    }
+    let vigente = true;
+    void (async () => {
+      try {
+        const { data, error } = await supabase
+          .from("encomiendas")
+          .select(SELECT_DETALLE)
+          .eq("cooperativa_id", cooperativaId)
+          .eq("id", encomiendaAbierta)
+          .maybeSingle();
+        if (!vigente) return;
+        if (error) throw error;
+        if (!data) {
+          avisarError("No encontramos esa encomienda en tu cooperativa.");
+          setEncomiendaAbierta(null);
+          return;
+        }
+        setDetalle(data as unknown as Encomienda);
+      } catch (err) {
+        if (vigente) avisarError(humanizeError(err, "abrir la encomienda"));
+      }
+    })();
+    return () => {
+      vigente = false;
+    };
+  }, [encomiendaAbierta, supabase, cooperativaId, setEncomiendaAbierta]);
+
   const handleScanFound = async (encomienda: Encomienda) => {
     const codigo = encomienda.tracking_id;
     // Solo se reciben las que vienen en camino; si no, se dice por qué.
@@ -140,13 +217,13 @@ export default function RecepcionDestinoPage() {
               codigo,
               tono: "aviso",
               titulo: "Ya está recibida",
-              detalle: "Está lista para entregar en «Entrega».",
+              detalle: `${encomienda.receiver_nombre} · lista para retirar`,
             }
           : {
               codigo,
               tono: "error",
               titulo: "No viene en camino",
-              detalle: `Estado: ${etiquetaEstado("encomienda", encomienda.estado)}. Solo se reciben encomiendas en tránsito.`,
+              detalle: `Está «${etiquetaEstado("encomienda", encomienda.estado)}».`,
             }
       );
       return;
@@ -160,8 +237,8 @@ export default function RecepcionDestinoPage() {
         registrar({
           codigo,
           tono: "exito",
-          titulo: `Recibida en tu oficina · ${codigo}`,
-          detalle: `${encomienda.receiver_nombre}. Ya puedes entregarla desde «Entrega».`,
+          titulo: `Recibida · ${codigo}`,
+          detalle: `${encomienda.receiver_nombre} · lista para retirar`,
         });
         void fetchEncomiendas();
       } else {
@@ -179,26 +256,14 @@ export default function RecepcionDestinoPage() {
     }
   };
 
-  const formatDate = (dateString?: string) => {
-    if (!dateString) return "Sin fecha";
-    return formatFechaVE(dateString, { day: "2-digit", month: "short", hour: "numeric", minute: "numeric" }) || dateString;
-  };
-
-  const descripcion = sucursal
-    ? `Escanea o selecciona las encomiendas que llegaron a tu sucursal ${sucursal.nombre} (${formatCiudad(sucursal.ciudad)}) para marcarlas como recibidas.`
-    : user.role === "admin_cooperativa"
-      ? "Escanea o selecciona las encomiendas que llegaron para marcarlas como recibidas. Ves las de todas las sucursales de tu cooperativa."
-      : "Escanea o selecciona las encomiendas que llegaron para marcarlas como recibidas. Tu cuenta no tiene sucursal asignada, así que ves las de toda la cooperativa: avísale al administrador.";
+  const { visibles, pagina, paginas, ir } = usePaginacion(encomiendas);
 
   return (
-    <div className="space-y-6 flex flex-col h-full animate-in fade-in duration-300">
-      <PageHeader
-        title="Recepción en destino"
-        description={descripcion}
-      >
-        <Button onClick={() => setIsLoteModalOpen(true)} className="flex items-center gap-2" disabled={!alcanceCargado}>
-          <Truck size={18} weight="bold" aria-hidden />
-          <span>Recibir lote del viaje</span>
+    <div className="flex flex-col gap-6">
+      <PageHeader title="Recepción en destino">
+        <Button onClick={() => setIsLoteModalOpen(true)} disabled={!alcanceCargado}>
+          <ICONO_SECCION.recepcion aria-hidden />
+          Recibir lote del viaje
         </Button>
       </PageHeader>
 
@@ -208,75 +273,73 @@ export default function RecepcionDestinoPage() {
           onError={(err) => registrar({ codigo: err.codigo, tono: "error", titulo: "No encontrada", detalle: err.mensaje })}
           cooperativaId={cooperativaId}
           mode="encomiendas"
-          disabled={isLoteModalOpen || recibiendo}
+          disabled={isLoteModalOpen || recibiendo || Boolean(encomiendaAbierta)}
         />
         <UltimoEscaneo resultado={ultimo} />
       </div>
 
-      <div className="flex-1 rounded-md border bg-card">
-        {loading && encomiendas.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-64">
-            <Spinner size="md" />
-            <span className="ml-3 mt-4 text-muted-foreground font-medium">Cargando encomiendas…</span>
-          </div>
-        ) : errorCarga ? (
-          <ErrorState
-            titulo="No pudimos cargar las encomiendas en camino"
-            descripcion={errorCarga}
-            onReintentar={fetchEncomiendas}
-          />
-        ) : encomiendas.length === 0 ? (
-          <EmptyState
-            icon={Package}
-            title="No hay encomiendas en camino"
-            description={sucursal
-              ? `No hay encomiendas en camino hacia tu sucursal ${sucursal.nombre} en este momento.`
-              : "No hay encomiendas en camino hacia tu cooperativa en este momento."}
-          />
-        ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Código</TableHead>
-                <TableHead>Remitente</TableHead>
-                <TableHead>Destinatario</TableHead>
-                <TableHead>Origen</TableHead>
-                <TableHead>Viaje</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {encomiendas.map((encomienda) => (
-                <TableRow key={encomienda.id} className="hover:bg-muted/50 transition-colors">
-                  <TableCell className="font-mono font-medium text-primary-text">
-                    {encomienda.tracking_id}
-                  </TableCell>
-                  <TableCell className="max-w-[150px] truncate">
-                    {remitenteDe(encomienda).nombre}
-                  </TableCell>
-                  <TableCell className="max-w-[150px] truncate">
-                    {encomienda.receiver_nombre}
-                  </TableCell>
-                  <TableCell className="truncate max-w-[120px]">
-                    {formatCiudad(encomienda.ciudad_origen)}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground text-sm">
-                    {encomienda.viaje ? (
-                      <div className="flex flex-col">
-                        <span className="font-medium text-foreground">
-                          {formatCiudad(encomienda.viaje.ruta?.ciudad_origen)} → {formatCiudad(encomienda.viaje.ruta?.ciudad_destino)}
-                        </span>
-                        <span>{formatDate(encomienda.viaje.fecha_hora_salida)}</span>
-                      </div>
-                    ) : (
-                      <span className="italic">Sin viaje asignado</span>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        )}
-      </div>
+      {loading && encomiendas.length === 0 ? (
+        <TablaSkeleton columnas={COLUMNAS} />
+      ) : (
+        <Card className="gap-0 overflow-hidden p-0">
+          {errorCarga ? (
+            <ErrorState
+              titulo="No pudimos cargar las encomiendas en camino"
+              descripcion={errorCarga}
+              onReintentar={fetchEncomiendas}
+            />
+          ) : (
+            <>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Código</TableHead>
+                    <TableHead className="hidden lg:table-cell">Remitente</TableHead>
+                    <TableHead>Destinatario</TableHead>
+                    <TableHead>Origen</TableHead>
+                    <TableHead>Viaje</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {encomiendas.length === 0 ? (
+                    <FilaVacia colSpan={COLUMNAS} icon={ICONO_SECCION.recepcion} titulo="No hay encomiendas en camino" />
+                  ) : (
+                    visibles.map((encomienda) => (
+                      <TableRow key={encomienda.id} className="relative">
+                        <CeldaEnlace
+                          onAbrir={() => setEncomiendaAbierta(encomienda.id)}
+                          etiqueta={`Ver encomienda ${encomienda.tracking_id}`}
+                          className="font-mono text-sm"
+                        >
+                          {encomienda.tracking_id}
+                        </CeldaEnlace>
+                        <TableCell className="hidden max-w-40 truncate lg:table-cell">{remitenteDe(encomienda).nombre}</TableCell>
+                        <TableCell className="max-w-40 truncate">{encomienda.receiver_nombre}</TableCell>
+                        <TableCell className="max-w-32 truncate">{formatCiudad(encomienda.ciudad_origen)}</TableCell>
+                        <TableCell className="text-sm">
+                          {encomienda.viaje ? (
+                            <div className="flex flex-col">
+                              <span className="font-medium text-foreground">
+                                {formatCiudad(encomienda.viaje.ruta?.ciudad_origen)} → {formatCiudad(encomienda.viaje.ruta?.ciudad_destino)}
+                              </span>
+                              <span className="text-xs text-muted-foreground tabular-nums">
+                                {formatFechaHoraCortaVE(encomienda.viaje.fecha_hora_salida)}
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground">Sin viaje asignado</span>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+              <PaginacionTabla pagina={pagina} paginas={paginas} onCambio={ir} />
+            </>
+          )}
+        </Card>
+      )}
 
       <RecepcionLoteModal
         isOpen={isLoteModalOpen}
@@ -285,6 +348,14 @@ export default function RecepcionDestinoPage() {
         sucursal={sucursal}
         onSuccess={fetchEncomiendas}
       />
+
+      {detalle && (
+        <DetalleSheet
+          encomienda={detalle}
+          isOpen={Boolean(encomiendaAbierta) && detalle.id === encomiendaAbierta}
+          onClose={() => setEncomiendaAbierta(null)}
+        />
+      )}
     </div>
   );
 }

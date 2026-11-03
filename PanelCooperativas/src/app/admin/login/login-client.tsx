@@ -1,224 +1,195 @@
 "use client";
 
-import { useState } from "react";
+// ─── Login del admin (SY-05, AD5-44) ────────────────────────────────────────
+// Mismo marco que el de cooperativas (`AuthLayout`). Orden de foco: correo →
+// contraseña → Entrar; "¿Olvidaste tu contraseña?" va al pie.
+
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { GoogleLogo, WarningCircle } from "@phosphor-icons/react";
 import { createClient } from "@/lib/supabase/client";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
+import { AuthLayout } from "@/components/auth-layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
 import { FieldGroup, Field, FieldLabel } from "@/components/ui/field";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { SpinnerIcon, WarningCircle, GoogleLogo } from "@phosphor-icons/react";
-import { humanizeError } from "@/lib/errores";
+import { humanizeError, MSG } from "@/lib/errores";
+import { INICIO } from "@/lib/navigation";
+import { INICIO_ADMIN } from "@/lib/admin-navigation";
 
-const ERROR_GOOGLE = "No pudimos iniciar sesión con Google. Intenta de nuevo o usa tu correo.";
+export type AvisoLoginAdmin = "sin-acceso" | "google";
 
-export default function AdminLoginClient({ errorInicial = null }: { errorInicial?: string | null }) {
+const ENLACE = "font-medium text-info-text underline-offset-4 hover:underline focus-visible:underline";
+
+type ErrorLogin = { titulo: string; detalle?: string };
+
+const SIN_ACCESO: ErrorLogin = {
+  titulo: "Esta cuenta no es de administrador",
+  detalle: "Entra con una cuenta de Administrador EnBus.",
+};
+const ERROR_GOOGLE: ErrorLogin = {
+  titulo: "No pudiste entrar con Google",
+  detalle: "Intenta de nuevo o usa tu correo.",
+};
+
+export default function AdminLoginClient({ aviso }: { aviso: AvisoLoginAdmin | null }) {
   const router = useRouter();
-  const supabase = createClient();
+  const [supabase] = useState(() => createClient());
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
-  const [error, setError] = useState<string | null>(errorInicial);
+  const [error, setError] = useState<ErrorLogin | null>(() =>
+    aviso === "sin-acceso" ? SIN_ACCESO : aviso === "google" ? ERROR_GOOGLE : null
+  );
+  const ocupado = loading || googleLoading;
+
+  // PN-01: el layout trajo aquí una sesión sin acceso al admin. Se cierra solo en
+  // este navegador y el login ya no redirige, así que no hay bucle.
+  useEffect(() => {
+    if (aviso === "sin-acceso") void supabase.auth.signOut({ scope: "local" });
+  }, [aviso, supabase]);
+
+  const fallar = async (e: ErrorLogin, cerrarSesion = false) => {
+    if (cerrarSesion) await supabase.auth.signOut({ scope: "local" });
+    setError(e);
+    setLoading(false);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (loading || googleLoading) return;
+    if (ocupado) return;
     setLoading(true);
     setError(null);
 
     try {
-      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({ email, password });
       if (authError || !authData.user) {
-        setError(
-          authError
-            ? humanizeError(authError, { accion: "iniciar sesión", email })
-            : "Correo o contraseña incorrectos. Revisa los datos e intenta de nuevo."
+        const texto = authError ? humanizeError(authError, { accion: "iniciar sesión", email }) : MSG.credenciales;
+        return fallar(
+          texto === MSG.credenciales
+            ? { titulo: "Correo o contraseña incorrectos", detalle: "Revisa los datos o recupera tu contraseña." }
+            : { titulo: "No pudiste entrar", detalle: texto }
         );
-        setLoading(false);
-        return;
       }
 
-      // Obtener el perfil para verificar que sea super_admin
       const { data: profile, error: profileError } = await supabase
         .from("profiles")
-        .select("role")
+        .select("role, cooperativa_id")
         .eq("id", authData.user.id)
         .single();
 
       if (profileError || !profile) {
-        await supabase.auth.signOut();
-        setError(humanizeError(profileError, "verificar los permisos de tu cuenta"));
-        setLoading(false);
-        return;
+        return fallar({ titulo: "No pudiste entrar", detalle: humanizeError(profileError, "verificar tu cuenta") }, true);
       }
 
-      if (profile.role !== "super_admin") {
-        await supabase.auth.signOut();
-        setError("Esta cuenta no es de administrador de EnBus. Entra con una cuenta de administrador o usa el panel de tu cooperativa.");
-        setLoading(false);
+      // Con cuenta de otra zona, a su inicio (§2.1 regla 7).
+      if ((profile.role === "taquillero" || profile.role === "admin_cooperativa") && profile.cooperativa_id) {
+        router.replace(INICIO);
         return;
       }
+      if (profile.role !== "super_admin") return fallar(SIN_ACCESO, true);
 
-      router.push("/admin/dashboard");
+      router.replace(INICIO_ADMIN);
       router.refresh();
     } catch (err) {
-      setError(humanizeError(err, "iniciar sesión"));
-      setLoading(false);
+      fallar({ titulo: "No pudiste entrar", detalle: humanizeError(err, "iniciar sesión") });
     }
   };
 
   const handleGoogleSignIn = async () => {
-    if (loading || googleLoading) return;
+    if (ocupado) return;
     setGoogleLoading(true);
     setError(null);
     try {
       const { error: oauthError } = await supabase.auth.signInWithOAuth({
         provider: "google",
-        options: {
-          redirectTo: `${window.location.origin}/admin/auth/callback`,
-        },
+        options: { redirectTo: `${window.location.origin}/admin/auth/callback` },
       });
-
       if (oauthError) {
-        console.error("Google OAuth error:", oauthError);
         setError(ERROR_GOOGLE);
         setGoogleLoading(false);
       }
-    } catch (err) {
-      console.error("Google OAuth exception:", err);
+    } catch {
       setError(ERROR_GOOGLE);
       setGoogleLoading(false);
     }
   };
 
   return (
-    <div className="flex min-h-screen bg-background text-foreground">
-      {/* Panel izquierdo decorativo (oculto en móvil) */}
-      <div className="hidden w-3/5 flex-col justify-between border-r bg-muted p-12 lg:flex">
-        <div className="flex items-center gap-2">
-          <div
-            aria-hidden
-            className="flex size-10 items-center justify-center rounded-lg bg-primary text-base font-bold text-primary-foreground"
-          >
-            EB
-          </div>
-          <span className="text-xl font-bold tracking-tight">EnBus · Administración</span>
+    <AuthLayout
+      zona="admin"
+      titulo="Iniciar sesión"
+      pie={
+        <Link href="/cooperativas/recuperar" className={ENLACE}>
+          ¿Olvidaste tu contraseña?
+        </Link>
+      }
+    >
+      <div className="flex flex-col gap-6">
+        {error && (
+          <Alert variant="destructive">
+            <WarningCircle weight="fill" aria-hidden />
+            <AlertTitle>{error.titulo}</AlertTitle>
+            {error.detalle && <AlertDescription>{error.detalle}</AlertDescription>}
+          </Alert>
+        )}
+
+        <form onSubmit={handleSubmit} className="flex flex-col gap-6">
+          <FieldGroup className="gap-4">
+            <Field>
+              <FieldLabel htmlFor="email">Correo</FieldLabel>
+              <Input
+                id="email"
+                type="email"
+                placeholder="tu@correo.com"
+                required
+                autoComplete="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                disabled={ocupado}
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="password">Contraseña</FieldLabel>
+              <Input
+                id="password"
+                type="password"
+                required
+                autoComplete="current-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                disabled={ocupado}
+              />
+            </Field>
+          </FieldGroup>
+
+          <Button type="submit" className="w-full" disabled={ocupado} aria-busy={loading || undefined}>
+            {loading && <Spinner size="sm" aria-hidden />}
+            {loading ? "Entrando…" : "Entrar"}
+          </Button>
+        </form>
+
+        <div className="flex items-center gap-2" aria-hidden>
+          <span className="h-px flex-1 bg-border" />
+          <span className="px-2 text-xs text-muted-foreground">o</span>
+          <span className="h-px flex-1 bg-border" />
         </div>
 
-        <div className="flex flex-col gap-4">
-          <h1 className="text-5xl leading-tight font-bold">
-            Panel de <br />
-            administración
-          </h1>
-          <p className="text-xl text-muted-foreground">
-            Solicitudes, cooperativas, tarifas, comisiones e incidencias de EnBus.
-          </p>
-        </div>
-
-        <p className="text-sm text-muted-foreground">
-          &copy; {new Date().getFullYear()} EnBus. Todos los derechos reservados.
-        </p>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={handleGoogleSignIn}
+          disabled={ocupado}
+          aria-busy={googleLoading || undefined}
+          className="w-full"
+        >
+          {googleLoading ? <Spinner size="sm" aria-hidden /> : <GoogleLogo aria-hidden />}
+          Continuar con Google
+        </Button>
       </div>
-
-      {/* Panel derecho con el formulario */}
-      <div className="flex w-full items-center justify-center p-6 lg:w-2/5">
-        <Card className="w-full max-w-sm">
-          <CardHeader>
-            <div className="mb-4 flex justify-center lg:hidden">
-              <div
-                aria-hidden
-                className="flex size-12 items-center justify-center rounded-lg bg-primary text-lg font-bold text-primary-foreground"
-              >
-                EB
-              </div>
-            </div>
-            <CardTitle className="text-2xl">Iniciar sesión</CardTitle>
-            <CardDescription className="text-muted-foreground">EnBus · Administración</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-col gap-6">
-              {error && (
-                <Alert variant="destructive">
-                  <WarningCircle className="size-4" data-icon="inline-start" aria-hidden />
-                  <AlertTitle>No pudiste entrar</AlertTitle>
-                  <AlertDescription>{error}</AlertDescription>
-                </Alert>
-              )}
-
-              <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-                <FieldGroup className="gap-3">
-                  <Field>
-                    <FieldLabel htmlFor="email">Correo</FieldLabel>
-                    <Input
-                      id="email"
-                      type="email"
-                      placeholder="admin@enbus.com"
-                      required
-                      autoComplete="username"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      disabled={loading || googleLoading}
-                    />
-                  </Field>
-                  <Field>
-                    <div className="flex items-center justify-between gap-2">
-                      <FieldLabel htmlFor="password">Contraseña</FieldLabel>
-                      <Link
-                        href="/cooperativas/recuperar"
-                        className="text-sm text-foreground underline decoration-primary underline-offset-4"
-                      >
-                        ¿Olvidaste tu contraseña?
-                      </Link>
-                    </div>
-                    <Input
-                      id="password"
-                      type="password"
-                      required
-                      autoComplete="current-password"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      disabled={loading || googleLoading}
-                    />
-                  </Field>
-                </FieldGroup>
-
-                <Button type="submit" className="w-full" disabled={loading || googleLoading} aria-busy={loading || undefined}>
-                  {loading ? <SpinnerIcon data-icon="inline-start" className="motion-safe:animate-spin" aria-hidden /> : null}
-                  {loading ? "Entrando…" : "Entrar"}
-                </Button>
-              </form>
-
-              <div className="relative flex items-center py-2">
-                <div className="flex-grow border-t" />
-                <span className="mx-4 flex-shrink text-xs text-muted-foreground">o</span>
-                <div className="flex-grow border-t" />
-              </div>
-
-              <Button
-                variant="outline"
-                onClick={handleGoogleSignIn}
-                disabled={loading || googleLoading}
-                aria-busy={googleLoading || undefined}
-                className="w-full"
-              >
-                {googleLoading ? (
-                  <SpinnerIcon data-icon="inline-start" className="motion-safe:animate-spin" aria-hidden />
-                ) : (
-                  <GoogleLogo className="mr-2 size-5" aria-hidden />
-                )}
-                Continuar con Google
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    </div>
+    </AuthLayout>
   );
 }

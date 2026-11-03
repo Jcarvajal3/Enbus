@@ -1,16 +1,24 @@
+/**
+ * boletos/[id] — un boleto. Ceja "Pase de abordaje" solo si está pagado; si
+ * no, "Boleto" (AN-09). El estado va en la fila bajo el código.
+ *
+ * Lo que se vino a hacer va primero (AN-10): pagado → el QR tras la cabecera;
+ * sin pagar → "Registrar pago" en la `FloatingBar` y "Cancelar reserva" en el
+ * cuerpo. La reserva corre con `ReservaTimer` (aquí y en la hoja de pago).
+ */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
   ArrowClockwise,
-  Clock,
+  ClockCounterClockwise,
   CreditCard,
   IdentificationCard,
   Info,
   Lifebuoy,
   MapPin,
   ShareNetwork,
-  WarningCircle,
+  Ticket,
 } from 'phosphor-react-native';
 import ViewShot, { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
@@ -18,19 +26,29 @@ import * as Haptics from 'expo-haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { QRCodeViewer } from '@/src/components/QRCodeViewer';
 import { StarRating } from '@/src/components/StarRating';
-import { PageTransition } from '@/src/components/PageTransition';
-import { PaymentFlow } from '@/src/components/PaymentFlow';
-import { PasajerosForm } from '@/src/components/PasajerosForm';
+import {
+  BotonesTasaCambiada,
+  PaymentFlow,
+  textoTasaCambiada,
+  tituloMetodo,
+  type AccionPago,
+  type MetodoElegido,
+} from '@/src/components/PaymentFlow';
+import { PasajerosForm, type PasajerosFormHandle } from '@/src/components/PasajerosForm';
+import { ReservaTimer } from '@/src/components/ReservaTimer';
+import { ScreenSkeleton, SkeletonLoader } from '@/src/components/SkeletonLoader';
 import { PressableScale } from '@/src/components/PressableScale';
+import { useVolver } from '@/src/hooks/useVolver';
 import {
   BottomSheet,
   Button,
   Card,
   Chip,
+  ConfirmSheet,
   EmptyState,
   ErrorState,
   Field,
-  LoadingState,
+  FloatingBar,
   RouteSummary,
   Screen,
   ScreenHeader,
@@ -42,7 +60,7 @@ import {
 import { supabase } from '@/src/utils/supabase';
 import { useAuth } from '@/src/contexts/AuthContext';
 import { useToast } from '@/src/components/Toast';
-import { dateFull, formatCity, formatDate, formatDuracion, timeOnly } from '@/src/utils/formatters';
+import { formatCity, formatDuracion } from '@/src/utils/formatters';
 import {
   METODO_PAGO,
   getEstadoBoletoUi,
@@ -58,7 +76,6 @@ import { useTasaBCV } from '@/src/hooks/useTasaBCV';
 import { usePerfil } from '@/src/hooks/usePerfil';
 import {
   asientosDelError,
-  formatCuentaAtras,
   formatDiaMes,
   formatSalidaCorta,
   mensajeAsientosTomados,
@@ -75,7 +92,7 @@ import type {
   ResultadoCancelacionBoleto,
   SucursalPunto,
 } from '@/src/types';
-import { Colors, Layout, Radius, Shadows, Sizes, Spacing, alpha } from '@/src/theme';
+import { Colors, Layout, Radius, Sizes, Spacing } from '@/src/theme';
 
 /** Porcentaje del pasaje que se devuelve al cancelar un boleto pagado (lo calcula el servidor). */
 const REFUND_RATE = 0.95;
@@ -122,6 +139,7 @@ export default function DetalleBoletoScreen() {
   const params = useLocalSearchParams<{ id: string }>();
   const id = Array.isArray(params.id) ? params.id[0] : params.id;
   const router = useRouter();
+  const volver = useVolver('/(tabs)/boletos');
   const toast = useToast();
   const { user } = useAuth();
   const tasaBCV = useTasaBCV();
@@ -132,6 +150,10 @@ export default function DetalleBoletoScreen() {
   const [loading, setLoading] = useState(true);
   const [errorCarga, setErrorCarga] = useState<string | null>(null);
   const [pagoSheetVisible, setPagoSheetVisible] = useState(false);
+  /** Subpaso de la hoja de pago (la ← de la hoja vuelve a las formas de pago) */
+  const [metodoPago, setMetodoPago] = useState<MetodoElegido | null>(null);
+  const [accionPago, setAccionPago] = useState<AccionPago | null>(null);
+  const pasajerosRef = useRef<PasajerosFormHandle>(null);
   const [recargasVencida, setRecargasVencida] = useState(0);
 
   // ── Cancelación (una sola hoja para reserva y boleto pagado, §5 #27) ──────
@@ -341,6 +363,10 @@ export default function DetalleBoletoScreen() {
   const pedirPasajeros = forzarPasajeros || compraSinDatos.length > 0;
 
   const cerrarPago = useCallback(() => setPagoSheetVisible(false), []);
+  const abrirPago = () => {
+    setMetodoPago(null);
+    setPagoSheetVisible(true);
+  };
 
   const checkout = useCheckoutBoletos({
     viajeId: boleto?.viaje_id,
@@ -391,39 +417,20 @@ export default function DetalleBoletoScreen() {
     });
   }, [asientosApartados, totalUsd, tasaBCV.tasa, tasaBCV.fecha, esperandoTasa, fijarCompra]);
 
-  // EB_TASA_CAMBIO: la hoja de pago ya está abierta, así que se pregunta con un Alert
-  // (una sola vez por aviso, aunque la pantalla se vuelva a pintar).
+  // EB_TASA_CAMBIO: la hoja de pago ya está abierta, así que el aviso se muestra
+  // dentro de ella (AU-25; antes era una alerta del sistema que en web no salía).
   const { recargar: recargarTasa } = tasaBCV;
-  const toastRef = useRef(toast);
-  toastRef.current = toast;
-  const avisoTasaRef = useRef<typeof tasaCambiada>(null);
   useEffect(() => {
-    if (!tasaCambiada || avisoTasaRef.current === tasaCambiada) return;
-    avisoTasaRef.current = tasaCambiada;
-    recargarTasa();
-    const antes = tasaCambiada.anteriorBs != null ? ` (antes ${formatBs(tasaCambiada.anteriorBs)})` : '';
-    Alert.alert(
-      'La tasa BCV cambió',
-      `La tasa BCV se actualizó. El total ahora es ${formatBs(tasaCambiada.nuevoBs)}${antes}. Si ya transferiste el monto anterior, regístralo igual: la cooperativa verá la diferencia.`,
-      [
-        { text: 'Revisar', style: 'cancel', onPress: descartarTasaCambiada },
-        {
-          text: 'Registrar con el nuevo total',
-          onPress: () => {
-            confirmarTasaCambiada().catch((err: unknown) => {
-              if (__DEV__) console.warn('[boleto] Error registrando pago:', err);
-              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-              toastRef.current.show(
-                'error',
-                `No pudimos registrar tu pago. ${humanizeError(err, 'pago')}`
-              );
-            });
-          },
-        },
-      ],
-      { cancelable: false }
-    );
-  }, [tasaCambiada, confirmarTasaCambiada, descartarTasaCambiada, recargarTasa]);
+    if (tasaCambiada) recargarTasa();
+  }, [tasaCambiada, recargarTasa]);
+
+  const registrarConTasaNueva = () => {
+    confirmarTasaCambiada().catch((err: unknown) => {
+      if (__DEV__) console.warn('[boleto] Error registrando pago:', err);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      toast.show('error', `No pudimos registrar tu pago. ${humanizeError(err, 'pago')}`);
+    });
+  };
 
   // La reserva venció (o el bus salió) con la hoja abierta: no se puede pagar ni cancelar.
   const salidaOcurrida = salidaYaOcurrio(salidaIso);
@@ -555,8 +562,12 @@ export default function DetalleBoletoScreen() {
         if (montadoRef.current) setCancelSheetVisible(false);
         toast.show('error', mensaje);
         void cargar();
-      } else if (montadoRef.current) {
-        setErrorCancelar(`No pudimos cancelar. ${mensaje}`);
+      } else if (pagado) {
+        if (montadoRef.current) setErrorCancelar(`No pudimos cancelar. ${mensaje}`);
+      } else {
+        // La confirmación de la reserva no tiene sitio para el error: se cierra y se avisa.
+        if (montadoRef.current) setCancelSheetVisible(false);
+        toast.show('error', `No pudimos cancelar. ${mensaje}`);
       }
     } finally {
       if (montadoRef.current) setCanceling(false);
@@ -631,7 +642,7 @@ export default function DetalleBoletoScreen() {
 
       setCalificacion({ estrellas, comentario: comentario.trim() || undefined });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      toast.show('success', '¡Gracias! Tu calificación fue registrada.');
+      toast.show('success', 'Gracias. Registramos tu calificación.');
     } catch (err) {
       if (__DEV__) console.warn('[boleto] Error enviando calificación:', err);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -648,7 +659,8 @@ export default function DetalleBoletoScreen() {
   if (loading) {
     return (
       <Screen>
-        <LoadingState label="Cargando tu boleto…" />
+        <ScreenHeader variant="compact" eyebrow="Boleto" title={id ?? ''} onBack={volver} />
+        <ScreenSkeleton variante="detalle" />
       </Screen>
     );
   }
@@ -656,15 +668,19 @@ export default function DetalleBoletoScreen() {
   if (!boleto) {
     return (
       <Screen>
-        <ScreenHeader variant="compact" title="Boleto" onBack={() => router.back()} />
+        <ScreenHeader variant="compact" title="Boleto" onBack={volver} />
         {errorCarga ? (
           <ErrorState title="No pudimos cargar tu boleto" description={errorCarga} onRetry={cargar} />
         ) : (
           <EmptyState
-            icon={WarningCircle}
+            icon={Ticket}
             title="Boleto no encontrado"
-            description="No pudimos encontrar este boleto. Revisa tus boletos en Mis boletos."
-            action={{ children: 'Volver', onPress: () => router.back() }}
+            description="Puede ser de otra cuenta o tener un error en el código."
+            action={{
+              children: 'Ir a Mis boletos',
+              icon: Ticket,
+              onPress: () => router.dismissTo('/(tabs)/boletos'),
+            }}
           />
         )}
       </Screen>
@@ -680,13 +696,20 @@ export default function DetalleBoletoScreen() {
   const codigoLegible = formatCodigoBoleto(boleto.codigo_boleto);
   const precio = formatMoney({ usd: Number(boleto.precio) || 0, tasa: tasaBCV.tasaRef });
   const reservaActiva = estadoUi === 'RESERVA_SIN_PAGAR' || estadoUi === 'PAGO_RECHAZADO';
+  const rechazado = estadoUi === 'PAGO_RECHAZADO';
   const enVerificacion = estadoUi === 'PAGO_EN_VERIFICACION';
   const pagado = estadoUi === 'PAGADO';
   const salioYa = salidaYaOcurrio(salidaIso);
   const vigente = (pagado || reservaActiva || enVerificacion) && !salioYa;
   const puedeCancelar = ((reservaActiva && !vencidaEnPantalla) || pagado) && !salioYa;
+  const puedePagar = reservaActiva && !vencidaEnPantalla && !salioYa && nAsientosDe(compra) > 0;
   const cotizacion = checkout.cotizacion;
   const nAsientos = asientosApartados.length;
+  const etiquetaAsientos =
+    nAsientos > 1
+      ? `Asientos ${unirAsientos(asientosApartados)}`
+      : `Asiento ${asientosApartados[0] ?? boleto.asiento ?? ''}`;
+  const tituloReserva = `${etiquetaAsientos} ${nAsientos > 1 ? 'apartados' : 'apartado'}`;
 
   // Lo que se devolvería al cancelar un boleto pagado (el servidor calcula el real).
   const reembolsoUsd = Math.round((Number(boleto.precio) || 0) * REFUND_RATE * 100) / 100;
@@ -705,111 +728,183 @@ export default function DetalleBoletoScreen() {
     .replace(/^[:\s]+/, '');
   const montoReembolso = Number(boleto.monto_reembolso) || 0;
 
+  // Hoja de pago: título y botón según el subpaso.
+  const tituloHojaPago = tasaCambiada
+    ? 'La tasa BCV cambió'
+    : pedirPasajeros
+      ? '¿Quién viaja?'
+      : (tituloMetodo(metodoPago) ?? '¿Cómo vas a pagar?');
+  const pieHojaPago = tasaCambiada ? (
+    <BotonesTasaCambiada
+      enviando={checkout.enCurso}
+      onConfirmar={registrarConTasaNueva}
+      onRevisar={descartarTasaCambiada}
+    />
+  ) : pedirPasajeros && nAsientos > 0 ? (
+    <Button fullWidth loading={checkout.enCurso} onPress={() => pasajerosRef.current?.enviar()}>
+      Continuar
+    </Button>
+  ) : accionPago ? (
+    <Button
+      fullWidth
+      icon={accionPago.icon}
+      loading={accionPago.cargando}
+      disabled={accionPago.disabled}
+      onPress={accionPago.onPress}
+    >
+      {accionPago.etiqueta}
+    </Button>
+  ) : undefined;
+
+  const ticket = (
+    <View style={s.ticket}>
+      <View style={s.ticketCabecera}>
+        <Text variant="caption" color="muted">
+          Cooperativa
+        </Text>
+        <Text variant="subheading" numberOfLines={2}>
+          {boleto.cooperativas?.nombre ?? 'Cooperativa'}
+        </Text>
+      </View>
+
+      <View style={s.ticketRuta}>
+        <RouteSummary
+          origen={ruta?.ciudad_origen}
+          destino={ruta?.ciudad_destino}
+          duration={minutos > 0 ? formatDuracion(minutos) : undefined}
+        />
+      </View>
+
+      {/* Perforación */}
+      <View style={s.perforation}>
+        <View style={[s.notch, s.notchLeft]} />
+        <View style={s.dashes} />
+        <View style={[s.notch, s.notchRight]} />
+      </View>
+
+      <View style={s.ticketDetails}>
+        <TicketField label="Asiento" value={boleto.asiento ?? '—'} highlight />
+        {/* Con la tarjeta "Salida" arriba, la fecha no se repite aquí (AU-18). */}
+        {!vigente ? <TicketField label="Salida" value={formatSalidaCorta(salidaIso)} /> : null}
+        <TicketField label="Pasajero" value={pasajero} />
+        <TicketField label="Cédula" value={cedula} />
+        <TicketField label="Unidad" value={boleto.viajes?.numero_unidad ?? 'Por asignar'} />
+        <TicketField label="Chofer" value={boleto.viajes?.nombre_chofer ?? 'Por asignar'} />
+        <TicketField label="Precio" value={precio.principal} hint={precio.secundario ?? undefined} />
+      </View>
+
+      {reservaActiva || enVerificacion ? (
+        <View style={s.ticketPie}>
+          <Text variant="caption" color="muted" align="center">
+            El QR de abordaje aparece cuando la cooperativa confirme tu pago.
+          </Text>
+        </View>
+      ) : null}
+    </View>
+  );
+
   return (
     <Screen>
-      <PageTransition>
-        <ScreenHeader
-          variant="compact"
-          eyebrow="Pase de abordaje"
-          title={codigoLegible || '—'}
-          onBack={() => router.back()}
-          right={
-            estadoReembolso ? (
-              <StatusBadge dominio="reembolso" estado={estadoReembolso} size="md" bordered />
-            ) : (
-              <StatusBadge dominio="boleto" estado={estadoUi} size="md" bordered />
-            )
-          }
-        />
+      <ScreenHeader
+        variant="compact"
+        eyebrow={pagado ? 'Pase de abordaje' : 'Boleto'}
+        title={codigoLegible || '—'}
+        onBack={volver}
+        status={
+          estadoReembolso ? (
+            <StatusBadge dominio="reembolso" estado={estadoReembolso} />
+          ) : (
+            <StatusBadge dominio="boleto" estado={estadoUi} />
+          )
+        }
+      />
 
-        <ScrollView
-          contentContainerStyle={scrollContent({ top: Spacing.lg })}
-          showsVerticalScrollIndicator={false}
-        >
-          {errorCarga ? <StaleBanner onRetry={() => void cargar()} /> : null}
+      <ScrollView
+        contentContainerStyle={scrollContent({ top: Spacing.lg, floatingAction: puedePagar })}
+        showsVerticalScrollIndicator={false}
+      >
+        {errorCarga ? <StaleBanner onRetry={() => void cargar()} /> : null}
 
-          {/* ── Aviso de estado ─────────────────────────────────────────── */}
-          {reservaActiva ? (
-            vencidaEnPantalla ? (
-              <View style={[s.banner, s.bannerNeutral]} accessibilityRole="alert">
-                <Clock size={Sizes.icon.lg} color={Colors.mutedForeground} weight="fill" />
-                <View style={s.bannerBody}>
-                  <Text variant="label">Se acabó el tiempo. Estamos liberando el asiento…</Text>
-                  {recargasVencida >= RECARGAS_VENCIDA_MAX ? (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      icon={ArrowClockwise}
-                      onPress={() => {
-                        setRecargasVencida(0);
-                        void cargar();
-                      }}
-                    >
-                      Actualizar
-                    </Button>
-                  ) : null}
-                </View>
-              </View>
-            ) : (
-              <View style={[s.banner, s.bannerWarning]}>
-                <Clock size={Sizes.icon.lg} color={Colors.warningText} weight="fill" />
-                <View style={s.bannerBody}>
-                  <Text variant="label" color="warningText">
-                    {estadoUi === 'PAGO_RECHAZADO' ? 'Pago rechazado' : 'Asiento apartado sin pagar'}
-                  </Text>
-                  <Text variant="caption" color="foreground">
-                    {estadoUi === 'PAGO_RECHAZADO'
-                      ? `Motivo: ${pago?.motivo_rechazo ?? 'la cooperativa no pudo confirmar tu pago.'} Regístralo de nuevo antes de que se acabe el tiempo.`
-                      : `Registra tu pago o paga en la taquilla de ${cooperativa} antes de que se acabe el tiempo.`}
-                  </Text>
-                </View>
-                {segundos !== null ? (
-                  <View
-                    style={s.countdown}
-                    accessible
-                    accessibilityLabel={`Quedan unos ${Math.ceil(segundos / 60)} minutos`}
+        {/* ── Aviso de estado (uno solo) ──────────────────────────────── */}
+        {reservaActiva ? (
+          vencidaEnPantalla ? (
+            <View style={[s.aviso, s.avisoNeutro]} accessibilityRole="alert">
+              <ClockCounterClockwise size={Sizes.icon.lg} color={Colors.mutedForeground} weight="fill" />
+              <View style={s.avisoCuerpo}>
+                <Text variant="label">Se acabó el tiempo. Estamos liberando el asiento…</Text>
+                {recargasVencida >= RECARGAS_VENCIDA_MAX ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    icon={ArrowClockwise}
+                    onPress={() => {
+                      setRecargasVencida(0);
+                      void cargar();
+                    }}
+                    style={s.inlineButton}
                   >
-                    <Text variant="label" weight="heavy" color="inverse" compact>
-                      {formatCuentaAtras(segundos)}
-                    </Text>
-                  </View>
+                    Actualizar
+                  </Button>
                 ) : null}
               </View>
-            )
-          ) : enVerificacion ? (
-            <View style={[s.banner, s.bannerInfo]}>
-              <Info size={Sizes.icon.lg} color={Colors.infoText} weight="fill" />
-              <View style={s.bannerBody}>
-                <Text variant="label" color="infoText">
-                  Pago en verificación
-                </Text>
-                <Text variant="caption" color="foreground">
-                  La cooperativa está revisando tu pago. Tu asiento sigue apartado y te avisaremos
-                  cuando tu boleto quede confirmado.
-                </Text>
-              </View>
             </View>
-          ) : estadoUi === 'EXPIRADO' ? (
-            <View style={[s.banner, s.bannerNeutral]}>
-              <WarningCircle size={Sizes.icon.lg} color={Colors.mutedForeground} weight="fill" />
-              <View style={s.bannerBody}>
-                <Text variant="label">{estadoVisual.label}</Text>
-                <Text variant="caption" color="muted">
-                  {estadoVisual.hint}
-                </Text>
-              </View>
+          ) : (
+            <View style={s.bloque}>
+              <ReservaTimer
+                segundos={segundos}
+                titulo={rechazado ? 'Registra tu pago de nuevo' : tituloReserva}
+                detalle={
+                  rechazado
+                    ? 'Antes de que venza la reserva.'
+                    : `Registra tu pago o paga en la taquilla de ${cooperativa}.`
+                }
+              />
             </View>
-          ) : null}
+          )
+        ) : enVerificacion ? (
+          <View style={[s.aviso, s.avisoInfo]}>
+            <Info size={Sizes.icon.lg} color={Colors.infoText} weight="fill" />
+            <Text variant="secondary" style={s.avisoCuerpo}>
+              Te avisaremos cuando la cooperativa confirme tu pago.
+            </Text>
+          </View>
+        ) : estadoUi === 'EXPIRADO' && estadoVisual.hint ? (
+          <View style={[s.aviso, s.avisoNeutro]}>
+            <ClockCounterClockwise size={Sizes.icon.lg} color={Colors.mutedForeground} weight="fill" />
+            <Text variant="secondary" style={s.avisoCuerpo}>
+              {estadoVisual.hint}
+            </Text>
+          </View>
+        ) : null}
 
-          {/* ── Cuándo y desde dónde sale (#26, M-33) ───────────────────── */}
-          {vigente ? (
-            <Card padding="md" style={s.salidaCard}>
-              <Text variant="overline" color="muted" uppercase>
-                Salida
+        {/* ── Pase: el QR primero (AN-10) y el boleto, juntos para compartir ── */}
+        {pagado ? (
+          <ViewShot ref={viewShotRef} options={{ format: 'png', quality: 0.9 }} style={s.captura}>
+            <View style={s.qr}>
+              <QRCodeViewer
+                data={boleto.qr_embarque_data || `PASS-${boleto.codigo_boleto}`}
+                codigoLegible={codigoLegible}
+                ampliable
+                size={200}
+              />
+              <Text variant="caption" color="muted" align="center" style={s.qrTexto}>
+                Muéstralo en la taquilla antes de subir. Si el lector falla, dicta el código.
               </Text>
-              <Text variant="heading" style={s.salidaHora}>
-                {`Sale ${formatSalidaCorta(salidaIso)}`}
-              </Text>
+            </View>
+            {ticket}
+          </ViewShot>
+        ) : null}
+
+        {/* ── Cuándo y desde dónde sale (#26, M-33) ───────────────────── */}
+        {vigente ? (
+          <Card tone="sunken" padding="md" style={s.bloque}>
+            <Text variant="caption" color="muted">
+              Salida
+            </Text>
+            <Text variant="heading" style={s.salidaHora}>
+              {formatSalidaCorta(salidaIso)}
+            </Text>
+            <View style={s.salidaFilas}>
               <PuntoDeSalida
                 sucursales={sucursales}
                 cooperativa={cooperativa}
@@ -821,464 +916,374 @@ export default function DetalleBoletoScreen() {
                   Llega 30 minutos antes con tu cédula.
                 </Text>
               </View>
-            </Card>
-          ) : null}
-
-          {/* ── Ticket ──────────────────────────────────────────────────── */}
-          <ViewShot ref={viewShotRef} options={{ format: 'png', quality: 0.9 }}>
-            <View style={s.ticket}>
-              <View style={s.ticketHeader}>
-                <Text variant="overline" color={alpha(Colors.primaryForeground, 0.6)} uppercase>
-                  Cooperativa
-                </Text>
-                <Text variant="heading" align="center" style={s.ticketCoop}>
-                  {boleto.cooperativas?.nombre ?? 'Cooperativa'}
-                </Text>
-              </View>
-
-              <View style={s.ticketBody}>
-                <RouteSummary
-                  origen={ruta?.ciudad_origen}
-                  destino={ruta?.ciudad_destino}
-                  duration={minutos > 0 ? formatDuracion(minutos) : undefined}
-                />
-              </View>
-
-              {/* Perforación */}
-              <View style={s.perforation}>
-                <View style={[s.notch, s.notchLeft]} />
-                <View style={s.dashes} />
-                <View style={[s.notch, s.notchRight]} />
-              </View>
-
-              <View style={s.ticketDetails}>
-                <TicketField label="Asiento" value={boleto.asiento ?? '—'} highlight />
-                <TicketField
-                  label="Fecha de salida"
-                  value={formatDate(salidaIso, dateFull)}
-                  hint={formatDate(salidaIso, timeOnly)}
-                />
-                <TicketField label="Pasajero" value={pasajero} />
-                <TicketField label="Cédula" value={cedula} />
-                <TicketField label="Unidad" value={boleto.viajes?.numero_unidad ?? 'Por asignar'} />
-                <TicketField
-                  label="Chofer"
-                  value={boleto.viajes?.nombre_chofer ?? 'Por asignar'}
-                />
-                <TicketField
-                  label="Precio"
-                  value={precio.principal}
-                  hint={precio.secundario ?? undefined}
-                />
-              </View>
-
-              <View style={s.ticketQr}>
-                {pagado ? (
-                  <>
-                    <Text variant="caption" color="muted" align="center" style={s.qrCaption}>
-                      Muestra este código en la taquilla antes de subir al bus.
-                    </Text>
-                    <QRCodeViewer
-                      data={boleto.qr_embarque_data || `PASS-${boleto.codigo_boleto}`}
-                      codigoLegible={codigoLegible}
-                      ampliable
-                      size={200}
-                    />
-                    <Text variant="caption" color="muted" align="center" style={s.qrCaption}>
-                      {`Si el lector falla, dicta este código: ${codigoLegible}`}
-                    </Text>
-                  </>
-                ) : enVerificacion ? (
-                  <>
-                    <Text variant="label" color="warningText" align="center" uppercase>
-                      Pago en verificación
-                    </Text>
-                    <Text variant="caption" color="muted" align="center" style={s.qrCaption}>
-                      El QR de abordaje aparece cuando la cooperativa confirme tu pago.
-                    </Text>
-                  </>
-                ) : reservaActiva ? (
-                  <>
-                    <Text variant="label" color="warningText" align="center" uppercase>
-                      {estadoVisual.label}
-                    </Text>
-                    <Text variant="caption" color="muted" align="center" style={s.qrCaption}>
-                      El QR de abordaje aparece cuando pagues y la cooperativa confirme tu pago.
-                    </Text>
-                  </>
-                ) : (
-                  <Text variant="label" color="muted" align="center" uppercase>
-                    {estadoVisual.label}
-                  </Text>
-                )}
-              </View>
             </View>
-          </ViewShot>
+          </Card>
+        ) : null}
 
-          {/* ── Pago registrado ─────────────────────────────────────────── */}
-          {pago && pago.tipo_pago === 'DIGITAL' && (enVerificacion || estadoUi === 'PAGO_RECHAZADO') ? (
-            <Card tone="sunken" padding="md" elevated={false} style={s.block}>
-              <Text variant="bodyStrong">
-                {estadoUi === 'PAGO_RECHAZADO' ? 'Pago rechazado' : 'Tu pago registrado'}
-              </Text>
-              <View style={s.pagoRows}>
-                {pago.numero_referencia ? (
-                  <Text variant="caption" color="muted">
-                    {`Referencia: ${pago.numero_referencia}`}
+        {!pagado ? <View style={s.bloque}>{ticket}</View> : null}
+
+        {/* ── Pago registrado ─────────────────────────────────────────── */}
+        {pago && pago.tipo_pago === 'DIGITAL' && (enVerificacion || rechazado) ? (
+          <Card tone="sunken" padding="md" style={s.bloque}>
+            <Text variant="subheading">{rechazado ? 'Pago rechazado' : 'Tu pago registrado'}</Text>
+            <View style={s.pagoRows}>
+              {rechazado && pago.motivo_rechazo ? (
+                <Text variant="secondary" color="dangerText">
+                  {`Motivo: ${pago.motivo_rechazo}`}
+                </Text>
+              ) : null}
+              {pago.numero_referencia ? (
+                <Text variant="secondary" color="muted">
+                  {`Referencia ${pago.numero_referencia}`}
+                </Text>
+              ) : null}
+              {pago.banco_emisor ? (
+                <Text variant="secondary" color="muted">
+                  {pago.banco_emisor}
+                </Text>
+              ) : null}
+              {pago.monto_declarado != null ? (
+                <Text variant="secondary" color="muted">
+                  {`Pagaste ${
+                    formatMoney({
+                      usd: pago.moneda === 'USD' ? Number(pago.monto_declarado) : null,
+                      bs: pago.moneda === 'USD' ? null : Number(pago.monto_declarado),
+                      tasa: null,
+                      moneda: pago.moneda,
+                    }).principal
+                  }`}
+                </Text>
+              ) : null}
+            </View>
+          </Card>
+        ) : null}
+
+        {/* ── Detalle de cancelación y reembolso ──────────────────────── */}
+        {estadoUi === 'CANCELADO' && (
+          <Card tone="sunken" padding="md" style={s.bloque}>
+            <View style={s.cancelRows}>
+              {porCooperativa ? (
+                <Text variant="secondary">
+                  {`La cooperativa canceló este viaje${
+                    motivoCooperativa ? `: ${motivoCooperativa}` : ''
+                  }.${montoReembolso > 0 ? ' Te devolverá el 100 % de tu pasaje.' : ''}`}
+                </Text>
+              ) : motivoCancelacion ? (
+                <Text variant="secondary" color="muted">
+                  {`Motivo: ${motivoCancelacion}`}
+                </Text>
+              ) : null}
+
+              {estadoReembolso === 'PROCESADO' ? (
+                <>
+                  <Text variant="secondary">
+                    {`Reembolso enviado${
+                      boleto.reembolso_procesado_at
+                        ? ` el ${formatDiaMes(boleto.reembolso_procesado_at)}`
+                        : ''
+                    }${
+                      boleto.reembolso_metodo
+                        ? ` por ${METODO_PAGO[boleto.reembolso_metodo] ?? boleto.reembolso_metodo}`
+                        : ''
+                    }${
+                      boleto.reembolso_referencia ? ` (ref. ${boleto.reembolso_referencia})` : ''
+                    }. Si no lo ves en tu cuenta, repórtalo.`}
+                  </Text>
+                </>
+              ) : estadoReembolso === 'PENDIENTE' ? (
+                <Text variant="secondary">
+                  {`La cooperativa te devolverá ${formatUsd(montoReembolso)}${
+                    tasaHoy ? ` (≈ ${formatBs(usdABs(montoReembolso, tasaHoy))})` : ''
+                  } en 1 a 2 días hábiles, por el mismo medio con que pagaste.`}
+                </Text>
+              ) : (
+                <Text variant="secondary">Cancelado sin costo: no habías pagado.</Text>
+              )}
+            </View>
+          </Card>
+        )}
+
+        {/* ── Calificación ────────────────────────────────────────────── */}
+        {estadoUi === 'USADO' && (
+          <Card tone="sunken" padding="md" style={s.bloque}>
+            <Text variant="subheading">Califica tu viaje</Text>
+            <Text variant="secondary" color="muted" style={s.blockText}>
+              {`¿Cómo estuvo viajar con ${cooperativa}?`}
+            </Text>
+
+            {loadingCalificacion ? (
+              <SkeletonLoader height={Sizes.control.lg} borderRadius={Radius.lg} />
+            ) : calificacion ? (
+              <View style={s.ratingDone}>
+                <StarRating rating={calificacion.estrellas} readonly />
+                {calificacion.comentario ? (
+                  <Text variant="secondary" style={s.quoteText}>
+                    {`“${calificacion.comentario}”`}
                   </Text>
                 ) : null}
-                {pago.banco_emisor ? (
-                  <Text variant="caption" color="muted">
-                    {`Desde: ${pago.banco_emisor}`}
-                  </Text>
-                ) : null}
-                {pago.monto_declarado != null ? (
-                  <Text variant="caption" color="muted">
-                    {`Monto que pagaste: ${
-                      formatMoney({
-                        usd: pago.moneda === 'USD' ? Number(pago.monto_declarado) : null,
-                        bs: pago.moneda === 'USD' ? null : Number(pago.monto_declarado),
-                        tasa: null,
-                        moneda: pago.moneda,
-                      }).principal
-                    }`}
-                  </Text>
-                ) : null}
-                {estadoUi === 'PAGO_RECHAZADO' && pago.motivo_rechazo ? (
-                  <Text variant="caption" color="dangerText">
-                    {`Motivo: ${pago.motivo_rechazo}`}
-                  </Text>
-                ) : null}
+                <Text variant="caption" color="successText">
+                  Ya calificaste este viaje
+                </Text>
               </View>
-            </Card>
-          ) : null}
-
-          {/* ── Acciones ────────────────────────────────────────────────── */}
-          <View style={s.actions}>
-            {pagado && (
-              <Button variant="primary" icon={ShareNetwork} fullWidth onPress={handleShare}>
-                Compartir pase de abordaje
-              </Button>
+            ) : (
+              <View style={s.ratingForm}>
+                <StarRating
+                  rating={estrellas}
+                  onRatingChange={setEstrellas}
+                  readonly={submittingRating}
+                />
+                <Field
+                  label="Comentario (opcional)"
+                  value={comentario}
+                  onChangeText={setComentario}
+                  editable={!submittingRating}
+                  multiline
+                  numberOfLines={2}
+                  containerStyle={s.ultimoCampo}
+                />
+                <Button
+                  size="md"
+                  fullWidth
+                  disabled={estrellas === 0}
+                  loading={submittingRating}
+                  onPress={handleSubmitRating}
+                >
+                  Enviar calificación
+                </Button>
+              </View>
             )}
+          </Card>
+        )}
 
-            {reservaActiva && !vencidaEnPantalla && !salioYa && (
-              <Button
-                variant="accent"
-                icon={CreditCard}
-                fullWidth
-                disabled={canceling || nAsientos === 0}
-                onPress={() => setPagoSheetVisible(true)}
-              >
-                {estadoUi === 'PAGO_RECHAZADO' ? 'Registrar pago de nuevo' : 'Registrar pago'}
+        {/* ── Acciones secundarias ────────────────────────────────────── */}
+        {pagado || puedeCancelar || (salioYa && vigenteAntes(estadoUi)) || enVerificacion ? (
+          <View style={s.acciones}>
+            {pagado ? (
+              <Button variant="outline" icon={ShareNetwork} fullWidth onPress={handleShare}>
+                Compartir pase
               </Button>
-            )}
+            ) : null}
 
             {puedeCancelar ? (
-              <Button variant="dangerSoft" fullWidth disabled={canceling} onPress={abrirCancelar}>
+              <Button variant="dangerGhost" fullWidth disabled={canceling} onPress={abrirCancelar}>
                 {pagado ? 'Cancelar boleto' : 'Cancelar reserva'}
               </Button>
             ) : null}
 
-            {salioYa && (pagado || reservaActiva || enVerificacion) ? (
-              <View style={s.avisoSalida}>
-                <Text variant="secondary" color="muted">
-                  Este viaje ya salió; no se puede cancelar desde la app. Si tuviste un problema,
-                  repórtalo.
-                </Text>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  icon={Lifebuoy}
-                  onPress={irAAyuda}
-                  style={s.inlineButton}
-                >
-                  Reportar un problema
-                </Button>
-              </View>
+            {salioYa && vigenteAntes(estadoUi) ? (
+              <Text variant="secondary" color="muted" align="center">
+                Este viaje ya salió; no se puede cancelar desde la app.
+              </Text>
             ) : enVerificacion ? (
-              <Text variant="secondary" color="muted">
-                Tu pago está en verificación. Para cancelar, espera la respuesta de la cooperativa o
-                escríbele.
+              <Text variant="secondary" color="muted" align="center">
+                Para cancelar, espera la respuesta de la cooperativa.
               </Text>
             ) : null}
           </View>
+        ) : null}
 
-          {/* ── Detalle de cancelación y reembolso ──────────────────────── */}
-          {estadoUi === 'CANCELADO' && (
-            <Card tone="sunken" padding="md" elevated={false} style={s.block}>
-              <Text variant="bodyStrong">Cancelado</Text>
-              <View style={s.cancelRows}>
-                {porCooperativa ? (
-                  <Text variant="secondary">
-                    {`La cooperativa canceló este viaje${
-                      motivoCooperativa ? `: ${motivoCooperativa}` : ''
-                    }.${montoReembolso > 0 ? ' Te devolverá el 100 % de tu pasaje.' : ''}`}
-                  </Text>
-                ) : motivoCancelacion ? (
-                  <Text variant="caption" color="muted">
-                    {`Motivo: ${motivoCancelacion}`}
-                  </Text>
-                ) : null}
+        {/* ── Ayuda (#28) ─────────────────────────────────────────────── */}
+        <PressableScale
+          onPress={irAAyuda}
+          haptic
+          hapticType="selection"
+          style={s.ayuda}
+          accessibilityRole="link"
+          accessibilityLabel="¿Problemas con este boleto? Reportar un problema"
+        >
+          <Lifebuoy size={Sizes.icon.md} color={Colors.mutedForeground} weight="bold" />
+          <Text variant="secondary" color="muted">
+            {'¿Problemas con este boleto? '}
+            <Text variant="label" color="link" style={s.enlace}>
+              Reportar un problema
+            </Text>
+          </Text>
+        </PressableScale>
+      </ScrollView>
 
-                {estadoReembolso === 'PROCESADO' ? (
-                  <>
-                    <Text variant="secondary" color="successText">
-                      {`Reembolso enviado${
-                        boleto.reembolso_procesado_at
-                          ? ` el ${formatDiaMes(boleto.reembolso_procesado_at)}`
-                          : ''
-                      }${
-                        boleto.reembolso_metodo
-                          ? ` por ${METODO_PAGO[boleto.reembolso_metodo] ?? boleto.reembolso_metodo}`
-                          : ''
-                      }${
-                        boleto.reembolso_referencia ? ` (ref. ${boleto.reembolso_referencia})` : ''
-                      }. Si no lo ves en tu cuenta, repórtalo.`}
-                    </Text>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      icon={Lifebuoy}
-                      onPress={irAAyuda}
-                      style={s.inlineButton}
-                    >
-                      Reportar un problema
-                    </Button>
-                  </>
-                ) : estadoReembolso === 'PENDIENTE' ? (
-                  <View style={s.reembolso}>
-                    <Text variant="secondary">
-                      {`Reembolso pendiente: la cooperativa te devolverá ${formatUsd(montoReembolso)}${
-                        tasaHoy ? ` (≈ ${formatBs(usdABs(montoReembolso, tasaHoy))})` : ''
-                      } en 1 a 2 días hábiles.`}
-                    </Text>
-                    <Text variant="caption" color="muted">
-                      Te la devuelve por el mismo medio con que pagaste, a la tasa BCV del día en que
-                      la haga.
-                    </Text>
-                  </View>
-                ) : (
-                  <Text variant="secondary">Cancelado sin costo: no habías pagado.</Text>
-                )}
-              </View>
-            </Card>
-          )}
+      {/* ── Sin pagar: "Registrar pago" fijo abajo (AN-10) ────────────── */}
+      {puedePagar ? (
+        <FloatingBar
+          resumen={`${etiquetaAsientos} · ${
+            cotizacion
+              ? formatMoney({ usd: cotizacion.totalUsd, bs: cotizacion.totalBs, tasa: null }).principal
+              : formatMoney({ usd: totalUsd, tasa: tasaBCV.tasaRef }).principal
+          }`}
+        >
+          <Button icon={CreditCard} fullWidth disabled={canceling} onPress={abrirPago}>
+            Registrar pago
+          </Button>
+        </FloatingBar>
+      ) : null}
 
-          {/* ── Calificación ────────────────────────────────────────────── */}
-          {estadoUi === 'USADO' && (
-            <Card padding="md" style={s.block}>
-              <Text variant="subheading">Califica tu viaje</Text>
-              <Text variant="caption" color="muted" style={s.blockText}>
-                {`Cuéntanos cómo estuvo viajar con ${cooperativa}.`}
-              </Text>
-
-              {loadingCalificacion ? (
-                <LoadingState compact />
-              ) : calificacion ? (
-                <View style={s.ratingDone}>
-                  <StarRating rating={calificacion.estrellas} readonly />
-                  {calificacion.comentario ? (
-                    <View style={s.quote}>
-                      <Text variant="secondary" style={s.quoteText}>
-                        {`“${calificacion.comentario}”`}
-                      </Text>
-                    </View>
-                  ) : null}
-                  <Text variant="overline" color="successText" uppercase>
-                    Ya calificaste este viaje
-                  </Text>
+      {/* ── Hoja de pago ────────────────────────────────────────────────── */}
+      <BottomSheet
+        visible={pagoSheetVisible}
+        onClose={() => {
+          if (!checkout.estaEnCurso()) setPagoSheetVisible(false);
+        }}
+        title={tituloHojaPago}
+        onBack={
+          metodoPago && !pedirPasajeros && !tasaCambiada && !checkout.enCurso
+            ? () => setMetodoPago(null)
+            : undefined
+        }
+        height="92%"
+        footer={pieHojaPago}
+      >
+        <ScrollView
+          contentContainerStyle={s.pagoSheet}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          {tasaCambiada ? (
+            <Text variant="body">{textoTasaCambiada(tasaCambiada)}</Text>
+          ) : (
+            <>
+              {segundos !== null && !vencidaEnPantalla ? (
+                <View style={s.bloque}>
+                  <ReservaTimer segundos={segundos} titulo={tituloReserva} />
                 </View>
+              ) : null}
+              {pedirPasajeros && nAsientos > 0 ? (
+                <PasajerosForm
+                  ref={pasajerosRef}
+                  asientos={asientosApartados}
+                  perfil={perfil}
+                  perfilCargando={perfilCargando}
+                  inicial={pasajerosIniciales}
+                  asientosConError={asientosSinDatos}
+                  mensajeError={errorPasajeros}
+                  guardando={checkout.enCurso}
+                  onSubmit={guardarPasajeros}
+                />
+              ) : cotizacion && boleto.cooperativa_id ? (
+                <PaymentFlow
+                  cooperativaId={boleto.cooperativa_id}
+                  concepto={`${nAsientos === 1 ? '1 boleto' : `${nAsientos} boletos`} · ${formatCity(
+                    ruta?.ciudad_origen
+                  )} → ${formatCity(ruta?.ciudad_destino)}`}
+                  tipoRecurso="boleto"
+                  cotizacion={cotizacion}
+                  onRegistrar={checkout.onRegistrar}
+                  bloqueado={checkout.enCurso || vencidaEnPantalla}
+                  embebido
+                  metodo={metodoPago}
+                  onMetodo={setMetodoPago}
+                  onAccion={setAccionPago}
+                />
               ) : (
-                <View style={s.ratingForm}>
-                  <StarRating
-                    rating={estrellas}
-                    onRatingChange={setEstrellas}
-                    readonly={submittingRating}
-                  />
-                  <Field
-                    placeholder="¿Cómo estuvo el servicio? (opcional)"
-                    value={comentario}
-                    onChangeText={setComentario}
-                    editable={!submittingRating}
-                    tone="sunken"
-                    multiline
-                    numberOfLines={2}
-                  />
-                  <Button
-                    variant="primary"
-                    fullWidth
-                    disabled={estrellas === 0}
-                    loading={submittingRating}
-                    onPress={handleSubmitRating}
-                  >
-                    Enviar calificación
-                  </Button>
+                <View style={s.esqueletoPago}>
+                  <SkeletonLoader height={Sizes.iconBox['2xl']} borderRadius={Radius.lg} />
+                  <SkeletonLoader height={Sizes.control.xl} borderRadius={Radius.lg} index={1} />
                 </View>
               )}
-            </Card>
+            </>
           )}
-
-          {/* ── Ayuda (#28) ─────────────────────────────────────────────── */}
-          <PressableScale
-            onPress={irAAyuda}
-            haptic
-            hapticType="selection"
-            style={s.ayuda}
-            accessibilityRole="link"
-            accessibilityLabel="¿Problemas con este boleto? Reportar un problema"
-          >
-            <Lifebuoy size={Sizes.icon.md} color={Colors.mutedForeground} weight="bold" />
-            <Text variant="secondary" color="muted">
-              {'¿Problemas con este boleto? '}
-              <Text variant="secondary" weight="bold" color="foreground" style={s.enlace}>
-                Reportar un problema
-              </Text>
-            </Text>
-          </PressableScale>
         </ScrollView>
+      </BottomSheet>
 
-        {/* ── Hoja de pago ──────────────────────────────────────────────── */}
-        <BottomSheet
-          visible={pagoSheetVisible}
-          onClose={() => {
-            if (!checkout.estaEnCurso()) setPagoSheetVisible(false);
-          }}
-          title={
-            pedirPasajeros
-              ? '¿Quién viaja?'
-              : estadoUi === 'PAGO_RECHAZADO'
-                ? 'Registrar pago de nuevo'
-                : 'Registrar pago'
-          }
-          height="92%"
+      {/* ── Cancelar una reserva: la confirmación común (D3) ─────────────── */}
+      <ConfirmSheet
+        visible={cancelSheetVisible && !pagado}
+        cargando={canceling}
+        titulo="¿Cancelar esta reserva?"
+        mensaje={`Liberaremos el asiento ${boleto.asiento ?? ''}. No se te cobrará nada.`}
+        confirmar="Cancelar reserva"
+        onConfirm={() => void confirmarCancelacion()}
+        onClose={cerrarCancelar}
+      />
+
+      {/* ── Cancelar un boleto pagado: misma hoja, con el motivo ─────────── */}
+      <BottomSheet
+        visible={cancelSheetVisible && pagado}
+        onClose={cerrarCancelar}
+        title="¿Cancelar este boleto?"
+        footer={
+          <View style={s.sheetButtons}>
+            <Button variant="danger" fullWidth loading={canceling} onPress={confirmarCancelacion}>
+              Cancelar boleto
+            </Button>
+            <Button variant="ghost" fullWidth disabled={canceling} onPress={cerrarCancelar}>
+              Volver
+            </Button>
+          </View>
+        }
+      >
+        <ScrollView
+          contentContainerStyle={s.sheetBody}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
         >
-          <ScrollView
-            contentContainerStyle={s.pagoSheet}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-          >
-            {segundos !== null && !vencidaEnPantalla ? (
-              <Text variant="caption" color={segundos <= 300 ? 'warningText' : 'muted'} style={s.pagoTimer}>
-                {`${nAsientos > 1 ? `Asientos ${unirAsientos(asientosApartados)} apartados` : `Asiento ${asientosApartados[0] ?? boleto.asiento} apartado`} · te quedan ${formatCuentaAtras(segundos)} para registrar tu pago`}
-              </Text>
-            ) : null}
-            {pedirPasajeros && nAsientos > 0 ? (
-              <PasajerosForm
-                asientos={asientosApartados}
-                perfil={perfil}
-                perfilCargando={perfilCargando}
-                inicial={pasajerosIniciales}
-                asientosConError={asientosSinDatos}
-                mensajeError={errorPasajeros}
-                guardando={checkout.enCurso}
-                onSubmit={guardarPasajeros}
+          <Text variant="body" color="muted" style={s.sheetIntro}>
+            {`${textoReembolso} El asiento queda libre y este pase deja de servir.`}
+          </Text>
+          <Text variant="label" style={s.motivoLabel}>
+            Motivo
+          </Text>
+          <View style={s.chips} accessibilityRole="radiogroup">
+            {MOTIVOS_CANCELACION.map((m) => (
+              <Chip
+                key={m}
+                label={m}
+                selected={motivoChip === m}
+                onPress={() => {
+                  if (canceling) return;
+                  setMotivoChip(m);
+                  setMotivoError(undefined);
+                }}
+                accessibilityLabel={`Motivo: ${m}`}
               />
-            ) : cotizacion && boleto.cooperativa_id ? (
-              <PaymentFlow
-                cooperativaId={boleto.cooperativa_id}
-                concepto={`${nAsientos === 1 ? '1 boleto' : `${nAsientos} boletos`} · ${formatCity(
-                  ruta?.ciudad_origen
-                )} → ${formatCity(ruta?.ciudad_destino)}`}
-                tipoRecurso="boleto"
-                cotizacion={cotizacion}
-                onRegistrar={checkout.onRegistrar}
-                bloqueado={checkout.enCurso || vencidaEnPantalla}
-              />
-            ) : (
-              <LoadingState label="Calculando el monto…" compact />
-            )}
-          </ScrollView>
-        </BottomSheet>
+            ))}
+          </View>
+          {motivoChip === 'Otro' ? (
+            <Field
+              label="Cuéntanos el motivo"
+              value={motivoOtro}
+              onChangeText={(v) => {
+                setMotivoOtro(v);
+                if (motivoError) setMotivoError(undefined);
+              }}
+              error={motivoError}
+              tone="sunken"
+              editable={!canceling}
+              multiline
+              numberOfLines={2}
+            />
+          ) : motivoError ? (
+            <Text variant="caption" color="dangerText" accessibilityRole="alert">
+              {motivoError}
+            </Text>
+          ) : null}
 
-        {/* ── Hoja de cancelación (reserva o boleto pagado) ─────────────── */}
-        <BottomSheet
-          visible={cancelSheetVisible}
-          onClose={cerrarCancelar}
-          title={pagado ? 'Cancelar boleto' : 'Cancelar reserva'}
-          footer={
-            <View style={s.sheetButtons}>
-              <Button variant="danger" fullWidth disabled={canceling} onPress={confirmarCancelacion}>
-                {canceling
-                  ? 'Cancelando…'
-                  : pagado
-                    ? 'Cancelar boleto y pedir reembolso'
-                    : 'Sí, cancelar reserva'}
-              </Button>
-              <Button variant="ghost" fullWidth disabled={canceling} onPress={cerrarCancelar}>
-                {pagado ? 'Mantener boleto' : 'Mantener reserva'}
-              </Button>
-            </View>
-          }
-        >
-          <ScrollView
-            contentContainerStyle={s.sheetBody}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-          >
-            {pagado ? (
-              <>
-                <Text variant="body" style={s.sheetIntro}>
-                  {`${textoReembolso} La cooperativa hace la devolución en 1 a 2 días hábiles, por el mismo medio con que pagaste y a la tasa BCV del día en que la haga. El asiento queda libre y este pase deja de servir.`}
-                </Text>
-                <Text variant="label" style={s.motivoLabel}>
-                  ¿Por qué cancelas?
-                </Text>
-                <View style={s.chips} accessibilityRole="radiogroup">
-                  {MOTIVOS_CANCELACION.map((m) => (
-                    <Chip
-                      key={m}
-                      label={m}
-                      selected={motivoChip === m}
-                      onPress={() => {
-                        if (canceling) return;
-                        setMotivoChip(m);
-                        setMotivoError(undefined);
-                      }}
-                      accessibilityLabel={`Motivo: ${m}`}
-                    />
-                  ))}
-                </View>
-                {motivoChip === 'Otro' ? (
-                  <Field
-                    label="Cuéntanos el motivo"
-                    placeholder="Escribe el motivo"
-                    value={motivoOtro}
-                    onChangeText={(v) => {
-                      setMotivoOtro(v);
-                      if (motivoError) setMotivoError(undefined);
-                    }}
-                    error={motivoError}
-                    tone="sunken"
-                    editable={!canceling}
-                    multiline
-                    numberOfLines={2}
-                  />
-                ) : motivoError ? (
-                  <Text variant="caption" color="dangerText" accessibilityRole="alert">
-                    {motivoError}
-                  </Text>
-                ) : null}
-              </>
-            ) : (
-              <Text variant="body" style={s.sheetIntro}>
-                {`Liberaremos el asiento ${boleto.asiento ?? ''} de inmediato. No se te cobrará nada.`}
-              </Text>
-            )}
-
-            {errorCancelar ? (
-              <Text
-                variant="secondary"
-                color="dangerText"
-                style={s.errorCancelar}
-                accessibilityRole="alert"
-              >
-                {errorCancelar}
-              </Text>
-            ) : null}
-          </ScrollView>
-        </BottomSheet>
-      </PageTransition>
+          {errorCancelar ? (
+            <Text
+              variant="secondary"
+              color="dangerText"
+              style={s.errorCancelar}
+              accessibilityRole="alert"
+            >
+              {errorCancelar}
+            </Text>
+          ) : null}
+        </ScrollView>
+      </BottomSheet>
     </Screen>
+  );
+}
+
+/** Asientos apartados (RESERVADO) de la compra. */
+function nAsientosDe(compra: readonly { estado: EstadoBoleto }[]): number {
+  return compra.filter((b) => b.estado === 'RESERVADO').length;
+}
+
+/** Estados con los que el boleto seguía vivo antes de la salida. */
+function vigenteAntes(estado: string | null): boolean {
+  return (
+    estado === 'PAGADO' ||
+    estado === 'RESERVA_SIN_PAGAR' ||
+    estado === 'PAGO_RECHAZADO' ||
+    estado === 'PAGO_EN_VERIFICACION'
   );
 }
 
@@ -1306,7 +1311,7 @@ function PuntoDeSalida({
     principal = `Pregunta en la taquilla de ${cooperativa} en ${ciudad} por el punto de salida.`;
   } else if (sucursales.length === 1) {
     const [suc] = sucursales;
-    principal = `Desde: ${suc.nombre}${suc.direccion ? ` · ${suc.direccion}` : ''}`;
+    principal = `Sale de ${suc.nombre}${suc.direccion ? ` · ${suc.direccion}` : ''}`;
     if (suc.telefono) {
       const tel = formatTelefono(suc.telefono);
       extras.push(`Teléfono: ${tel === '—' ? suc.telefono : tel}`);
@@ -1346,16 +1351,16 @@ function TicketField({
 }) {
   return (
     <View style={s.ticketField}>
-      <Text variant="overline" color="muted" uppercase>
+      <Text variant="caption" color="muted">
         {label}
       </Text>
       {highlight ? (
         // El asiento es lo que más se busca al subir al bus: ≥ 30 pt (M-32).
-        <Text variant="title" size="3xl" weight="heavy" color="foreground" compact>
+        <Text variant="title" compact>
           {value}
         </Text>
       ) : (
-        <Text variant="bodyStrong" size="sm" weight="heavy" numberOfLines={1}>
+        <Text variant="bodyStrong" numberOfLines={2}>
           {value}
         </Text>
       )}
@@ -1371,48 +1376,55 @@ function TicketField({
 const NOTCH = Spacing.xl;
 
 const s = StyleSheet.create({
-  // ── Banners
-  banner: {
+  bloque: {
+    marginBottom: Spacing.lg,
+  },
+  // ── Avisos
+  aviso: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.md,
-    padding: Spacing.lg,
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.lg,
     borderRadius: Radius.lg,
     marginBottom: Spacing.lg,
-    borderWidth: Sizes.hairline,
   },
-  bannerWarning: {
-    backgroundColor: Colors.warningLight,
-    borderColor: alpha(Colors.warning, 0.25),
-  },
-  bannerInfo: {
+  avisoInfo: {
     backgroundColor: Colors.infoLight,
-    borderColor: alpha(Colors.info, 0.25),
   },
-  bannerNeutral: {
+  avisoNeutro: {
     backgroundColor: Colors.surface,
-    borderColor: Colors.border,
   },
-  bannerBody: {
+  avisoCuerpo: {
     flex: 1,
-    gap: Spacing.xs / 2,
-    alignItems: 'flex-start',
+    gap: Spacing.xs,
   },
-  countdown: {
-    // White on the vivid amber is ~2:1; the dark orange keeps it ≥ 4.5:1.
-    backgroundColor: Colors.warningText,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.xs + 2,
-    borderRadius: Radius.sm,
+
+  // ── QR
+  captura: {
+    backgroundColor: Colors.background,
+    gap: Spacing.lg,
+    marginBottom: Spacing.lg,
+  },
+  qr: {
+    alignItems: 'center',
+    gap: Spacing.md,
+    paddingVertical: Spacing.xl,
+    paddingHorizontal: Spacing.xl,
+    borderRadius: Radius.xl,
+    backgroundColor: Colors.surface,
+  },
+  qrTexto: {
+    maxWidth: 280,
   },
 
   // ── Salida
-  salidaCard: {
-    marginBottom: Spacing.lg,
-    gap: Spacing.sm,
-  },
   salidaHora: {
-    marginBottom: Spacing.xs,
+    marginTop: Spacing.xs,
+  },
+  salidaFilas: {
+    gap: Spacing.sm,
+    marginTop: Spacing.md,
   },
   salidaFila: {
     flexDirection: 'row',
@@ -1421,37 +1433,34 @@ const s = StyleSheet.create({
   },
   salidaTexto: {
     flex: 1,
-    gap: Spacing.xs / 2,
+    gap: Spacing.xs,
   },
 
   // ── Ticket
   ticket: {
-    backgroundColor: Colors.card,
+    backgroundColor: Colors.surface,
     borderRadius: Radius.xl,
     overflow: 'hidden',
-    ...Shadows.card,
   },
-  ticketHeader: {
-    backgroundColor: Colors.primary,
-    alignItems: 'center',
-    paddingVertical: Spacing.xl,
-    paddingHorizontal: Spacing.lg,
+  ticketCabecera: {
+    paddingHorizontal: Spacing.xl,
+    paddingTop: Spacing.xl,
+    gap: Spacing.xs,
   },
-  ticketCoop: {
-    marginTop: Spacing.xs,
-  },
-  ticketBody: {
-    padding: Spacing.xl,
+  ticketRuta: {
+    paddingHorizontal: Spacing.xl,
+    paddingTop: Spacing.lg,
+    paddingBottom: Spacing.lg,
   },
   perforation: {
     height: NOTCH,
     justifyContent: 'center',
   },
   dashes: {
-    marginHorizontal: NOTCH / 2,
+    marginHorizontal: NOTCH,
     borderTopWidth: Sizes.borderStrong,
     borderStyle: 'dashed',
-    borderColor: Colors.border,
+    borderColor: Colors.borderStrong,
   },
   notch: {
     position: 'absolute',
@@ -1472,77 +1481,59 @@ const s = StyleSheet.create({
     flexWrap: 'wrap',
     paddingHorizontal: Spacing.xl,
     paddingTop: Spacing.lg,
-    paddingBottom: Spacing.sm,
+    paddingBottom: Spacing.xs,
   },
   ticketField: {
     width: '50%',
     paddingRight: Spacing.md,
     marginBottom: Spacing.lg,
-    gap: Spacing.xs / 2,
+    gap: Spacing.xs,
   },
-  ticketQr: {
-    alignItems: 'center',
-    gap: Spacing.sm,
+  ticketPie: {
     paddingHorizontal: Spacing.xl,
-    paddingVertical: Spacing.xl,
-    backgroundColor: Colors.surface,
-  },
-  qrCaption: {
-    maxWidth: 260,
-    marginBottom: Spacing.sm,
+    paddingVertical: Spacing.lg,
+    borderTopWidth: Sizes.hairline,
+    borderTopColor: Colors.border,
   },
 
   // ── Bloques inferiores
-  actions: {
-    marginTop: Spacing.xl,
-    gap: Spacing.md,
-  },
-  block: {
-    marginTop: Spacing.xl,
+  acciones: {
+    gap: Spacing.sm,
+    marginTop: Spacing.sm,
   },
   blockText: {
     marginTop: Spacing.xs,
-    marginBottom: Spacing.md,
+    marginBottom: Spacing.lg,
   },
   pagoRows: {
     marginTop: Spacing.sm,
     gap: Spacing.xs,
   },
   cancelRows: {
-    marginTop: Spacing.sm,
     gap: Spacing.sm,
-  },
-  reembolso: {
-    gap: Spacing.xs / 2,
   },
   inlineButton: {
     alignSelf: 'flex-start',
-  },
-  avisoSalida: {
-    gap: Spacing.xs,
+    marginTop: Spacing.xs,
   },
   ratingDone: {
     gap: Spacing.md,
-    marginTop: Spacing.sm,
   },
   ratingForm: {
     gap: Spacing.lg,
-    marginTop: Spacing.sm,
-  },
-  quote: {
-    backgroundColor: Colors.surface,
-    borderRadius: Radius.md,
-    padding: Spacing.md,
   },
   quoteText: {
     fontStyle: 'italic',
+  },
+  ultimoCampo: {
+    marginBottom: 0,
   },
   ayuda: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.sm,
-    marginTop: Spacing['2xl'],
-    paddingVertical: Spacing.md,
+    minHeight: Sizes.touchTarget,
+    marginTop: Spacing.lg,
   },
   enlace: {
     textDecorationLine: 'underline',
@@ -1551,17 +1542,17 @@ const s = StyleSheet.create({
   // ── Hoja de pago
   pagoSheet: {
     paddingHorizontal: Layout.screenPadding,
-    paddingTop: Spacing.lg,
+    paddingTop: Spacing.sm,
     paddingBottom: Spacing['3xl'],
   },
-  pagoTimer: {
-    marginBottom: Spacing.md,
+  esqueletoPago: {
+    gap: Spacing.md,
   },
 
   // ── Hoja de cancelación
   sheetBody: {
-    paddingHorizontal: Spacing['2xl'],
-    paddingTop: Spacing.xl,
+    paddingHorizontal: Layout.screenPadding,
+    paddingTop: Spacing.sm,
     paddingBottom: Spacing.sm,
   },
   sheetIntro: {

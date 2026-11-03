@@ -1,44 +1,13 @@
 import { createClient } from "@/lib/supabase/server";
 import { getUserProfile } from "@/lib/supabase/cached";
 import { obtenerTasaBCV } from "@/lib/tasa-bcv";
-import { formatFechaHoraCortaVE, formatFechaVE, hoyVE, rangoDiaVE, sumarDiasVE } from "@/lib/fechas";
+import { formatFechaVE, hoyVE, rangoDiaVE, sumarDiasVE } from "@/lib/fechas";
 import { resumirIngresos } from "@/lib/types/admin-dashboard";
-import { PageHeader } from "@/components/page-header";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { CheckCircle, Coins, WarningCircle, WhatsappLogo } from "@phosphor-icons/react/dist/ssr";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { StatusBadge, TonoBadge } from "@/components/status-badge";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Monto } from "@/components/monto";
-import { KpiCard } from "@/components/kpi-card";
-import { FilaVacia } from "@/components/fila-vacia";
 import { formatMoney } from "@/lib/dinero";
-import { ICONO_SECCION } from "@/lib/navigation";
-import { ChecklistPuestaEnMarcha, type ChecklistCooperativa } from "@/components/checklist-puesta-en-marcha";
-import dynamic from "next/dynamic";
-import { formatCiudad } from "@/lib/ciudades";
+import type { ChecklistCooperativa } from "@/components/checklist-puesta-en-marcha";
 import { telefonoWhatsApp } from "@/lib/ve";
-import { CeldaEnlace } from "@/components/celda-enlace";
-import { BandejaAtencion } from "./bandeja-atencion";
-import { ErrorRecargable } from "./error-recargable";
 import { cargarBandeja } from "./actions";
-
-// Gráfico con recharts cargado aparte (~280 KB menos en la carga inicial)
-const ActivityChart = dynamic(
-  () => import("@/components/activity-chart").then((m) => ({ default: m.ActivityChart })),
-  {
-    loading: () => (
-      <Card className="lg:col-span-2">
-        <CardHeader>
-          <CardTitle>Actividad</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Skeleton className="h-[250px] w-full" />
-        </CardContent>
-      </Card>
-    ),
-  }
-);
+import { ResumenVista, type EncomiendaReciente } from "./resumen-vista";
 
 const SELECT_RECIENTES =
   "id, tracking_id, receiver_nombre, estado, created_at, estado_origen, ciudad_origen, estado_destino, ciudad_destino, origen_registro, remitente_nombre, sender:profiles!sender_id(nombre_completo)";
@@ -46,31 +15,10 @@ const SELECT_RECIENTES =
 const SELECT_RECIENTES_BASICO =
   "id, tracking_id, receiver_nombre, estado, created_at, estado_origen, ciudad_origen, estado_destino, ciudad_destino, sender:profiles!sender_id(nombre_completo)";
 
-type EncomiendaReciente = {
-  id: string;
-  tracking_id: string;
-  receiver_nombre: string | null;
-  estado: string;
-  created_at: string;
-  ciudad_origen: string | null;
-  ciudad_destino: string | null;
-  origen_registro?: string | null;
-  remitente_nombre?: string | null;
-  sender: unknown;
-};
-
 /** WhatsApp de soporte de EnBus solo con dígitos (para wa.me), o null si no está configurado. */
 function whatsappSoporte(): string | null {
   const crudo = process.env.NEXT_PUBLIC_SOPORTE_WHATSAPP ?? "";
   return telefonoWhatsApp(crudo) ?? (crudo.replace(/\D/g, "") || null);
-}
-
-/** Quién envía: en el alta presencial `sender_id` es el empleado; el remitente real está en `remitente_nombre`. */
-function nombreRemitente(enc: EncomiendaReciente) {
-  if (enc.origen_registro === "TAQUILLA" && enc.remitente_nombre) return enc.remitente_nombre;
-  const embed = enc.sender;
-  const sender = (Array.isArray(embed) ? embed[0] : embed) as { nombre_completo?: string | null } | null;
-  return enc.remitente_nombre || sender?.nombre_completo || "Sin nombre";
 }
 
 export default async function DashboardPage() {
@@ -210,157 +158,39 @@ export default async function DashboardPage() {
   if (checklistRes?.error) console.error("[DashboardPage] checklist:", checklistRes.error);
   const checklist = (checklistRes && !checklistRes.error ? checklistRes.data : null) as ChecklistCooperativa | null;
 
-  // Un KPI que falla muestra "—" y un solo aviso encima de la fila (PU-14), nunca un 0 engañoso.
   const kpi = (r: { count: number | null; error: unknown }) => (r.error ? "—" : String(r.count ?? 0));
-  const kpisConError = [kpiRecibidas, kpiDespachadas, kpiBoletos, kpiPagos].some((r) => r.error);
-  // Σ coalesce(monto_bs, monto × tasa de hoy) en Bs; cada pago a su propia tasa (sin la de hoy como referencia).
-  const ingresos = resumirIngresos(kpiPagos.data, tasa?.tasa ?? null);
-  const montoIngresos = formatMoney({ usd: ingresos.usd, bs: ingresos.bs, tasa: null });
-  const soporte = whatsappSoporte();
-  const encomiendasRecientes = (recentData.data ?? []) as unknown as EncomiendaReciente[];
-  const chartData = adminData?.chartData ?? [];
   const ciclosPendientes = (adminData?.comisiones ?? []) as {
     monto_comision: number | string;
     periodo_inicio: string;
     periodo_fin: string;
   }[];
-  const comisionPendiente =
-    ciclosPendientes.length > 0
-      ? {
-          total: ciclosPendientes.reduce((suma, c) => suma + Number(c.monto_comision ?? 0), 0),
-          ciclos: ciclosPendientes.length,
-          desde: ciclosPendientes[0].periodo_inicio,
-          hasta: ciclosPendientes[ciclosPendientes.length - 1].periodo_fin,
-        }
-      : null;
+  // Σ coalesce(monto_bs, monto × tasa de hoy) en Bs; cada pago a su propia tasa (sin la de hoy como referencia).
+  const ingresos = resumirIngresos(kpiPagos.data, tasa?.tasa ?? null);
 
   return (
-    <div className="flex flex-col gap-6">
-      <PageHeader title="Resumen" />
-
-      {checklist && <ChecklistPuestaEnMarcha checklist={checklist} />}
-
-      <BandejaAtencion inicial={bandeja} />
-
-      <section aria-labelledby="hoy-titulo" className="flex flex-col gap-3">
-        <h2 id="hoy-titulo" className="text-lg font-semibold">
-          Hoy
-        </h2>
-        {kpisConError && <ErrorRecargable titulo="No pudimos cargar algunos datos de hoy" />}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <KpiCard title="Encomiendas recibidas" value={kpi(kpiRecibidas)} icon={ICONO_SECCION.taquillaEncomiendas} />
-          <KpiCard title="Encomiendas despachadas" value={kpi(kpiDespachadas)} icon={ICONO_SECCION.despacho} />
-          <KpiCard title="Boletos vendidos" value={kpi(kpiBoletos)} icon={ICONO_SECCION.taquillaBoletos} />
-          <KpiCard
-            title="Ingresos verificados"
-            value={kpiPagos.error ? "—" : <span aria-label={montoIngresos.accesible}>{montoIngresos.principal}</span>}
-            detail={kpiPagos.error ? null : montoIngresos.secundario}
-            icon={Coins}
-          />
-        </div>
-      </section>
-
-      {esAdmin && (
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-          <ActivityChart data={chartData} />
-
-          <Card>
-            <CardHeader>
-              <CardTitle
-                className={comisionPendiente && !adminData?.comisionesError ? "flex items-center gap-2 text-warning-text" : undefined}
-              >
-                {comisionPendiente && !adminData?.comisionesError && (
-                  <WarningCircle className="size-5 shrink-0" weight="fill" aria-hidden />
-                )}
-                {comisionPendiente && !adminData?.comisionesError ? "Comisión pendiente con EnBus" : "Comisión con EnBus"}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-4">
-              {adminData?.comisionesError ? (
-                <ErrorRecargable titulo="No pudimos cargar tus comisiones" />
-              ) : comisionPendiente ? (
-                <>
-                  <Monto usd={comisionPendiente.total} size="lg" />
-                  <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground tabular-nums">
-                    {comisionPendiente.ciclos > 1 && (
-                      <TonoBadge tono="pendiente">{`${comisionPendiente.ciclos} ciclos sin pagar`}</TonoBadge>
-                    )}
-                    <span>
-                      {formatFechaVE(comisionPendiente.desde)} – {formatFechaVE(comisionPendiente.hasta)}
-                    </span>
-                  </div>
-                  {soporte && (
-                    <a
-                      href={`https://wa.me/${soporte}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-2 text-sm font-medium text-info-text underline-offset-4 hover:underline focus-visible:underline"
-                    >
-                      <WhatsappLogo className="size-4" aria-hidden />
-                      ¿Dudas para pagarla? Escríbenos
-                    </a>
-                  )}
-                </>
-              ) : (
-                <p className="flex items-center gap-2 text-sm font-medium text-success-text">
-                  <CheckCircle className="size-5 shrink-0" weight="fill" aria-hidden />
-                  Sin comisiones pendientes
-                </p>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      <section aria-labelledby="recientes-titulo" className="flex flex-col gap-3">
-        <h2 id="recientes-titulo" className="text-lg font-semibold">
-          Encomiendas recientes
-        </h2>
-        {recentData.error ? (
-          <ErrorRecargable titulo="No pudimos cargar las encomiendas recientes" />
-        ) : (
-          <Card className="gap-0 overflow-hidden p-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Código</TableHead>
-                  <TableHead className="hidden lg:table-cell">Remitente</TableHead>
-                  <TableHead>Destinatario</TableHead>
-                  <TableHead className="hidden lg:table-cell">Ruta</TableHead>
-                  <TableHead>Estado</TableHead>
-                  <TableHead>Fecha</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {encomiendasRecientes.length > 0 ? (
-                  encomiendasRecientes.map((enc) => (
-                    <TableRow key={enc.id ?? enc.tracking_id} className="relative">
-                      <CeldaEnlace
-                        href={`/cooperativas/taquilla/encomiendas?encomienda=${encodeURIComponent(enc.id)}`}
-                        etiqueta={`Ver encomienda ${enc.tracking_id}`}
-                        className="font-mono text-sm text-foreground"
-                      >
-                        {enc.tracking_id}
-                      </CeldaEnlace>
-                      <TableCell className="hidden lg:table-cell">{nombreRemitente(enc)}</TableCell>
-                      <TableCell>{enc.receiver_nombre}</TableCell>
-                      <TableCell className="hidden lg:table-cell">
-                        {formatCiudad(enc.ciudad_origen)} → {formatCiudad(enc.ciudad_destino)}
-                      </TableCell>
-                      <TableCell>
-                        <StatusBadge status={enc.estado} dominio="encomienda" />
-                      </TableCell>
-                      <TableCell className="tabular-nums">{formatFechaHoraCortaVE(enc.created_at)}</TableCell>
-                    </TableRow>
-                  ))
-                ) : (
-                  <FilaVacia colSpan={6} icon={ICONO_SECCION.taquillaEncomiendas} titulo="Todavía no hay encomiendas" />
-                )}
-              </TableBody>
-            </Table>
-          </Card>
-        )}
-      </section>
-    </div>
+    <ResumenVista
+      esAdmin={esAdmin}
+      checklist={checklist}
+      bandeja={bandeja}
+      kpis={{ recibidas: kpi(kpiRecibidas), despachadas: kpi(kpiDespachadas), boletos: kpi(kpiBoletos) }}
+      ingresos={kpiPagos.error ? null : formatMoney({ usd: ingresos.usd, bs: ingresos.bs, tasa: null })}
+      // Un KPI que falla muestra "—" y un solo aviso encima de la fila (PU-14), nunca un 0 engañoso.
+      kpisConError={[kpiRecibidas, kpiDespachadas, kpiBoletos, kpiPagos].some((r) => r.error)}
+      chartData={adminData?.chartData ?? []}
+      comisionPendiente={
+        ciclosPendientes.length > 0
+          ? {
+              total: ciclosPendientes.reduce((suma, c) => suma + Number(c.monto_comision ?? 0), 0),
+              ciclos: ciclosPendientes.length,
+              desde: ciclosPendientes[0].periodo_inicio,
+              hasta: ciclosPendientes[ciclosPendientes.length - 1].periodo_fin,
+            }
+          : null
+      }
+      comisionesError={Boolean(adminData?.comisionesError)}
+      soporte={whatsappSoporte()}
+      encomiendasRecientes={(recentData.data ?? []) as unknown as EncomiendaReciente[]}
+      recientesError={Boolean(recentData.error)}
+    />
   );
 }

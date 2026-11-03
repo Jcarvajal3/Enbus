@@ -3,37 +3,35 @@
 // ─── Taquilla de encomiendas ────────────────────────────────────────────────
 // Orden en el mostrador: recepción (pesar) → foto del paquete → cobro (solo si
 // paga quien envía). Lo mismo para el alta de un cliente sin la app
-// ("Nueva encomienda (sin app)"). El contador "Pagos por verificar" se recarga
-// con los cambios de la tabla `pagos` de la cooperativa (tiempo real).
-// `?encomienda=<id>` (filas del Resumen) abre el detalle de esa encomienda.
-
-import { relativeTimeFormatter, dateFormatterDayMonthTime } from "@/lib/utils";
+// ("Nueva encomienda"). La pestaña de estado (`?estado=`, p. ej. PAGADA = "Lista
+// para despacho"), la página y la encomienda abierta en su detalle
+// (`?encomienda=<id>`) viven en la URL.
 
 import { Suspense, useEffect, useRef, useState, useCallback, useMemo } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
+import { Plus, Printer } from "@phosphor-icons/react";
 import { PageHeader } from "@/components/page-header";
 import { ScanInput } from "@/components/scan-input";
 import { UltimoEscaneo, useUltimoEscaneo } from "@/components/ultimo-escaneo";
 import { CeldaEnlace } from "@/components/celda-enlace";
-import { useImpresora } from "@/hooks/use-impresora";
-import { formatCiudad } from "@/lib/ciudades";
-import { StatusBadge } from "@/components/status-badge";
+import { StatusBadge, TonoBadge } from "@/components/status-badge";
 import { ErrorState } from "@/components/error-state";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { FilaVacia } from "@/components/fila-vacia";
+import { TablaSkeleton } from "@/components/tabla-skeleton";
+import { TabsUrl } from "@/components/barra-filtros";
+import { PaginacionTabla, usePaginacion } from "@/components/paginacion-tabla";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useUser } from "@/hooks/use-user";
+import { useCambiarParams, useParamUrl } from "@/hooks/use-param-url";
 import { createClient } from "@/lib/supabase/client";
-import { toast } from "sonner";
-import { Truck, Printer, Receipt, Plus } from "@phosphor-icons/react";
-import Link from "next/link";
 import type { Encomienda } from "@/lib/types/encomiendas";
 import type { RecepcionOrigen } from "@/lib/types/pagos";
-import { Spinner } from "@/components/ui/spinner";
 import { obtenerPdfGuia } from "@/app/cooperativas/(panel)/taquilla/encomiendas/actions";
-import { listarPagosPorVerificar } from "@/app/cooperativas/(panel)/pagos/actions";
 import { RecepcionModal } from "@/components/encomiendas/recepcion-modal";
-import { Pagination } from "@/components/ui/pagination";
 import { PagoModal } from "@/components/encomiendas/pago-modal";
 import { PhotoCaptureModal } from "@/components/encomiendas/photo-capture-modal";
 import { DetalleSheet, faltaFoto, remitenteDe } from "@/components/encomiendas/detalle-sheet";
@@ -41,8 +39,12 @@ import { NuevaEncomiendaDialog } from "@/components/encomiendas/nueva-encomienda
 import { RechazarEncomiendaDialog } from "@/components/encomiendas/rechazar-encomienda-dialog";
 import { Monto } from "@/components/monto";
 import { useEncomiendasRealtime } from "@/hooks/use-encomiendas-realtime";
+import { avisarError } from "@/lib/avisos";
+import { formatCiudad } from "@/lib/ciudades";
 import { humanizeError } from "@/lib/errores";
 import { MODALIDAD_PAGO, etiquetaEstado } from "@/lib/estados";
+import { capitalizarInicio, formatHaceTiempo } from "@/lib/fechas";
+import { ICONO_SECCION } from "@/lib/navigation";
 import { MSG_VENTANA_BLOQUEADA, abrirUrlAsincrona } from "@/lib/printing/print-helpers";
 
 const SELECT_ENCOMIENDAS = `
@@ -55,6 +57,8 @@ const SELECT_ENCOMIENDAS = `
 `;
 
 const FILTROS = ["todas", "PENDIENTE_DE_ESCANEO", "EN_RECEPCION", "POR_PAGAR", "PAGADA"] as const;
+const PESTANAS = FILTROS.map((f) => ({ valor: f, etiqueta: f === "todas" ? "Todas" : etiquetaEstado("encomienda", f) }));
+const COLUMNAS = 8;
 
 /** Qué sigue después de la foto. */
 type DespuesDeFoto = "pago" | "fin";
@@ -84,13 +88,14 @@ const ETIQUETA_ACCION: Record<ReturnType<typeof accionDe>, string> = {
 };
 
 export default function TaquillaEncomiendasPage() {
-  // useSearchParams (?encomienda=) necesita un límite de Suspense (Next.js 16).
+  // useSearchParams (?estado=, ?encomienda=) necesita un límite de Suspense (Next.js 16).
   return (
     <Suspense
       fallback={
-        <div className="flex h-40 items-center justify-center gap-3 text-muted-foreground">
-          <Spinner size="md" />
-          <span className="font-medium">Cargando encomiendas…</span>
+        <div className="flex flex-col gap-6">
+          <Skeleton className="h-8 w-64" />
+          <Skeleton className="h-24 w-full rounded-md" />
+          <TablaSkeleton columnas={COLUMNAS} />
         </div>
       }
     >
@@ -101,10 +106,9 @@ export default function TaquillaEncomiendasPage() {
 
 function TaquillaEncomiendas() {
   const { user } = useUser();
-  const router = useRouter();
-  const pathname = usePathname();
   const searchParams = useSearchParams();
   const encomiendaParam = searchParams.get("encomienda");
+  const cambiarParams = useCambiarParams();
   const cooperativaId = user.cooperativa_id!;
   // Stable client instance — not recreated on every render
   const supabase = useMemo(() => createClient(), []);
@@ -112,17 +116,26 @@ function TaquillaEncomiendas() {
   const [encomiendas, setEncomiendas] = useState<Encomienda[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorCarga, setErrorCarga] = useState<string | null>(null);
-  const [filtroEstado, setFiltroEstado] = useState<string>("todas");
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 10;
-  // Pagos de encomiendas que los clientes reportaron desde la app y falta verificar.
-  const [pagosPorVerificar, setPagosPorVerificar] = useState<number | null>(null);
+  const [estadoUrl] = useParamUrl("estado", "todas");
+  const filtroEstado = (FILTROS as readonly string[]).includes(estadoUrl) ? estadoUrl : "todas";
 
   const [modalState, setModalState] = useState<ModalState>({ type: "closed" });
-  const cerrarModal = useCallback(() => setModalState({ type: "closed" }), []);
   const { ultimo, registrar } = useUltimoEscaneo();
-  // Reconecta la impresora guardada al abrir la taquilla (#53).
-  const impresora = useImpresora();
+
+  // `?encomienda=` sigue al detalle abierto: abrirlo lo escribe y cerrarlo lo limpia.
+  const encomiendaEnUrl = useRef<string | null>(null);
+  const cambiarModal = useCallback(
+    (siguiente: ModalState) => {
+      setModalState(siguiente);
+      const id = siguiente.type === "detail" ? siguiente.encomienda.id : null;
+      if (id !== encomiendaEnUrl.current) {
+        encomiendaEnUrl.current = id;
+        cambiarParams({ encomienda: id }, { conservarPagina: true });
+      }
+    },
+    [cambiarParams]
+  );
+  const cerrarModal = useCallback(() => cambiarModal({ type: "closed" }), [cambiarModal]);
 
   const fetchEncomiendas = useCallback(async () => {
     setLoading(true);
@@ -133,7 +146,7 @@ function TaquillaEncomiendas() {
         .select(SELECT_ENCOMIENDAS)
         .eq("cooperativa_id", cooperativaId)
         .order("created_at", { ascending: false })
-        .limit(50);
+        .limit(100);
 
       if (filtroEstado !== "todas") {
         query = query.eq("estado", filtroEstado);
@@ -143,7 +156,6 @@ function TaquillaEncomiendas() {
 
       if (error) throw error;
       setEncomiendas(data as unknown as Encomienda[]);
-      setCurrentPage(1);
     } catch (err) {
       setErrorCarga(humanizeError(err, "cargar las encomiendas"));
     } finally {
@@ -164,34 +176,15 @@ function TaquillaEncomiendas() {
     fetchEncomiendasRef.current = fetchEncomiendas;
   }, [fetchEncomiendas]);
 
-  const contarPagosPorVerificar = useCallback(async () => {
-    try {
-      const res = await listarPagosPorVerificar("encomienda");
-      setPagosPorVerificar(res.success ? res.data.length : null);
-    } catch {
-      setPagosPorVerificar(null);
-    }
-  }, []);
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- carga asíncrona del contador
-    void contarPagosPorVerificar();
-  }, [contarPagosPorVerificar]);
-
-  // Un solo canal: cambios en `encomiendas` y en `pagos` de la cooperativa
-  // (cooperativa_id=eq.{id}) recargan la lista y el contador. Callback estable
-  // para que el canal no se vuelva a crear en cada render.
-  const alCambiar = useCallback(() => {
-    void fetchEncomiendasRef.current();
-    void contarPagosPorVerificar();
-  }, [contarPagosPorVerificar]);
+  // Un solo canal: cambios en `encomiendas` y en `pagos` de la cooperativa recargan la lista.
+  const alCambiar = useCallback(() => void fetchEncomiendasRef.current(), []);
   useEncomiendasRealtime(cooperativaId, alCambiar);
 
   const handleRowClick = (encomienda: Encomienda) => {
     const accion = accionDe(encomienda);
     // EN_RECEPCION: quedó a medio recibir; se completa pesándola de nuevo.
     // Paga al retirar: se cobra en destino (el detalle permite cobrar ya si paga quien envía).
-    setModalState({ type: accion, encomienda });
+    cambiarModal({ type: accion, encomienda });
   };
 
   /** Código escaneado: suena y dice qué sigue; luego abre el paso que toca. */
@@ -211,16 +204,18 @@ function TaquillaEncomiendas() {
     handleRowClick(encomienda);
   };
 
-  // ?encomienda=<id>: abre su detalle una sola vez y limpia la URL.
-  const encomiendaParamUsada = useRef<string | null>(null);
+  // ?encomienda=<id> que llega desde fuera (Resumen, hoja del viaje, recarga): abre su detalle.
   useEffect(() => {
-    if (!encomiendaParam || encomiendaParamUsada.current === encomiendaParam) return;
-    encomiendaParamUsada.current = encomiendaParam;
-    const params = new URLSearchParams(searchParams.toString());
-    params.delete("encomienda");
-    const query = params.toString();
-    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
-    if (!UUID_RE.test(encomiendaParam)) return;
+    if (!encomiendaParam) {
+      encomiendaEnUrl.current = null;
+      return;
+    }
+    if (encomiendaParam === encomiendaEnUrl.current) return;
+    encomiendaEnUrl.current = encomiendaParam;
+    if (!UUID_RE.test(encomiendaParam)) {
+      cambiarParams({ encomienda: null }, { conservarPagina: true });
+      return;
+    }
     void (async () => {
       try {
         const { data, error } = await supabase
@@ -231,19 +226,21 @@ function TaquillaEncomiendas() {
           .maybeSingle();
         if (error) throw error;
         if (!data) {
-          toast.error("No encontramos esa encomienda en tu cooperativa.");
+          avisarError("No encontramos esa encomienda en tu cooperativa.");
+          encomiendaEnUrl.current = null;
+          cambiarParams({ encomienda: null }, { conservarPagina: true });
           return;
         }
         setModalState({ type: "detail", encomienda: data as unknown as Encomienda });
       } catch (err) {
-        toast.error(humanizeError(err, "abrir la encomienda"));
+        avisarError(humanizeError(err, "abrir la encomienda"));
       }
     })();
-  }, [encomiendaParam, searchParams, router, pathname, supabase, cooperativaId]);
+  }, [encomiendaParam, supabase, cooperativaId, cambiarParams]);
 
   /** Recibida (o registrada sin app): sigue la foto y, si paga quien envía, el cobro. */
   const pedirFoto = (encomienda: Encomienda) => {
-    setModalState({
+    cambiarModal({
       type: "foto",
       encomienda,
       // Solo se cobra si sigue por pagar (un alta repetida puede venir ya pagada).
@@ -256,7 +253,7 @@ function TaquillaEncomiendas() {
       codigo: encomienda.tracking_id,
       tono: "exito",
       titulo: `Recibida · ${encomienda.tracking_id}`,
-      detalle: `${pesoKg.toLocaleString("es-VE")} kg · sigue la foto del paquete.`,
+      detalle: `${pesoKg.toLocaleString("es-VE")} kg · sigue la foto del paquete`,
     });
     void fetchEncomiendas();
     pedirFoto({
@@ -270,72 +267,19 @@ function TaquillaEncomiendas() {
 
   const despuesDeFoto = (encomienda: Encomienda, luego: DespuesDeFoto) => {
     void fetchEncomiendas();
-    if (luego === "pago") setModalState({ type: "pago", encomienda });
-    else setModalState({ type: "closed" });
+    if (luego === "pago") cambiarModal({ type: "pago", encomienda });
+    else cerrarModal();
   };
 
-  const formatDateRelative = (dateString: string) => {
-    try {
-      const date = new Date(dateString);
-      const now = new Date();
-      const diffInMs = now.getTime() - date.getTime();
-      const diffInDays = Math.round(diffInMs / (1000 * 3600 * 24));
-
-      if (diffInDays < 1) {
-        const diffInHours = Math.round(diffInMs / (1000 * 3600));
-        if (diffInHours < 1) {
-          const diffInMinutes = Math.round(diffInMs / (1000 * 60));
-          return relativeTimeFormatter.format(-diffInMinutes, "minute");
-        }
-        return relativeTimeFormatter.format(-diffInHours, "hour");
-      }
-
-      if (diffInDays < 7) {
-        return relativeTimeFormatter.format(-diffInDays, "day");
-      }
-
-      return dateFormatterDayMonthTime.format(date);
-    } catch {
-      return dateString;
-    }
-  };
-
-  const totalPages = Math.ceil(encomiendas.length / itemsPerPage);
-  const paginatedEncomiendas = encomiendas.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+  const { visibles, pagina, paginas, ir } = usePaginacion(encomiendas);
 
   return (
-    <div className="space-y-6 flex flex-col h-full animate-in fade-in duration-300">
-      <PageHeader
-        title="Taquilla de encomiendas"
-        description="Recibe y pesa los paquetes, toma la foto y cobra el envío cuando paga quien envía."
-      >
-        <div className="flex flex-wrap gap-2">
-          <Button onClick={() => setModalState({ type: "nueva" })}>
-            <Plus className="w-4 h-4 mr-2" aria-hidden />
-            Nueva encomienda (sin app)
-          </Button>
-          <Link
-            href="/cooperativas/pagos?tipo=encomienda"
-            className={buttonVariants({ variant: pagosPorVerificar ? "secondary" : "outline" })}
-          >
-            <Receipt className="w-4 h-4 mr-2" aria-hidden />
-            Pagos por verificar{pagosPorVerificar != null ? ` (${pagosPorVerificar})` : ""}
-          </Link>
-          <Link href="/cooperativas/despacho" className={buttonVariants({ variant: "outline" })}>
-            <Truck className="w-4 h-4 mr-2" aria-hidden />
-            Ir a Despacho
-          </Link>
-          {impresora.estado !== "no-soportado" && (
-            <Link href="/cooperativas/hardware" className={buttonVariants({ variant: "outline" })}>
-              <Printer className="w-4 h-4 mr-2" aria-hidden />
-              {impresora.estado === "conectada"
-                ? "Impresora conectada"
-                : impresora.estado === "reconectando"
-                  ? "Reconectando impresora…"
-                  : "Conectar impresora"}
-            </Link>
-          )}
-        </div>
+    <div className="flex flex-col gap-6">
+      <PageHeader title="Taquilla de encomiendas">
+        <Button onClick={() => cambiarModal({ type: "nueva" })}>
+          <Plus aria-hidden />
+          Nueva encomienda
+        </Button>
       </PageHeader>
 
       <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
@@ -348,135 +292,118 @@ function TaquillaEncomiendas() {
         <UltimoEscaneo resultado={ultimo} />
       </div>
 
-      <div className="flex-1 space-y-4">
-        <Tabs value={filtroEstado} onValueChange={setFiltroEstado} className="w-full">
-          <TabsList className="flex-wrap">
-            {FILTROS.map((f) => (
-              <TabsTrigger key={f} value={f}>
-                {f === "todas" ? "Todas" : etiquetaEstado("encomienda", f)}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
+      <div className="flex flex-col gap-4">
+        <TabsUrl param="estado" defecto="todas" opciones={PESTANAS} />
 
-        {errorCarga && encomiendas.length === 0 && !loading ? (
-          <div className="rounded-md border bg-card">
-            <ErrorState
-              titulo="No pudimos cargar las encomiendas"
-              descripcion={errorCarga}
-              onReintentar={fetchEncomiendas}
-            />
-          </div>
+        {errorCarga && encomiendas.length > 0 && (
+          <ErrorState
+            compacto
+            titulo="No pudimos actualizar la lista"
+            descripcion={`${errorCarga} Ves los últimos datos que cargaron.`}
+            onReintentar={fetchEncomiendas}
+          />
+        )}
+
+        {loading && encomiendas.length === 0 ? (
+          <TablaSkeleton columnas={COLUMNAS} />
         ) : (
-          <>
-            {errorCarga && (
-              <ErrorState
-                compacto
-                titulo="No pudimos actualizar la lista"
-                descripcion={`${errorCarga} Mostramos los últimos datos que cargaron.`}
-                onReintentar={fetchEncomiendas}
-              />
-            )}
-            <div className="rounded-md border bg-card">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Código</TableHead>
-                    <TableHead>Remitente</TableHead>
-                    <TableHead>Destinatario</TableHead>
-                    <TableHead>Ruta</TableHead>
-                    <TableHead>Estado</TableHead>
-                    <TableHead className="text-right">Costo</TableHead>
-                    <TableHead className="text-right">Fecha</TableHead>
-                    <TableHead className="w-12 text-center">
-                      <span className="sr-only">Guía</span>
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {loading && encomiendas.length === 0 ? (
+          <Card className="gap-0 overflow-hidden p-0">
+            {errorCarga && encomiendas.length === 0 ? (
+              <ErrorState titulo="No pudimos cargar las encomiendas" descripcion={errorCarga} onReintentar={fetchEncomiendas} />
+            ) : (
+              <>
+                <Table>
+                  <TableHeader>
                     <TableRow>
-                      <TableCell colSpan={8} className="h-32 text-center">
-                        <div className="flex items-center justify-center">
-                          <Spinner size="md" />
-                          <span className="ml-3 text-muted-foreground font-medium">Cargando encomiendas…</span>
-                        </div>
-                      </TableCell>
+                      <TableHead>Código</TableHead>
+                      <TableHead className="hidden lg:table-cell">Remitente</TableHead>
+                      <TableHead>Destinatario</TableHead>
+                      <TableHead>Ruta</TableHead>
+                      <TableHead>Estado</TableHead>
+                      <TableHead className="text-right">Costo</TableHead>
+                      <TableHead className="hidden lg:table-cell">Fecha</TableHead>
+                      <TableHead className="w-12 text-right">
+                        <span className="sr-only">Guía</span>
+                      </TableHead>
                     </TableRow>
-                  ) : encomiendas.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={8} className="h-32 text-center text-muted-foreground">
-                        {filtroEstado === "todas"
-                          ? "Todavía no hay encomiendas. Escanea el código del cliente o registra una nueva."
-                          : `No hay encomiendas «${etiquetaEstado("encomienda", filtroEstado)}».`}
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    paginatedEncomiendas.map((encomienda) => (
-                      <TableRow key={encomienda.id} className="relative hover:bg-muted/50 transition-colors">
-                        <CeldaEnlace
-                          onAbrir={() => handleRowClick(encomienda)}
-                          etiqueta={`${ETIQUETA_ACCION[accionDe(encomienda)]} ${encomienda.tracking_id}`}
-                          className="font-mono"
-                        >
-                          <span className="text-primary-text">{encomienda.tracking_id}</span>
-                        </CeldaEnlace>
-                        <TableCell className="max-w-[150px] truncate">
-                          {remitenteDe(encomienda).nombre}
-                        </TableCell>
-                        <TableCell className="max-w-[150px] truncate">{encomienda.receiver_nombre}</TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                            <span className="truncate max-w-[100px]" title={formatCiudad(encomienda.ciudad_origen)}>
-                              {formatCiudad(encomienda.ciudad_origen)}
-                            </span>
-                            <span aria-hidden>→</span>
-                            <span className="sr-only">a</span>
-                            <span
-                              className="font-medium text-foreground truncate max-w-[100px]"
-                              title={formatCiudad(encomienda.ciudad_destino)}
-                            >
-                              {formatCiudad(encomienda.ciudad_destino)}
-                            </span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex flex-col items-start gap-1">
-                            <StatusBadge status={encomienda.estado} dominio="encomienda" />
-                            {encomienda.modalidad_pago === "DESTINO" &&
-                              ["POR_PAGAR", "EN_TRANSITO", "EN_OFICINA_DESTINO"].includes(encomienda.estado) && (
-                                <span className="text-xs text-muted-foreground">{MODALIDAD_PAGO.DESTINO.corto}</span>
-                              )}
-                            {faltaFoto(encomienda) && (
-                              <span className="text-xs font-medium text-warning-text">Falta foto</span>
+                  </TableHeader>
+                  <TableBody>
+                    {encomiendas.length === 0 ? (
+                      <FilaVacia
+                        colSpan={COLUMNAS}
+                        icon={ICONO_SECCION.taquillaEncomiendas}
+                        titulo={
+                          filtroEstado === "todas"
+                            ? "Todavía no hay encomiendas"
+                            : `No hay encomiendas «${etiquetaEstado("encomienda", filtroEstado)}»`
+                        }
+                        accion={
+                          filtroEstado === "todas" ? (
+                            <Button onClick={() => cambiarModal({ type: "nueva" })}>
+                              <Plus aria-hidden />
+                              Nueva encomienda
+                            </Button>
+                          ) : undefined
+                        }
+                      />
+                    ) : (
+                      visibles.map((encomienda) => (
+                        <TableRow key={encomienda.id} className="relative">
+                          <CeldaEnlace
+                            onAbrir={() => handleRowClick(encomienda)}
+                            etiqueta={`${ETIQUETA_ACCION[accionDe(encomienda)]} ${encomienda.tracking_id}`}
+                            className="font-mono text-sm"
+                          >
+                            {encomienda.tracking_id}
+                          </CeldaEnlace>
+                          <TableCell className="hidden max-w-40 truncate lg:table-cell">{remitenteDe(encomienda).nombre}</TableCell>
+                          <TableCell className="max-w-40 truncate">{encomienda.receiver_nombre}</TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                              <span className="max-w-28 truncate" title={formatCiudad(encomienda.ciudad_origen)}>
+                                {formatCiudad(encomienda.ciudad_origen)}
+                              </span>
+                              <span aria-hidden>→</span>
+                              <span className="sr-only">a</span>
+                              <span className="max-w-28 truncate font-medium text-foreground" title={formatCiudad(encomienda.ciudad_destino)}>
+                                {formatCiudad(encomienda.ciudad_destino)}
+                              </span>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex flex-col items-start gap-1">
+                              <StatusBadge status={encomienda.estado} dominio="encomienda" />
+                              {encomienda.modalidad_pago === "DESTINO" &&
+                                ["POR_PAGAR", "EN_TRANSITO", "EN_OFICINA_DESTINO"].includes(encomienda.estado) && (
+                                  <span className="text-xs text-muted-foreground">{MODALIDAD_PAGO.DESTINO.corto}</span>
+                                )}
+                              {faltaFoto(encomienda) && <TonoBadge tono="pendiente">Falta foto</TonoBadge>}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {Number(encomienda.costo_calculado) > 0 ? (
+                              <Monto usd={Number(encomienda.costo_calculado)} size="sm" align="right" />
+                            ) : (
+                              <span className="text-sm text-muted-foreground">Por calcular</span>
                             )}
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {Number(encomienda.costo_calculado) > 0 ? (
-                            <Monto usd={Number(encomienda.costo_calculado)} size="sm" align="right" />
-                          ) : (
-                            <span className="text-sm text-muted-foreground">Por pesar</span>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-right text-muted-foreground text-sm whitespace-nowrap capitalize">
-                          {formatDateRelative(encomienda.created_at)}
-                        </TableCell>
-                        <TableCell className="text-center">
-                          {encomienda.estado !== "PENDIENTE_DE_ESCANEO" ? (
-                            <RowPrintButton encomiendaId={encomienda.id} trackingId={encomienda.tracking_id} />
-                          ) : (
-                            <div className="w-8 h-8" />
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-            <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} />
-          </>
+                          </TableCell>
+                          <TableCell className="hidden text-sm whitespace-nowrap text-muted-foreground lg:table-cell">
+                            {capitalizarInicio(formatHaceTiempo(encomienda.created_at))}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {encomienda.estado !== "PENDIENTE_DE_ESCANEO" && (
+                              <RowPrintButton encomiendaId={encomienda.id} trackingId={encomienda.tracking_id} />
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+                <PaginacionTabla pagina={pagina} paginas={paginas} onCambio={ir} />
+              </>
+            )}
+          </Card>
         )}
       </div>
 
@@ -508,8 +435,7 @@ function TaquillaEncomiendas() {
           onClose={cerrarModal}
           onSuccess={() => {
             void fetchEncomiendas();
-            void contarPagosPorVerificar();
-            setModalState({ type: "closed" });
+            cerrarModal();
           }}
         />
       )}
@@ -519,16 +445,16 @@ function TaquillaEncomiendas() {
           encomienda={modalState.encomienda}
           isOpen={true}
           onClose={cerrarModal}
-          onCobrar={() => setModalState({ type: "pago", encomienda: modalState.encomienda })}
-          onAgregarFoto={() => setModalState({ type: "foto", encomienda: modalState.encomienda, luego: "fin" })}
-          onRechazar={() => setModalState({ type: "rechazar", encomienda: modalState.encomienda })}
+          onCobrar={() => cambiarModal({ type: "pago", encomienda: modalState.encomienda })}
+          onAgregarFoto={() => cambiarModal({ type: "foto", encomienda: modalState.encomienda, luego: "fin" })}
+          onRechazar={() => cambiarModal({ type: "rechazar", encomienda: modalState.encomienda })}
         />
       )}
 
       <NuevaEncomiendaDialog
         open={modalState.type === "nueva"}
         onOpenChange={(abierto) => {
-          if (!abierto) setModalState({ type: "closed" });
+          if (!abierto) cerrarModal();
         }}
         onRegistrada={() => void fetchEncomiendas()}
         onContinuar={pedirFoto}
@@ -538,7 +464,7 @@ function TaquillaEncomiendas() {
         encomienda={modalState.type === "rechazar" ? modalState.encomienda : null}
         open={modalState.type === "rechazar"}
         onOpenChange={(abierto) => {
-          if (!abierto) setModalState({ type: "closed" });
+          if (!abierto) cerrarModal();
         }}
         onRechazada={() => void fetchEncomiendas()}
       />
@@ -559,10 +485,10 @@ function RowPrintButton({ encomiendaId, trackingId }: { encomiendaId: string; tr
         errorPdf = res.error;
         return null;
       });
-      if (resultado === "bloqueada") toast.error(MSG_VENTANA_BLOQUEADA);
-      else if (resultado === "sin-url") toast.error(errorPdf || "No pudimos obtener la guía en PDF. Intenta de nuevo.");
+      if (resultado === "bloqueada") avisarError(MSG_VENTANA_BLOQUEADA);
+      else if (resultado === "sin-url") avisarError(errorPdf || "No pudimos obtener la guía en PDF. Intenta de nuevo.");
     } catch (err) {
-      toast.error(humanizeError(err, "obtener la guía en PDF"));
+      avisarError(humanizeError(err, "obtener la guía en PDF"));
     } finally {
       setLoading(false);
     }
@@ -571,14 +497,14 @@ function RowPrintButton({ encomiendaId, trackingId }: { encomiendaId: string; tr
   return (
     <Button
       variant="ghost"
-      size="icon"
-      className="relative z-10 h-8 w-8 text-muted-foreground hover:text-foreground"
+      size="icon-sm"
+      className="relative z-10 text-muted-foreground hover:text-foreground"
       onClick={handlePrint}
       disabled={loading}
       title="Reimprimir guía"
       aria-label={`Reimprimir la guía de ${trackingId}`}
     >
-      {loading ? <Spinner className="h-4 w-4" /> : <Printer className="h-4 w-4" aria-hidden />}
+      {loading ? <Spinner size="sm" /> : <Printer aria-hidden />}
     </Button>
   );
 }

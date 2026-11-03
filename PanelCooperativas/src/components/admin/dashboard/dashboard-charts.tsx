@@ -13,7 +13,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import type { DailyActivity, TopCooperativa, RutaPopular } from "@/lib/types/admin-dashboard";
 
 const ChartSkeleton = () => (
-  <Skeleton className="h-[300px] w-full rounded-xl" aria-hidden />
+  <Skeleton className="h-80 w-full rounded-md" aria-hidden />
 );
 
 const ActivityChart = dynamic(
@@ -38,13 +38,9 @@ interface DashboardChartsProps {
 export function DashboardCharts({ activityData, topCooperativas, rutasPopulares }: DashboardChartsProps) {
   return (
     <>
-      {/* Activity Line Chart */}
-      <div className="grid grid-cols-1 gap-6">
-        <ActivityChart data={activityData} />
-      </div>
+      <ActivityChart data={activityData} />
 
-      {/* Top 5 Cooperativas & Rutas populares */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <TopCooperativasChart data={topCooperativas} />
         <RutasChart data={rutasPopulares} />
       </div>

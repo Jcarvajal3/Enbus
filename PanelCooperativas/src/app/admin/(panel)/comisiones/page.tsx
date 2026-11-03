@@ -7,7 +7,6 @@ import { PageHeader } from "@/components/page-header";
 import { obtenerTasaBCV } from "@/lib/tasa-bcv";
 
 export default async function AdminComisionesPage() {
-  // Fetch data concurrently on the server side
   const [ciclos, cooperativas, tasa] = await Promise.all([
     fetchCiclosComisiones(),
     fetchCooperativasList(),
@@ -15,15 +14,11 @@ export default async function AdminComisionesPage() {
   ]);
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Comisiones"
-        description="Genera los ciclos de comisiones de cada cooperativa y registra sus pagos."
-      >
+    <div className="flex flex-col gap-6">
+      <PageHeader title="Comisiones" description="Ciclos de comisión de cada cooperativa y sus pagos.">
         <GenerarCicloDialog cooperativas={cooperativas} tasa={tasa} />
       </PageHeader>
 
-      {/* Tabla e interfaz interactiva */}
       <CiclosTable data={ciclos} cooperativas={cooperativas} tasa={tasa} />
     </div>
   );

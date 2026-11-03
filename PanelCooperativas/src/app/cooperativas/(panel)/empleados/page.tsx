@@ -1,6 +1,5 @@
 import { createClient, createAdminClient } from "@/lib/supabase/server";
-import { getUserProfile } from "@/lib/supabase/cached";
-import { redirect } from "next/navigation";
+import { exigirRolPanel } from "@/lib/supabase/auth-guards";
 import { humanizeError } from "@/lib/errores";
 import { EmpleadosClient, type Empleado, type InvitacionPendiente, type SucursalOpcion } from "./client";
 
@@ -12,16 +11,8 @@ function estaBloqueado(bannedUntil: string | null | undefined): boolean {
 const SELECT_INVITACIONES = "id, email, role, sucursal_id, token, expira_at, created_at";
 
 export default async function EmpleadosPage() {
-  const user = await getUserProfile();
-  if (!user) redirect("/cooperativas/login");
-
-  if (user.role !== "admin_cooperativa") {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <p className="text-muted-foreground">Solo el administrador de la cooperativa puede ver los empleados.</p>
-      </div>
-    );
-  }
+  // Solo el administrador gestiona a los empleados (PN-12).
+  const user = await exigirRolPanel(["admin_cooperativa"]);
 
   const supabase = await createClient();
   const adminSupabase = createAdminClient();

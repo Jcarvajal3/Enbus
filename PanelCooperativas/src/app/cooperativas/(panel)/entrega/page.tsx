@@ -5,21 +5,23 @@
 // Solo se entregan las que están en la oficina de la sucursal del usuario; si
 // no, se dice por qué (va en camino, ya se entregó, está en otra oficina…).
 
-import { useEffect, useRef, useState, useCallback, useMemo } from "react";
+import { Suspense, useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { PageHeader } from "@/components/page-header";
-import { EmptyState } from "@/components/empty-state";
 import { ErrorState } from "@/components/error-state";
+import { FilaVacia } from "@/components/fila-vacia";
+import { TablaSkeleton } from "@/components/tabla-skeleton";
+import { BarraFiltros } from "@/components/barra-filtros";
+import { PaginacionTabla, usePaginacion } from "@/components/paginacion-tabla";
 import { ScanInput } from "@/components/scan-input";
 import { UltimoEscaneo, useUltimoEscaneo } from "@/components/ultimo-escaneo";
 import { CeldaEnlace } from "@/components/celda-enlace";
+import { StatusBadge, TonoBadge } from "@/components/status-badge";
+import { Card } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
 import { useUser } from "@/hooks/use-user";
+import { useParamUrl } from "@/hooks/use-param-url";
 import { createClient } from "@/lib/supabase/client";
-import { toast } from "sonner";
-import { Spinner } from "@/components/ui/spinner";
-import { Handshake, MagnifyingGlass, LockKey, Warning } from "@phosphor-icons/react";
 import { useEncomiendasRealtime } from "@/hooks/use-encomiendas-realtime";
 import {
   DIAS_HABILES_DEVOLUCION,
@@ -28,15 +30,19 @@ import {
   textoDevolucion,
 } from "@/components/entrega/entrega-modal";
 import { Monto } from "@/components/monto";
+import { avisarError } from "@/lib/avisos";
 import { humanizeError } from "@/lib/errores";
-import { etiquetaEstado } from "@/lib/estados";
-import { formatFechaVE } from "@/lib/fechas";
+import { etiquetaEstado, retencionInfo } from "@/lib/estados";
+import { formatFechaHoraCortaVE } from "@/lib/fechas";
 import { formatCiudad } from "@/lib/ciudades";
+import { ICONO_SECCION } from "@/lib/navigation";
 import { formatTelefono } from "@/lib/ve";
 import type { Encomienda } from "@/lib/types/encomiendas";
 import type { EstadoVerificacion } from "@/lib/types/pagos";
 import { obtenerSucursalRecepcion } from "../recepcion-destino/actions";
 import { vaASucursal, type SucursalRecepcion } from "../recepcion-destino/sucursal";
+
+const COLUMNAS = 6;
 
 type EncomiendaEntrega = {
   id: string;
@@ -56,56 +62,43 @@ type EncomiendaEntrega = {
 
 const ESTADOS_ANTES_DE_SALIR = ["PENDIENTE_DE_ESCANEO", "EN_RECEPCION", "POR_PAGAR", "PAGADA"];
 
+/** Días en la oficina (PU-32): tono de `retencionInfo`, la etiqueta son los días. */
 function RetentionBadge({ dias }: { dias: number }) {
-  const texto = `${dias} ${dias === 1 ? "día hábil" : "días hábiles"}`;
-  if (dias >= DIAS_HABILES_DEVOLUCION - 1) {
-    return (
-      <Badge variant="secondary" className="gap-1 bg-destructive-light text-destructive-deep">
-        <Warning weight="fill" className="size-3.5" aria-hidden />
-        {texto}
-      </Badge>
-    );
-  }
-  if (dias >= DIAS_HABILES_DEVOLUCION - 2) {
-    return (
-      <Badge variant="secondary" className="bg-warning-light text-warning-deep">
-        {texto}
-      </Badge>
-    );
-  }
-  return <Badge variant="outline">{texto}</Badge>;
+  const info = retencionInfo(dias, DIAS_HABILES_DEVOLUCION);
+  return <TonoBadge tono={info.tono}>{info.etiqueta}</TonoBadge>;
 }
 
-/** Cobro para la lista: verde si ya está pagada; ámbar si falta cobrar o verificar. */
+/** Cobro para la lista, con el vocabulario de `cobro` (lib/estados). */
 function CobroCelda({ e }: { e: EncomiendaEntrega }) {
-  const verde = "bg-success-light text-success-deep";
-  const ambar = "bg-warning-light text-warning-deep";
   const estados = (e.pagos ?? []).map((p) => p.estado_verificacion);
-  if (e.modalidad_pago === "ORIGEN" || estados.includes("APROBADO")) {
-    return (
-      <Badge variant="secondary" className={verde}>
-        Pagada
-      </Badge>
-    );
-  }
-  if (estados.includes("PENDIENTE")) {
-    return (
-      <Badge variant="secondary" className={ambar}>
-        Pago por verificar
-      </Badge>
-    );
-  }
+  if (e.modalidad_pago === "ORIGEN" || estados.includes("APROBADO")) return <StatusBadge status="PAGADO" dominio="cobro" />;
+  if (estados.includes("PENDIENTE")) return <StatusBadge status="EN_VERIFICACION" dominio="cobro" />;
   return (
     <div className="flex flex-col items-start gap-1">
-      <Badge variant="secondary" className={ambar}>
-        Cobrar al retirar
-      </Badge>
+      <StatusBadge status="SIN_PAGO" dominio="cobro" />
       {Number(e.costo_calculado) > 0 && <Monto usd={Number(e.costo_calculado)} size="sm" />}
     </div>
   );
 }
 
 export default function EntregaPage() {
+  // useSearchParams (?q=) necesita un límite de Suspense (Next.js 16).
+  return (
+    <Suspense
+      fallback={
+        <div className="flex flex-col gap-6">
+          <Skeleton className="h-8 w-32" />
+          <Skeleton className="h-24 w-full rounded-md" />
+          <TablaSkeleton columnas={COLUMNAS} conFiltros />
+        </div>
+      }
+    >
+      <Entrega />
+    </Suspense>
+  );
+}
+
+function Entrega() {
   const { user } = useUser();
   const cooperativaId = user.cooperativa_id!;
   const supabase = useMemo(() => createClient(), []);
@@ -113,7 +106,7 @@ export default function EntregaPage() {
   const [encomiendas, setEncomiendas] = useState<EncomiendaEntrega[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorCarga, setErrorCarga] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery] = useParamUrl("q");
   const { ultimo, registrar } = useUltimoEscaneo();
 
   // Sucursal donde entrega el usuario (null = toda la cooperativa), igual que Recepción en destino
@@ -131,11 +124,11 @@ export default function EntregaPage() {
     obtenerSucursalRecepcion()
       .then((res) => {
         if (!isMounted) return;
-        if (res.error) toast.error(res.error);
+        if (res.error) avisarError(res.error);
         setSucursal(res.sucursal ?? null);
       })
       .catch((err) => {
-        if (isMounted) toast.error(humanizeError(err, "cargar tu sucursal"));
+        if (isMounted) avisarError(humanizeError(err, "cargar tu sucursal"));
       })
       .finally(() => {
         if (isMounted) setAlcanceCargado(true);
@@ -190,7 +183,7 @@ export default function EntregaPage() {
   useEncomiendasRealtime(cooperativaId, alCambiar);
 
   const filteredEncomiendas = useMemo(() => {
-    const q = searchQuery.toLowerCase();
+    const q = searchQuery.trim().toLowerCase();
     if (!q) return encomiendas;
     return encomiendas.filter(
       (e) => e.tracking_id.toLowerCase().includes(q) || e.receiver_nombre.toLowerCase().includes(q)
@@ -214,7 +207,7 @@ export default function EntregaPage() {
         });
         return;
       }
-      registrar({ codigo, tono: "exito", titulo: `Abriendo la entrega de ${codigo}`, detalle: e.receiver_nombre });
+      registrar({ codigo, tono: "exito", titulo: `Entrega de ${codigo}`, detalle: e.receiver_nombre });
       abrirEntrega(e.id);
       return;
     }
@@ -223,7 +216,7 @@ export default function EntregaPage() {
         codigo,
         tono: "aviso",
         titulo: "Todavía va en camino",
-        detalle: `Va hacia ${formatCiudad(e.ciudad_destino)}. Recíbela en «Recepción en destino» cuando llegue.`,
+        detalle: `Va hacia ${formatCiudad(e.ciudad_destino)}.`,
       });
     } else if (e.estado === "ENTREGADA") {
       const fecha = e.entregada_at ?? e.updated_at;
@@ -231,9 +224,7 @@ export default function EntregaPage() {
         codigo,
         tono: "aviso",
         titulo: "Ya fue entregada",
-        detalle: fecha
-          ? `El ${formatFechaVE(fecha, { day: "2-digit", month: "2-digit", hour: "numeric", minute: "2-digit" })}.`
-          : undefined,
+        detalle: fecha ? `El ${formatFechaHoraCortaVE(fecha)}.` : undefined,
       });
     } else if (ESTADOS_ANTES_DE_SALIR.includes(e.estado)) {
       registrar({
@@ -262,13 +253,11 @@ export default function EntregaPage() {
     setModalState({ isOpen: false, encomiendaId: null });
   }, []);
 
-  const descripcion = sucursal
-    ? `Encomiendas en tu sucursal ${sucursal.nombre} (${formatCiudad(sucursal.ciudad)}) listas para entregar. Escanea el código o elige una en la lista.`
-    : "Encomiendas en la oficina listas para entregar. Escanea el código o elige una en la lista.";
+  const { visibles, pagina, paginas, ir } = usePaginacion(filteredEncomiendas);
 
   return (
-    <div className="space-y-6 flex flex-col h-full animate-in fade-in duration-300">
-      <PageHeader title="Entrega" description={descripcion} />
+    <div className="flex flex-col gap-6">
+      <PageHeader title="Entrega" />
 
       <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
         <ScanInput
@@ -281,104 +270,81 @@ export default function EntregaPage() {
         <UltimoEscaneo resultado={ultimo} />
       </div>
 
-      <div className="relative max-w-md">
-        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-          <MagnifyingGlass size={20} className="text-muted-foreground" aria-hidden />
-        </div>
-        <Input
-          type="text"
-          placeholder="Filtrar por código o nombre de quien recibe…"
-          aria-label="Filtrar por código o nombre de quien recibe"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="pl-10 shadow-sm"
-        />
-      </div>
+      <div className="flex flex-col gap-4">
+        <BarraFiltros busqueda={{ etiqueta: "Buscar", placeholder: "Código o destinatario" }} />
 
-      <div className="flex-1 rounded-md border bg-card overflow-hidden flex flex-col">
+        {errorCarga && encomiendas.length > 0 && (
+          <ErrorState compacto titulo="No pudimos actualizar la lista" descripcion={errorCarga} onReintentar={fetchEncomiendas} />
+        )}
+
         {loading && encomiendas.length === 0 ? (
-          <div className="flex flex-col items-center justify-center flex-1 h-64">
-            <Spinner size="md" />
-            <span className="ml-3 mt-4 text-muted-foreground font-medium">Cargando encomiendas…</span>
-          </div>
-        ) : errorCarga && encomiendas.length === 0 ? (
-          <ErrorState titulo="No pudimos cargar las encomiendas" descripcion={errorCarga} onReintentar={fetchEncomiendas} />
-        ) : filteredEncomiendas.length === 0 ? (
-          <div className="flex-1">
-            <EmptyState
-              icon={Handshake}
-              title={searchQuery ? "No hay coincidencias" : "Oficina al día"}
-              description={
-                searchQuery
-                  ? "Revisa el código o el nombre e intenta de nuevo."
-                  : "No hay encomiendas en la oficina pendientes de entrega."
-              }
-            />
-          </div>
+          <TablaSkeleton columnas={COLUMNAS} />
         ) : (
-          <div className="overflow-auto flex-1">
-            {errorCarga && (
-              <div className="p-3">
-                <ErrorState
-                  compacto
-                  titulo="No pudimos actualizar la lista"
-                  descripcion={errorCarga}
-                  onReintentar={fetchEncomiendas}
-                />
-              </div>
-            )}
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Código</TableHead>
-                  <TableHead>Destinatario</TableHead>
-                  <TableHead>Teléfono</TableHead>
-                  <TableHead>En la oficina</TableHead>
-                  <TableHead>Cobro</TableHead>
-                  <TableHead>PIN</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredEncomiendas.map((encomienda) => {
-                  const dias = diasHabilesDesde(encomienda.updated_at);
-                  return (
-                    <TableRow key={encomienda.id} className="relative hover:bg-muted/50 transition-colors">
-                      <CeldaEnlace
-                        onAbrir={() => abrirEntrega(encomienda.id)}
-                        etiqueta={`Entregar encomienda ${encomienda.tracking_id}`}
-                        className="font-mono"
-                      >
-                        <span className="text-primary-text">{encomienda.tracking_id}</span>
-                      </CeldaEnlace>
-                      <TableCell className="max-w-[200px] truncate font-medium">{encomienda.receiver_nombre}</TableCell>
-                      <TableCell className="text-muted-foreground whitespace-nowrap">
-                        {formatTelefono(encomienda.receiver_telefono)}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-col items-start gap-1">
-                          <RetentionBadge dias={dias} />
-                          <span className="text-xs text-muted-foreground">{textoDevolucion(dias)}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <CobroCelda e={encomienda} />
-                      </TableCell>
-                      <TableCell>
-                        {encomienda.pin_bloqueado ? (
-                          <div className="flex items-center gap-1.5 text-destructive-text font-medium text-sm">
-                            <LockKey size={16} weight="bold" aria-hidden />
-                            Bloqueado
-                          </div>
-                        ) : (
-                          <span className="text-muted-foreground text-sm">Activo</span>
-                        )}
-                      </TableCell>
+          <Card className="gap-0 overflow-hidden p-0">
+            {errorCarga && encomiendas.length === 0 ? (
+              <ErrorState titulo="No pudimos cargar las encomiendas" descripcion={errorCarga} onReintentar={fetchEncomiendas} />
+            ) : (
+              <>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Código</TableHead>
+                      <TableHead>Destinatario</TableHead>
+                      <TableHead className="hidden lg:table-cell">Teléfono</TableHead>
+                      <TableHead>En la oficina</TableHead>
+                      <TableHead>Cobro</TableHead>
+                      <TableHead>PIN</TableHead>
                     </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </div>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredEncomiendas.length === 0 ? (
+                      <FilaVacia
+                        colSpan={COLUMNAS}
+                        icon={ICONO_SECCION.entrega}
+                        titulo={searchQuery ? "No hay coincidencias" : "No hay encomiendas por entregar"}
+                      />
+                    ) : (
+                      visibles.map((encomienda) => {
+                        const dias = diasHabilesDesde(encomienda.updated_at);
+                        return (
+                          <TableRow key={encomienda.id} className="relative">
+                            <CeldaEnlace
+                              onAbrir={() => abrirEntrega(encomienda.id)}
+                              etiqueta={`Entregar encomienda ${encomienda.tracking_id}`}
+                              className="font-mono text-sm"
+                            >
+                              {encomienda.tracking_id}
+                            </CeldaEnlace>
+                            <TableCell className="max-w-48 truncate font-medium">{encomienda.receiver_nombre}</TableCell>
+                            <TableCell className="hidden whitespace-nowrap text-muted-foreground tabular-nums lg:table-cell">
+                              {formatTelefono(encomienda.receiver_telefono)}
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex flex-col items-start gap-1">
+                                <RetentionBadge dias={dias} />
+                                <span className="text-xs text-muted-foreground">{textoDevolucion(dias)}</span>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <CobroCelda e={encomienda} />
+                            </TableCell>
+                            <TableCell>
+                              {encomienda.pin_bloqueado ? (
+                                <TonoBadge tono="peligro">Bloqueado</TonoBadge>
+                              ) : (
+                                <span className="text-sm text-muted-foreground">Activo</span>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })
+                    )}
+                  </TableBody>
+                </Table>
+                <PaginacionTabla pagina={pagina} paginas={paginas} onCambio={ir} />
+              </>
+            )}
+          </Card>
         )}
       </div>
 

@@ -1,32 +1,38 @@
 "use client";
 
-import { useState, useMemo } from "react";
-import { 
-  Table, 
-  TableBody, 
-  TableCell, 
-  TableHead, 
-  TableHeader, 
-  TableRow 
-} from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
+// ─── Ciclos de comisiones (AD5-14, AD5-15, AD5-24, AD5-30) ──────────────────
+// Filtros en la URL (`?cooperativa=&estado=&desde=&hasta=`), totales con
+// `KpiCard` y el mismo orden en tarjetas, tabla y CSV: Boletos, Encomiendas,
+// Comisión. La cooperativa de cada fila lleva a su balance.
+
+import { useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { Coins, MagnifyingGlass, Receipt, Ticket, Package, Warning } from "@phosphor-icons/react";
+import { Card } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import { Warning, ArrowsCounterClockwise, Receipt, Coins } from "@phosphor-icons/react";
 import { StatusBadge } from "@/components/status-badge";
-import { etiquetaCiclo, etiquetaMetodoPago } from "@/lib/estados";
-import { RegistrarPagoCicloDialog } from "./registrar-pago-ciclo-dialog";
-import { ComisionCiclo } from "@/lib/types/admin-comisiones";
-import { ExportCSVButton } from "./export-csv-button";
+import { CeldaEnlace } from "@/components/celda-enlace";
+import { FilaVacia } from "@/components/fila-vacia";
+import { KpiCard } from "@/components/kpi-card";
+import { BarraFiltros } from "@/components/barra-filtros";
+import { PaginacionTabla, usePaginacion } from "@/components/paginacion-tabla";
 import { Monto } from "@/components/monto";
+import { Vacio } from "@/components/admin/detalle";
+import { formatPorcentaje } from "@/components/admin/cooperativas/cooperativas-table";
+import { etiquetaMetodoPago } from "@/lib/estados";
 import { formatFechaVE } from "@/lib/fechas";
+import type { ComisionCiclo } from "@/lib/types/admin-comisiones";
 import type { TasaBCV } from "@/lib/types/pagos";
 import { useTasaBCVAdmin } from "@/components/admin/dashboard/use-tasa-bcv-admin";
+import { RegistrarPagoCicloDialog } from "./registrar-pago-ciclo-dialog";
+import { ExportCSVButton } from "./export-csv-button";
 
-/** "Pagado el 02/10 · Pago Móvil · ref. 1234" (sin método en ciclos anteriores a la fase 4). */
+/** "02/10/2026 · Pago Móvil · ref. 1234" (sin método en ciclos anteriores a la fase 4). */
 export function detallePago(c: Pick<ComisionCiclo, "pagado" | "pagado_at" | "pago_metodo" | "pago_referencia">): string {
   if (!c.pagado) return "";
-  const partes = [etiquetaCiclo(true, c.pagado_at)];
+  const partes: string[] = [];
+  if (c.pagado_at) partes.push(formatFechaVE(c.pagado_at));
   if (c.pago_metodo) partes.push(etiquetaMetodoPago(c.pago_metodo));
   if (c.pago_referencia) partes.push(`ref. ${c.pago_referencia}`);
   return partes.join(" · ");
@@ -41,225 +47,146 @@ interface CiclosTableProps {
 
 export function CiclosTable({ data, cooperativas, tasa: tasaServidor }: CiclosTableProps) {
   const tasa = useTasaBCVAdmin(tasaServidor);
+  const searchParams = useSearchParams();
   const [aPagar, setAPagar] = useState<ComisionCiclo | null>(null);
 
-  // Filters State
-  const [cooperativaFilter, setCooperativaFilter] = useState("all");
-  const [estadoFilter, setEstadoFilter] = useState("all");
-  const [desdeFilter, setDesdeFilter] = useState("");
-  const [hastaFilter, setHastaFilter] = useState("");
+  const cooperativa = searchParams.get("cooperativa") ?? "";
+  const estado = searchParams.get("estado") ?? "";
+  const desde = searchParams.get("desde") ?? "";
+  const hasta = searchParams.get("hasta") ?? "";
+  const hayFiltros = Boolean(cooperativa || estado || desde || hasta);
 
-  // Filter logic
-  const filteredData = useMemo(() => {
-    return data.filter((item) => {
-      // 1. Cooperativa
-      if (cooperativaFilter !== "all" && item.cooperativa_id !== cooperativaFilter) {
-        return false;
-      }
-      // 2. Estado
-      if (estadoFilter !== "all") {
-        const isPagado = estadoFilter === "pagado";
-        if (item.pagado !== isPagado) return false;
-      }
-      // 3. Desde
-      if (desdeFilter && item.periodo_inicio < desdeFilter) {
-        return false;
-      }
-      // 4. Hasta
-      if (hastaFilter && item.periodo_fin > hastaFilter) {
-        return false;
-      }
-      return true;
-    });
-  }, [data, cooperativaFilter, estadoFilter, desdeFilter, hastaFilter]);
+  const filtradas = useMemo(
+    () =>
+      data.filter((item) => {
+        if (cooperativa && item.cooperativa_id !== cooperativa) return false;
+        if (estado === "pendiente" && item.pagado) return false;
+        if (estado === "pagado" && !item.pagado) return false;
+        if (desde && item.periodo_inicio < desde) return false;
+        if (hasta && item.periodo_fin > hasta) return false;
+        return true;
+      }),
+    [data, cooperativa, estado, desde, hasta]
+  );
+  const { visibles, pagina, paginas, ir } = usePaginacion(filtradas);
 
-  const handleResetFilters = () => {
-    setCooperativaFilter("all");
-    setEstadoFilter("all");
-    setDesdeFilter("");
-    setHastaFilter("");
-  };
+  // Totales de la selección filtrada.
+  const totales = useMemo(
+    () =>
+      filtradas.reduce(
+        (acc, c) => {
+          acc.boletos += c.total_boletos;
+          acc.encomiendas += c.total_encomiendas;
+          acc.comisiones += c.monto_comision;
+          if (!c.pagado) acc.pendiente += c.monto_comision;
+          return acc;
+        },
+        { boletos: 0, encomiendas: 0, comisiones: 0, pendiente: 0 }
+      ),
+    [filtradas]
+  );
 
-  // Totales de la selección filtrada
-  const totals = useMemo(() => {
-    return filteredData.reduce(
-      (acc, curr) => {
-        acc.encomiendas += curr.total_encomiendas;
-        acc.boletos += curr.total_boletos;
-        acc.comisiones += curr.monto_comision;
-        if (!curr.pagado) acc.pendiente += curr.monto_comision;
-        return acc;
-      },
-      { encomiendas: 0, boletos: 0, comisiones: 0, pendiente: 0 }
-    );
-  }, [filteredData]);
+  const monto = (usd: number) => <Monto usd={usd} tasa={tasa} moneda="USD" size="lg" />;
 
   return (
-    <div className="space-y-6">
-      {/* Tarjetas de Resumen Rápido (Basadas en los filtros) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-card border p-4 rounded-xl flex flex-col justify-between">
-          <span className="text-muted-foreground text-xs font-medium">Ventas de encomiendas (USD)</span>
-          <Monto usd={totals.encomiendas} tasa={tasa} moneda="USD" size="lg" className="mt-2 text-foreground" />
-        </div>
-        <div className="bg-card border p-4 rounded-xl flex flex-col justify-between">
-          <span className="text-muted-foreground text-xs font-medium">Ventas de boletos (USD)</span>
-          <Monto usd={totals.boletos} tasa={tasa} moneda="USD" size="lg" className="mt-2 text-foreground" />
-        </div>
-        <div className="bg-card border p-4 rounded-xl flex flex-col justify-between">
-          <span className="text-muted-foreground text-xs font-medium flex items-center gap-1">
-            <Coins className="h-3.5 w-3.5" aria-hidden /> Total de comisiones (USD)
-          </span>
-          <Monto usd={totals.comisiones} tasa={tasa} moneda="USD" size="lg" className="mt-2 text-foreground" />
-        </div>
-        <div className="bg-warning-light border border-warning/40 p-4 rounded-xl flex flex-col justify-between">
-          <span className="text-warning-deep text-xs font-medium flex items-center gap-1">
-            <Warning className="h-3.5 w-3.5" aria-hidden /> Pendiente por cobrar (USD)
-          </span>
-          <Monto usd={totals.pendiente} tasa={tasa} moneda="USD" size="lg" className="mt-2 text-warning-deep" />
-        </div>
+    <div className="flex flex-col gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <KpiCard title="Ventas de boletos" value={monto(totales.boletos)} icon={Ticket} />
+        <KpiCard title="Ventas de encomiendas" value={monto(totales.encomiendas)} icon={Package} />
+        <KpiCard title="Comisiones" value={monto(totales.comisiones)} icon={Coins} />
+        <KpiCard
+          title="Pendiente por cobrar"
+          value={monto(totales.pendiente)}
+          icon={Warning}
+          variant={totales.pendiente > 0 ? "warning" : "default"}
+        />
       </div>
 
-      {/* Controles de Filtros y Exportación */}
-      <div className="bg-card border rounded-xl p-4 space-y-4">
-        <div className="flex flex-col lg:flex-row gap-4 items-end justify-between">
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 w-full lg:w-auto flex-1">
-            <div className="space-y-1.5">
-              <Label htmlFor="coop_filter" className="text-xs text-muted-foreground">Cooperativa</Label>
-              <select
-                id="coop_filter"
-                value={cooperativaFilter}
-                onChange={(e) => setCooperativaFilter(e.target.value)}
-                className="w-full bg-background border border-input rounded-md px-3 py-1.5 text-xs text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                <option value="all">Todas las cooperativas</option>
-                {cooperativas.map((c) => (
-                  <option key={c.id} value={c.id}>{c.nombre}</option>
-                ))}
-              </select>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="estado_filter" className="text-xs text-muted-foreground">Estado del pago</Label>
-              <select
-                id="estado_filter"
-                value={estadoFilter}
-                onChange={(e) => setEstadoFilter(e.target.value)}
-                className="w-full bg-background border border-input rounded-md px-3 py-1.5 text-xs text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                <option value="all">Todos los estados</option>
-                <option value="pendiente">Pendientes</option>
-                <option value="pagado">Pagados</option>
-              </select>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="desde_filter" className="text-xs text-muted-foreground">Desde</Label>
-              <input
-                id="desde_filter"
-                type="date"
-                value={desdeFilter}
-                onChange={(e) => setDesdeFilter(e.target.value)}
-                className="w-full bg-background border border-input rounded-md px-3 py-1.5 text-xs text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="hasta_filter" className="text-xs text-muted-foreground">Hasta</Label>
-              <input
-                id="hasta_filter"
-                type="date"
-                value={hastaFilter}
-                onChange={(e) => setHastaFilter(e.target.value)}
-                className="w-full bg-background border border-input rounded-md px-3 py-1.5 text-xs text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              />
-            </div>
-          </div>
-
-          <div className="flex gap-2 w-full lg:w-auto justify-end">
-            {(cooperativaFilter !== "all" || estadoFilter !== "all" || desdeFilter || hastaFilter) && (
-              <Button
-                onClick={handleResetFilters}
-                variant="ghost"
-                size="sm"
-                className="text-muted-foreground hover:text-foreground h-9 gap-1"
-              >
-                <ArrowsCounterClockwise className="h-3.5 w-3.5" aria-hidden /> Limpiar filtros
-              </Button>
-            )}
-            <ExportCSVButton data={filteredData} />
-          </div>
-        </div>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <BarraFiltros
+          selects={[
+            {
+              param: "cooperativa",
+              etiqueta: "Cooperativa",
+              opciones: cooperativas.map((c) => ({ valor: c.id, etiqueta: c.nombre })),
+            },
+            {
+              param: "estado",
+              etiqueta: "Estado",
+              todas: "Todos",
+              opciones: [
+                { valor: "pendiente", etiqueta: "Pendientes" },
+                { valor: "pagado", etiqueta: "Pagados" },
+              ],
+            },
+          ]}
+          fechas={[
+            { param: "desde", etiqueta: "Desde" },
+            { param: "hasta", etiqueta: "Hasta" },
+          ]}
+        />
+        <ExportCSVButton data={filtradas} />
       </div>
 
-      {/* Tabla de Resultados */}
-      <div className="border rounded-xl bg-card overflow-hidden">
+      <Card className="gap-0 overflow-hidden p-0">
         <Table>
-          <TableHeader className="bg-muted/50 border-b">
+          <TableHeader>
             <TableRow>
-              <TableHead className="text-muted-foreground font-medium p-4">Cooperativa</TableHead>
-              <TableHead className="text-muted-foreground font-medium p-4">Período</TableHead>
-              <TableHead className="text-muted-foreground font-medium p-4 text-right">Boletos (USD)</TableHead>
-              <TableHead className="text-muted-foreground font-medium p-4 text-right">Encomiendas (USD)</TableHead>
-              <TableHead className="text-muted-foreground font-medium p-4 text-right">Comisión %</TableHead>
-              <TableHead className="text-muted-foreground font-medium p-4 text-right">Comisión (USD)</TableHead>
-              <TableHead className="text-muted-foreground font-medium p-4 text-center">Estado</TableHead>
-              <TableHead className="text-muted-foreground font-medium p-4 text-center">Pago</TableHead>
+              <TableHead>Cooperativa</TableHead>
+              <TableHead>Período</TableHead>
+              <TableHead className="hidden text-right lg:table-cell">Boletos</TableHead>
+              <TableHead className="hidden text-right lg:table-cell">Encomiendas</TableHead>
+              <TableHead className="hidden text-right md:table-cell">Comisión %</TableHead>
+              <TableHead className="text-right">Comisión</TableHead>
+              <TableHead>Estado</TableHead>
+              <TableHead className="hidden xl:table-cell">Pago</TableHead>
+              <TableHead className="text-right">Acciones</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredData.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={8} className="p-8 text-center text-muted-foreground">
-                  <div className="flex flex-col items-center justify-center space-y-2">
-                    <Receipt className="h-8 w-8 text-muted-foreground" aria-hidden />
-                    <p className="text-sm font-medium">No hay ciclos de comisiones con estos filtros</p>
-                    <p className="text-xs text-muted-foreground">Cambia los filtros o genera un ciclo nuevo.</p>
-                  </div>
-                </TableCell>
-              </TableRow>
+            {filtradas.length === 0 ? (
+              <FilaVacia
+                colSpan={9}
+                icon={hayFiltros ? MagnifyingGlass : Receipt}
+                titulo={hayFiltros ? "Ningún ciclo coincide con los filtros" : "Todavía no hay ciclos de comisiones"}
+              />
             ) : (
-              filteredData.map((item) => (
-                <TableRow key={item.id} className="transition-colors text-foreground">
-                  <TableCell className="p-4 font-semibold text-foreground">
-                    {item.cooperativa_nombre || "Desconocida"}
+              visibles.map((item) => (
+                <TableRow key={item.id} className="relative">
+                  <CeldaEnlace
+                    href={`/admin/cooperativas/${item.cooperativa_id}?tab=balance`}
+                    etiqueta={`Ver el balance de ${item.cooperativa_nombre || "la cooperativa"}`}
+                  >
+                    {item.cooperativa_nombre || "Cooperativa sin nombre"}
+                  </CeldaEnlace>
+                  <TableCell className="text-muted-foreground tabular-nums">
+                    {formatFechaVE(item.periodo_inicio)} – {formatFechaVE(item.periodo_fin)}
                   </TableCell>
-                  <TableCell className="p-4 text-muted-foreground">
-                    <div className="flex items-center gap-1.5 text-xs">
-                      <span>{formatFechaVE(item.periodo_inicio)}</span>
-                      <span className="text-muted-foreground/60">—</span>
-                      <span>{formatFechaVE(item.periodo_fin)}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell className="p-4 text-right text-muted-foreground text-xs">
+                  <TableCell className="hidden text-right lg:table-cell">
                     <Monto usd={item.total_boletos} tasa={tasa} moneda="USD" size="sm" align="right" />
                   </TableCell>
-                  <TableCell className="p-4 text-right text-muted-foreground text-xs">
+                  <TableCell className="hidden text-right lg:table-cell">
                     <Monto usd={item.total_encomiendas} tasa={tasa} moneda="USD" size="sm" align="right" />
                   </TableCell>
-                  <TableCell className="p-4 text-right text-muted-foreground text-xs">
-                    {item.comision_porcentaje} %
+                  <TableCell className="hidden text-right tabular-nums md:table-cell">
+                    {formatPorcentaje(item.comision_porcentaje)}
                   </TableCell>
-                  <TableCell className="p-4 text-right font-bold text-foreground text-sm">
+                  <TableCell className="text-right">
                     <Monto usd={item.monto_comision} tasa={tasa} moneda="USD" size="sm" align="right" />
                   </TableCell>
-                  <TableCell className="p-4 text-center">
-                    {item.pagado ? (
-                      <Badge variant="secondary" className="bg-success-light text-success-deep">
-                        {etiquetaCiclo(true, item.pagado_at)}
-                      </Badge>
-                    ) : (
-                      <StatusBadge status="false" dominio="ciclo" />
-                    )}
+                  <TableCell>
+                    <StatusBadge status={String(item.pagado)} dominio="ciclo" />
                   </TableCell>
-                  <TableCell className="p-4 text-center">
-                    {item.pagado ? (
-                      <span className="text-xs text-muted-foreground">{detallePago(item)}</span>
-                    ) : (
+                  <TableCell className="hidden text-muted-foreground xl:table-cell">
+                    {item.pagado ? detallePago(item) || <Vacio /> : <Vacio />}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {!item.pagado && (
                       <Button
-                        variant="secondary"
+                        type="button"
+                        variant="outline"
                         size="sm"
-                        className="h-8 px-3 text-xs"
+                        className="relative z-10"
                         aria-label={`Registrar pago de ${item.cooperativa_nombre || "la cooperativa"}`}
                         onClick={() => setAPagar(item)}
                       >
@@ -272,9 +199,10 @@ export function CiclosTable({ data, cooperativas, tasa: tasaServidor }: CiclosTa
             )}
           </TableBody>
         </Table>
-      </div>
+        <PaginacionTabla pagina={pagina} paginas={paginas} onCambio={ir} />
+      </Card>
 
-      <RegistrarPagoCicloDialog ciclo={aPagar} onClose={() => setAPagar(null)} />
+      <RegistrarPagoCicloDialog ciclo={aPagar} tasa={tasa} onClose={() => setAPagar(null)} />
     </div>
   );
 }

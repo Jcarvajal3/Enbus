@@ -540,7 +540,12 @@ export default function BuscarBoletoScreen() {
       .channel(`rt:viaje:${viajeElegidoId}:${Math.random().toString(36).slice(2, 8)}`)
       .on(
         'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'viajes', filter: `id=eq.${viajeElegidoId}` },
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'viajes',
+          filter: `id=eq.${viajeElegidoId}`,
+        },
         () => setAsientosVersion((v) => v + 1)
       )
       .subscribe();
@@ -594,7 +599,10 @@ export default function BuscarBoletoScreen() {
     const compraId = r?.compra_id ?? checkout.compraId;
     // La compra vive en Mis boletos: ← desde "Tu compra" cae en la lista (AN-05).
     router.dismissTo('/(tabs)/boletos');
-    router.push({ pathname: '/boletos/compra/[id]', params: { id: compraId, recien } });
+    router.push({
+      pathname: '/boletos/compra/[id]',
+      params: { id: compraId, recien },
+    });
   }
 
   /** Otro pasajero tomó asientos: marcarlos ocupados y volver a elegir. */
@@ -747,7 +755,11 @@ export default function BuscarBoletoScreen() {
   const precioDe = (n: number) =>
     seleccionado ? formatMoney({ usd: seleccionado.precio * n, tasa: tasaRef }).principal : '';
   const totalCompra = cotizacion
-    ? formatMoney({ usd: cotizacion.totalUsd, bs: cotizacion.totalBs, tasa: null }).principal
+    ? formatMoney({
+        usd: cotizacion.totalUsd,
+        bs: cotizacion.totalBs,
+        tasa: null,
+      }).principal
     : precioDe(nBoletos);
   const resumenReserva =
     nBoletos > 0 ? `${etiquetaAsientos(checkout.asientosApartados)} · ${totalCompra}` : null;
@@ -787,7 +799,9 @@ export default function BuscarBoletoScreen() {
             void confirmarAsientos(ordenados);
           }}
           accessibilityLabel={
-            ordenados.length > 0 ? `Apartar ${etiquetaAsientos(ordenados).toLowerCase()}` : 'Apartar asientos'
+            ordenados.length > 0
+              ? `Apartar ${etiquetaAsientos(ordenados).toLowerCase()}`
+              : 'Apartar asientos'
           }
         >
           {ordenados.length === 1
@@ -829,7 +843,8 @@ export default function BuscarBoletoScreen() {
     };
   }
 
-  const tituloPaso = step === 4 ? (tituloMetodo(metodoPago) ?? STEP_TITLES[3]) : STEP_TITLES[step - 1];
+  const tituloPaso =
+    step === 4 ? (tituloMetodo(metodoPago) ?? STEP_TITLES[3]) : STEP_TITLES[step - 1];
   const tituloReserva = `${etiquetaAsientos(checkout.asientosApartados)} ${
     nBoletos > 1 ? 'apartados' : 'apartado'
   }`;
@@ -846,7 +861,10 @@ export default function BuscarBoletoScreen() {
       />
 
       <ScrollView
-        contentContainerStyle={scrollContent({ top: Spacing.lg, floatingAction: !!barra })}
+        contentContainerStyle={scrollContent({
+          top: Spacing.lg,
+          floatingAction: !!barra,
+        })}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
@@ -910,32 +928,38 @@ export default function BuscarBoletoScreen() {
                           : 'Filtrar por cooperativa'
                       }
                     >
-                      <SlidersHorizontal color={Colors.foreground} weight="bold" size={Sizes.icon.md} />
+                      <SlidersHorizontal
+                        color={Colors.foreground}
+                        weight="bold"
+                        size={Sizes.icon.md}
+                      />
                       <Text variant="label">Filtrar</Text>
                       {filtroActivo && <View style={s.filterDot} />}
                     </PressableScale>
                   ) : null}
                 </View>
 
-                {/* Orden en línea (APP-21). */}
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  style={s.sortScroll}
-                  contentContainerStyle={s.sortRow}
-                  accessibilityRole="radiogroup"
-                  accessibilityLabel="Ordenar salidas"
-                >
-                  {SORT_OPTIONS.map((option) => (
-                    <Chip
-                      key={option.id}
-                      label={option.label}
-                      selected={sortType === option.id}
-                      onPress={() => setSortType(option.id)}
-                      accessibilityLabel={`Ordenar: ${option.label}`}
-                    />
-                  ))}
-                </ScrollView>
+                {/* Orden en línea (APP-21); con una sola salida no hay nada que ordenar. */}
+                {visibles.length > 1 ? (
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    style={s.sortScroll}
+                    contentContainerStyle={s.sortRow}
+                    accessibilityRole="radiogroup"
+                    accessibilityLabel="Ordenar salidas"
+                  >
+                    {SORT_OPTIONS.map((option) => (
+                      <Chip
+                        key={option.id}
+                        label={option.label}
+                        selected={sortType === option.id}
+                        onPress={() => setSortType(option.id)}
+                        accessibilityLabel={`Ordenar: ${option.label}`}
+                      />
+                    ))}
+                  </ScrollView>
+                ) : null}
               </>
             )}
 
@@ -956,7 +980,10 @@ export default function BuscarBoletoScreen() {
                   onRetry={() => setReintentoViajes((n) => n + 1)}
                   compact
                 />
-              ) : viajes.length === 0 && !errorFechas && !loadingDates && activeDates?.length === 0 ? (
+              ) : viajes.length === 0 &&
+                !errorFechas &&
+                !loadingDates &&
+                activeDates?.length === 0 ? (
                 // La ruta no tiene ninguna salida (no solo ese día): otros destinos (M-09).
                 <SinSalidasRuta
                   origen={origen}
@@ -971,7 +998,11 @@ export default function BuscarBoletoScreen() {
                   description="Prueba con otra fecha."
                   action={
                     calendarEnabled
-                      ? { children: 'Cambiar fecha', variant: 'secondary', onPress: () => setShowCalendar(true) }
+                      ? {
+                          children: 'Cambiar fecha',
+                          variant: 'secondary',
+                          onPress: () => setShowCalendar(true),
+                        }
                       : undefined
                   }
                   compact
@@ -1013,7 +1044,13 @@ export default function BuscarBoletoScreen() {
                         badge={<Valoracion calificacion={viaje.calificacion} />}
                         meta={
                           <View style={s.priceMeta}>
-                            <Monto usd={viaje.precio} tasa={tasaRef} size="sm" align="right" sinReferencia />
+                            <Monto
+                              usd={viaje.precio}
+                              tasa={tasaRef}
+                              size="sm"
+                              align="right"
+                              sinReferencia
+                            />
                             {viaje.asientosDisponibles <= POCOS_ASIENTOS ? (
                               <Badge tone="pending">{`Quedan ${viaje.asientosDisponibles}`}</Badge>
                             ) : (

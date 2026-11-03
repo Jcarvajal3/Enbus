@@ -2,11 +2,11 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { toast } from "sonner";
 import { CalendarCheck, XCircle } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { cancelarTarifaProgramada } from "@/app/admin/(panel)/tarifas/actions";
+import { avisarExito } from "@/lib/avisos";
 import { formatNumeroVE, formatUsd } from "@/lib/dinero";
 import { formatFechaProgramada, type Tarifa } from "@/lib/types/admin-tarifas";
 import { cn } from "@/lib/utils";
@@ -29,12 +29,12 @@ export function TarifaProgramadaAviso({
   const [vencida] = useState(() => new Date(tarifa.vigente_desde).getTime() < Date.now());
 
   return (
-    <div className={cn("space-y-3 rounded-xl border border-info/40 bg-info-light p-4 text-info-deep", className)}>
+    <div className={cn("flex flex-col gap-3 rounded-md bg-info-light p-4 text-sm text-info-deep", className)}>
       <div className="flex items-start gap-2">
-        <CalendarCheck className="mt-0.5 size-5 shrink-0" weight="duotone" aria-hidden />
-        <div className="space-y-1 text-sm">
+        <CalendarCheck className="mt-0.5 size-4 shrink-0" weight="fill" aria-hidden />
+        <div className="flex flex-col gap-1">
           <p className="font-semibold">Programada para el {cuando}</p>
-          <p>
+          <p className="tabular-nums">
             Precio por kilo {formatUsd(tarifa.tarifa_por_kg)}
             {actual && actual.tarifa_por_kg !== tarifa.tarifa_por_kg ? ` (hoy ${formatUsd(actual.tarifa_por_kg)})` : ""} ·
             recargo por minuto {formatNumeroVE(tarifa.factor_distancia_por_min, 4)} · hasta{" "}
@@ -44,8 +44,8 @@ export function TarifaProgramadaAviso({
           {vencida && <p className="font-medium">Su hora ya llegó: se activará en los próximos minutos.</p>}
         </div>
       </div>
-      <Button type="button" variant="outline" size="sm" onClick={() => setOpen(true)} className="bg-background">
-        <XCircle className="size-4" aria-hidden /> Cancelar programación
+      <Button type="button" variant="outline" size="sm" onClick={() => setOpen(true)} className="self-start">
+        <XCircle aria-hidden /> Cancelar programación
       </Button>
 
       <ConfirmDialog
@@ -59,12 +59,11 @@ export function TarifaProgramadaAviso({
         ]}
         verbo="Cancelar programación"
         verboCargando="Cancelando…"
-        textoCancelar="Mantenerla"
         tono="destructive"
         onConfirm={async () => {
           const res = await cancelarTarifaProgramada(tarifa.id);
           if (!res.success) return { ok: false, error: res.error };
-          toast.success("Cancelamos la tarifa programada.");
+          avisarExito("Cancelamos la tarifa programada.");
           router.refresh();
           return { ok: true };
         }}

@@ -125,6 +125,8 @@ const BANCOS_VE: BancoVE[] = [
 ];
 
 const OTRO_BANCO = 'Otro banco';
+/** Lo que dice el selector de banco sin elegir (no es un marcador de texto: abre una lista). */
+const ELEGIR_BANCO = 'Elige tu banco';
 
 const bancoLabel = (b: BancoVE) => `${b.codigo} · ${b.nombre}`;
 
@@ -751,7 +753,7 @@ export function PaymentFlow({
         {!isZelle && (
           <SelectField
             label="Banco desde el que pagaste"
-            placeholder="Elige tu banco"
+            placeholder={ELEGIR_BANCO}
             icon={Bank}
             tone={tonoCampo}
             value={banco}
