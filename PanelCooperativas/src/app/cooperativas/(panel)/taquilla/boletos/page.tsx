@@ -471,7 +471,7 @@ function ResultadoEmbarqueDialog({
         ) : (
           cuerpo
         )}
-        <DialogFooter>{acciones}</DialogFooter>
+        <DialogFooter className="sm:justify-between">{acciones}</DialogFooter>
       </DialogContent>
     </Dialog>
   );

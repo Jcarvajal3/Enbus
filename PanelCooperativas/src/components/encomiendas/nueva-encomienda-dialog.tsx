@@ -524,7 +524,7 @@ function Contenido({
           <p className="text-sm font-medium">Datos de quien envía</p>
           {campoPersona(remitente, setRemitente, errRemitente, setErrRemitente, "rem")}
           {errorBanner}
-          <DialogFooter>
+          <DialogFooter className="sm:justify-between">
             <Button type="button" variant="outline" onClick={onCerrar}>
               Cancelar
             </Button>
@@ -541,7 +541,7 @@ function Contenido({
           </div>
           {campoPersona(destinatario, setDestinatario, errDestinatario, setErrDestinatario, "des")}
           {errorBanner}
-          <DialogFooter>
+          <DialogFooter className="sm:justify-between">
             <Button type="button" variant="outline" onClick={() => setPaso(1)}>
               Atrás
             </Button>
@@ -726,7 +726,7 @@ function Contenido({
           )}
 
           {errorBanner}
-          <DialogFooter>
+          <DialogFooter className="sm:justify-between">
             <Button type="button" variant="outline" onClick={() => setPaso(2)} disabled={enviando}>
               Atrás
             </Button>

@@ -351,7 +351,7 @@ function FormularioProgramar({
             </div>
           </div>
         </div>
-        <DialogFooter>
+        <DialogFooter className="sm:justify-between">
           <Button type="button" variant="outline" onClick={onCerrar} disabled={isPending}>
             Cancelar
           </Button>
@@ -629,7 +629,7 @@ function FormularioEditar({
           )}
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="sm:justify-between">
           <Button type="button" variant="outline" onClick={onCerrar} disabled={enviando}>
             Cancelar
           </Button>

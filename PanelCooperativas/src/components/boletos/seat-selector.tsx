@@ -53,7 +53,7 @@ function filasDe(totalAsientos: number): (string | null)[][] {
 
 function Bus({ filas, casilla }: { filas: (string | null)[][]; casilla: (asiento: string | null, idx: number) => React.ReactNode }) {
   return (
-    <div className="w-full max-w-sm rounded-md border border-border bg-muted/40 p-6">
+    <div className="w-full max-w-sm rounded-md border border-border bg-card p-6">
       <p className="mb-6 border-b border-dashed border-border-strong pb-4 text-center text-xs font-medium text-muted-foreground">
         Frente
       </p>
