@@ -1128,7 +1128,6 @@ export default function DetalleBoletoScreen() {
             ? () => setMetodoPago(null)
             : undefined
         }
-        height="92%"
         footer={pieHojaPago}
       >
         <ScrollView
@@ -1533,7 +1532,7 @@ const s = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.sm,
     minHeight: Sizes.touchTarget,
-    marginTop: Spacing.lg,
+    marginTop: Spacing.sm,
   },
   enlace: {
     textDecorationLine: 'underline',
@@ -1542,8 +1541,8 @@ const s = StyleSheet.create({
   // ── Hoja de pago
   pagoSheet: {
     paddingHorizontal: Layout.screenPadding,
-    paddingTop: Spacing.sm,
-    paddingBottom: Spacing['3xl'],
+    paddingTop: Spacing.lg,
+    paddingBottom: Spacing.sm,
   },
   esqueletoPago: {
     gap: Spacing.md,

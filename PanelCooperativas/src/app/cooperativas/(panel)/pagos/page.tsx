@@ -188,10 +188,10 @@ function BandejaPagos() {
             <TableHeader>
               <TableRow>
                 <TableHead>Cliente</TableHead>
-                <TableHead>Registrado</TableHead>
-                <TableHead>Concepto</TableHead>
+                <TableHead className="hidden md:table-cell">Registrado</TableHead>
+                <TableHead className="hidden sm:table-cell">Concepto</TableHead>
                 <TableHead className="hidden lg:table-cell">Método</TableHead>
-                <TableHead>Referencia</TableHead>
+                <TableHead className="hidden md:table-cell">Referencia</TableHead>
                 <TableHead className="text-right">Monto</TableHead>
                 <TableHead className="hidden text-right lg:table-cell">Diferencia</TableHead>
                 <TableHead className="text-right">
@@ -216,13 +216,13 @@ function BandejaPagos() {
                           .join(" · ")}
                       </span>
                     </CeldaEnlace>
-                    <TableCell className="whitespace-nowrap">
+                    <TableCell className="hidden whitespace-nowrap md:table-cell">
                       <span className="block text-sm">{ahora > 0 ? formatHaceTiempo(p.creado_at, new Date(ahora)) : ""}</span>
                       <span className="block text-xs text-muted-foreground tabular-nums">
                         {formatFechaHoraCortaVE(p.creado_at)}
                       </span>
                     </TableCell>
-                    <TableCell className="max-w-[18rem]">
+                    <TableCell className="hidden max-w-[18rem] sm:table-cell">
                       <span className="block text-sm whitespace-normal">{conceptoDePago(p)}</span>
                       {(viajeSalio || p.recurso_vencido) && (
                         <span className="mt-1 flex flex-wrap gap-1">
@@ -241,7 +241,7 @@ function BandejaPagos() {
                         <span className="block text-xs text-muted-foreground">Desde {p.banco_emisor}</span>
                       )}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="hidden md:table-cell">
                       <span className="font-mono text-sm text-foreground">{p.numero_referencia || "—"}</span>
                       {p.referencia_repetida && (
                         <span className="mt-1 flex items-center gap-1 text-xs font-medium text-warning-text">

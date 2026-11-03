@@ -87,6 +87,11 @@ function NombreRuta({ ruta }: { ruta: Ruta }) {
       <span className="text-xs font-normal text-muted-foreground">
         {formatCiudad(ruta.estado_origen)} → {formatCiudad(ruta.estado_destino)}
       </span>
+      {/* En teléfono, la duración y el estado van aquí (sus columnas se ocultan). */}
+      <span className="text-xs font-normal text-muted-foreground sm:hidden">
+        {formatDuracion(Number(ruta.duracion_estimada_min) || 0)}
+        {!ruta.activa && " · Inactiva"}
+      </span>
     </span>
   );
 }
@@ -298,9 +303,9 @@ export function RutasClient({ rutas, errorCarga }: { rutas: Ruta[]; errorCarga: 
             <TableHeader>
               <TableRow>
                 <TableHead>Ruta</TableHead>
-                <TableHead>Duración</TableHead>
-                <TableHead className="text-right">Precio del pasaje</TableHead>
-                <TableHead>Estado</TableHead>
+                <TableHead className="hidden sm:table-cell">Duración</TableHead>
+                <TableHead className="text-right">Precio</TableHead>
+                <TableHead className="hidden sm:table-cell">Estado</TableHead>
                 <TableHead className="text-right">
                   <span className="sr-only">Acciones</span>
                 </TableHead>
@@ -309,14 +314,20 @@ export function RutasClient({ rutas, errorCarga }: { rutas: Ruta[]; errorCarga: 
             <TableBody>
               {visibles.map((ruta) => (
                 <TableRow key={ruta.id} className={cn("relative", !ruta.activa && "text-muted-foreground")}>
-                  <CeldaEnlace onAbrir={() => openEditModal(ruta)} etiqueta={`Editar ruta ${nombreRuta(ruta)}`}>
+                  <CeldaEnlace
+                    onAbrir={() => openEditModal(ruta)}
+                    etiqueta={`Editar ruta ${nombreRuta(ruta)}`}
+                    className="whitespace-normal"
+                  >
                     <NombreRuta ruta={ruta} />
                   </CeldaEnlace>
-                  <TableCell className="tabular-nums">{formatDuracion(Number(ruta.duracion_estimada_min) || 0)}</TableCell>
+                  <TableCell className="hidden tabular-nums sm:table-cell">{formatDuracion(Number(ruta.duracion_estimada_min) || 0)}</TableCell>
                   <TableCell className="text-right">
-                    <Monto usd={Number(ruta.precio_pasaje)} size="sm" align="right" />
+                    <Monto usd={Number(ruta.precio_pasaje)} size="sm" align="right" className="hidden sm:inline-flex" />
+                    {/* En teléfono, solo el precio de referencia: la fila cabe sin desplazarse. */}
+                    <span className="text-sm font-medium tabular-nums sm:hidden">{formatUsd(Number(ruta.precio_pasaje))}</span>
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="hidden sm:table-cell">
                     <StatusBadge status={ruta.activa ? "ACTIVO" : "INACTIVO"} dominio="recurso" />
                   </TableCell>
                   <TableCell className="text-right">

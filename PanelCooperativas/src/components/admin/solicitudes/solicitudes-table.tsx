@@ -102,7 +102,7 @@ export function SolicitudesTable({ solicitudes }: SolicitudesTableProps) {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <BarraFiltros busqueda={{ etiqueta: "Buscar", placeholder: "Nombre, RIF, representante o correo" }} />
+        <BarraFiltros busqueda={{ etiqueta: "Buscar", placeholder: "Nombre, RIF o correo" }} />
         <TabsUrl
           param="tab"
           defecto="pendientes"

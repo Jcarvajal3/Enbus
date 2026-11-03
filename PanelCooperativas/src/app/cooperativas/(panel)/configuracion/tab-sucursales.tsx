@@ -298,7 +298,7 @@ export function SucursalesTab({ sucursales: initialSucursales, errorCarga = null
         )}
 
         {showForm && (
-          <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4 rounded-md border border-border p-4">
+          <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4 rounded-md border-border sm:border sm:p-4">
             <h3 className="text-sm font-semibold text-foreground">
               {editingId ? "Editar sucursal" : "Nueva sucursal"}
             </h3>

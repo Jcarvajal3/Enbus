@@ -2,22 +2,25 @@
 
 // ─── Nueva encomienda (cliente sin la app) · #33, P-27 ──────────────────────
 // Tres pasos en <form> (Enter = siguiente): 1 Quién envía · 2 Quién recibe ·
-// 3 Paquete. "Registrar y recibir" llama a fn_registrar_encomienda_taquilla con
+// 3 Paquete ("Continuar" avanza, "Atrás" vuelve). "Registrar y recibir" llama a fn_registrar_encomienda_taquilla con
 // una clave de idempotencia creada al abrir (reintentar no duplica). El
 // resultado muestra el PIN de retiro, "Enviar PIN por WhatsApp", "Imprimir guía"
 // y "Continuar" → foto → cobro (si paga quien envía).
 
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import Link from "next/link";
-import { toast } from "sonner";
-import { CheckCircle, Printer, WhatsappLogo, WarningCircle } from "@phosphor-icons/react";
+import { CheckCircle, Printer, WhatsappLogo } from "@phosphor-icons/react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
+import { AvisoError } from "@/components/aviso-error";
 import { ErrorState } from "@/components/error-state";
+import { GrupoOpciones, OpcionTile } from "@/components/opcion-tile";
+import { avisarError, avisarExito, avisarInfo } from "@/lib/avisos";
 import { Monto } from "@/components/monto";
 import { requireOnline } from "@/components/connectivity-banner";
 import { useUser } from "@/hooks/use-user";
@@ -125,7 +128,7 @@ export function NuevaEncomiendaDialog({ open, onOpenChange, onContinuar, onRegis
         onOpenChange(abierto);
       }}
     >
-      <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-[620px]">
+      <DialogContent tamano="flujo">
         {/* Montado al abrir: cada apertura empieza vacía y con una clave nueva. */}
         {open && (
           <Contenido
@@ -422,7 +425,7 @@ function Contenido({
       };
       setResultado({ registro: r, encomienda });
       onRegistrada?.();
-      if (r.repetido) toast.info("Esta encomienda ya estaba registrada: no se creó otra.");
+      if (r.repetido) avisarInfo("Esta encomienda ya estaba registrada: no se creó otra.");
     } catch (err) {
       setErrorGeneral(humanizeError(err, "registrar la encomienda"));
     } finally {
@@ -450,22 +453,21 @@ function Contenido({
           key={p.n}
           aria-current={p.n === paso ? "step" : undefined}
           className={cn(
-            "flex items-center gap-1.5 rounded-full border px-2.5 py-1",
-            p.n === paso ? "border-foreground bg-foreground text-background" : p.n < paso ? "text-foreground" : "text-muted-foreground"
+            "flex items-center gap-1.5 rounded-full border px-2.5 py-1 font-medium",
+            p.n === paso
+              ? "border-accent-strong bg-accent-strong text-accent-strong-foreground"
+              : p.n < paso
+                ? "border-border text-foreground"
+                : "border-border text-muted-foreground"
           )}
         >
-          <span className="font-semibold">{p.n}</span> {p.titulo}
+          <span className="font-semibold tabular-nums">{p.n}</span> {p.titulo}
         </li>
       ))}
     </ol>
   );
 
-  const errorBanner = errorGeneral && (
-    <p role="alert" className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive-text">
-      <WarningCircle className="mt-0.5 h-4 w-4 shrink-0" weight="fill" aria-hidden />
-      {errorGeneral}
-    </p>
-  );
+  const errorBanner = errorGeneral && <AvisoError>{errorGeneral}</AvisoError>;
 
   const campoPersona = (
     persona: PersonaEncomienda,
@@ -512,10 +514,8 @@ function Contenido({
   return (
     <>
       <DialogHeader>
-        <DialogTitle>Nueva encomienda (sin app)</DialogTitle>
-        <DialogDescription>
-          Para clientes que traen el paquete sin haberlo registrado en la app. Se registra, se pesa y queda recibida.
-        </DialogDescription>
+        <DialogTitle>Nueva encomienda</DialogTitle>
+        <DialogDescription>Cliente sin la app: se registra, se pesa y queda recibida.</DialogDescription>
       </DialogHeader>
       {indicador}
 
@@ -528,24 +528,24 @@ function Contenido({
             <Button type="button" variant="outline" onClick={onCerrar}>
               Cancelar
             </Button>
-            <Button type="submit">Siguiente</Button>
+            <Button type="submit">Continuar</Button>
           </DialogFooter>
         </form>
       )}
 
       {paso === 2 && (
         <form onSubmit={siguientePersona} noValidate className="grid gap-4">
-          <p className="text-sm font-medium">Datos de quien recibe</p>
-          <p className="-mt-2 text-xs text-muted-foreground">
-            Retirará el paquete en el destino con esta cédula y el PIN de retiro.
-          </p>
+          <div className="flex flex-col gap-1">
+            <p className="text-sm font-medium">Datos de quien recibe</p>
+            <p className="text-sm text-muted-foreground">Retira con esta cédula y el PIN.</p>
+          </div>
           {campoPersona(destinatario, setDestinatario, errDestinatario, setErrDestinatario, "des")}
           {errorBanner}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setPaso(1)}>
               Atrás
             </Button>
-            <Button type="submit">Siguiente</Button>
+            <Button type="submit">Continuar</Button>
           </DialogFooter>
         </form>
       )}
@@ -555,14 +555,17 @@ function Contenido({
           {errorDatos && !datos ? (
             <ErrorState compacto titulo="No pudimos cargar las rutas" descripcion={errorDatos} onReintentar={cargarDatos} />
           ) : !datos ? (
-            <p className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Spinner size="sm" /> Cargando sucursales y rutas…
-            </p>
+            <div className="grid gap-4 sm:grid-cols-2" role="status" aria-label="Cargando sucursales y rutas">
+              <Skeleton className="h-14 w-full rounded-md sm:col-span-2" />
+              <Skeleton className="h-14 w-full rounded-md sm:col-span-2" />
+              <Skeleton className="h-14 w-full rounded-md" />
+              <Skeleton className="h-14 w-full rounded-md" />
+            </div>
           ) : datos.sucursales.length === 0 ? (
-            <p className="rounded-lg border border-dashed p-3 text-sm text-muted-foreground">
+            <p className="rounded-md border border-dashed border-border p-3 text-sm text-muted-foreground">
               Tu cooperativa no tiene sucursales activas.{" "}
               {esAdmin ? (
-                <Link href="/cooperativas/configuracion?tab=sucursales" className="font-medium text-foreground underline underline-offset-4">
+                <Link href="/cooperativas/configuracion?tab=sucursales" className="font-medium text-info-text underline underline-offset-4">
                   Crea una sucursal
                 </Link>
               ) : (
@@ -598,10 +601,10 @@ function Contenido({
 
               <Campo id={id("destino")} etiqueta="Destino" error={errPaquete.destino} className="sm:col-span-2">
                 {sucursal && destinos.length === 0 ? (
-                  <p className="rounded-lg border border-dashed p-3 text-sm text-muted-foreground">
+                  <p className="rounded-md border border-dashed border-border p-3 text-sm text-muted-foreground">
                     No hay rutas activas que salgan de {formatCiudad(sucursal.ciudad)}.{" "}
                     {esAdmin ? (
-                      <Link href="/cooperativas/rutas" className="font-medium text-foreground underline underline-offset-4">
+                      <Link href="/cooperativas/rutas" className="font-medium text-info-text underline underline-offset-4">
                         Crear ruta
                       </Link>
                     ) : (
@@ -636,7 +639,7 @@ function Contenido({
                 <Input
                   id={id("contenido")}
                   autoComplete="off"
-                  placeholder="Por ejemplo: ropa y zapatos"
+                  placeholder="Ej. Ropa y zapatos"
                   maxLength={500}
                   value={contenido}
                   aria-invalid={errPaquete.contenido ? true : undefined}
@@ -683,51 +686,36 @@ function Contenido({
                 />
               </Campo>
 
-              <fieldset className="grid gap-2 sm:col-span-2">
-                <legend className="mb-2 text-sm font-medium">¿Quién paga?</legend>
-                <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-invalid={errPaquete.modalidad ? true : undefined}>
+              <div className="grid gap-2 sm:col-span-2">
+                <p className="text-sm font-medium">¿Quién paga?</p>
+                <GrupoOpciones etiqueta="¿Quién paga?" className="grid gap-2 sm:grid-cols-2">
                   {(
                     [
-                      ["ORIGEN", "Paga al enviar (ahora)", "Cobras el envío al terminar de recibirlo."],
-                      ["DESTINO", "Paga al retirar", "Quien recibe paga en la oficina de destino."],
+                      ["ORIGEN", "Paga al enviar", "Cobras el envío al recibirlo."],
+                      ["DESTINO", "Paga al retirar", "Paga quien recibe, en destino."],
                     ] as const
                   ).map(([valorRadio, titulo, ayuda]) => (
-                    <label
+                    <OpcionTile
                       key={valorRadio}
-                      htmlFor={id(`modalidad-${valorRadio}`)}
-                      className={cn(
-                        "grid cursor-pointer grid-cols-[auto_1fr] items-start gap-x-3 rounded-xl border p-3 text-sm transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring",
-                        modalidad === valorRadio ? "border-foreground bg-muted/60" : "hover:bg-muted/40"
-                      )}
-                    >
-                      <input
-                        id={id(`modalidad-${valorRadio}`)}
-                        type="radio"
-                        name={id("modalidad")}
-                        value={valorRadio}
-                        checked={modalidad === valorRadio}
-                        onChange={() => {
-                          setModalidad(valorRadio);
-                          setErrPaquete((p) => ({ ...p, modalidad: undefined }));
-                        }}
-                        className="row-span-2 mt-0.5 accent-foreground"
-                      />
-                      <span className="font-medium">{titulo}</span>
-                      <span className="text-xs text-muted-foreground">{ayuda}</span>
-                    </label>
+                      seleccionado={modalidad === valorRadio}
+                      onSelect={() => {
+                        setModalidad(valorRadio);
+                        setErrPaquete((p) => ({ ...p, modalidad: undefined }));
+                      }}
+                      titulo={titulo}
+                      detalle={ayuda}
+                    />
                   ))}
-                </div>
+                </GrupoOpciones>
                 {errPaquete.modalidad && <p className="text-sm text-destructive-text">{errPaquete.modalidad}</p>}
-              </fieldset>
+              </div>
 
-              <div aria-live="polite" className="flex min-h-[72px] flex-col justify-center rounded-xl border bg-muted/40 p-3 text-sm sm:col-span-2">
-                <p className="mb-1 text-muted-foreground">Costo estimado del envío</p>
+              <div aria-live="polite" className="flex min-h-[72px] flex-col justify-center gap-1 rounded-md bg-muted/50 p-4 text-sm sm:col-span-2">
+                <p className="text-xs font-medium text-muted-foreground">Costo estimado del envío</p>
                 {!claveEstimado ? (
-                  <p className="text-muted-foreground">Elige el destino y escribe el peso para estimarlo.</p>
+                  <p className="text-muted-foreground">Elige el destino y escribe el peso.</p>
                 ) : !estimadoVigente ? (
-                  <p className="flex items-center gap-2 text-muted-foreground">
-                    <Spinner size="sm" /> Calculando…
-                  </p>
+                  <Skeleton className="h-7 w-40" aria-label="Calculando" />
                 ) : estimadoVigente.estado === "listo" ? (
                   <Monto usd={estimadoVigente.usd} bs={estimadoVigente.bs} tasa={estimadoVigente.tasa} size="lg" />
                 ) : (
@@ -743,7 +731,7 @@ function Contenido({
               Atrás
             </Button>
             <Button type="submit" disabled={enviando || !datos || datos.sucursales.length === 0} aria-busy={enviando || undefined}>
-              {enviando && <Spinner size="sm" className="mr-1" />}
+              {enviando && <Spinner size="sm" />}
               {enviando ? "Registrando…" : "Registrar y recibir"}
             </Button>
           </DialogFooter>
@@ -769,7 +757,7 @@ function Campo({
   children: ReactNode;
 }) {
   return (
-    <div className={cn("grid gap-1.5", className)}>
+    <div className={cn("grid gap-2", className)}>
       <Label htmlFor={id}>{etiqueta}</Label>
       {children}
       {error ? (
@@ -777,7 +765,7 @@ function Campo({
           {error}
         </p>
       ) : ayuda ? (
-        <p className="text-xs text-muted-foreground">{ayuda}</p>
+        <p className="text-sm text-muted-foreground">{ayuda}</p>
       ) : null}
     </div>
   );
@@ -813,16 +801,16 @@ function Resultado({
     try {
       if (printer.isConnected) {
         await printGuiaEncomienda(encomienda, { pin, cooperativa });
-        toast.success("Guía enviada a la impresora.");
+        avisarExito("Guía enviada a la impresora.");
       } else if (!imprimirGuiaNavegador(encomienda, { pin, cooperativa })) {
-        toast.error(MSG_VENTANA_BLOQUEADA);
+        avisarError(MSG_VENTANA_BLOQUEADA);
       }
-    } catch (err) {
-      console.error("Error al imprimir la guía:", err);
+    } catch {
+      // Sin Bluetooth, se imprime desde el navegador.
       if (!imprimirGuiaNavegador(encomienda, { pin, cooperativa })) {
-        toast.error(MSG_VENTANA_BLOQUEADA);
+        avisarError(MSG_VENTANA_BLOQUEADA);
       } else {
-        toast.warning("No pudimos imprimir por Bluetooth. Abrimos la impresión del navegador.");
+        avisarInfo("No pudimos imprimir por Bluetooth. Abrimos la impresión del navegador.");
       }
     } finally {
       setImprimiendo(false);
@@ -833,24 +821,24 @@ function Resultado({
     <>
       <DialogHeader>
         <DialogTitle className="flex items-center gap-2">
-          <CheckCircle className="h-6 w-6 text-success-text" weight="fill" aria-hidden />
-          Encomienda {encomienda.tracking_id} registrada.
+          <CheckCircle className="size-5 shrink-0 text-success-text" weight="fill" aria-hidden />
+          <span>
+            Encomienda <span className="font-mono">{encomienda.tracking_id}</span> registrada
+          </span>
         </DialogTitle>
         <DialogDescription>
-          Quedó recibida con {Number(encomienda.peso_kg).toLocaleString("es-VE")} kg. {MODALIDAD_PAGO[encomienda.modalidad_pago].largo}.
+          Recibida con {Number(encomienda.peso_kg).toLocaleString("es-VE")} kg · {MODALIDAD_PAGO[encomienda.modalidad_pago].largo}
         </DialogDescription>
       </DialogHeader>
 
       <div className="grid gap-4">
-        <div className="rounded-xl border-2 border-primary bg-primary/10 p-4">
-          <p className="text-sm text-foreground">PIN de retiro</p>
-          <p className="font-mono text-4xl font-bold tracking-[0.3em] text-foreground">{pin ?? "—"}</p>
-          <p className="mt-1 text-sm text-foreground">
-            Dáselo a quien envía para que se lo pase a quien recibe. Sin el PIN y la cédula no se entrega.
-          </p>
+        <div className="flex flex-col gap-1 rounded-md bg-primary-light p-4">
+          <p className="text-sm font-medium text-foreground">PIN de retiro</p>
+          <p className="font-mono text-4xl font-semibold tracking-widest text-foreground tabular-nums">{pin ?? "—"}</p>
+          <p className="text-sm text-foreground">Dáselo a quien envía. Sin el PIN y la cédula no se entrega.</p>
         </div>
 
-        <div className="flex items-center justify-between rounded-xl bg-muted/40 p-3 text-sm">
+        <div className="flex items-center justify-between gap-3 rounded-md bg-muted/50 p-4 text-sm">
           <span className="text-muted-foreground">Costo del envío</span>
           <Monto
             usd={registro.costo_usd != null ? Number(registro.costo_usd) : null}
@@ -860,32 +848,28 @@ function Resultado({
           />
         </div>
 
-        <div className="grid gap-2 sm:grid-cols-2">
+        <div className="flex flex-wrap gap-2">
           {enlaceWa ? (
-            <a href={enlaceWa} target="_blank" rel="noreferrer" className={cn(buttonVariants({ variant: "outline" }), "h-auto whitespace-normal py-2")}>
-              <WhatsappLogo className="mr-1.5 h-4 w-4 shrink-0" aria-hidden />
-              Enviar PIN por WhatsApp a {destinatario}
+            <a href={enlaceWa} target="_blank" rel="noreferrer" className={buttonVariants({ variant: "outline" })}>
+              <WhatsappLogo aria-hidden />
+              Enviar PIN por WhatsApp
             </a>
           ) : (
-            <p className="text-xs text-muted-foreground">
-              El teléfono de quien recibe no es válido para WhatsApp: dicta el PIN a quien envía.
-            </p>
+            <p className="text-sm text-muted-foreground">El teléfono no sirve para WhatsApp: dicta el PIN a quien envía.</p>
           )}
-          <Button variant="outline" onClick={() => void imprimir()} disabled={imprimiendo}>
-            {imprimiendo ? <Spinner size="sm" className="mr-1.5" /> : <Printer className="mr-1.5 h-4 w-4" aria-hidden />}
+          <Button variant="outline" onClick={() => void imprimir()} disabled={imprimiendo} aria-busy={imprimiendo || undefined}>
+            {imprimiendo ? <Spinner size="sm" /> : <Printer aria-hidden />}
             Imprimir guía
           </Button>
         </div>
       </div>
 
-      <DialogFooter>
+      <DialogFooter className="sm:items-center sm:justify-between">
+        <p className="text-sm text-muted-foreground">Sigue: foto del paquete{pagaAhora ? " y cobro del envío" : ""}.</p>
         <Button onClick={onContinuar} autoFocus>
           Continuar
         </Button>
       </DialogFooter>
-      <p className="-mt-2 text-right text-xs text-muted-foreground">
-        Sigue: foto del paquete{pagaAhora ? " y cobro del envío" : ""}.
-      </p>
     </>
   );
 }

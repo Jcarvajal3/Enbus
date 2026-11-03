@@ -7,8 +7,7 @@
 // La foto va al bucket privado en "<encomiendaId>/<ts>.jpg" y se guarda la RUTA.
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
-import { toast } from "sonner";
-import { ArrowUUpLeft, Camera, CameraSlash, Check, FastForward, UploadSimple, WarningCircle } from "@phosphor-icons/react";
+import { ArrowUUpLeft, Camera, CameraSlash, Check, FastForward, UploadSimple } from "@phosphor-icons/react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -20,6 +19,8 @@ import { BUCKET_FOTOS, rutaNuevaFoto } from "@/lib/fotos";
 import { humanizeError, isNetworkError } from "@/lib/errores";
 import { guardarFotoEncomienda } from "@/app/cooperativas/(panel)/taquilla/encomiendas/actions";
 import { cn } from "@/lib/utils";
+import { AvisoError } from "@/components/aviso-error";
+import { avisarExito, avisarInfo } from "@/lib/avisos";
 
 const MSG_ERROR_SUBIDA = "No pudimos subir la foto. Intenta de nuevo o súbela después desde el detalle.";
 const MOTIVOS_OMITIR = ["La cámara no funciona", "El cliente tiene prisa", "Otro"];
@@ -223,7 +224,7 @@ export function PhotoCaptureModal({ encomiendaId, trackingId, isOpen, onClose, o
         setError(res.error);
         return;
       }
-      toast.success("Foto guardada.");
+      avisarExito("Foto guardada.");
       onListo("foto");
     } catch (err) {
       setError(isNetworkError(err) ? humanizeError(err) : MSG_ERROR_SUBIDA);
@@ -249,7 +250,7 @@ export function PhotoCaptureModal({ encomiendaId, trackingId, isOpen, onClose, o
         setError(res.error);
         return;
       }
-      toast.info("Foto omitida. Agrégala después desde el detalle de la encomienda.");
+      avisarInfo("Foto omitida. Agrégala desde el detalle.");
       onListo("omitida");
     } catch (err) {
       setError(humanizeError(err, "guardar el motivo"));
@@ -266,13 +267,13 @@ export function PhotoCaptureModal({ encomiendaId, trackingId, isOpen, onClose, o
 
   return (
     <Dialog open={isOpen} onOpenChange={(abierto) => !abierto && cerrar()}>
-      <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-[520px]">
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>{modo === "omitir" ? "Omitir la foto por ahora" : "Foto del paquete"}</DialogTitle>
           <DialogDescription>
             {modo === "omitir"
-              ? "La encomienda quedará marcada «Falta foto». Agrégala después desde su detalle."
-              : `Toma una foto del paquete con la guía visible${trackingId ? ` (${trackingId})` : ""}. Sirve como prueba si hay un reclamo.`}
+              ? "Queda marcada «Falta foto»: agrégala después desde su detalle."
+              : `Con la guía visible${trackingId ? ` (${trackingId})` : ""}. Sirve de prueba si hay un reclamo.`}
           </DialogDescription>
         </DialogHeader>
 
@@ -295,41 +296,41 @@ export function PhotoCaptureModal({ encomiendaId, trackingId, isOpen, onClose, o
           <div className="flex flex-col gap-4">
             {cameraError ? (
               <Alert>
-                <CameraSlash className="h-5 w-5" aria-hidden />
+                <CameraSlash aria-hidden />
                 <AlertTitle>No se puede usar la cámara</AlertTitle>
                 <AlertDescription>{cameraError}</AlertDescription>
               </Alert>
             ) : (
-              <div className="relative flex aspect-video w-full items-center justify-center overflow-hidden rounded-lg border bg-black">
+              <div className="relative flex aspect-video w-full items-center justify-center overflow-hidden rounded-md border border-border bg-black">
                 <video
                   ref={videoRef}
                   autoPlay
                   playsInline
                   muted
                   aria-label="Vista de la cámara"
-                  className={cn("h-full w-full object-cover", !stream && "invisible")}
+                  className={cn("size-full object-cover", !stream && "invisible")}
                 />
                 {!stream && (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center text-white/80">
-                    <Spinner size="md" className="mb-2" />
+                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-white/80">
+                    <Spinner size="md" />
                     <span className="text-sm">Encendiendo la cámara…</span>
                   </div>
                 )}
                 {stream && (
                   <div className="pointer-events-none absolute inset-0 flex items-center justify-center" aria-hidden>
-                    <div className="h-3/4 w-3/4 rounded-md border-2 border-dashed border-white/60" />
+                    <div className="size-3/4 rounded-sm border-2 border-dashed border-white/60" />
                   </div>
                 )}
               </div>
             )}
 
             <div className="grid gap-2 sm:grid-cols-2">
-              <Button size="lg" onClick={capturar} disabled={!stream || guardando} className="h-12">
-                <Camera className="mr-2 h-5 w-5" aria-hidden />
+              <Button size="lg" onClick={capturar} disabled={!stream || guardando}>
+                <Camera aria-hidden />
                 Tomar foto
               </Button>
-              <Button size="lg" variant="outline" onClick={() => archivoRef.current?.click()} disabled={guardando} className="h-12">
-                <UploadSimple className="mr-2 h-5 w-5" aria-hidden />
+              <Button size="lg" variant="outline" onClick={() => archivoRef.current?.click()} disabled={guardando}>
+                <UploadSimple aria-hidden />
                 Subir archivo
               </Button>
             </div>
@@ -338,17 +339,17 @@ export function PhotoCaptureModal({ encomiendaId, trackingId, isOpen, onClose, o
 
         {modo === "vista" && previewUrl && (
           <div className="flex flex-col gap-4">
-            <div className="aspect-video w-full overflow-hidden rounded-lg border bg-black">
+            <div className="aspect-video w-full overflow-hidden rounded-md border border-border bg-black">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={previewUrl} alt="Vista previa de la foto del paquete" className="h-full w-full object-contain" />
+              <img src={previewUrl} alt="Vista previa de la foto del paquete" className="size-full object-contain" />
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <Button variant="outline" onClick={otraFoto} disabled={guardando} className="h-12">
-                <ArrowUUpLeft className="mr-2 h-5 w-5" aria-hidden />
+              <Button size="lg" variant="outline" onClick={otraFoto} disabled={guardando}>
+                <ArrowUUpLeft aria-hidden />
                 Tomar otra
               </Button>
-              <Button onClick={() => void guardarFoto()} disabled={guardando} className="h-12" autoFocus>
-                {guardando ? <Spinner size="sm" className="mr-2" /> : <Check className="mr-2 h-5 w-5" aria-hidden />}
+              <Button size="lg" onClick={() => void guardarFoto()} disabled={guardando} aria-busy={guardando || undefined} autoFocus>
+                {guardando ? <Spinner size="sm" /> : <Check aria-hidden />}
                 {guardando ? "Subiendo…" : "Guardar foto"}
               </Button>
             </div>
@@ -370,7 +371,10 @@ export function PhotoCaptureModal({ encomiendaId, trackingId, isOpen, onClose, o
                   key={m}
                   type="button"
                   size="sm"
-                  variant={chip === m ? "default" : "outline"}
+                  variant="outline"
+                  className={cn(
+                    chip === m && "border-accent-strong bg-accent-strong text-accent-strong-foreground hover:bg-accent-strong/90"
+                  )}
                   aria-pressed={chip === m}
                   disabled={guardando}
                   onClick={() => {
@@ -384,8 +388,8 @@ export function PhotoCaptureModal({ encomiendaId, trackingId, isOpen, onClose, o
               ))}
             </div>
             {chip === "Otro" && (
-              <div className="grid gap-1.5">
-                <Label htmlFor={`${uid}-motivo`}>Cuéntanos el motivo</Label>
+              <div className="grid gap-2">
+                <Label htmlFor={`${uid}-motivo`}>Motivo</Label>
                 <Textarea
                   id={`${uid}-motivo`}
                   ref={motivoRef}
@@ -401,29 +405,24 @@ export function PhotoCaptureModal({ encomiendaId, trackingId, isOpen, onClose, o
               </div>
             )}
             {errorMotivo && <p className="text-sm text-destructive-text">{errorMotivo}</p>}
-            <DialogFooter className="mt-2">
+            <DialogFooter className="mt-2 sm:justify-between">
               <Button type="button" variant="outline" onClick={() => setModo("camara")} disabled={guardando}>
-                Volver a la foto
+                Atrás
               </Button>
-              <Button type="submit" disabled={guardando}>
-                {guardando && <Spinner size="sm" className="mr-2" />}
+              <Button type="submit" disabled={guardando} aria-busy={guardando || undefined}>
+                {guardando && <Spinner size="sm" />}
                 {guardando ? "Guardando…" : "Omitir por ahora"}
               </Button>
             </DialogFooter>
           </form>
         )}
 
-        {error && (
-          <p role="alert" className="flex items-start gap-2 text-sm text-destructive-text">
-            <WarningCircle className="mt-0.5 h-4 w-4 shrink-0" weight="fill" aria-hidden />
-            {error}
-          </p>
-        )}
+        {error && <AvisoError>{error}</AvisoError>}
 
         {modo !== "omitir" && (
-          <div className="flex flex-col-reverse gap-2 border-t pt-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col-reverse gap-2 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between">
             <Button
-              variant="ghost"
+              variant="outline"
               size="sm"
               onClick={() => {
                 apagarCamara();
@@ -432,10 +431,10 @@ export function PhotoCaptureModal({ encomiendaId, trackingId, isOpen, onClose, o
               }}
               disabled={guardando}
             >
-              <FastForward className="mr-1.5 h-4 w-4" aria-hidden />
+              <FastForward aria-hidden />
               Omitir por ahora
             </Button>
-            {siguiente && <p className="text-xs text-muted-foreground">{siguiente}</p>}
+            {siguiente && <p className="text-sm text-muted-foreground">{siguiente}</p>}
           </div>
         )}
       </DialogContent>

@@ -39,7 +39,6 @@ import {
   EntityCard,
   ErrorState,
   FloatingBar,
-  InfoRow,
   Monto,
   RouteSummary,
   Screen,
@@ -1107,7 +1106,7 @@ export default function BuscarBoletoScreen() {
                   <ReservaTimer
                     segundos={segundosReserva}
                     titulo={tituloReserva}
-                    detalle="Completa tu compra antes de que venza."
+                    detalle="Termina antes de que venza."
                   />
                 </View>
                 <PasajerosForm
@@ -1273,7 +1272,12 @@ function TripCard({ viaje }: { viaje: ViajeResumen }) {
       <Divider spacing={Spacing.lg} />
 
       <View style={s.tripFooter}>
-        <InfoRow label="Fecha" value={formatDiaVE(viaje.fecha_hora_salida)} />
+        <View style={s.fechaBlock}>
+          <Text variant="caption" color="muted">
+            Fecha
+          </Text>
+          <Text variant="bodyStrong">{formatDiaVE(viaje.fecha_hora_salida)}</Text>
+        </View>
         <View style={s.totalBlock}>
           <Text variant="caption" color="muted" align="right">
             Por asiento
@@ -1365,9 +1369,12 @@ const s = StyleSheet.create({
   },
   tripFooter: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
     gap: Spacing.md,
+  },
+  fechaBlock: {
+    gap: Spacing.xs,
   },
   totalBlock: {
     alignItems: 'flex-end',

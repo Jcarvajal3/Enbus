@@ -216,8 +216,10 @@ export function SeatSelector({
         </Text>
         {filas.map((fila, rowIndex) => (
           <View key={`fila-${rowIndex}`} style={s.fila}>
-            {fila.map((seat, colIndex) =>
-              seat === '' ? (
+            {completarFila(fila).map((seat, colIndex) =>
+              seat === HUECO ? (
+                <View key={`hueco-${rowIndex}-${colIndex}`} style={s.hueco} />
+              ) : seat === '' ? (
                 <View key={`pasillo-${rowIndex}-${colIndex}`} style={s.pasillo} />
               ) : (
                 <SeatButton
@@ -235,6 +237,20 @@ export function SeatSelector({
       </View>
     </View>
   );
+}
+
+/** Hueco de una fila incompleta (la última): conserva las columnas del bus. */
+const HUECO = '·';
+
+/** 2 + pasillo + 2: la última fila puede venir corta y se completa con huecos. */
+function completarFila(fila: string[]): string[] {
+  const conPasillo = fila.includes('') ? fila : [...fila, ''];
+  const pasillo = conPasillo.indexOf('');
+  const izquierda = conPasillo.slice(0, pasillo);
+  const derecha = conPasillo.slice(pasillo + 1);
+  while (izquierda.length < 2) izquierda.push(HUECO);
+  while (derecha.length < 2) derecha.push(HUECO);
+  return [...izquierda, '', ...derecha];
 }
 
 function Leyenda({ tipo, label }: { tipo: TipoAsiento; label: string }) {
@@ -315,6 +331,10 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: Sizes.borderStrong,
+  },
+  hueco: {
+    width: SEAT_SIZE,
+    height: SEAT_SIZE,
   },
   pasillo: {
     width: Spacing.xl,

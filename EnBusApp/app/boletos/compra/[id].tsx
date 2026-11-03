@@ -235,7 +235,7 @@ export default function CompraScreen() {
             tono: 'info' as const,
             titulo: reservados.length === 1 ? 'Tu asiento está apartado' : 'Tus asientos están apartados',
             texto: expiraMin
-              ? `Paga en la taquilla de ${cooperativa} antes de las ${formatHora(expiraMin)}.`
+              ? `Paga en la taquilla de ${cooperativa} antes de las ${formatHora(expiraMin)}`
               : `Paga en la taquilla de ${cooperativa} antes de que venza la reserva.`,
           }
         : null;
@@ -284,6 +284,7 @@ export default function CompraScreen() {
             origen={ruta?.ciudad_origen}
             destino={ruta?.ciudad_destino}
             duration={minutos > 0 ? formatDuracion(minutos) : undefined}
+            horaSalida={formatHora(viaje?.fecha_hora_salida) || undefined}
           />
           <Divider spacing={Spacing.lg} />
           <View style={s.resumenFila}>

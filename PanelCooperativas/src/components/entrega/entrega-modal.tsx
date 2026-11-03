@@ -13,13 +13,13 @@
 // el taquillero ve a quién pedírselo.
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
-import { toast } from "sonner";
 import { CheckCircle, LockKey, Warning, WhatsappLogo } from "@phosphor-icons/react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { createClient } from "@/lib/supabase/client";
@@ -36,6 +36,9 @@ import { VerificarPagoDialog } from "@/components/pagos/verificar-pago-dialog";
 import { CobroEncomiendaForm } from "@/components/encomiendas/pago-modal";
 import { remitenteDe } from "@/components/encomiendas/detalle-sheet";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { AvisoError } from "@/components/aviso-error";
+import { StatusBadge } from "@/components/status-badge";
+import { avisarError, avisarExito } from "@/lib/avisos";
 import { ErrorState } from "@/components/error-state";
 import { Monto } from "@/components/monto";
 import { CedulaField } from "@/components/ve-fields";
@@ -310,7 +313,7 @@ export function EntregaModal({ encomiendaId, isOpen, onClose, onSuccess }: Entre
 
       if (result.success) {
         const nombre = result.data.retiro_nombre || encomienda.receiver_nombre;
-        toast.success(
+        avisarExito(
           result.data.ya_procesado
             ? `La encomienda ${encomienda.tracking_id} ya estaba entregada.`
             : `Encomienda ${encomienda.tracking_id} entregada a ${nombre}.`
@@ -321,7 +324,7 @@ export function EntregaModal({ encomiendaId, isOpen, onClose, onSuccess }: Entre
       }
       switch (result.codigo) {
         case "EB_COBRO_PENDIENTE":
-          toast.error(textoFaltaCobrar());
+          setErrores({ general: textoFaltaCobrar() });
           await cargarCobro(encomienda.id);
           break;
         case "EB_PIN_INCORRECTO":
@@ -340,7 +343,8 @@ export function EntregaModal({ encomiendaId, isOpen, onClose, onSuccess }: Entre
           break;
         case "EB_ESTADO_CAMBIO":
         case "EB_NO_ENCONTRADO":
-          toast.error(result.error);
+          // La encomienda cambió (otro compañero la entregó): se cierra y el motivo queda en un aviso.
+          avisarError(result.error);
           onSuccess?.();
           onClose();
           break;
@@ -380,15 +384,15 @@ export function EntregaModal({ encomiendaId, isOpen, onClose, onSuccess }: Entre
       );
     } else if (cobro) {
       seccionCobro = (
-        <div className="space-y-4">
-          <div className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning-light p-3 text-warning-deep">
-            <Warning size={20} weight="fill" className="mt-0.5 shrink-0" aria-hidden />
+        <div className="flex flex-col gap-4">
+          <div role="status" className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning-light p-3 text-sm text-warning-deep">
+            <Warning weight="fill" className="mt-0.5 size-4 shrink-0 text-warning-text" aria-hidden />
             <div className="flex flex-col gap-1">
               <span className="font-medium">
-                {MODALIDAD_PAGO.DESTINO.corto}: cobra el envío antes de entregarlo.
+                {MODALIDAD_PAGO.DESTINO.corto}: cóbralo antes de entregar.
               </span>
               {cobro.rechazado && (
-                <span className="text-sm">
+                <span>
                   El último pago reportado se rechazó{cobro.rechazado.motivo ? `: ${cobro.rechazado.motivo}` : ""}.
                 </span>
               )}
@@ -403,22 +407,19 @@ export function EntregaModal({ encomiendaId, isOpen, onClose, onSuccess }: Entre
       );
     } else {
       seccionCobro = (
-        <p className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Spinner size="sm" aria-label="Cargando" /> Revisando el pago…
-        </p>
+        <div className="flex flex-col gap-3" role="status" aria-label="Revisando el pago">
+          <Skeleton className="h-12 w-full rounded-md" />
+          <Skeleton className="h-32 w-full rounded-md" />
+        </div>
       );
     }
   }
 
   // ── Paso 2: PIN ──
   const seccionPin = encomienda && paso === "pin" && (
-    <div className="space-y-3">
-      {avisoPin && !pinBloqueado && (
-        <p role="alert" className="text-center text-sm font-medium text-destructive-text">
-          {avisoPin}
-        </p>
-      )}
-      <div className="rounded-md border border-dashed bg-background p-4">
+    <div className="flex flex-col gap-3">
+      {avisoPin && !pinBloqueado && <AvisoError>{avisoPin}</AvisoError>}
+      <div className="rounded-md border border-dashed border-border-strong bg-background p-4">
         <PinInput
           key={pinKey}
           encomiendaId={encomienda.id}
@@ -437,48 +438,52 @@ export function EntregaModal({ encomiendaId, isOpen, onClose, onSuccess }: Entre
       </div>
       {pinBloqueado ? (
         esAdmin ? (
-          <div className="space-y-2 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm">
-            <p className="font-medium text-destructive-text">El PIN se bloqueó por intentos fallidos.</p>
-            <p className="text-muted-foreground">
-              Desbloquéalo si quien retira recuerda el PIN, o entrega sin PIN si ya confirmaste su identidad.
-            </p>
-            <div className="flex flex-wrap gap-2">
-              <Button size="sm" variant="outline" onClick={() => setDesbloquearOpen(true)}>
-                Desbloquear PIN
-              </Button>
-              <Button size="sm" variant="outline" onClick={() => setSinPinOpen(true)}>
-                Entregar sin PIN
-              </Button>
+          <AvisoError>
+            <div className="flex flex-col gap-3">
+              <p>
+                <span className="font-semibold">El PIN se bloqueó por intentos fallidos.</span> Desbloquéalo si quien retira lo
+                recuerda, o entrega sin PIN si ya confirmaste su identidad.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" variant="outline" onClick={() => setDesbloquearOpen(true)}>
+                  Desbloquear PIN
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => setSinPinOpen(true)}>
+                  Entregar sin PIN
+                </Button>
+              </div>
             </div>
-          </div>
+          </AvisoError>
         ) : (
-          <div className="space-y-2 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm">
-            <p className="flex items-start gap-2 text-destructive-text">
-              <LockKey size={18} weight="fill" className="mt-0.5 shrink-0" aria-hidden />
-              <span>
-                El PIN se bloqueó por intentos fallidos. Pídele al administrador de tu cooperativa que lo desbloquee
-                {soporte ? ` o que el destinatario nos escriba por WhatsApp al ${soporte.numero}` : ""}.
-              </span>
-            </p>
-            {soporte && (
-              <a
-                href={soporte.enlace}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1.5 font-medium text-foreground underline underline-offset-4"
-              >
-                <WhatsappLogo size={16} aria-hidden /> Abrir WhatsApp de soporte
-              </a>
-            )}
-          </div>
+          <AvisoError>
+            <div className="flex flex-col gap-2">
+              <p className="flex items-start gap-2">
+                <LockKey className="mt-0.5 size-4 shrink-0" aria-hidden />
+                <span>
+                  El PIN se bloqueó por intentos fallidos. Pídele al administrador que lo desbloquee
+                  {soporte ? ` o que el destinatario nos escriba por WhatsApp al ${soporte.numero}` : ""}.
+                </span>
+              </p>
+              {soporte && (
+                <a
+                  href={soporte.enlace}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1.5 self-start font-medium text-info-text underline underline-offset-4"
+                >
+                  <WhatsappLogo className="size-4" aria-hidden /> Abrir WhatsApp de soporte
+                </a>
+              )}
+            </div>
+          </AvisoError>
         )
       ) : (
         esAdmin && (
-          <p className="text-center text-xs text-muted-foreground">
+          <p className="text-center text-sm text-muted-foreground">
             ¿Quien retira no tiene el PIN?{" "}
             <button
               type="button"
-              className="font-medium text-foreground underline underline-offset-4"
+              className="rounded-xs font-medium text-info-text underline underline-offset-4 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
               onClick={() => setSinPinOpen(true)}
             >
               Entregar sin PIN
@@ -491,7 +496,7 @@ export function EntregaModal({ encomiendaId, isOpen, onClose, onSuccess }: Entre
 
   // ── Paso 3: identidad ──
   const seccionIdentidad = encomienda && paso === "identidad" && (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-4">
       {sinPinMotivo ? (
         <p className="rounded-md border border-warning/40 bg-warning-light p-3 text-sm text-warning-deep">
           Entrega sin PIN: {sinPinMotivo}
@@ -499,7 +504,7 @@ export function EntregaModal({ encomiendaId, isOpen, onClose, onSuccess }: Entre
       ) : (
         <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
           <span className="inline-flex items-center gap-2 font-medium text-success-text">
-            <CheckCircle size={18} weight="fill" aria-hidden /> PIN correcto
+            <CheckCircle className="size-4" weight="fill" aria-hidden /> PIN correcto
           </span>
           {pinValidadoAt !== null && (
             <span className="text-muted-foreground">
@@ -509,9 +514,9 @@ export function EntregaModal({ encomiendaId, isOpen, onClose, onSuccess }: Entre
         </p>
       )}
 
-      <div className="rounded-md border bg-muted/30 p-4">
+      <div className="flex flex-col gap-1 rounded-md bg-muted/50 p-4">
         <p className="text-sm font-semibold">Revisa la cédula de quien retira</p>
-        <p className="mt-1 text-base">
+        <p className="text-base">
           {encomienda.receiver_nombre} · <span className="font-mono">{formatCedula(encomienda.receiver_cedula_rif)}</span>
         </p>
       </div>
@@ -523,7 +528,7 @@ export function EntregaModal({ encomiendaId, isOpen, onClose, onSuccess }: Entre
 
       {tercero && (
         <div className="grid gap-3 sm:grid-cols-2">
-          <div className="grid gap-1.5">
+          <div className="grid gap-2">
             <Label htmlFor={id("tercero-nombre")}>Nombre de quien retira</Label>
             <Input
               id={id("tercero-nombre")}
@@ -551,7 +556,7 @@ export function EntregaModal({ encomiendaId, isOpen, onClose, onSuccess }: Entre
         </div>
       )}
 
-      <div className="space-y-1">
+      <div className="flex flex-col gap-2">
         <div className="flex items-start gap-3">
           <Checkbox
             ref={cedulaRef}
@@ -576,12 +581,14 @@ export function EntregaModal({ encomiendaId, isOpen, onClose, onSuccess }: Entre
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && !isConfirming && !desbloquearOpen && !sinPinOpen && onClose()}>
-      <DialogContent className="max-h-[92vh] max-w-2xl overflow-y-auto">
+      <DialogContent tamano="flujo">
         {loading && !encomienda ? (
-          <div className="flex h-[360px] flex-col items-center justify-center">
+          <div className="flex flex-col gap-5" role="status" aria-label="Cargando la encomienda">
             <DialogTitle className="sr-only">Cargando la encomienda</DialogTitle>
-            <Spinner size="lg" />
-            <span className="mt-4 font-medium text-muted-foreground">Cargando la encomienda…</span>
+            <Skeleton className="h-6 w-56" />
+            <Skeleton className="h-4 w-72" />
+            <Skeleton className="h-24 w-full rounded-md" />
+            <Skeleton className="h-40 w-full rounded-md" />
           </div>
         ) : errorCarga && !encomienda ? (
           <>
@@ -591,12 +598,12 @@ export function EntregaModal({ encomiendaId, isOpen, onClose, onSuccess }: Entre
         ) : encomienda ? (
           <>
             <DialogHeader>
-              <DialogTitle className="text-xl">
-                Entregar <span className="font-mono tracking-wider">{encomienda.tracking_id}</span>
+              <DialogTitle>
+                Entregar <span className="font-mono">{encomienda.tracking_id}</span>
               </DialogTitle>
               <DialogDescription>
-                {encomienda.descripcion_contenido || "Sin descripción"} · {encomienda.peso_kg || 0} kg ·{" "}
-                {diasHabiles} {diasHabiles === 1 ? "día hábil" : "días hábiles"} en la oficina
+                {encomienda.descripcion_contenido || "Sin descripción"} ·{" "}
+                {encomienda.peso_kg ? `${String(encomienda.peso_kg).replace(".", ",")} kg` : "sin peso"}
               </DialogDescription>
             </DialogHeader>
 
@@ -606,79 +613,77 @@ export function EntregaModal({ encomiendaId, isOpen, onClose, onSuccess }: Entre
                   key={p.id}
                   aria-current={p.id === paso ? "step" : undefined}
                   className={cn(
-                    "flex items-center gap-1.5 rounded-full border px-2.5 py-1",
+                    "flex items-center gap-1.5 rounded-full border px-2.5 py-1 font-medium",
                     p.id === paso
-                      ? "border-foreground bg-foreground text-background"
+                      ? "border-accent-strong bg-accent-strong text-accent-strong-foreground"
                       : i < indicePaso
-                        ? "text-success-text"
-                        : "text-muted-foreground"
+                        ? "border-border text-success-text"
+                        : "border-border text-muted-foreground"
                   )}
                 >
-                  {i < indicePaso ? <CheckCircle size={14} weight="fill" aria-hidden /> : <span className="font-semibold">{i + 1}</span>}
+                  {i < indicePaso ? (
+                    <CheckCircle className="size-3.5" weight="fill" aria-hidden />
+                  ) : (
+                    <span className="font-semibold tabular-nums">{i + 1}</span>
+                  )}
                   {p.titulo}
                 </li>
               ))}
             </ol>
 
-            <div className="grid grid-cols-1 gap-3 rounded-md border bg-muted/20 p-4 text-sm sm:grid-cols-2">
-              <div>
-                <span className="block text-xs text-muted-foreground">Destinatario</span>
-                <span className="font-medium">{encomienda.receiver_nombre}</span>
-                <span className="block text-xs text-muted-foreground">
+            <dl className="grid grid-cols-1 gap-3 rounded-md bg-muted/50 p-4 text-sm sm:grid-cols-2">
+              <div className="flex flex-col gap-0.5">
+                <dt className="text-xs text-muted-foreground">Destinatario</dt>
+                <dd className="font-medium">{encomienda.receiver_nombre}</dd>
+                <dd className="text-xs text-muted-foreground">
                   {formatCedula(encomienda.receiver_cedula_rif)} · {formatTelefono(encomienda.receiver_telefono)}
-                </span>
+                </dd>
               </div>
-              <div>
-                <span className="block text-xs text-muted-foreground">Remitente</span>
-                <span className="font-medium">{remitente?.nombre}</span>
+              <div className="flex flex-col gap-0.5">
+                <dt className="text-xs text-muted-foreground">Remitente</dt>
+                <dd className="font-medium">{remitente?.nombre}</dd>
               </div>
-              <div>
-                <span className="block text-xs text-muted-foreground">Cobro</span>
-                {pagoOk ? (
-                  <span className="font-medium text-success-text">
-                    {cobroEnDestino ? "Pagada" : "Pagada al enviar"}
-                  </span>
-                ) : (
-                  <div className="font-medium text-warning-text">
-                    Cobrar al retirar
-                    {Number(encomienda.costo_calculado) > 0 && (
-                      <Monto usd={Number(encomienda.costo_calculado)} size="sm" className="block" />
-                    )}
-                  </div>
-                )}
+              <div className="flex flex-col items-start gap-1">
+                <dt className="text-xs text-muted-foreground">Cobro</dt>
+                <dd className="flex flex-col items-start gap-1">
+                  {pagoOk ? (
+                    <StatusBadge status="PAGADO" dominio="cobro" />
+                  ) : (
+                    <>
+                      <StatusBadge status="SIN_PAGO" dominio="cobro" />
+                      {Number(encomienda.costo_calculado) > 0 && <Monto usd={Number(encomienda.costo_calculado)} size="sm" />}
+                    </>
+                  )}
+                </dd>
               </div>
-              <div>
-                <span className="block text-xs text-muted-foreground">En la oficina</span>
-                <span className="font-medium">{textoDevolucion(diasHabiles)}</span>
+              <div className="flex flex-col gap-0.5">
+                <dt className="text-xs text-muted-foreground">En la oficina</dt>
+                <dd className="font-medium">
+                  {diasHabiles} {diasHabiles === 1 ? "día hábil" : "días hábiles"}
+                </dd>
+                <dd className="text-xs text-muted-foreground">{textoDevolucion(diasHabiles)}</dd>
               </div>
-            </div>
+            </dl>
 
-            <div className="space-y-4">
+            <div className="flex flex-col gap-4">
               {seccionCobro}
               {seccionPin}
               {seccionIdentidad}
             </div>
 
-            {errores.general && (
-              <p role="alert" className="text-sm text-destructive-text">
-                {errores.general}
-              </p>
-            )}
+            {errores.general && <AvisoError>{errores.general}</AvisoError>}
 
-            <DialogFooter className="mt-2 border-t pt-4">
-              {paso === "cobro" && (
-                <p className="mr-auto self-center text-sm text-muted-foreground">Cobra el envío para seguir con el PIN.</p>
-              )}
-              <Button variant="ghost" onClick={onClose} disabled={isConfirming}>
+            <DialogFooter className="border-t border-border pt-4 sm:justify-between">
+              <Button variant="outline" onClick={onClose} disabled={isConfirming}>
                 Cancelar
               </Button>
               <Button
                 disabled={paso !== "identidad" || isConfirming}
-                className="gap-2"
                 onClick={() => void handleEntregar()}
                 aria-busy={isConfirming || undefined}
+                title={paso === "cobro" ? "Cobra el envío para seguir con el PIN." : undefined}
               >
-                {isConfirming ? <Spinner className="h-4 w-4" /> : <CheckCircle size={18} weight="bold" aria-hidden />}
+                {isConfirming ? <Spinner size="sm" /> : <CheckCircle aria-hidden />}
                 {isConfirming ? "Entregando…" : "Entregar encomienda"}
               </Button>
             </DialogFooter>
@@ -707,7 +712,7 @@ export function EntregaModal({ encomiendaId, isOpen, onClose, onSuccess }: Entre
                   setIntentos(0);
                   setAvisoPin(null);
                   setPinKey((k) => k + 1);
-                  toast.success("PIN desbloqueado. Pídele el PIN a quien retira.");
+                  avisarExito("PIN desbloqueado. Pídele el PIN a quien retira.");
                   return { ok: true };
                 } catch (err) {
                   return { ok: false, error: mensajeExcepcion(err, "desbloquear el PIN") };

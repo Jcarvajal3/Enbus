@@ -7,7 +7,7 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { validarPin } from "@/app/cooperativas/(panel)/entrega/actions";
-import { CheckCircle, Warning, LockKey } from "@phosphor-icons/react";
+import { CheckCircle, LockKey, WarningCircle } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 import { requireOnline } from "@/components/connectivity-banner";
 import { humanizeError, isNetworkError } from "@/lib/errores";
@@ -83,7 +83,7 @@ export function PinInput({ encomiendaId, initialIntentos, initialBloqueado, onVa
   const conError = Boolean(errorMsg) && !isBlocked && !isSuccess;
 
   return (
-    <div className="flex flex-col items-center justify-center py-2 space-y-4">
+    <div className="flex flex-col items-center justify-center gap-4 py-2">
       <label htmlFor={`${uid}-pin`} className="text-sm font-medium">
         Pídele a quien retira su PIN de 4 dígitos
       </label>
@@ -112,7 +112,7 @@ export function PinInput({ encomiendaId, initialIntentos, initialBloqueado, onVa
             <InputOTPSlot
               key={i}
               index={i}
-              className={cn(isSuccess && "border-success", conError && "border-2 border-destructive")}
+              className={cn(isSuccess && "border-success", conError && "border-destructive-text")}
             />
           ))}
         </InputOTPGroup>
@@ -123,17 +123,17 @@ export function PinInput({ encomiendaId, initialIntentos, initialBloqueado, onVa
           <span className="text-muted-foreground">Revisando el PIN…</span>
         ) : isSuccess ? (
           <span className="flex items-center gap-1.5 font-medium text-success-text">
-            <CheckCircle size={18} weight="fill" aria-hidden />
+            <CheckCircle className="size-4" weight="fill" aria-hidden />
             PIN correcto
           </span>
         ) : isBlocked ? (
           <span className="flex items-center gap-1.5 font-medium text-destructive-text">
-            <LockKey size={18} weight="fill" aria-hidden />
+            <LockKey className="size-4" weight="fill" aria-hidden />
             {errorMsg || "El PIN se bloqueó por intentos fallidos."}
           </span>
         ) : errorMsg ? (
           <span className="flex items-center gap-1.5 font-medium text-destructive-text" role="alert">
-            <Warning size={18} aria-hidden />
+            <WarningCircle className="size-4" weight="fill" aria-hidden />
             {errorMsg}
           </span>
         ) : (

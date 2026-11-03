@@ -9,29 +9,23 @@
 
 import { formatCiudad } from "@/lib/ciudades";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
-import { toast } from "sonner";
-import { Info, Warning } from "@phosphor-icons/react";
+import { cn } from "@/lib/utils";
+import { Bank, CheckCircle, CurrencyDollar, DeviceMobile, Money, Warning, type Icon } from "@phosphor-icons/react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Spinner } from "@/components/ui/spinner";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Monto } from "@/components/monto";
+import { AvisoError } from "@/components/aviso-error";
+import { ConfirmDialog, type ResultadoConfirmacion } from "@/components/confirm-dialog";
+import { GrupoOpciones, OpcionTile } from "@/components/opcion-tile";
+import { avisarError, avisarExito, avisarInfo } from "@/lib/avisos";
 import { requireOnline } from "@/components/connectivity-banner";
 import { useTasaBCV } from "@/components/tasa-bcv-provider";
 import { VerificarPagoDialog } from "@/components/pagos/verificar-pago-dialog";
 import { createClient } from "@/lib/supabase/client";
-import { fechaTasaCorta, formatBs, formatUsd, usdABs } from "@/lib/dinero";
+import { formatBs, formatUsd, usdABs } from "@/lib/dinero";
 import { humanizeError } from "@/lib/errores";
 import { MODALIDAD_PAGO } from "@/lib/estados";
 import { OPCIONES_BANCO } from "@/lib/bancos";
@@ -88,12 +82,13 @@ function formatEnMoneda(monto: number, moneda: MonedaPago) {
 
 type OpcionCobro = "EFECTIVO_VES" | "EFECTIVO_USD" | "PAGO_MOVIL" | "TRANSFERENCIA_BANCARIA" | "ZELLE";
 
-const OPCIONES: { valor: OpcionCobro; etiqueta: string; tipo: TipoMetodoPago; moneda: MonedaPago }[] = [
-  { valor: "EFECTIVO_VES", etiqueta: "Efectivo Bs", tipo: "EFECTIVO", moneda: "VES" },
-  { valor: "EFECTIVO_USD", etiqueta: "Efectivo USD", tipo: "EFECTIVO", moneda: "USD" },
-  { valor: "PAGO_MOVIL", etiqueta: "Pago Móvil", tipo: "PAGO_MOVIL", moneda: "VES" },
-  { valor: "TRANSFERENCIA_BANCARIA", etiqueta: "Transferencia", tipo: "TRANSFERENCIA_BANCARIA", moneda: "VES" },
-  { valor: "ZELLE", etiqueta: "Zelle", tipo: "ZELLE", moneda: "USD" },
+// Mismos mosaicos e iconos que el cobro de boletos (PU-16, §2.3).
+const OPCIONES: { valor: OpcionCobro; etiqueta: string; tipo: TipoMetodoPago; moneda: MonedaPago; icono: Icon }[] = [
+  { valor: "EFECTIVO_VES", etiqueta: "Efectivo Bs", tipo: "EFECTIVO", moneda: "VES", icono: Money },
+  { valor: "EFECTIVO_USD", etiqueta: "Efectivo USD", tipo: "EFECTIVO", moneda: "USD", icono: Money },
+  { valor: "PAGO_MOVIL", etiqueta: "Pago Móvil", tipo: "PAGO_MOVIL", moneda: "VES", icono: DeviceMobile },
+  { valor: "TRANSFERENCIA_BANCARIA", etiqueta: "Transferencia", tipo: "TRANSFERENCIA_BANCARIA", moneda: "VES", icono: Bank },
+  { valor: "ZELLE", etiqueta: "Zelle", tipo: "ZELLE", moneda: "USD", icono: CurrencyDollar },
 ];
 
 const NOMBRE_METODO: Record<TipoMetodoPago, string> = {
@@ -139,7 +134,6 @@ export function CobroEncomiendaForm({ encomienda, onCobrado, onCambioExterno, di
   const [errores, setErrores] = useState<Partial<Record<Campo, string>>>({});
   const [confirmarOpen, setConfirmarOpen] = useState(false);
   const [enviando, setEnviando] = useState(false);
-  const enviandoRef = useRef(false);
   // Misma clave en todos los reintentos de este cobro: un doble clic no cobra dos veces.
   const [idemKey] = useState(() => nuevaClave());
 
@@ -155,8 +149,8 @@ export function CobroEncomiendaForm({ encomienda, onCobrado, onCambioExterno, di
         .eq("activo", true)
         .order("created_at", { ascending: true });
       if (!activo) return;
-      if (error) console.error("Error al cargar las cuentas de la cooperativa:", error);
-      setCuentas((data as MetodoPagoCooperativa[] | null) ?? []);
+      // Sin cuentas (o si fallan), el cobro se registra sin cuenta: el servidor lo acepta.
+      setCuentas(error ? [] : ((data as MetodoPagoCooperativa[] | null) ?? []));
     };
     void cargarCuentas();
     return () => {
@@ -228,9 +222,9 @@ export function CobroEncomiendaForm({ encomienda, onCobrado, onCambioExterno, di
     if (validar()) setConfirmarOpen(true);
   };
 
-  const registrar = async () => {
-    if (!opcionActual || enviandoRef.current) return;
-    enviandoRef.current = true;
+  /** Registra el cobro desde la confirmación: el error general se ve dentro de ella. */
+  const registrar = async (): Promise<ResultadoConfirmacion> => {
+    if (!opcionActual) return { ok: false, error: "Elige cómo pagó el cliente." };
     setEnviando(true);
     try {
       const res = await requireOnline(() =>
@@ -248,177 +242,157 @@ export function CobroEncomiendaForm({ encomienda, onCobrado, onCambioExterno, di
           },
         })
       )();
-      setConfirmarOpen(false);
       if (res.success) {
         const cobro = res.data.cobro;
         if (cobro?.repetido) {
-          toast.info("Este cobro ya estaba registrado.");
+          avisarInfo("Este cobro ya estaba registrado.");
         } else if (cobro && cobro.vuelto && cobro.vuelto > 0) {
-          toast.success(`Cobro registrado. Entrega de vuelto ${formatEnMoneda(cobro.vuelto, cobro.moneda ?? moneda)}.`);
+          avisarExito(`Cobro registrado. Vuelto: ${formatEnMoneda(cobro.vuelto, cobro.moneda ?? moneda)}.`);
         } else {
-          toast.success("Cobro registrado.");
+          avisarExito("Cobro registrado.");
         }
-        enviandoRef.current = false;
         if (cobro) onCobrado(cobro);
-        return;
+        return { ok: true };
       }
       const campo = res.detalle?.campo as Campo | undefined;
       if (res.codigo === "EB_MONTO_INSUFICIENTE" && typeof res.detalle?.esperado === "number") {
         // El servidor cobra con la tasa vigente: puede diferir de la que muestra esta pantalla.
         const totalServidor = formatEnMoneda(res.detalle.esperado, res.detalle.moneda === "USD" ? "USD" : "VES");
-        setErrores((prev) => ({
-          ...prev,
-          monto: `El monto recibido es menor que el total a cobrar (${totalServidor}).`,
-        }));
-      } else if (campo && ["monto", "referencia", "banco", "fecha"].includes(campo)) {
+        setErrores((prev) => ({ ...prev, monto: `El monto recibido es menor que el total a cobrar (${totalServidor}).` }));
+        return { ok: true };
+      }
+      if (campo && ["monto", "referencia", "banco", "fecha"].includes(campo)) {
+        // El error queda junto a su campo, en el formulario.
         setErrores((prev) => ({ ...prev, [campo]: res.error }));
-      } else {
-        toast.error(res.error);
+        return { ok: true };
       }
       if (
         res.codigo === "EB_PAGO_PENDIENTE_EXISTE" ||
         res.codigo === "EB_PAGO_YA_REGISTRADO" ||
         res.codigo === "EB_ESTADO_CAMBIO"
       ) {
+        // El cobro cambió por fuera (otro compañero, un pago desde la app): se recarga el estado.
+        avisarError(res.error);
         onCambioExterno?.();
+        return { ok: true };
       }
+      return { ok: false, error: res.error };
     } catch (err) {
-      setConfirmarOpen(false);
-      toast.error(mensajeExcepcion(err, "registrar el cobro"));
+      return { ok: false, error: mensajeExcepcion(err, "registrar el cobro") };
     } finally {
-      enviandoRef.current = false;
       setEnviando(false);
     }
   };
 
-  // ── Textos ──
-  const tasaTexto = tasa ? ` · BCV ${fechaTasaCorta(tasa.fecha)}` : "";
-  const textoCobrar =
-    moneda === "USD"
-      ? `Cobrar ${formatUsd(costoUsd)}${totalBs != null ? ` (≈ ${formatBs(totalBs)}${tasaTexto})` : ""}`
-      : totalBs != null
-        ? `Cobrar ${formatBs(totalBs)} (${formatUsd(costoUsd)}${tasaTexto})`
-        : `Cobrar ${formatUsd(costoUsd)}`;
-
   const id = (s: string) => `${idBase}-${s}`;
   const sinCosto = !(costoUsd > 0);
+  const totalTexto = moneda === "USD" || totalBs == null ? formatUsd(costoUsd) : formatBs(totalBs);
+  const alPulsarEnter = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !enviando && tasa) {
+      e.preventDefault();
+      pedirConfirmacion();
+    }
+  };
 
   return (
-    <div className="flex flex-col gap-4">
-      <fieldset className="flex flex-col gap-2" disabled={disabled || enviando}>
-        <legend className="mb-2 text-sm font-semibold">¿Cómo pagó el cliente?</legend>
-        <div role="radiogroup" aria-label="Forma de pago" className="flex flex-wrap gap-2">
+    <div className="flex flex-col gap-5">
+      {sinCosto && <AvisoError>Todavía no tiene costo: recíbela y pésala primero.</AvisoError>}
+      {!tasa && !sinCosto && <AvisoError>Sin tasa BCV de hoy: no se puede cobrar.</AvisoError>}
+
+      <div className="flex flex-col gap-2">
+        <p className="text-sm font-medium">¿Cómo pagó?</p>
+        <GrupoOpciones etiqueta="¿Cómo pagó?" className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
           {OPCIONES.map((o) => (
-            <Button
+            <OpcionTile
               key={o.valor}
-              type="button"
-              role="radio"
-              aria-checked={opcion === o.valor}
-              variant={opcion === o.valor ? "default" : "outline"}
-              size="sm"
-              onClick={() => elegirOpcion(o.valor)}
-            >
-              {o.etiqueta}
-            </Button>
+              seleccionado={opcion === o.valor}
+              onSelect={() => elegirOpcion(o.valor)}
+              icono={o.icono}
+              titulo={o.etiqueta}
+              disabled={disabled || enviando}
+              className="items-center px-2 text-center"
+            />
           ))}
-        </div>
+        </GrupoOpciones>
         {errores.metodo && <p className="text-sm text-destructive-text">{errores.metodo}</p>}
-      </fieldset>
-
-      {sinCosto && (
-        <p role="alert" className="flex items-start gap-2 text-sm text-destructive-text">
-          <Warning weight="fill" className="mt-0.5 size-4 shrink-0" aria-hidden />
-          Esta encomienda todavía no tiene costo. Recíbela y pésala primero.
-        </p>
-      )}
-
-      {!tasa && !sinCosto && (
-        <p role="alert" className="flex items-start gap-2 rounded-xl border border-warning/40 bg-warning-light px-3 py-2 text-sm text-warning-deep">
-          <Warning weight="fill" className="mt-0.5 size-4 shrink-0" aria-hidden />
-          No hay tasa BCV registrada hoy, así que no se puede calcular el monto en bolívares. Pídele al administrador
-          que la cargue en Tarifas.
-        </p>
-      )}
+      </div>
 
       {opcionActual && !sinCosto && (
-        <div className="flex flex-col gap-4 rounded-2xl border p-4">
-          <p className="text-base font-semibold tabular-nums">{textoCobrar}</p>
-
+        <div className="flex flex-col gap-4">
           {efectivo ? (
             <div className="grid gap-4 sm:grid-cols-2">
-              <div className="flex flex-col gap-1.5">
+              <div className="flex flex-col gap-2">
                 <Label htmlFor={id("recibido")}>Monto recibido ({moneda === "USD" ? "USD" : "Bs"})</Label>
                 <Input
                   id={id("recibido")}
                   inputMode="decimal"
                   autoComplete="off"
-                  placeholder={esperado != null ? formatEnMoneda(esperado, moneda) : undefined}
+                  placeholder={esperado != null ? `Ej. ${formatEnMoneda(esperado, moneda)}` : undefined}
                   value={recibido}
                   // Al elegir efectivo el foco va al monto; Enter pide confirmar el cobro.
                   autoFocus
+                  disabled={disabled || enviando}
                   aria-invalid={errores.monto ? true : undefined}
                   aria-describedby={errores.monto ? id("recibido-error") : id("vuelto")}
                   onChange={(e) => {
                     setRecibido(e.target.value);
                     limpiarError("monto");
                   }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !enviando && tasa) {
-                      e.preventDefault();
-                      pedirConfirmacion();
-                    }
-                  }}
+                  onKeyDown={alPulsarEnter}
                 />
-                {errores.monto && (
+                {errores.monto ? (
                   <p id={id("recibido-error")} className="text-sm text-destructive-text">
                     {errores.monto}
                   </p>
+                ) : (
+                  <p className="text-sm text-muted-foreground">Para calcular el vuelto.</p>
                 )}
               </div>
-              <div id={id("vuelto")} aria-live="polite" className="flex flex-col justify-end gap-1 text-sm">
-                {diferencia == null ? (
-                  <span className="text-muted-foreground">Escribe lo que te entregó para calcular el vuelto.</span>
-                ) : diferencia < -0.004 ? (
-                  <span className="font-medium text-destructive-text">Faltan {formatEnMoneda(-diferencia, moneda)}</span>
-                ) : (
-                  <span className="text-base font-semibold tabular-nums">
-                    Vuelto: {formatEnMoneda(Math.max(diferencia, 0), moneda)}
-                  </span>
-                )}
+              <div
+                id={id("vuelto")}
+                aria-live="polite"
+                className="flex flex-col gap-1 self-start rounded-md border border-border bg-card p-4"
+              >
+                <p className="text-xs font-medium text-muted-foreground">Vuelto</p>
+                <p
+                  className={cn(
+                    "text-2xl font-semibold tabular-nums",
+                    diferencia != null && diferencia < -0.004 && "text-destructive-text"
+                  )}
+                >
+                  {diferencia == null
+                    ? "—"
+                    : diferencia < -0.004
+                      ? `Faltan ${formatEnMoneda(-diferencia, moneda)}`
+                      : formatEnMoneda(Math.max(diferencia, 0), moneda)}
+                </p>
               </div>
             </div>
           ) : (
             <div className="grid gap-4">
-              <div className="flex flex-col gap-1.5">
-                <span className="text-sm font-medium">Cuenta que recibió el pago</span>
+              <div className="flex flex-col gap-2">
+                <p className="text-sm font-medium">Cuenta que recibió el pago</p>
                 {cuentasDelTipo.length === 0 ? (
-                  <p className="flex items-start gap-2 text-sm text-muted-foreground">
-                    <Info className="mt-0.5 size-4 shrink-0" aria-hidden />
-                    Tu cooperativa no tiene cuentas de {NOMBRE_METODO[opcionActual.tipo]} activas en Configuración. El
-                    cobro se registra sin cuenta.
+                  <p className="text-sm text-muted-foreground">
+                    Sin cuentas de {NOMBRE_METODO[opcionActual.tipo]} activas: se registra sin cuenta.
                   </p>
                 ) : (
-                  <div role="radiogroup" aria-label="Cuenta que recibió el pago" className="flex flex-wrap gap-2">
+                  <GrupoOpciones etiqueta="Cuenta que recibió el pago" className="grid gap-2 sm:grid-cols-2">
                     {cuentasDelTipo.map((c) => (
-                      <Button
+                      <OpcionTile
                         key={c.id}
-                        type="button"
-                        role="radio"
-                        aria-checked={cuentaId === c.id}
-                        variant={cuentaId === c.id ? "secondary" : "outline"}
-                        size="sm"
-                        className="h-auto py-1.5 whitespace-normal text-left"
-                        onClick={() => setCuentaElegida(c.id)}
-                      >
-                        {etiquetaCuenta(c)}
-                      </Button>
+                        seleccionado={cuentaId === c.id}
+                        onSelect={() => setCuentaElegida(c.id)}
+                        disabled={disabled || enviando}
+                        titulo={etiquetaCuenta(c)}
+                      />
                     ))}
-                  </div>
+                  </GrupoOpciones>
                 )}
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2">
-                <div className="flex flex-col gap-1.5">
+                <div className="flex flex-col gap-2">
                   <Label htmlFor={id("referencia")}>
                     {opcionActual.tipo === "ZELLE" ? "Código de confirmación" : "Número de referencia"}
                   </Label>
@@ -428,18 +402,14 @@ export function CobroEncomiendaForm({ encomienda, onCobrado, onCambioExterno, di
                     inputMode={opcionActual.tipo === "ZELLE" ? "text" : "numeric"}
                     className="font-mono"
                     value={referencia}
+                    disabled={disabled || enviando}
                     aria-invalid={errores.referencia ? true : undefined}
                     aria-describedby={errores.referencia ? id("referencia-error") : undefined}
                     onChange={(e) => {
                       setReferencia(e.target.value);
                       limpiarError("referencia");
                     }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && !enviando && tasa) {
-                        e.preventDefault();
-                        pedirConfirmacion();
-                      }
-                    }}
+                    onKeyDown={alPulsarEnter}
                   />
                   {errores.referencia && (
                     <p id={id("referencia-error")} className="text-sm text-destructive-text">
@@ -447,13 +417,14 @@ export function CobroEncomiendaForm({ encomienda, onCobrado, onCambioExterno, di
                     </p>
                   )}
                 </div>
-                <div className="flex flex-col gap-1.5">
+                <div className="flex flex-col gap-2">
                   <Label htmlFor={id("fecha")}>Fecha del pago</Label>
                   <Input
                     id={id("fecha")}
                     type="date"
                     value={fecha}
                     max={hoyVE()}
+                    disabled={disabled || enviando}
                     aria-invalid={errores.fecha ? true : undefined}
                     aria-describedby={errores.fecha ? id("fecha-error") : undefined}
                     onChange={(e) => {
@@ -468,14 +439,15 @@ export function CobroEncomiendaForm({ encomienda, onCobrado, onCambioExterno, di
                   )}
                 </div>
                 {opcionActual.tipo !== "ZELLE" && (
-                  <div className="flex flex-col gap-1.5 sm:col-span-2">
+                  <div className="flex flex-col gap-2 sm:col-span-2">
                     <Label htmlFor={id("banco")}>Banco del cliente</Label>
                     <Input
                       id={id("banco")}
                       list={id("bancos")}
                       autoComplete="off"
-                      placeholder="Ej.: 0134 · Banesco"
+                      placeholder="Ej. 0134 · Banesco"
                       value={banco}
+                      disabled={disabled || enviando}
                       aria-invalid={errores.banco ? true : undefined}
                       aria-describedby={errores.banco ? id("banco-error") : undefined}
                       onChange={(e) => {
@@ -496,56 +468,50 @@ export function CobroEncomiendaForm({ encomienda, onCobrado, onCambioExterno, di
                   </div>
                 )}
               </div>
-              <p className="text-xs text-muted-foreground">
-                Registra el pago solo cuando ya lo veas en la cuenta de la cooperativa.
-              </p>
+              <p className="text-sm text-muted-foreground">Regístralo cuando ya lo veas en la cuenta.</p>
             </div>
           )}
 
-          <div className="flex justify-end">
+          <div className="flex justify-end border-t border-border pt-4">
             <Button onClick={pedirConfirmacion} disabled={disabled || enviando || !tasa}>
-              {enviando && <Spinner size="sm" className="mr-1" />}
-              Registrar cobro
+              Cobrar {totalTexto}
             </Button>
           </div>
         </div>
       )}
 
-      <AlertDialog open={confirmarOpen} onOpenChange={(abierto) => !enviando && setConfirmarOpen(abierto)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {efectivo ? "¿Registrar el cobro en efectivo?" : `¿Registrar el pago por ${opcionActual ? NOMBRE_METODO[opcionActual.tipo] : ""}?`}
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              {efectivo ? (
+      <ConfirmDialog
+        open={confirmarOpen}
+        onOpenChange={setConfirmarOpen}
+        titulo={
+          efectivo ? "¿Registrar el cobro en efectivo?" : `¿Registrar el pago por ${opcionActual ? NOMBRE_METODO[opcionActual.tipo] : ""}?`
+        }
+        descripcion={
+          efectivo ? (
+            <p>
+              Recibiste <strong className="text-foreground">{montoRecibido != null ? formatEnMoneda(montoRecibido, moneda) : "—"}</strong>{" "}
+              por <strong className="font-mono text-foreground">{encomienda.tracking_id}</strong>
+              {esperado != null && <> (total {formatEnMoneda(esperado, moneda)})</>}.
+              {diferencia != null && diferencia > 0.004 && (
                 <>
-                  Recibiste <strong className="text-foreground">{montoRecibido != null ? formatEnMoneda(montoRecibido, moneda) : "—"}</strong>{" "}
-                  por la encomienda <strong className="font-mono text-foreground">{encomienda.tracking_id}</strong>
-                  {esperado != null && <> (total {formatEnMoneda(esperado, moneda)})</>}.
-                  {diferencia != null && diferencia > 0.004 && (
-                    <> Entrega de vuelto <strong className="text-foreground">{formatEnMoneda(diferencia, moneda)}</strong>.</>
-                  )}{" "}
-                  El cobro no se puede deshacer.
+                  {" "}
+                  Vuelto: <strong className="text-foreground">{formatEnMoneda(diferencia, moneda)}</strong>.
                 </>
-              ) : (
-                <>
-                  Confirma que en {cuenta ? etiquetaCuenta(cuenta) : "la cuenta de la cooperativa"} ya aparece{" "}
-                  <strong className="text-foreground">{esperado != null ? formatEnMoneda(esperado, moneda) : formatUsd(costoUsd)}</strong>{" "}
-                  con la referencia <strong className="font-mono text-foreground">{referencia.trim()}</strong>. El cobro no se
-                  puede deshacer.
-                </>
-              )}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={enviando}>Revisar</AlertDialogCancel>
-            <AlertDialogAction autoFocus onClick={() => void registrar()} disabled={enviando}>
-              {enviando ? "Registrando…" : "Registrar cobro"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+              )}{" "}
+              No se puede deshacer.
+            </p>
+          ) : (
+            <p>
+              Confirma que en {cuenta ? etiquetaCuenta(cuenta) : "la cuenta de la cooperativa"} ya aparece{" "}
+              <strong className="text-foreground">{esperado != null ? formatEnMoneda(esperado, moneda) : formatUsd(costoUsd)}</strong>{" "}
+              con la referencia <strong className="font-mono text-foreground">{referencia.trim()}</strong>. No se puede deshacer.
+            </p>
+          )
+        }
+        verbo="Registrar cobro"
+        verboCargando="Registrando…"
+        onConfirm={registrar}
+      />
     </div>
   );
 }
@@ -600,14 +566,19 @@ export function PagoModal({ encomienda, isOpen, onClose, onSuccess }: PagoModalP
 
   const modalidad =
     encomienda.modalidad_pago === "DESTINO"
-      ? `${MODALIDAD_PAGO.DESTINO.largo}. Si quien envía quiere pagar ahora, regístralo aquí.`
+      ? `${MODALIDAD_PAGO.DESTINO.largo}. Quien envía puede pagar ahora.`
       : `${MODALIDAD_PAGO.ORIGEN.largo}.`;
 
   let cuerpo: React.ReactNode;
   if (cargando && !cobro) {
     cuerpo = (
-      <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
-        <Spinner size="sm" aria-label="Cargando" /> Revisando si el cliente ya reportó un pago…
+      <div className="flex flex-col gap-4" role="status" aria-label="Revisando si el cliente ya reportó un pago">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+          {[0, 1, 2, 3, 4].map((i) => (
+            <Skeleton key={i} className="h-20 rounded-md" />
+          ))}
+        </div>
+        <Skeleton className="h-9 w-full rounded-full" />
       </div>
     );
   } else if (errorCarga && !cobro) {
@@ -616,8 +587,9 @@ export function PagoModal({ encomienda, isOpen, onClose, onSuccess }: PagoModalP
     );
   } else if (cobro?.aprobado) {
     cuerpo = (
-      <p className="rounded-xl border border-success/40 bg-success-light px-3 py-2 text-sm text-success-deep">
-        Esta encomienda ya está pagada. Actualiza la lista para ver su estado.
+      <p role="status" className="flex items-start gap-2 rounded-md border border-success/40 bg-success-light p-3 text-sm text-success-deep">
+        <CheckCircle className="mt-0.5 size-4 shrink-0 text-success-text" weight="fill" aria-hidden />
+        Ya está pagada.
       </p>
     );
   } else if (cobro?.pendiente) {
@@ -645,8 +617,8 @@ export function PagoModal({ encomienda, isOpen, onClose, onSuccess }: PagoModalP
     cuerpo = (
       <div className="flex flex-col gap-4">
         {cobro?.rechazado && (
-          <p className="flex items-start gap-2 rounded-xl border border-warning/40 bg-warning-light px-3 py-2 text-sm text-warning-deep">
-            <Warning weight="fill" className="mt-0.5 size-4 shrink-0" aria-hidden />
+          <p role="status" className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning-light p-3 text-sm text-warning-deep">
+            <Warning weight="fill" className="mt-0.5 size-4 shrink-0 text-warning-text" aria-hidden />
             <span>
               El cliente reportó un pago que se rechazó
               {cobro.rechazado.numeroReferencia ? ` (ref. ${cobro.rechazado.numeroReferencia})` : ""}
@@ -665,7 +637,7 @@ export function PagoModal({ encomienda, isOpen, onClose, onSuccess }: PagoModalP
 
   return (
     <Dialog open={isOpen} onOpenChange={(abierto) => !abierto && cerrar()}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[600px]">
+      <DialogContent tamano="flujo">
         <DialogHeader>
           <DialogTitle>Cobrar encomienda</DialogTitle>
           <DialogDescription>
@@ -675,21 +647,23 @@ export function PagoModal({ encomienda, isOpen, onClose, onSuccess }: PagoModalP
         </DialogHeader>
 
         <div className="grid gap-5">
-          <section aria-label="Resumen" className="grid grid-cols-2 gap-4 rounded-2xl bg-muted/40 p-4 text-sm">
-            <div>
-              <p className="mb-1 text-muted-foreground">Remitente</p>
+          <section aria-label="Resumen" className="grid grid-cols-2 gap-x-4 gap-y-3 rounded-md bg-muted/50 p-4 text-sm">
+            <div className="flex min-w-0 flex-col gap-0.5">
+              <p className="text-xs text-muted-foreground">Remitente</p>
               <p className="truncate font-medium">{remitenteDe(encomienda).nombre}</p>
             </div>
-            <div>
-              <p className="mb-1 text-muted-foreground">Destinatario</p>
+            <div className="flex min-w-0 flex-col gap-0.5">
+              <p className="text-xs text-muted-foreground">Destinatario</p>
               <p className="truncate font-medium">{encomienda.receiver_nombre}</p>
             </div>
-            <div>
-              <p className="mb-1 text-muted-foreground">Peso</p>
-              <p className="font-medium">{encomienda.peso_kg ? `${encomienda.peso_kg} kg` : "Por pesar"}</p>
+            <div className="flex flex-col gap-0.5">
+              <p className="text-xs text-muted-foreground">Peso</p>
+              <p className="font-medium tabular-nums">
+                {encomienda.peso_kg ? `${String(encomienda.peso_kg).replace(".", ",")} kg` : "Por pesar"}
+              </p>
             </div>
-            <div>
-              <p className="mb-1 text-muted-foreground">Costo del envío</p>
+            <div className="flex flex-col gap-0.5">
+              <p className="text-xs text-muted-foreground">Total a cobrar</p>
               <Monto usd={encomienda.costo_calculado} size="md" />
             </div>
             <p className="col-span-2 text-muted-foreground">{modalidad}</p>

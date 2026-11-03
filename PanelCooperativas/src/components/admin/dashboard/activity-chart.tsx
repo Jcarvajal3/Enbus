@@ -56,37 +56,37 @@ export function ActivityChart({ data }: ActivityChartProps) {
         {data.every((d) => !d.boletos && !d.encomiendas) ? (
           <EmptyState compacto icon={ChartLine} title="Sin actividad en estos 30 días" />
         ) : (
-        <ChartContainer config={chartConfig} className="min-h-[300px] w-full">
-          <LineChart accessibilityLayer data={formattedData} margin={{ left: 10, right: 10, top: 10, bottom: 10 }}>
-            <CartesianGrid vertical={false} strokeDasharray="3 3" className="stroke-border" />
-            <XAxis
-              dataKey="displayDate"
-              tickLine={false}
-              tickMargin={10}
-              axisLine={false}
-              className="text-xs text-muted-foreground"
-            />
-            <YAxis allowDecimals={false} tickLine={false} axisLine={false} width={32} className="text-xs text-muted-foreground" />
-            <ChartTooltip content={<ChartTooltipContent />} />
-            <ChartLegend content={<ChartLegendContent />} />
-            <Line
-              type="monotone"
-              dataKey="boletos"
-              stroke="var(--color-boletos)"
-              strokeWidth={2}
-              dot={false}
-              activeDot={{ r: 4 }}
-            />
-            <Line
-              type="monotone"
-              dataKey="encomiendas"
-              stroke="var(--color-encomiendas)"
-              strokeWidth={2}
-              dot={false}
-              activeDot={{ r: 4 }}
-            />
-          </LineChart>
-        </ChartContainer>
+          <ChartContainer config={chartConfig} className="min-h-[300px] w-full">
+            <LineChart accessibilityLayer data={formattedData} margin={{ left: 10, right: 10, top: 10, bottom: 10 }}>
+              <CartesianGrid vertical={false} strokeDasharray="3 3" className="stroke-border" />
+              <XAxis
+                dataKey="displayDate"
+                tickLine={false}
+                tickMargin={10}
+                axisLine={false}
+                className="text-xs text-muted-foreground"
+              />
+              <YAxis allowDecimals={false} tickLine={false} axisLine={false} width={32} className="text-xs text-muted-foreground" />
+              <ChartTooltip content={<ChartTooltipContent />} />
+              <ChartLegend content={<ChartLegendContent />} />
+              <Line
+                type="monotone"
+                dataKey="boletos"
+                stroke="var(--color-boletos)"
+                strokeWidth={2}
+                dot={false}
+                activeDot={{ r: 4 }}
+              />
+              <Line
+                type="monotone"
+                dataKey="encomiendas"
+                stroke="var(--color-encomiendas)"
+                strokeWidth={2}
+                dot={false}
+                activeDot={{ r: 4 }}
+              />
+            </LineChart>
+          </ChartContainer>
         )}
       </CardContent>
     </Card>

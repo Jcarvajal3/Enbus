@@ -254,7 +254,7 @@ export function EmpleadosClient({
                     <TableHead>Correo</TableHead>
                     <TableHead className="hidden lg:table-cell">Rol</TableHead>
                     <TableHead className="hidden lg:table-cell">Sucursal</TableHead>
-                    <TableHead>Vencimiento</TableHead>
+                    <TableHead className="hidden sm:table-cell">Vencimiento</TableHead>
                     <TableHead className="text-right">
                       <span className="sr-only">Acciones</span>
                     </TableHead>
@@ -266,10 +266,17 @@ export function EmpleadosClient({
                     const renovando = renovandoId === inv.id;
                     return (
                       <TableRow key={inv.id}>
-                        <TableCell className="font-medium text-foreground">{inv.email}</TableCell>
+                        <TableCell>
+                          <span className="block font-medium text-foreground">{inv.email}</span>
+                          {ahora > 0 && (
+                            <span className="block text-xs text-muted-foreground sm:hidden">
+                              {vencida ? "Vencida" : venceEn(inv.expira_at, ahora)}
+                            </span>
+                          )}
+                        </TableCell>
                         <TableCell className="hidden lg:table-cell">{etiquetaRol(inv.role)}</TableCell>
                         <TableCell className="hidden lg:table-cell">{nombreSucursal(inv.sucursal_id)}</TableCell>
-                        <TableCell>
+                        <TableCell className="hidden sm:table-cell">
                           {ahora === 0 ? (
                             ""
                           ) : vencida ? (
@@ -289,7 +296,7 @@ export function EmpleadosClient({
                                 onClick={() => void renovar(inv)}
                               >
                                 {renovando ? <Spinner size="sm" aria-hidden /> : <ArrowClockwise aria-hidden />}
-                                Renovar
+                                <span className="hidden sm:inline">Renovar</span>
                               </Button>
                             ) : (
                               <Button
@@ -299,7 +306,7 @@ export function EmpleadosClient({
                                 onClick={() => void copiar(inv)}
                               >
                                 {copiadoId === inv.id ? <Check aria-hidden /> : <Copy aria-hidden />}
-                                {copiadoId === inv.id ? "Copiado" : "Copiar enlace"}
+                                <span className="hidden sm:inline">{copiadoId === inv.id ? "Copiado" : "Copiar enlace"}</span>
                               </Button>
                             )}
                             <DropdownMenu>
@@ -364,7 +371,7 @@ export function EmpleadosClient({
               <TableHeader>
                 <TableRow>
                   <TableHead>Nombre</TableHead>
-                  <TableHead>Rol</TableHead>
+                  <TableHead className="hidden sm:table-cell">Rol</TableHead>
                   <TableHead className="hidden lg:table-cell">Sucursal</TableHead>
                   <TableHead className="hidden lg:table-cell">Alta</TableHead>
                   <TableHead>Estado</TableHead>
@@ -385,8 +392,9 @@ export function EmpleadosClient({
                           {esYo && <span className="font-normal text-muted-foreground"> (tú)</span>}
                         </span>
                         <span className="block text-xs text-muted-foreground">{emp.email ?? "Sin correo"}</span>
+                        <span className="block text-xs text-muted-foreground sm:hidden">{etiquetaRol(emp.role)}</span>
                       </TableCell>
-                      <TableCell>{etiquetaRol(emp.role)}</TableCell>
+                      <TableCell className="hidden sm:table-cell">{etiquetaRol(emp.role)}</TableCell>
                       <TableCell className="hidden lg:table-cell">
                         {emp.role === "admin_cooperativa" && !emp.sucursal_id ? "Todas" : nombreSucursal(emp.sucursal_id)}
                       </TableCell>
@@ -396,7 +404,7 @@ export function EmpleadosClient({
                       </TableCell>
                       <TableCell className="text-right">
                         {esYo ? (
-                          <span className="text-xs text-muted-foreground">Tu cuenta</span>
+                          <span className="hidden text-xs text-muted-foreground sm:inline">Tu cuenta</span>
                         ) : (
                           <DropdownMenu>
                             <DropdownMenuTrigger

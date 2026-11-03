@@ -646,7 +646,7 @@ export function PaymentFlow({
           label={isZelle ? 'Monto a enviar por Zelle' : 'Monto a transferir'}
           cotizacion={cotizacion}
           moneda={moneda}
-          concepto={concepto}
+          concepto={enTarjeta ? concepto : undefined}
         />
 
         {sinTasa ? <Aviso tono="warning" texto={AVISO_SIN_TASA} /> : null}
@@ -933,7 +933,12 @@ export function PaymentFlow({
               accessibilityState={{ selected: elegida, disabled: o.deshabilitada }}
               accessibilityLabel={`${o.label}. ${o.desc}`}
             >
-              <View style={[s.metodoIcono, enTarjeta ? s.metodoIconoEnTarjeta : s.metodoIconoEnFondo]}>
+              <View
+                style={[
+                  s.metodoIcono,
+                  enTarjeta || elegida ? s.metodoIconoEnTarjeta : s.metodoIconoEnFondo,
+                ]}
+              >
                 <o.icono
                   color={o.deshabilitada ? Colors.mutedForeground : Colors.foreground}
                   weight="bold"
@@ -1097,7 +1102,7 @@ function AmountBadge({
       ) : null}
       {tasa ? (
         <Text variant="caption" color="muted" align="center">
-          {`Tasa BCV ${formatNumeroVE(tasa.tasa)} Bs/USD · ${formatDiaVE(tasa.fecha)}`}
+          {`Tasa BCV ${formatNumeroVE(tasa.tasa)} Bs/USD`}
         </Text>
       ) : null}
       {concepto ? (

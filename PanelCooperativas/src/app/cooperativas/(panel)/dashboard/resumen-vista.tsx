@@ -117,7 +117,7 @@ export function ResumenVista({
       </section>
 
       {esAdmin && (
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-3">
           <ActivityChart data={chartData} />
 
           <Card>
@@ -181,10 +181,10 @@ export function ResumenVista({
                 <TableRow>
                   <TableHead>Código</TableHead>
                   <TableHead className="hidden lg:table-cell">Remitente</TableHead>
-                  <TableHead>Destinatario</TableHead>
+                  <TableHead className="hidden sm:table-cell">Destinatario</TableHead>
                   <TableHead className="hidden lg:table-cell">Ruta</TableHead>
                   <TableHead>Estado</TableHead>
-                  <TableHead>Fecha</TableHead>
+                  <TableHead className="hidden sm:table-cell">Fecha</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -199,14 +199,14 @@ export function ResumenVista({
                         {enc.tracking_id}
                       </CeldaEnlace>
                       <TableCell className="hidden lg:table-cell">{nombreRemitente(enc)}</TableCell>
-                      <TableCell>{enc.receiver_nombre}</TableCell>
+                      <TableCell className="hidden sm:table-cell">{enc.receiver_nombre}</TableCell>
                       <TableCell className="hidden lg:table-cell">
                         {formatCiudad(enc.ciudad_origen)} → {formatCiudad(enc.ciudad_destino)}
                       </TableCell>
                       <TableCell>
                         <StatusBadge status={enc.estado} dominio="encomienda" />
                       </TableCell>
-                      <TableCell className="tabular-nums">{formatFechaHoraCortaVE(enc.created_at)}</TableCell>
+                      <TableCell className="hidden tabular-nums sm:table-cell">{formatFechaHoraCortaVE(enc.created_at)}</TableCell>
                     </TableRow>
                   ))
                 ) : (
