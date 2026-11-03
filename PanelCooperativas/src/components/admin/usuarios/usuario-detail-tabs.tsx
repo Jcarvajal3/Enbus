@@ -79,10 +79,10 @@ function TablaEncomiendas({
       <TableHeader>
         <TableRow>
           <TableHead>Código de seguimiento</TableHead>
-          <TableHead>{tipo === "enviadas" ? "Destinatario" : "Remitente"}</TableHead>
+          <TableHead className="hidden md:table-cell">{tipo === "enviadas" ? "Destinatario" : "Remitente"}</TableHead>
           <TableHead className="hidden xl:table-cell">Cooperativa</TableHead>
           <TableHead>Estado</TableHead>
-          <TableHead className="text-right">Costo</TableHead>
+          <TableHead className="hidden text-right sm:table-cell">Costo</TableHead>
           <TableHead className="hidden xl:table-cell">Fecha</TableHead>
           {conAcciones && <TableHead className="text-right">Acciones</TableHead>}
         </TableRow>
@@ -100,7 +100,7 @@ function TablaEncomiendas({
               >
                 {e.tracking_id}
               </CeldaEnlace>
-              <TableCell>
+              <TableCell className="hidden md:table-cell">
                 {tipo === "enviadas" ? (
                   <>
                     <span className="block">{e.receiver_nombre}</span>
@@ -122,7 +122,7 @@ function TablaEncomiendas({
                   {e.pin_bloqueado && <TonoBadge tono="peligro">PIN bloqueado</TonoBadge>}
                 </span>
               </TableCell>
-              <TableCell className="text-right">
+              <TableCell className="hidden text-right sm:table-cell">
                 {e.costo_calculado > 0 ? (
                   <Monto usd={e.costo_calculado} tasa={tasa} moneda="USD" size="sm" align="right" />
                 ) : (
@@ -256,11 +256,11 @@ export function UsuarioDetailTabs({ usuario }: UsuarioDetailTabsProps) {
             <TableHeader>
               <TableRow>
                 <TableHead>Código</TableHead>
-                <TableHead>Viaje</TableHead>
+                <TableHead className="hidden md:table-cell">Viaje</TableHead>
                 <TableHead>Asiento</TableHead>
                 <TableHead className="hidden lg:table-cell">Cooperativa</TableHead>
                 <TableHead>Estado</TableHead>
-                <TableHead className="text-right">Precio</TableHead>
+                <TableHead className="hidden text-right sm:table-cell">Precio</TableHead>
                 <TableHead className="hidden md:table-cell">Compra</TableHead>
               </TableRow>
             </TableHeader>
@@ -271,7 +271,7 @@ export function UsuarioDetailTabs({ usuario }: UsuarioDetailTabsProps) {
                 usuario.boletos.map((b) => (
                   <TableRow key={b.id}>
                     <TableCell className="font-mono text-sm text-foreground">{formatCodigoBoleto(b.codigo_boleto)}</TableCell>
-                    <TableCell className="max-w-64 truncate">{b.viaje_info}</TableCell>
+                    <TableCell className="hidden max-w-64 truncate md:table-cell">{b.viaje_info}</TableCell>
                     <TableCell>
                       <Badge variant="outline" className="font-mono">{b.asiento}</Badge>
                     </TableCell>
@@ -279,7 +279,7 @@ export function UsuarioDetailTabs({ usuario }: UsuarioDetailTabsProps) {
                     <TableCell>
                       <StatusBadge status={b.estado} dominio="boleto" />
                     </TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="hidden text-right sm:table-cell">
                       <Monto usd={b.precio} tasa={tasa} moneda="USD" size="sm" align="right" />
                     </TableCell>
                     <TableCell className="hidden text-muted-foreground tabular-nums md:table-cell">{formatFechaVE(b.created_at)}</TableCell>

@@ -132,7 +132,7 @@ export function CiclosTable({ data, cooperativas, tasa: tasaServidor }: CiclosTa
           <TableHeader>
             <TableRow>
               <TableHead>Cooperativa</TableHead>
-              <TableHead>Período</TableHead>
+              <TableHead className="hidden md:table-cell">Período</TableHead>
               <TableHead className="hidden text-right xl:table-cell">Boletos</TableHead>
               <TableHead className="hidden text-right xl:table-cell">Encomiendas</TableHead>
               <TableHead className="hidden text-right xl:table-cell">Comisión %</TableHead>
@@ -157,7 +157,7 @@ export function CiclosTable({ data, cooperativas, tasa: tasaServidor }: CiclosTa
                   >
                     {item.cooperativa_nombre || "Cooperativa sin nombre"}
                   </CeldaEnlace>
-                  <TableCell className="text-muted-foreground tabular-nums">
+                  <TableCell className="hidden text-muted-foreground tabular-nums md:table-cell">
                     {formatFechaVE(item.periodo_inicio)} – {formatFechaVE(item.periodo_fin)}
                   </TableCell>
                   <TableCell className="hidden text-right xl:table-cell">

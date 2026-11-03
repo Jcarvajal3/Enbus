@@ -21,7 +21,7 @@ export function IncidenciasRecientesTable({ data }: IncidenciasRecientesTablePro
           <TableRow>
             <TableHead>Incidencia</TableHead>
             <TableHead className="hidden sm:table-cell">Tipo</TableHead>
-            <TableHead className="hidden xl:table-cell">Encomienda</TableHead>
+            <TableHead className="hidden 2xl:table-cell">Encomienda</TableHead>
             <TableHead>Estado</TableHead>
             <TableHead>Antigüedad</TableHead>
           </TableRow>
@@ -40,7 +40,7 @@ export function IncidenciasRecientesTable({ data }: IncidenciasRecientesTablePro
                   {codigoIncidencia(item.id)}
                 </CeldaEnlace>
                 <TableCell className="hidden sm:table-cell">{etiquetaTipoIncidencia(item.tipo)}</TableCell>
-                <TableCell className="hidden font-mono text-sm xl:table-cell">
+                <TableCell className="hidden font-mono text-sm 2xl:table-cell">
                   {item.encomienda_tracking_id || <Vacio />}
                 </TableCell>
                 <TableCell>
