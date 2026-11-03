@@ -6,11 +6,14 @@
 //    (fn_validar_encomienda_despacho) y explica por qué no puede ir.
 // 3. Confirmar: fn_despachar_encomiendas (todo o nada). El viaje no cambia de
 //    estado; la salida del bus se marca con "Marcar salida".
+// `?viaje=<id>` (enlace "Próxima salida" del Resumen) deja ese viaje elegido.
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { Suspense, useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useSearchParams } from "next/navigation";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Spinner } from "@/components/ui/spinner";
@@ -25,6 +28,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { ScanInput } from "@/components/scan-input";
+import { UltimoEscaneo, useUltimoEscaneo } from "@/components/ultimo-escaneo";
 import { Monto } from "@/components/monto";
 import { createClient } from "@/lib/supabase/client";
 import { useUser } from "@/hooks/use-user";
@@ -32,14 +36,16 @@ import { toast } from "sonner";
 import { despacharEncomiendas } from "./actions";
 import { MarcarSalidaDialog } from "../viajes/client";
 import { formatCiudad } from "@/lib/ciudades";
-import { MapPin, Clock, Truck, Package, X, Bus, WarningCircle } from "@phosphor-icons/react";
+import { MapPin, Clock, Truck, Package, X, Bus } from "@phosphor-icons/react";
 import type { Encomienda } from "@/lib/types/encomiendas";
 import type { EncomiendaRechazadaDespacho, ResultadoDespacho } from "@/lib/types/pagos";
 import { requireOnline } from "@/components/connectivity-banner";
 import { humanizeError } from "@/lib/errores";
 import { MODALIDAD_PAGO } from "@/lib/estados";
 import { ErrorState } from "@/components/error-state";
-import { hoyVE, rangoDiaVE, formatHoraVE, formatFechaVE } from "@/lib/fechas";
+import { fechaVE, hoyVE, rangoDiaVE, formatHoraVE, formatFechaVE } from "@/lib/fechas";
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 interface ViajeDespacho {
   id: string;
@@ -109,7 +115,25 @@ function horaCorta(iso: string) {
 }
 
 export default function DespachoPage() {
+  // useSearchParams (?viaje=) necesita un límite de Suspense (Next.js 16).
+  return (
+    <Suspense
+      fallback={
+        <div className="flex h-40 items-center justify-center gap-3 text-muted-foreground">
+          <Spinner size="md" />
+          <span className="font-medium">Cargando despacho…</span>
+        </div>
+      }
+    >
+      <Despacho />
+    </Suspense>
+  );
+}
+
+function Despacho() {
   const { user } = useUser();
+  const searchParams = useSearchParams();
+  const viajeParam = searchParams.get("viaje");
   const cooperativaId = user.cooperativa_id!;
   const supabase = useMemo(() => createClient(), []);
 
@@ -121,7 +145,7 @@ export default function DespachoPage() {
   const [selectedViaje, setSelectedViaje] = useState<ViajeDespacho | null>(null);
   const [lista, setLista] = useState<ItemDespacho[]>([]);
   const [validando, setValidando] = useState(false);
-  const [ultimoRechazo, setUltimoRechazo] = useState<string | null>(null);
+  const { ultimo, registrar } = useUltimoEscaneo();
 
   const [cambioPendiente, setCambioPendiente] = useState<ViajeDespacho | null>(null);
   const [confirmarOpen, setConfirmarOpen] = useState(false);
@@ -163,6 +187,40 @@ export default function DespachoPage() {
     void fetchViajes();
   }, [fetchViajes]);
 
+  // ?viaje=<id>: elige ese viaje (y su fecha) una sola vez por id.
+  const viajeParamUsado = useRef<string | null>(null);
+  useEffect(() => {
+    if (!viajeParam || viajeParamUsado.current === viajeParam) return;
+    viajeParamUsado.current = viajeParam;
+    if (!UUID_RE.test(viajeParam)) return;
+    let activo = true;
+    void (async () => {
+      try {
+        const { data, error } = await supabase
+          .from("viajes")
+          .select("id, fecha_hora_salida, numero_unidad, estado, ruta:rutas!ruta_id(ciudad_origen, ciudad_destino)")
+          .eq("cooperativa_id", cooperativaId)
+          .eq("id", viajeParam)
+          .maybeSingle();
+        if (!activo) return;
+        if (error) throw error;
+        const v = data as unknown as (ViajeDespacho & { estado: string }) | null;
+        if (!v || v.estado !== "PROGRAMADO") {
+          toast.info("Esa salida ya no está disponible para despachar. Elige otro viaje.");
+          return;
+        }
+        const { estado: _estado, ...viaje } = v;
+        setFecha(fechaVE(viaje.fecha_hora_salida));
+        setSelectedViaje(viaje);
+      } catch (err) {
+        if (activo) toast.error(humanizeError(err, "abrir el viaje"));
+      }
+    })();
+    return () => {
+      activo = false;
+    };
+  }, [viajeParam, supabase, cooperativaId]);
+
   const elegirViaje = (viaje: ViajeDespacho) => {
     if (selectedViaje?.id === viaje.id) return;
     if (lista.length > 0) {
@@ -170,24 +228,23 @@ export default function DespachoPage() {
       return;
     }
     setSelectedViaje(viaje);
-    setUltimoRechazo(null);
   };
 
   const confirmarCambioViaje = () => {
     if (!cambioPendiente) return;
     setSelectedViaje(cambioPendiente);
     setLista([]);
-    setUltimoRechazo(null);
     setCambioPendiente(null);
   };
 
   const handleEncomiendaFound = async (encomienda: Encomienda) => {
+    const codigo = encomienda.tracking_id;
     if (!selectedViaje) {
-      toast.error("Primero elige el viaje en el que vas a cargar las encomiendas.");
+      registrar({ codigo, tono: "aviso", titulo: "Primero elige el viaje", detalle: "Elige el viaje en el que vas a cargar las encomiendas." });
       return;
     }
     if (lista.some((e) => e.id === encomienda.id)) {
-      toast.warning(`La encomienda ${encomienda.tracking_id} ya está en la lista.`);
+      registrar({ codigo, tono: "aviso", titulo: "Ya está en la lista", detalle: "No hace falta escanearla de nuevo." });
       return;
     }
 
@@ -201,15 +258,16 @@ export default function DespachoPage() {
       const r = data as ResultadoDespacho;
 
       if (r.resultado === "NO_ENCONTRADA") {
-        const texto = "No encontramos esa encomienda en tu cooperativa. Revisa el código e intenta de nuevo.";
-        setUltimoRechazo(texto);
-        toast.error(texto);
+        registrar({
+          codigo,
+          tono: "error",
+          titulo: "No encontrada",
+          detalle: "No encontramos esa encomienda en tu cooperativa. Revisa el código e intenta de nuevo.",
+        });
         return;
       }
       if (r.resultado !== "OK") {
-        const texto = mensajeResultado(r);
-        setUltimoRechazo(texto);
-        toast.error(texto);
+        registrar({ codigo, tono: "error", titulo: "No puede ir en este viaje", detalle: mensajeResultado(r) });
         return;
       }
 
@@ -230,15 +288,17 @@ export default function DespachoPage() {
               },
             ]
       );
-      setUltimoRechazo(null);
-      toast.success(
-        e.cobro_en_destino
-          ? `${e.tracking_id} agregada a la lista (se cobra al retirar en destino).`
-          : `${e.tracking_id} agregada a la lista.`
-      );
+      registrar({
+        codigo: e.tracking_id,
+        tono: "exito",
+        titulo: `Agregada · ${e.tracking_id}`,
+        detalle: e.cobro_en_destino
+          ? `${e.receiver_nombre} · se cobra al retirar en destino.`
+          : `${e.receiver_nombre} · ${formatCiudad(e.ciudad_destino)}`,
+      });
     } catch (err) {
       console.error(err);
-      toast.error(humanizeError(err, "revisar la encomienda"));
+      registrar({ codigo, tono: "error", titulo: "No pudimos revisarla", detalle: humanizeError(err, "revisar la encomienda") });
     } finally {
       setValidando(false);
     }
@@ -263,7 +323,6 @@ export default function DespachoPage() {
           { description: "Cuando el bus salga, márcalo con «Marcar salida»." }
         );
         setLista([]);
-        setUltimoRechazo(null);
         return;
       }
 
@@ -299,15 +358,15 @@ export default function DespachoPage() {
         {/* Columna izquierda: viajes */}
         <div className="space-y-4">
           <h2 className="text-xl font-semibold flex items-center gap-2">
-            <Truck className="w-5 h-5 text-primary-text" />
+            <Truck className="w-5 h-5 text-primary-text" aria-hidden />
             1. Elegir el viaje
           </h2>
           <Card>
             <CardContent className="p-4 space-y-4">
               <div className="space-y-1.5">
-                <label htmlFor="despacho-fecha-viaje" className="text-sm font-medium text-muted-foreground">
+                <Label htmlFor="despacho-fecha-viaje" className="text-sm font-medium text-muted-foreground">
                   Fecha del viaje
-                </label>
+                </Label>
                 <Input
                   id="despacho-fecha-viaje"
                   type="date"
@@ -320,7 +379,7 @@ export default function DespachoPage() {
                 {loadingViajes ? (
                   <div className="py-8 flex flex-col items-center justify-center text-muted-foreground gap-3">
                     <Spinner size="md" />
-                    <p>Cargando viajes...</p>
+                    <p>Cargando viajes…</p>
                   </div>
                 ) : errorViajes ? (
                   <ErrorState
@@ -352,11 +411,11 @@ export default function DespachoPage() {
                         </div>
                         <div className="flex gap-4 text-sm text-muted-foreground">
                           <div className="flex items-center gap-1">
-                            <Clock className="w-4 h-4" />
+                            <Clock className="w-4 h-4" aria-hidden />
                             {formatHoraVE(viaje.fecha_hora_salida)}
                           </div>
                           <div className="flex items-center gap-1">
-                            <MapPin className="w-4 h-4" />
+                            <MapPin className="w-4 h-4" aria-hidden />
                             Unidad {viaje.numero_unidad || "sin asignar"}
                           </div>
                         </div>
@@ -372,7 +431,7 @@ export default function DespachoPage() {
         {/* Columna derecha: encomiendas */}
         <div className="space-y-4">
           <h2 className={`text-xl font-semibold flex items-center gap-2 ${!selectedViaje ? "text-muted-foreground" : ""}`}>
-            <Package className="w-5 h-5 text-primary-text" />
+            <Package className="w-5 h-5 text-primary-text" aria-hidden />
             2. Escanear paquetes
           </h2>
 
@@ -400,27 +459,20 @@ export default function DespachoPage() {
                   disabled={n > 0 || isSubmitting}
                   title={n > 0 ? "Despacha o vacía la lista antes de marcar la salida." : undefined}
                 >
-                  <Bus className="h-4 w-4" />
+                  <Bus className="h-4 w-4" aria-hidden />
                   Marcar salida
                 </Button>
               </div>
 
               <ScanInput
                 onEncomiendaFound={(e) => void handleEncomiendaFound(e)}
+                onError={(err) => registrar({ codigo: err.codigo, tono: "error", titulo: "No encontrada", detalle: err.mensaje })}
                 cooperativaId={cooperativaId}
                 mode="encomiendas"
-                disabled={isSubmitting || validando || confirmarOpen || cambioPendiente !== null}
+                disabled={isSubmitting || validando || confirmarOpen || cambioPendiente !== null || salidaOpen}
               />
 
-              {ultimoRechazo && (
-                <div
-                  role="alert"
-                  className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive-text"
-                >
-                  <WarningCircle weight="fill" className="mt-0.5 size-4 shrink-0" aria-hidden />
-                  <span>{ultimoRechazo}</span>
-                </div>
-              )}
+              <UltimoEscaneo resultado={ultimo} />
 
               <Card>
                 <CardContent className="p-0">
@@ -463,7 +515,7 @@ export default function DespachoPage() {
                             aria-label={`Quitar ${enc.tracking_id} de la lista`}
                             className="h-8 w-8 shrink-0 text-destructive-text hover:bg-destructive/10"
                           >
-                            <X className="w-4 h-4" />
+                            <X className="w-4 h-4" aria-hidden />
                           </Button>
                         </div>
                       ))
