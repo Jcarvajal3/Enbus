@@ -209,9 +209,8 @@ function Despacho() {
           toast.info("Esa salida ya no está disponible para despachar. Elige otro viaje.");
           return;
         }
-        const { estado: _estado, ...viaje } = v;
-        setFecha(fechaVE(viaje.fecha_hora_salida));
-        setSelectedViaje(viaje);
+        setFecha(fechaVE(v.fecha_hora_salida));
+        setSelectedViaje({ id: v.id, fecha_hora_salida: v.fecha_hora_salida, numero_unidad: v.numero_unidad, ruta: v.ruta });
       } catch (err) {
         if (activo) toast.error(humanizeError(err, "abrir el viaje"));
       }
