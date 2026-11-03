@@ -9,24 +9,20 @@ interface CardSkeletonProps {
 }
 
 /**
- * Loading placeholder shaped like an `EntityCard`, so the list doesn't reflow
- * when real data arrives.
+ * Loading placeholder shaped like an `EntityCard` (insignia + código, título,
+ * subtítulo), so the list doesn't reflow when real data arrives.
  */
 export const CardSkeleton = memo(function CardSkeleton({ count = 3 }: CardSkeletonProps) {
   return (
-    <View style={s.list} accessibilityLabel="Cargando contenido">
+    <View style={s.list} accessible accessibilityRole="progressbar" accessibilityLabel="Cargando">
       {Array.from({ length: count }, (_, i) => (
         <View key={i} style={s.card}>
-          <View style={s.body}>
-            <SkeletonLoader width={92} height={18} borderRadius={Radius.full} />
-            <SkeletonLoader width="70%" height={16} />
-            <SkeletonLoader width="45%" height={12} />
+          <View style={s.top}>
+            <SkeletonLoader width={Sizes.iconBox['2xl']} height={Sizes.badge.sm} borderRadius={Radius.full} index={i} />
+            <SkeletonLoader width={Sizes.iconBox['2xl']} height={Sizes.icon.xs} index={i} />
           </View>
-          <SkeletonLoader
-            width={Sizes.iconBox.lg + Spacing.sm}
-            height={Sizes.iconBox['2xl']}
-            borderRadius={Radius.md}
-          />
+          <SkeletonLoader width="70%" height={Sizes.icon.md} index={i} />
+          <SkeletonLoader width="45%" height={Sizes.icon.xs} index={i} />
         </View>
       ))}
     </View>
@@ -38,15 +34,14 @@ const s = StyleSheet.create({
     gap: Spacing.md,
   },
   card: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.lg,
+    gap: Spacing.sm,
     backgroundColor: Colors.surface,
     borderRadius: Radius.xl,
     padding: Spacing.lg,
   },
-  body: {
-    flex: 1,
-    gap: Spacing.sm,
+  top: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
 });

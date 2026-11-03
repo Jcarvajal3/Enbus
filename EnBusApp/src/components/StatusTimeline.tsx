@@ -3,13 +3,14 @@ import { StyleSheet, View } from 'react-native';
 import { CheckCircle, Clock, Truck, XCircle } from 'phosphor-react-native';
 import Animated, {
   useAnimatedStyle,
+  useReducedMotion,
   useSharedValue,
   withDelay,
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
 import { Text } from '@/src/components/ui';
-import { dateTime, formatDate } from '@/src/utils/formatters';
+import { formatDiaHoraVE } from '@/src/utils/formatters';
 import { getEncomiendaTimeline } from '@/src/utils/estados';
 import { Colors, Motion, Radius, Sizes, Spacing } from '@/src/theme';
 
@@ -38,7 +39,7 @@ export function buildEncomiendaTimeline(
   return getEncomiendaTimeline(estado, historial, options.creadaAt).map((etapa) => ({
     estado: etapa.id,
     label: etapa.label,
-    timestamp: etapa.fecha ? formatDate(etapa.fecha, dateTime) : null,
+    timestamp: etapa.fecha ? formatDiaHoraVE(etapa.fecha) : null,
     completado: etapa.situacion === 'completada',
     activo: etapa.situacion === 'actual',
     cortado: etapa.situacion === 'cortada',
@@ -59,11 +60,11 @@ export function StatusTimeline({ estados }: { estados: EstadoItem[] }) {
       {estados.map((item, index) => {
         const isLast = index === estados.length - 1;
         const tone = item.cortado
-          ? { fg: Colors.destructive, bg: Colors.destructiveLight }
+          ? { fg: Colors.dangerText, bg: Colors.destructiveLight }
           : item.completado
             ? { fg: Colors.success, bg: Colors.successLight }
             : item.activo
-              ? { fg: Colors.accent, bg: Colors.accentLight }
+              ? { fg: Colors.accentStrong, bg: Colors.accentLight }
               : { fg: Colors.mutedForeground, bg: Colors.surface };
 
         return (
@@ -120,7 +121,7 @@ export function StatusTimeline({ estados }: { estados: EstadoItem[] }) {
                   {item.label}
                 </Text>
                 {item.timestamp ? (
-                  <Text variant="caption" size="xs" color="muted" weight="semibold" compact>
+                  <Text variant="caption" color="muted" weight="semibold" compact>
                     {item.timestamp}
                   </Text>
                 ) : null}
@@ -154,14 +155,21 @@ function TimelineIcon({
   color: string;
   background: string;
 }) {
-  const progress = useSharedValue(0);
-  const scale = useSharedValue(0.6);
+  const reduceMotion = useReducedMotion();
+  const progress = useSharedValue(reduceMotion ? 1 : 0);
+  const scale = useSharedValue(reduceMotion ? 1 : 0.6);
 
   useEffect(() => {
-    const delay = Math.min(index, Motion.stagger.maxIndex) * 80;
+    // Con "reducir movimiento" los iconos aparecen ya en su sitio.
+    if (reduceMotion) {
+      progress.value = 1;
+      scale.value = 1;
+      return;
+    }
+    const delay = Math.min(index, Motion.stagger.maxIndex) * Motion.stagger.step;
     progress.value = withDelay(delay, withTiming(1, { duration: Motion.duration.base }));
     scale.value = withDelay(delay, withSpring(1, Motion.spring.bouncy));
-  }, [index, progress, scale]);
+  }, [index, progress, scale, reduceMotion]);
 
   const animStyle = useAnimatedStyle(() => ({
     opacity: progress.value,

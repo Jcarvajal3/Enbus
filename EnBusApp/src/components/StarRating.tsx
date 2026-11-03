@@ -3,6 +3,7 @@ import { StyleSheet, View } from 'react-native';
 import { Star } from 'phosphor-react-native';
 import Animated, {
   useAnimatedStyle,
+  useReducedMotion,
   useSharedValue,
   withSequence,
   withSpring,
@@ -42,15 +43,19 @@ function AnimatedStar({
   readonly: boolean;
   maxStars: number;
 }) {
+  const reduceMotion = useReducedMotion();
   const scale = useSharedValue(1);
   const animStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
 
   const handlePress = () => {
     if (readonly) return;
-    scale.value = withSequence(
-      withSpring(1.3, Motion.spring.bouncy),
-      withSpring(1, Motion.spring.snappy)
-    );
+    // Con "reducir movimiento" la estrella se rellena sin rebotar.
+    if (!reduceMotion) {
+      scale.value = withSequence(
+        withSpring(1.3, Motion.spring.bouncy),
+        withSpring(1, Motion.spring.snappy)
+      );
+    }
     onPress();
   };
 

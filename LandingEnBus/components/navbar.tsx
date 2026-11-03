@@ -124,7 +124,7 @@ export function Navbar({ secciones = {}, sobreMarca = false }: NavbarProps) {
 
             <div className="flex flex-col gap-1 px-6 py-4">
               {navLinks.map((link) => (
-                <SheetClose key={link.href} render={<a href={link.href} className={cn("rounded-sm", FOCO)} />}>
+                <SheetClose key={link.href} nativeButton={false} render={<a href={link.href} className={cn("rounded-sm", FOCO)} />}>
                   <span className="inline-flex w-full rounded-sm px-3 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted">
                     {link.label}
                   </span>

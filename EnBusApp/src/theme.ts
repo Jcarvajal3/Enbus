@@ -98,8 +98,8 @@ export const Colors = {
    * switch, focus ring, active tab, active counter. White text on it = 5.7:1.
    * `shared/tokens.json` → `accent-strong` (= `paleta.blue-dark`).
    */
-  accentStrong: palette.blueDark,
-  accentStrongForeground: palette.white,
+  accentStrong: tokens.claro.accentStrong,
+  accentStrongForeground: tokens.claro.accentStrongForeground,
 
   /** Links in running text and text buttons (≥ 4.5:1 on white and beige). */
   link: palette.blueText,
@@ -150,7 +150,7 @@ export const Colors = {
 
   // Tab bar specific
   /** Active pill behind the white label/icon (5.7:1) — `accentStrong` */
-  tabActive: palette.blueDark,
+  tabActive: tokens.claro.accentStrong,
   /** Inactive label/icon on the beige bar (5.0:1) */
   tabInactive: palette.greyText,
   tabBackground: palette.white,

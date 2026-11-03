@@ -4,13 +4,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import QRCode from 'react-native-qrcode-svg';
 import Animated, {
   useAnimatedStyle,
+  useReducedMotion,
   useSharedValue,
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
-import { ArrowsOut, SunDim } from 'phosphor-react-native';
-import { Button, Text } from '@/src/components/ui';
-import { Colors, Layout, Motion, Radius, Shadows, Sizes, Spacing } from '@/src/theme';
+import { ArrowsOut, SunDim, X } from 'phosphor-react-native';
+import { Button, IconButton, Text } from '@/src/components/ui';
+import { Colors, Layout, Motion, Radius, Sizes, Spacing, Typography } from '@/src/theme';
 
 /** Tamaño del QR en pantalla completa: lo bastante grande para cualquier lector. */
 const QR_GRANDE = 280;
@@ -36,14 +37,21 @@ interface QRCodeViewerProps {
 
 /** QR with a spring reveal — it should feel like the code "arrives", not blink in. */
 export function QRCodeViewer({ data, size = 200, codigoLegible, ampliable }: QRCodeViewerProps) {
-  const opacity = useSharedValue(0);
-  const scale = useSharedValue(0.9);
+  const reduceMotion = useReducedMotion();
+  const opacity = useSharedValue(reduceMotion ? 1 : 0);
+  const scale = useSharedValue(reduceMotion ? 1 : 0.9);
   const [grande, setGrande] = useState(false);
 
   useEffect(() => {
+    // Con "reducir movimiento" el QR aparece sin escalar ni fundirse.
+    if (reduceMotion) {
+      opacity.value = 1;
+      scale.value = 1;
+      return;
+    }
     opacity.value = withTiming(1, { duration: Motion.duration.base, easing: Motion.easing.out });
     scale.value = withSpring(1, Motion.spring.soft);
-  }, [opacity, scale]);
+  }, [opacity, scale, reduceMotion]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     opacity: opacity.value,
@@ -85,6 +93,9 @@ export function QRCodeViewer({ data, size = 200, codigoLegible, ampliable }: QRC
           presentationStyle="fullScreen"
         >
           <SafeAreaView style={s.fullscreen} edges={['top', 'bottom']}>
+            <View style={s.fullscreenHeader}>
+              <IconButton icon={X} label="Cerrar" onPress={() => setGrande(false)} variant="surface" />
+            </View>
             <View style={s.fullscreenBody}>
               <View accessible accessibilityLabel={etiqueta} accessibilityRole="image">
                 <QRCode
@@ -107,11 +118,6 @@ export function QRCodeViewer({ data, size = 200, codigoLegible, ampliable }: QRC
                 </Text>
               </View>
             </View>
-            <View style={s.fullscreenFooter}>
-              <Button variant="secondary" fullWidth onPress={() => setGrande(false)}>
-                Cerrar
-              </Button>
-            </View>
           </SafeAreaView>
         </Modal>
       ) : null}
@@ -131,11 +137,10 @@ const s = StyleSheet.create({
     borderRadius: Radius.lg,
     borderWidth: Sizes.hairline,
     borderColor: Colors.border,
-    ...Shadows.card,
   },
   code: {
     marginTop: Spacing.md,
-    letterSpacing: 1.5,
+    letterSpacing: Typography.tracking.wide,
   },
   ampliar: {
     marginTop: Spacing.sm,
@@ -152,7 +157,7 @@ const s = StyleSheet.create({
   },
   fullscreenCode: {
     marginTop: Spacing.xl,
-    letterSpacing: 2,
+    letterSpacing: Typography.tracking.wider,
   },
   ayuda: {
     flexDirection: 'row',
@@ -164,8 +169,9 @@ const s = StyleSheet.create({
   ayudaTexto: {
     flexShrink: 1,
   },
-  fullscreenFooter: {
+  fullscreenHeader: {
+    alignItems: 'flex-end',
     paddingHorizontal: Layout.screenPadding,
-    paddingBottom: Spacing.xl,
+    paddingTop: Spacing.sm,
   },
 });

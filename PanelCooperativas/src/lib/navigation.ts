@@ -3,8 +3,10 @@ import {
   MapTrifold, Users, Gear, CalendarBlank,
   DownloadSimple, Handshake, Receipt, ArrowCounterClockwise, Printer,
   Bus, QrCode,
-  type Icon,
 } from "@phosphor-icons/react/dist/ssr";
+// Iconos de la entrada SSR: este módulo lo importan el proxy y los Server Components,
+// donde la entrada normal (con React context) no se puede evaluar.
+import type { Icon } from "@phosphor-icons/react";
 
 // ─── Mapa del panel de cooperativas (fase 5, §2.1) ───────────────────────────
 // Una sola fuente para el menú, la miga de la barra superior, la pestaña del

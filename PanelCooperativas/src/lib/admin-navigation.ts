@@ -1,8 +1,10 @@
 import {
   ChartBar, Buildings, CurrencyDollar,
   Receipt, Warning, Users, ClipboardText, Package,
-  type Icon,
 } from "@phosphor-icons/react/dist/ssr";
+// Iconos de la entrada SSR: este módulo lo importan el proxy y los Server Components,
+// donde la entrada normal (con React context) no se puede evaluar.
+import type { Icon } from "@phosphor-icons/react";
 
 // ─── Mapa del panel de administración (fase 5, §2.1) ─────────────────────────
 // Mismo texto en el menú, la miga, el H1 y la pestaña del navegador.

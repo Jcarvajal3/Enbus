@@ -39,7 +39,7 @@ export default async function Image() {
         <div style={{ marginTop: 48, fontSize: 56, fontWeight: 600, lineHeight: 1.2, maxWidth: 960 }}>
           Boletos de bus y encomiendas por toda Venezuela
         </div>
-        <div style={{ marginTop: 28, fontSize: 32, color: "#666666" }}>
+        <div style={{ marginTop: 28, fontSize: 28, color: "#666666" }}>
           Cooperativas verificadas · Pago Móvil o transferencia · Rastreo en línea
         </div>
       </div>

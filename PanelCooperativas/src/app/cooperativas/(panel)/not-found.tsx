@@ -1,23 +1,19 @@
 import Link from "next/link";
-import { buttonVariants } from "@/components/ui/button";
 import { MagnifyingGlass } from "@phosphor-icons/react/dist/ssr";
+import { buttonVariants } from "@/components/ui/button";
+import { INICIO } from "@/lib/navigation";
 
+// 404 dentro del panel (PN-21): sin referencias al menú, que en teléfono está oculto.
 export default function PanelNotFound() {
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-4 py-20 text-center">
-      <div className="rounded-full bg-muted p-4">
-        <MagnifyingGlass size={48} className="text-muted-foreground" weight="duotone" aria-hidden />
+    <div className="flex flex-1 flex-col items-center justify-center gap-4 p-12 text-center">
+      <div className="flex size-16 items-center justify-center rounded-full bg-muted">
+        <MagnifyingGlass className="size-8 text-muted-foreground" aria-hidden />
       </div>
-      <h2 className="text-2xl font-bold">No encontramos esta página</h2>
-      <p className="max-w-md text-muted-foreground">
-        Puede que la dirección esté mal escrita o que la sección ya no exista. Usa el menú de la izquierda o vuelve al
-        resumen.
-      </p>
-      <div className="mt-4">
-        <Link href="/cooperativas/dashboard" className={buttonVariants({ variant: "default" })}>
-          Volver al resumen
-        </Link>
-      </div>
+      <h1 className="text-base font-semibold text-foreground">No encontramos esta página.</h1>
+      <Link href={INICIO} className={buttonVariants({ variant: "default" })}>
+        Ir al Resumen
+      </Link>
     </div>
   );
 }

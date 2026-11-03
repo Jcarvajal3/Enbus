@@ -2,17 +2,21 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { SpinnerIcon, WarningCircle } from "@phosphor-icons/react";
+import { ArrowClockwise, WarningCircle } from "@phosphor-icons/react";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
+import { INICIO_ADMIN } from "@/lib/admin-navigation";
 
-// Nunca muestra el texto técnico del error: solo el `digest` para cruzarlo con los registros.
+// Error de una sección del admin. Nunca muestra el texto técnico del error
+// (en producción Next.js lo oculta y en desarrollo puede traer datos internos):
+// solo el código `digest` para cruzarlo con los registros del servidor.
 export default function AdminPanelError({
   error,
   unstable_retry,
   reset,
 }: {
   error: Error & { digest?: string };
-  /** Next.js 16.2: vuelve a pedir los datos del servidor y a renderizar la sección. */
+  /** Next.js 16: vuelve a pedir los datos y a renderizar la sección. */
   unstable_retry?: () => void;
   reset: () => void;
 }) {
@@ -31,30 +35,31 @@ export default function AdminPanelError({
   };
 
   return (
-    <div role="alert" className="flex h-full flex-col items-center justify-center gap-4 py-20 text-center text-foreground">
-      <div className="rounded-full bg-destructive/10 p-4">
-        <WarningCircle size={48} className="text-destructive-text" weight="duotone" aria-hidden />
+    <div role="alert" className="flex flex-1 flex-col items-center justify-center gap-4 p-12 text-center">
+      <div className="flex size-16 items-center justify-center rounded-full bg-destructive-light">
+        <WarningCircle className="size-8 text-destructive-deep" aria-hidden />
       </div>
-      <h2 className="text-2xl font-bold">No pudimos cargar esta sección</h2>
-      <p className="max-w-md text-muted-foreground">
-        Reintenta; si sigue pasando, avísanos
-        {error.digest ? (
-          <>
-            {" "}
-            con este código: <span className="font-mono text-foreground">{error.digest}</span>
-          </>
-        ) : (
-          "."
-        )}
-      </p>
-      <div className="mt-4 flex flex-wrap justify-center gap-3">
+      <div className="flex max-w-sm flex-col gap-1">
+        <h1 className="text-base font-semibold text-foreground">No pudimos cargar esta sección</h1>
+        <p className="text-sm text-muted-foreground">
+          {error.digest ? (
+            <>
+              Si sigue pasando, avísanos con este código:{" "}
+              <span className="font-mono font-medium text-foreground">{error.digest}</span>
+            </>
+          ) : (
+            "Reintenta en unos segundos."
+          )}
+        </p>
+      </div>
+      <div className="flex flex-wrap justify-center gap-2">
+        <Link href={INICIO_ADMIN} className={buttonVariants({ variant: "outline" })}>
+          Ir al Resumen
+        </Link>
         <Button onClick={reintentar} disabled={reintentando} aria-busy={reintentando || undefined}>
-          {reintentando && <SpinnerIcon className="motion-safe:animate-spin" aria-hidden />}
+          {reintentando ? <Spinner size="sm" aria-hidden /> : <ArrowClockwise aria-hidden />}
           {reintentando ? "Reintentando…" : "Reintentar"}
         </Button>
-        <Link href="/admin/dashboard" className={buttonVariants({ variant: "outline" })}>
-          Volver al resumen
-        </Link>
       </div>
     </div>
   );
