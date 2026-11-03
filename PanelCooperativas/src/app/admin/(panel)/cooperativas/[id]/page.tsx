@@ -6,8 +6,9 @@ import { CooperativaDetailTabs } from "@/components/admin/cooperativas/cooperati
 import { CooperativaActions } from "@/components/admin/cooperativas/cooperativa-actions";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { StatusBadge } from "@/components/status-badge";
-import { ArrowLeft, Buildings } from "@phosphor-icons/react/dist/ssr"; // Use SSR-safe icons
-import Link from "next/link";
+import { Buildings } from "@phosphor-icons/react/dist/ssr";
+import { PageHeader } from "@/components/page-header";
+import { PendienteAprobacion } from "@/components/admin/cooperativas/cooperativas-table";
 import { formatFechaVE } from "@/lib/fechas";
 
 interface PageProps {
@@ -24,31 +25,25 @@ export default async function CooperativaDetailPage({ params }: PageProps) {
 
   return (
     <div className="space-y-6">
-      {/* Back Button / Breadcrumb */}
-      <div>
-        <Link 
-          href="/admin/cooperativas"
-          className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeft className="h-4 w-4" aria-hidden /> Volver a cooperativas
-        </Link>
-      </div>
-
-      {/* Main Header */}
-      <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between bg-card border p-6 rounded-2xl">
-        <div className="flex items-center gap-4">
-          <Avatar className="h-16 w-16 border-2">
-            <AvatarImage src={cooperativa.logo_url || ""} alt={cooperativa.nombre} />
-            <AvatarFallback className="bg-muted text-muted-foreground">
-              <Buildings className="h-8 w-8" />
-            </AvatarFallback>
-          </Avatar>
-          <div className="space-y-1">
+      <PageHeader
+        title={cooperativa.nombre}
+        migas={[{ label: "Cooperativas", href: "/admin/cooperativas" }, { label: cooperativa.nombre }]}
+        description={
+          <div className="mt-1 flex flex-col gap-2">
             <div className="flex flex-wrap items-center gap-3">
-              <h1 className="text-2xl font-bold tracking-tight">{cooperativa.nombre}</h1>
-              <StatusBadge status={cooperativa.estado} dominio="cooperativa" />
+              <Avatar className="size-10 border">
+                <AvatarImage src={cooperativa.logo_url || ""} alt="" />
+                <AvatarFallback className="bg-muted text-muted-foreground">
+                  <Buildings className="size-5" aria-hidden />
+                </AvatarFallback>
+              </Avatar>
+              {cooperativa.estado === "PENDIENTE" ? (
+                <PendienteAprobacion className="flex-row items-center gap-2" />
+              ) : (
+                <StatusBadge status={cooperativa.estado} dominio="cooperativa" />
+              )}
+              <span className="font-mono text-sm">RIF: {cooperativa.rif}</span>
             </div>
-            <p className="text-sm text-muted-foreground font-mono">RIF: {cooperativa.rif}</p>
             {cooperativa.motivo_estado && cooperativa.estado !== "ACTIVA" && cooperativa.estado !== "PENDIENTE" && (
               <p className="max-w-xl text-sm text-foreground">
                 <span className="text-muted-foreground">Motivo: </span>
@@ -59,11 +54,10 @@ export default async function CooperativaDetailPage({ params }: PageProps) {
               </p>
             )}
           </div>
-        </div>
-        
-        {/* Action buttons */}
+        }
+      >
         <CooperativaActions cooperativa={cooperativa} />
-      </div>
+      </PageHeader>
 
       {/* Detail Tabs */}
       <CooperativaDetailTabs cooperativa={cooperativa} />

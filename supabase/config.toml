@@ -481,8 +481,9 @@ entrypoint = "./functions/procesar-notificaciones-pendientes/index.ts"
 
 [functions.actualizar-tasa-bcv]
 enabled = true
-# La invoca pg_cron con la service role key; la función compara el header Authorization a mano.
-verify_jwt = false
+# La invoca pg_cron con la service role key (legacy JWT del vault). La pasarela verifica la firma
+# y la función exige el rol service_role en los claims.
+verify_jwt = true
 import_map = "./functions/actualizar-tasa-bcv/deno.json"
 entrypoint = "./functions/actualizar-tasa-bcv/index.ts"
 

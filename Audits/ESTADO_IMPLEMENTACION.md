@@ -1,8 +1,8 @@
 # Estado de la implementación del plan UX
 
-Actualizado el 02/11/2026. Rama `ux/mejoras-auditoria`.
+Actualizado el 03/11/2026. Rama `ux/mejoras-auditoria`.
 
-Las fases 1, 2 y 3 están implementadas: 42 de las 60 mejoras del plan. La fase 4 (mejoras #43 a #60) está planificada y sin implementar. Nada se ha probado contra Supabase real, en un dispositivo ni en un navegador. Lo que se verificó: compilación, lint y build de los tres proyectos, y las migraciones contra PGlite (Postgres en memoria).
+**Las cuatro fases están implementadas: 60 de 60 mejoras.** Las migraciones de las fases 2, 3 y 4 están **aplicadas en el proyecto de Supabase** (`tydpnvajwfzcsxsowctp`, el único, todavía sin usuarios reales) y las edge functions están desplegadas. Nada se ha probado todavía en un dispositivo ni en un navegador contra la base real: eso es lo siguiente (ver «Qué falta»).
 
 ## Documentos de referencia
 
@@ -11,119 +11,68 @@ Las fases 1, 2 y 3 están implementadas: 42 de las 60 mejoras del plan. La fase 
 | [Informe de auditoría (doc)](https://claude.ai/code/artifact/115c0622-7d60-4d94-ba9f-6df2151c8e81) | Plan de 60 mejoras priorizadas, con columna de estado |
 | `Audits/audit_ux_usuario_novato.md` | Hallazgos M-, P-, A-, L- con `archivo:línea` |
 | `Audits/audit_ux_experto_uxui.md` | Propuestas APP-, PC-, AD-, LP-, DS- con la ley UX aplicada |
-| `Audits/fase2_spec.md` | Especificación de la fase 2: moneda, checkout, RPC, `dinero.ts` |
-| `Audits/fase3_spec.md` | Especificación de la fase 3 |
-| `Audits/fase4_spec.md` | Especificación de la fase 4, lista para implementar (§7 tiene la partición) |
-| `Audits/pendientes_fase1.md` … `pendientes_fase3.md` | Lo que quedó abierto en cada fase y los pasos manuales |
-| `Specs/00_General/Glosario.md` | Vocabulario único y tabla de estados para pasajero y operador |
+| `Audits/fase2_spec.md` … `fase4_spec.md` | Especificación de cada fase |
+| `Audits/pendientes_fase1.md` … `pendientes_fase4.md` | Lo que quedó abierto en cada fase y los pasos manuales |
+| `shared/README.md` | Fuente única de tokens, formatos venezolanos y artefactos (`node shared/generar.mjs [--check]`) |
+| `Specs/00_General/Glosario.md`, `Artefactos_Compartidos.md` | Vocabulario, estados, códigos, QR y PIN |
 
 ## Decisiones tomadas
 
-- **Moneda:** precios de referencia en USD y cobro en Bs a la tasa BCV del día. Cada pago guarda `monto_bs`, `tasa_bcv` y `tasa_bcv_fecha`. La tasa vive en la tabla `tasas_bcv`, la actualiza la edge function `actualizar-tasa-bcv` y el super admin puede cargarla a mano.
-- **Lógica en servidor:** el dinero y los estados se deciden en RPC `SECURITY DEFINER`. Los errores salen como `EB_*` con el texto para el usuario en `hint`, y `humanizeError` los traduce en la app y en el panel.
-- **Sin Docker ni Supabase local:** el SQL se valida con PGlite en el scratchpad, y nunca se toca el proyecto remoto sin aprobación (`db push`, `link`, `functions deploy`).
-- **Builds de la app:** EnBusApp se compila en EAS (nube), no con Gradle local.
+- **Moneda:** precios de referencia en USD y cobro en Bs a la tasa BCV del día. Cada pago guarda `monto_bs`, `tasa_bcv` y `tasa_bcv_fecha`. La tasa vive en `tasas_bcv`; la carga la edge function `actualizar-tasa-bcv` cada 30 min (pg_cron) y el super admin puede cargarla a mano.
+- **Lógica en servidor:** el dinero y los estados se deciden en RPC `SECURITY DEFINER`. Los errores salen como `EB_*` con el texto para el usuario en `hint`; `humanizeError` los traduce en la app y en el panel.
+- **Una sola fuente de diseño y formatos:** `shared/` genera tokens CSS/TS y copias de `ve.ts` y `artefactos.ts` en los tres proyectos. El lint prohíbe colores sueltos (nivel `error`).
+- **Supabase:** como no hay usuarios todavía, se aplicó todo directo en el único proyecto, por la Management API. Los builds de la app van por EAS.
 
 ## Estado por fase
 
-| Fase | Mejoras | Estado | Migraciones |
+| Fase | Mejoras | Código | Supabase |
 | --- | --- | --- | --- |
-| 1 · Arreglos rápidos | P0 de horas: #4, #7–#13, #17, #18; P1 baratos: #20, #21, #29, #30 | Implementada | Ninguna |
-| 2 · Resto de P0 | #1, #2, #3, #5, #6, #14, #15, #16 + pendientes de fase 1 | Implementada | `20260719000001`–`05`, más `06` diferida |
-| 3 · Confianza (P1) | #19–#28, #31–#42 + pendientes de fase 2 | Implementada | `20260720000001`–`05` |
-| 4 · Pulido y base (P2, P3) | #43–#60 + pendientes de fase 3 | Planificada, sin código | `20260721000001`–`03`, solo en la spec |
+| 1 · Arreglos rápidos | #4, #7–#13, #17, #18, #20, #21, #29, #30 | Hecho | Sin migraciones |
+| 2 · Resto de P0 | #1, #2, #3, #5, #6, #14, #15, #16 | Hecho | `20260719000001`–`06` aplicadas (la 06 con `enbus.aplicar_cierre_fase2='si'`) |
+| 3 · Confianza (P1) | #19–#28, #31–#42 | Hecho | `20260720000001`–`05` aplicadas |
+| 4 · Pulido y base (P2, P3) | #43–#60 | Hecho | `20260721000001`–`04` aplicadas |
 
-### Qué hizo cada fase implementada
+### Fase 4 en resumen
 
-**Fase 1**
-- Columna `viaje_id` en despacho y token correcto en las invitaciones.
-- Timeline de encomiendas sin falsos "Entregada" y "Entrega" en el menú.
-- Fecha del pago con chips, hora de Venezuela (`lib/fechas.ts`) y RIF oficial aceptado (`lib/rif.ts`).
-- Ya no se dice "Revisa tu correo" cuando el correo falló, ni se muestran éxitos falsos en la taquilla.
-- Recepción filtrada por sucursal.
-- Errores traducidos (`utils/errores.ts`, `lib/errores.ts`).
-- Colores de texto accesibles y "atrás" de Android en los wizards (`useWizardBack`).
+- **Seguridad de la entrega:** el PIN se valida antes de entregar (15 min, mismo empleado) y la API ya no puede escribir el PIN ni pasar una encomienda a ENTREGADA. Las guías PDF (que ahora llevan el PIN) son privadas por cooperativa (migración 04, añadida en la integración).
+- **App:** Inicio con «Tu próximo viaje», búsqueda con recientes y populares, resultados con llegada y «Quedan 3», notificaciones por día que abren el recurso, perfil por secciones con preferencias de notificación, cambiar contraseña y eliminar cuenta (Google Play), campos de cédula y teléfono, toasts de error persistentes, «reducir movimiento».
+- **Panel:** escaneo con sonido y «Último escaneo» en las cinco pantallas del mostrador, «Impresora y lector» para ambos roles con reconexión, Resumen con «Requiere tu atención», viajes con pestañas, editar viaje, marcar llegada y manifiesto, rutas con horas y minutos, filas navegables con teclado.
+- **Admin:** dashboard en dos bandas con deltas, tarifas con revisión y programación, pago de comisión con método y referencia, usuarios paginados en servidor con bajas de cuenta, incidencias por prioridad, sistema visual unificado.
+- **Landing:** `/terminos`, `/privacidad`, `/eliminar-cuenta`, SEO (OG, robots, sitemap, JSON-LD), límite atómico en el reenvío de invitaciones.
 
-**Fase 2**
-- Moneda USD/BCV con `dinero.ts` (idéntico en los tres proyectos) y el componente `Monto`.
-- Checkout atómico: `fn_reservar_asientos` y `fn_checkout_boletos`, con idempotencia e índice único de asiento.
-- Reserva sin pagar separada de pago en verificación; solo el cron escribe `EXPIRADO`.
-- Cobro en destino completo y destinatario vinculado por cédula o teléfono.
-- Embarque con resultado por causa, despacho que valida el destino y "Marcar salida" como acción aparte.
-- Bandeja "Pagos por verificar" con aprobar y rechazar con motivo, y venta en taquilla por RPC.
+Detalle, desviaciones y pendientes: `Audits/pendientes_fase4.md`.
 
-**Fase 3**
-- Restablecer contraseña, pantalla "Revisa tu correo", Google con PKCE y cédula antes de la primera compra.
-- Nombre y cédula por pasajero, y pantalla "Tu compra" con todos los boletos.
-- Pase de abordaje con hora, dirección y código corto.
-- Cancelación y reembolso: bandeja de reembolsos en el panel y `fn_cancelar_viaje`.
-- Ayuda con "Reportar un problema", que crea una incidencia.
-- Alta presencial de encomiendas y foto que se puede subir u omitir.
-- Entrega con el PIN y la cédula validados en el servidor.
-- Rechazo de solicitudes reversible (`RECHAZADA`), aviso del estado de la cooperativa y checklist de puesta en marcha.
-- Un solo flujo de registro, invitaciones con reenviar y revocar, y métodos de pago con campos según el tipo.
-- Landing con rastreo real y calculadora, sin testimonios inventados.
-- Nueva política (`aa_proteger_cooperativa`) que impide que el admin de una cooperativa cambie su propio estado o su comisión.
+## Qué hay en Supabase (verificado el 03/11/2026)
+
+- **Migraciones:** las 33 del repo constan en `supabase_migrations.schema_migrations` (las de `20260503` a `20260718` ya estaban aplicadas a mano y se registraron).
+- **Realtime:** `boletos`, `encomiendas`, `viajes`, `pagos` y `notificaciones_usuario` en `supabase_realtime`.
+- **Índices únicos** de cédula y teléfono normalizados creados (no había duplicados).
+- **Crons (7):** `auto_expirar_reserva`, `alerta_amarilla_72h`, `auto_devolver_encomienda`, `procesar_notificaciones_pendientes`, `actualizar_tasa_bcv`, `activar_tarifas_programadas`, `limpiar_limites_uso`.
+- **Vault:** `project_url` y `service_role_key` (los usan los crons que llaman a edge functions).
+- **Edge functions (9, activas):** `actualizar-tasa-bcv`, `calculadora-publica`, `calcular-costo-encomienda`, `eliminar-cuenta`, `enviar-push`, `enviar-whatsapp`, `generar-guia-pdf`, `procesar-notificaciones-pendientes`, `track-and-trace`.
+- **Tasa BCV vigente:** 889,5754 Bs/USD (02/11/2026, dolarapi).
 
 ## Qué falta
 
-### 1. Implementar la fase 4 (#43–#60)
+Ver la lista completa y ordenada en `Audits/pendientes_fase4.md` § Pasos manuales. En corto:
 
-La especificación completa está en `Audits/fase4_spec.md`. Su partición (§7) tiene 2 oleadas de 5 clusters, con archivos disjuntos.
-
-- **Oleada 1:**
-  - W1-DB: 3 migraciones `20260721…`, la edge function `eliminar-cuenta` y specs.
-  - W1-SHARED: `shared/` como fuente única de tokens, formatos venezolanos y artefactos, con el script `generar.mjs`.
-  - W1-APP-BASE, W1-PANEL-BASE y W1-LANDING: páginas legales, SEO y limpieza.
-- **Oleada 2:**
-  - W2-APP-VIAJES: inicio, búsqueda, resultados y mis boletos.
-  - W2-APP-CUENTA: notificaciones, perfil, cambiar contraseña y eliminar cuenta.
-  - W2-PANEL-MOSTRADOR: escaneo de experto y hardware.
-  - W2-PANEL-GESTION: dashboard "Requiere tu atención", viajes y rutas.
-  - W2-ADMIN: admin operativo y visual.
-- **Pendiente de seguridad que corrige la migración `20260721000001`:** `fn_entregar_encomienda` no cuenta el intento de PIN fallido. Con ella, el PIN debe validarse antes de entregar, con una vigencia de 15 minutos por empleado.
-
-Cómo reanudar: un orquestador con un agente implementador por cluster (cada uno solo con sus archivos), un revisor adversarial por cluster y un integrador final que ejecute `tsc`, lint y build en los tres proyectos. Primero la oleada 1, luego la 2.
-
-### 2. Aplicar y probar las migraciones en staging (nunca directo en producción)
-
-Orden:
-1. Desplegar antes los hints de embed del panel (fase 2), o fallan comisiones y el detalle de usuario.
-2. Antes de la `20260719000002`, ejecutar la consulta de solo lectura de asientos duplicados.
-3. Aplicar `20260719000001`–`05`.
-4. Aplicar `20260720000001` sola y luego `20260720000002`–`05`.
-5. Aplicar `20260721000001`–`03` (cuando exista la fase 4).
-6. Después de cada migración, ejecutar `NOTIFY pgrst, 'reload schema';`.
-7. La `20260719000006` va al final, cuando la versión vieja de la app ya no esté en uso, con `SET enbus.aplicar_cierre_fase2 = 'si';` en la misma sesión.
-
-Los pasos detallados y las pruebas están en §6 de `fase2_spec.md`, en `pendientes_fase3.md` y en §8 de `fase4_spec.md`.
-
-### 3. Otros pasos manuales
-
-- **Edge functions a desplegar:** `actualizar-tasa-bcv`, `procesar-notificaciones-pendientes`, `enviar-push`, `calculadora-publica` y `calcular-costo-encomienda`. Con la fase 4, también `eliminar-cuenta` y `generar-guia-pdf`. Después, comprobar `select * from fn_tasa_bcv_vigente();`.
-- **Realtime:** `viajes` y `pagos` deben estar en `supabase_realtime`. La migración `20260721000002` las añade.
-- **Supabase Auth:**
-  - Redirect URLs `enbus://auth/callback`, `enbus://**` y `exp://**`.
-  - Proveedor Google activado.
-  - Plantillas de correo con `{{ .ConfirmationURL }}`.
-- **Variables de entorno:**
-  - `EXPO_PUBLIC_SOPORTE_WHATSAPP` y `NEXT_PUBLIC_SOPORTE_WHATSAPP`.
-  - `NEXT_PUBLIC_COOPERATIVAS_URL` y `RESEND_API_KEY`.
-  - `SUPABASE_SERVICE_ROLE_KEY` en la landing.
-  - Con la fase 4: `EXPO_PUBLIC_SITIO_URL` y `NEXT_PUBLIC_SITIO_URL`.
-- **Orden de despliegue:** migraciones → edge functions → panel y landing → nuevo build de la app en EAS. Recomendado: `npx expo install expo-crypto`. `expo-clipboard` ya está añadido.
-- **Datos:**
-  - Confirmar con cada cooperativa que `rutas.precio_pasaje` está en USD (revisar los mayores de 200).
-  - Revisar los RIF antiguos sin dígito verificador.
-  - Pasar a `foto_cliente_path` las fotos antiguas guardadas como URL.
-
-### 4. Decisiones de negocio pendientes
-
-- Texto del reembolso para quien pagó con Zelle: hoy promete "Te devolveremos Bs …".
-- Lista de artículos prohibidos y texto del seguro (3 veces el valor declarado).
-- Si un cambio de hora hecho por la cooperativa da derecho a reembolso del 100 %.
-- Revisión legal de `/terminos` y `/privacidad` (fase 4).
+1. **Supabase Auth** (dashboard → Authentication → URL Configuration / Providers): Site URL, Redirect URLs, Google y SMTP propio.
+2. **Variables de entorno** en Vercel (panel y landing) y en EAS (app), incluida `*_SITIO_URL = https://enbus-hazel.vercel.app`.
+3. **Desplegar** panel y landing y hacer un build nuevo de la app en EAS.
+4. **Probar** los flujos de §8 paso 10 de `fase4_spec.md` en dispositivo y navegador.
+5. **Revisión legal** de `/terminos` y `/privacidad`, y decisiones de negocio pendientes.
 
 ## Último estado verificado
 
-El 02/11/2026, `npx tsc --noEmit` dio 0 errores en EnBusApp, PanelCooperativas y LandingEnBus. Al cerrar la fase 3, `expo lint`, `eslint` y `npm run build` del panel y la landing también estaban en verde.
+03/11/2026, al integrar la fase 4:
+
+| Comando | Resultado |
+|---|---|
+| `node shared/generar.mjs --check` | OK, los 9 generados coinciden |
+| `EnBusApp: npx tsc --noEmit` / `npx expo lint` | 0 errores / 0 errores, 0 avisos |
+| `PanelCooperativas: npx tsc --noEmit` / `npx eslint` | 0 errores / 0 errores, 0 avisos (reglas de tokens y `jsx-a11y` en `error`) |
+| `PanelCooperativas: npm run build` | OK, 37 rutas (incluida `/cooperativas/hardware`) |
+| `LandingEnBus: npx tsc --noEmit` / `npx eslint` | 0 errores / 0 errores, 0 avisos |
+| `LandingEnBus: npm run build` | OK, 12 rutas (incluidas las legales, `opengraph-image`, `robots.txt`, `sitemap.xml`) |
+| SQL de la fase 4 en PGlite (Postgres 18) | 4 migraciones, dos pasadas, 123/123 pruebas de §2.4 |
+| Supabase real | Migraciones aplicadas sin error; `actualizar-tasa-bcv` y `procesar-notificaciones-pendientes` responden 200 desde pg_cron |

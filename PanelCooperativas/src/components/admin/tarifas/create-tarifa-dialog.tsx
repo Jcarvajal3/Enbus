@@ -85,6 +85,11 @@ function rutasDeEjemplo(rutas: RouteOption[]): RouteOption[] {
   return [ordenadas[0], ordenadas[Math.floor(ordenadas.length / 2)], ordenadas[ordenadas.length - 1]];
 }
 
+/** true si el instante ISO es posterior a ahora (se usa al validar, no al renderizar). */
+function esFuturo(iso: string): boolean {
+  return new Date(iso).getTime() > Date.now();
+}
+
 /** Ahora en Venezuela + 1 hora, redondeado a la hora: valor inicial de "Programar". */
 function horaSugerida(): string {
   const partes = new Intl.DateTimeFormat("en-GB", {
@@ -193,7 +198,7 @@ function Formulario({
     if (cuando === "programar") {
       if (!fecha || !hora) {
         e.vigente_desde = "Elige la fecha y la hora en que empieza a regir.";
-      } else if (new Date(fechaHoraVEaISO(fecha, hora)).getTime() <= Date.now()) {
+      } else if (!esFuturo(fechaHoraVEaISO(fecha, hora))) {
         e.vigente_desde = "La fecha programada tiene que ser posterior a ahora.";
       }
     }

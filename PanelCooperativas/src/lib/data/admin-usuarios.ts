@@ -3,6 +3,7 @@ import type { User } from "@supabase/supabase-js";
 import { humanizeError } from "@/lib/errores";
 import { formatFechaHoraVE } from "@/lib/fechas";
 import { cedulaParaGuardar, telefonoParaGuardar } from "@/lib/ve";
+import { formatCiudad } from "@/lib/ciudades";
 import type {
   BajaCuenta,
   FiltrosUsuarios,
@@ -265,8 +266,8 @@ export async function fetchUsuarioById(id: string): Promise<UsuarioDetalle | nul
   }));
 
   const boletos: BoletoUsuario[] = (boletosResult.data || []).map((b) => {
-    const origen = b.viajes?.rutas?.ciudad_origen || "";
-    const destino = b.viajes?.rutas?.ciudad_destino || "";
+    const origen = formatCiudad(b.viajes?.rutas?.ciudad_origen);
+    const destino = formatCiudad(b.viajes?.rutas?.ciudad_destino);
     const fechaSalida = b.viajes?.fecha_hora_salida ? formatFechaHoraVE(b.viajes.fecha_hora_salida) : "";
     return {
       id: b.id,

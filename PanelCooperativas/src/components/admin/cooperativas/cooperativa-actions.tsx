@@ -278,7 +278,7 @@ export function CooperativaActions({ cooperativa }: CooperativaActionsProps) {
                 Cancelar
               </Button>
               <Button type="submit" disabled={guardando} aria-busy={guardando || undefined}>
-                {guardando && <SpinnerIcon className="animate-spin" aria-hidden />}
+                {guardando && <SpinnerIcon className="motion-safe:animate-spin" aria-hidden />}
                 {guardando ? "Guardando…" : "Guardar cambios"}
               </Button>
             </div>
@@ -304,7 +304,7 @@ export function CooperativaActions({ cooperativa }: CooperativaActionsProps) {
         <DialogContent className="max-w-md">
           {inviteLink ? (
             <div className="space-y-6 py-2 text-center">
-              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-emerald-900 dark:bg-emerald-400/15 dark:text-emerald-200">
+              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-success-light text-success-deep">
                 <CheckCircle className="h-8 w-8" aria-hidden />
               </div>
               <div className="space-y-2">
@@ -315,7 +315,7 @@ export function CooperativaActions({ cooperativa }: CooperativaActionsProps) {
               </div>
               <div className="flex items-center gap-2 rounded-lg border bg-muted p-3">
                 <span className="flex-1 truncate text-left text-sm text-foreground">{inviteLink}</span>
-                <Button onClick={copyInviteLink} size="sm" variant="secondary" aria-label="Copiar enlace">
+                <Button onClick={copyInviteLink} size="sm" variant="secondary" aria-label={copied ? "Enlace de invitación copiado" : "Copiar enlace de invitación"}>
                   {copied ? <Check className="h-4 w-4" aria-hidden /> : <Copy className="h-4 w-4" aria-hidden />}
                 </Button>
               </div>
@@ -349,7 +349,7 @@ export function CooperativaActions({ cooperativa }: CooperativaActionsProps) {
                   Cancelar
                 </Button>
                 <Button type="submit" disabled={invitando} aria-busy={invitando || undefined}>
-                  {invitando && <SpinnerIcon className="animate-spin" aria-hidden />}
+                  {invitando && <SpinnerIcon className="motion-safe:animate-spin" aria-hidden />}
                   {invitando ? "Creando…" : "Crear invitación"}
                 </Button>
               </div>
@@ -373,7 +373,7 @@ export function CooperativaActions({ cooperativa }: CooperativaActionsProps) {
       {isActive && (
         <Button
           variant="outline"
-          className="border-amber-600/40 text-warning-text hover:bg-amber-100 dark:hover:bg-amber-400/15"
+          className="border-warning/40 text-warning-text hover:bg-warning-light"
           onClick={() => setConfirmar("SUSPENDIDA")}
         >
           <HandPalm className="mr-2 h-4 w-4" aria-hidden /> Suspender

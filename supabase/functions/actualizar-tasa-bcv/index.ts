@@ -13,6 +13,28 @@ function responder(status: number, body: Record<string, unknown>): Response {
   return new Response(JSON.stringify(body), { status, headers: jsonHeaders });
 }
 
+/**
+ * Solo la invoca pg_cron con la service role key. verify_jwt = true en config.toml: la pasarela de
+ * Supabase ya verificó la firma del JWT antes de llegar aquí, así que basta con exigir el rol
+ * service_role en sus claims. También se acepta la coincidencia exacta con la variable del runtime
+ * (en proyectos con las API keys nuevas, SUPABASE_SERVICE_ROLE_KEY puede no ser la clave legacy
+ * que guarda el vault, y la comparación exacta sola fallaba con 401).
+ */
+function esServiceRole(authHeader: string, serviceKey: string): boolean {
+  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
+  if (!token) return false;
+  if (token === serviceKey) return true;
+  const partes = token.split('.');
+  if (partes.length !== 3) return false;
+  try {
+    const base64 = partes[1].replace(/-/g, '+').replace(/_/g, '/');
+    const payload = JSON.parse(atob(base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), '=')));
+    return payload?.role === 'service_role';
+  } catch {
+    return false;
+  }
+}
+
 const fechaCaracas = new Intl.DateTimeFormat('en-CA', {
   timeZone: 'America/Caracas',
   year: 'numeric',
@@ -42,8 +64,7 @@ Deno.serve(async (req) => {
 
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
   const authHeader = req.headers.get('Authorization') ?? '';
-  // verify_jwt = false en config.toml: solo se acepta la service role key exacta.
-  if (!serviceKey || authHeader !== `Bearer ${serviceKey}`) {
+  if (!serviceKey || !esServiceRole(authHeader, serviceKey)) {
     return responder(401, { error: 'No autorizado' });
   }
 

@@ -9,9 +9,9 @@ const PALETA_TAILWIND =
 const MENSAJE_TOKENS =
   "Usa los tokens del sistema (bg-success-light, text-warning-text…), no colores sueltos de Tailwind. Ver shared/README.md.";
 
-// Nivel "warn" mientras la oleada 2 limpia sus archivos; al integrar pasan a "error"
+// Nivel "error" desde la integración de la fase 4 (antes "warn" mientras la oleada 2 limpiaba sus archivos)
 // (paso manual 9 de Audits/fase4_spec.md).
-const NIVEL = "warn";
+const NIVEL = "error";
 
 const eslintConfig = defineConfig([
   ...nextVitals,

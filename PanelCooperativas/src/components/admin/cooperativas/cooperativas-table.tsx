@@ -1,31 +1,22 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useId, useState, useTransition, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { 
-  Table, 
-  TableBody, 
-  TableCell, 
-  TableHead, 
-  TableHeader, 
-  TableRow 
-} from "@/components/ui/table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
-import { 
-  Select, 
-  SelectContent, 
-  SelectItem, 
-  SelectTrigger, 
-  SelectValue 
-} from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/status-badge";
+import { CeldaEnlace } from "@/components/celda-enlace";
 import { etiquetaEstado } from "@/lib/estados";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Star, MagnifyingGlass, Funnel } from "@phosphor-icons/react";
+import { ArrowsCounterClockwise, MagnifyingGlass, Star } from "@phosphor-icons/react";
 import type { Cooperativa } from "@/lib/types/admin-cooperativas";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { isValidRif } from "@/lib/rif";
+import { formatNumeroVE } from "@/lib/dinero";
 import { formatFechaVE } from "@/lib/fechas";
 import { cn } from "@/lib/utils";
 
@@ -42,9 +33,8 @@ export function RifIncompletoBadge({ rif, className }: { rif: string | null | un
       <TooltipTrigger
         type="button"
         aria-label={`RIF incompleto. ${AYUDA_RIF_INCOMPLETO}`}
-        onClick={(e) => e.stopPropagation()}
         className={cn(
-          "inline-flex h-5 shrink-0 items-center rounded-4xl border border-transparent bg-amber-100 px-2 text-xs font-medium whitespace-nowrap text-amber-900 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:bg-amber-400/15 dark:text-amber-200",
+          "inline-flex h-5 shrink-0 items-center rounded-4xl border border-transparent bg-warning-light px-2 text-xs font-medium whitespace-nowrap text-warning-deep outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
           className
         )}
       >
@@ -56,140 +46,202 @@ export function RifIncompletoBadge({ rif, className }: { rif: string | null | un
 }
 
 const ESTADOS_FILTRO = ["PENDIENTE", "RECHAZADA", "ACTIVA", "SUSPENDIDA", "DESACTIVADA"] as const;
-// Etiqueta del valor elegido: sin `items`, el Select muestra el valor crudo ("ALL", "PENDIENTE").
-const ITEMS_ESTADO: Record<string, string> = {
-  ALL: "Todos los estados",
-  ...Object.fromEntries(ESTADOS_FILTRO.map((e) => [e, etiquetaEstado("cooperativa", e)])),
-};
+
+const CLASE_SELECT =
+  "h-9 w-full rounded-md border border-border-strong bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+
+/** 10 → "10 %", 7.5 → "7,5 %". */
+export function formatPorcentaje(n: number | string): string {
+  const v = Number(n);
+  const texto = Number.isInteger(v) ? formatNumeroVE(v, 0) : formatNumeroVE(v, 2).replace(/0$/, "");
+  return `${texto} %`;
+}
+
+/** "Pendiente de aprobación" con el enlace a Solicitudes, donde se aprueba (AD-14, A-04). */
+export function PendienteAprobacion({ className }: { className?: string }) {
+  return (
+    <div className={cn("flex flex-col items-start gap-1", className)}>
+      <Badge variant="secondary" className="bg-warning-light text-warning-deep">
+        Pendiente de aprobación
+      </Badge>
+      <Link
+        href="/admin/solicitudes"
+        className="relative z-10 text-sm text-foreground underline decoration-primary underline-offset-4"
+      >
+        Revisar solicitud
+      </Link>
+    </div>
+  );
+}
+
+/** "4,5 (12)" o "Sin calificaciones" (nunca "0.0 (0)"). */
+export function Calificacion({ promedio, total }: { promedio: number | string; total: number }) {
+  if (!total) return <span className="text-sm text-muted-foreground">Sin calificaciones</span>;
+  return (
+    <span className="inline-flex items-center gap-1">
+      <Star weight="fill" className="size-4 text-primary-text" aria-hidden />
+      <span className="text-sm font-medium text-foreground">{formatNumeroVE(Number(promedio), 1)}</span>
+      <span className="text-sm text-muted-foreground">
+        ({total}
+        <span className="sr-only"> {total === 1 ? "calificación" : "calificaciones"}</span>)
+      </span>
+    </span>
+  );
+}
 
 interface CooperativasTableProps {
   initialCooperativas: Cooperativa[];
+  /** Filtros de la URL (`?estado=&q=`), ya aplicados en el servidor. */
+  estado?: string;
+  q?: string;
 }
 
-export function CooperativasTable({ initialCooperativas }: CooperativasTableProps) {
+export function CooperativasTable({ initialCooperativas, estado = "", q = "" }: CooperativasTableProps) {
   const router = useRouter();
-  const [search, setSearch] = useState("");
-  const [estadoFilter, setEstadoFilter] = useState<string>("ALL");
+  const uid = useId();
+  const [pendiente, startTransition] = useTransition();
+  const [search, setSearch] = useState(q);
 
-  // Filtering on client side for instantaneous interaction, but could also sync with searchParams if needed
-  const filteredCooperativas = initialCooperativas.filter((coop) => {
-    const matchesSearch = 
-      coop.nombre.toLowerCase().includes(search.toLowerCase()) ||
-      coop.rif.toLowerCase().includes(search.toLowerCase());
-    
-    const matchesEstado = estadoFilter === "ALL" || coop.estado === estadoFilter;
+  const navegar = (cambios: { estado?: string; q?: string }) => {
+    const params = new URLSearchParams();
+    const e = cambios.estado ?? estado;
+    const texto = (cambios.q ?? search).trim();
+    if (e) params.set("estado", e);
+    if (texto) params.set("q", texto);
+    const qs = params.toString();
+    startTransition(() => router.push(qs ? `/admin/cooperativas?${qs}` : "/admin/cooperativas"));
+  };
 
-    return matchesSearch && matchesEstado;
-  });
+  const buscar = (ev: FormEvent) => {
+    ev.preventDefault();
+    navegar({ q: search });
+  };
+
+  const hayFiltros = Boolean(estado || q);
 
   return (
     <div className="space-y-4">
-      {/* Filtros */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="relative flex-1 max-w-md">
-          <MagnifyingGlass className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            aria-label="Buscar cooperativa"
-            placeholder="Buscar por nombre o RIF"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9 bg-background border-input text-foreground placeholder:text-muted-foreground"
-          />
+      {/* Filtros (en la URL) */}
+      <div className="grid grid-cols-1 items-end gap-4 rounded-xl border bg-card p-4 sm:grid-cols-[1fr_220px_auto]">
+        <form onSubmit={buscar} role="search" className="space-y-1.5">
+          <Label htmlFor={`${uid}-q`}>Buscar</Label>
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <MagnifyingGlass className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
+              <Input
+                id={`${uid}-q`}
+                type="search"
+                placeholder="Nombre o RIF"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pl-9"
+                autoComplete="off"
+              />
+            </div>
+            <Button type="submit" variant="outline" disabled={pendiente}>
+              Buscar
+            </Button>
+          </div>
+        </form>
+        <div className="space-y-1.5">
+          <Label htmlFor={`${uid}-estado`}>Estado</Label>
+          <select
+            id={`${uid}-estado`}
+            value={estado}
+            onChange={(e) => navegar({ estado: e.target.value })}
+            className={CLASE_SELECT}
+          >
+            <option value="">Todos los estados</option>
+            {ESTADOS_FILTRO.map((e) => (
+              <option key={e} value={e}>
+                {etiquetaEstado("cooperativa", e)}
+              </option>
+            ))}
+          </select>
         </div>
-        <div className="flex items-center gap-2">
-          <Funnel className="h-4 w-4 text-muted-foreground" />
-          <Select value={estadoFilter} onValueChange={(val) => setEstadoFilter(val ?? "ALL")} items={ITEMS_ESTADO}>
-            <SelectTrigger aria-label="Filtrar por estado" className="w-[180px] bg-background border-input text-foreground">
-              <SelectValue placeholder="Filtrar por estado" />
-            </SelectTrigger>
-            <SelectContent className="bg-popover border text-popover-foreground">
-              <SelectItem value="ALL">Todos los estados</SelectItem>
-              {ESTADOS_FILTRO.map((e) => (
-                <SelectItem key={e} value={e}>
-                  {etiquetaEstado("cooperativa", e)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        {hayFiltros ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-9"
+            onClick={() => {
+              setSearch("");
+              startTransition(() => router.push("/admin/cooperativas"));
+            }}
+          >
+            <ArrowsCounterClockwise className="size-3.5" aria-hidden /> Limpiar filtros
+          </Button>
+        ) : (
+          <span className="hidden sm:block" />
+        )}
       </div>
 
       {/* Tabla */}
-      <div className="rounded-xl border bg-card overflow-hidden">
-        <Table>
-          <TableHeader className="bg-muted/50 border-b">
-            <TableRow className="hover:bg-transparent">
-              <TableHead className="text-muted-foreground w-[80px]">Logo</TableHead>
-              <TableHead className="text-muted-foreground">Nombre</TableHead>
-              <TableHead className="text-muted-foreground">RIF</TableHead>
-              <TableHead className="text-muted-foreground">Estado</TableHead>
-              <TableHead className="text-muted-foreground text-right">Comisión</TableHead>
-              <TableHead className="text-muted-foreground text-center">Calificación</TableHead>
-              <TableHead className="text-muted-foreground text-right">Registro</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filteredCooperativas.length === 0 ? (
+      <div className={cn("overflow-hidden rounded-xl border bg-card", pendiente && "opacity-60")} aria-busy={pendiente || undefined}>
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader className="border-b bg-muted/50">
               <TableRow className="hover:bg-transparent">
-                <TableCell colSpan={7} className="h-32 text-center text-muted-foreground">
-                  No se encontraron cooperativas con los filtros seleccionados.
-                </TableCell>
+                <TableHead>Nombre</TableHead>
+                <TableHead>RIF</TableHead>
+                <TableHead>Estado</TableHead>
+                <TableHead className="text-right">Comisión</TableHead>
+                <TableHead className="text-center">Calificación</TableHead>
+                <TableHead className="hidden text-right lg:table-cell">Registro</TableHead>
               </TableRow>
-            ) : (
-              filteredCooperativas.map((coop) => (
-                <TableRow 
-                  key={coop.id}
-                  onClick={() => router.push(`/admin/cooperativas/${coop.id}`)}
-                  className="cursor-pointer transition-colors"
-                >
-                  <TableCell className="py-3">
-                    <Avatar className="h-10 w-10 border">
-                      <AvatarImage src={coop.logo_url || ""} alt={coop.nombre} />
-                      <AvatarFallback className="bg-muted text-muted-foreground font-semibold">
-                        {coop.nombre.substring(0, 2).toUpperCase()}
-                      </AvatarFallback>
-                    </Avatar>
-                  </TableCell>
-                  <TableCell className="font-medium text-foreground py-3">
-                    <Link
-                      href={`/admin/cooperativas/${coop.id}`}
-                      onClick={(e) => e.stopPropagation()}
-                      className="text-foreground underline decoration-primary underline-offset-4"
-                    >
-                      {coop.nombre}
-                    </Link>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground py-3">
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <span className="font-mono text-sm">{coop.rif}</span>
-                      <RifIncompletoBadge rif={coop.rif} />
-                    </div>
-                  </TableCell>
-                  <TableCell className="py-3">
-                    <StatusBadge status={coop.estado} dominio="cooperativa" />
-                  </TableCell>
-                  <TableCell className="text-right text-foreground py-3 font-semibold">
-                    {coop.comision_porcentaje} %
-                  </TableCell>
-                  <TableCell className="py-3">
-                    <div className="flex items-center justify-center gap-1">
-                      <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
-                      <span className="text-sm font-medium text-foreground">
-                        {Number(coop.calificacion_promedio).toFixed(1)}
-                      </span>
-                      <span className="text-xs text-muted-foreground">
-                        ({coop.total_calificaciones})
-                      </span>
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-right text-muted-foreground py-3 text-sm">
-                    {formatFechaVE(coop.created_at)}
+            </TableHeader>
+            <TableBody>
+              {initialCooperativas.length === 0 ? (
+                <TableRow className="hover:bg-transparent">
+                  <TableCell colSpan={6} className="h-32 text-center text-muted-foreground">
+                    {hayFiltros
+                      ? "Ninguna cooperativa coincide con la búsqueda o el estado."
+                      : "Todavía no hay cooperativas. Crea una con «Nueva cooperativa» o espera las solicitudes."}
                   </TableCell>
                 </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
+              ) : (
+                initialCooperativas.map((coop) => (
+                  <TableRow key={coop.id} className="relative motion-safe:transition-colors">
+                    <CeldaEnlace href={`/admin/cooperativas/${coop.id}`} etiqueta={`Ver cooperativa ${coop.nombre}`} className="py-3">
+                      <span className="flex items-center gap-3">
+                        <Avatar className="size-9 border">
+                          <AvatarImage src={coop.logo_url || ""} alt="" />
+                          <AvatarFallback className="bg-muted text-xs font-semibold text-muted-foreground">
+                            {coop.nombre.substring(0, 2).toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+                        <span>{coop.nombre}</span>
+                      </span>
+                    </CeldaEnlace>
+                    <TableCell className="py-3 text-muted-foreground">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="font-mono text-sm">{coop.rif}</span>
+                        <RifIncompletoBadge rif={coop.rif} className="relative z-10" />
+                      </div>
+                    </TableCell>
+                    <TableCell className="py-3">
+                      {coop.estado === "PENDIENTE" ? (
+                        <PendienteAprobacion />
+                      ) : (
+                        <StatusBadge status={coop.estado} dominio="cooperativa" />
+                      )}
+                    </TableCell>
+                    <TableCell className="py-3 text-right font-semibold text-foreground">
+                      {formatPorcentaje(coop.comision_porcentaje)}
+                    </TableCell>
+                    <TableCell className="py-3 text-center">
+                      <Calificacion promedio={coop.calificacion_promedio} total={coop.total_calificaciones} />
+                    </TableCell>
+                    <TableCell className="hidden py-3 text-right text-sm text-muted-foreground lg:table-cell">
+                      {formatFechaVE(coop.created_at)}
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </div>
       </div>
     </div>
   );

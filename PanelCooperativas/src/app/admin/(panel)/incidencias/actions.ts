@@ -184,6 +184,15 @@ export async function activarSeguro(incidenciaId: string) {
     const valorDeclarado = encomienda?.valor_declarado ? Number(encomienda.valor_declarado) : 0;
     // Spec: cobertura del seguro es 3× el valor declarado
     const montoReembolso = valorDeclarado * 3;
+    if (incidencia.estado !== "EN_PROCESO") {
+      return { success: false, error: "Primero toma el caso; después podrás activar el seguro." };
+    }
+    if (valorDeclarado <= 0) {
+      return {
+        success: false,
+        error: "Esta encomienda no declaró valor: el seguro no aplica. Registra la compensación manualmente en la resolución.",
+      };
+    }
 
     const resolucionText = `[SEGURO ACTIVADO] Se aprobó el reembolso de seguro por ${formatUsd(montoReembolso)} (cobertura 3× el valor declarado de ${formatUsd(valorDeclarado)}). Gestionado por el equipo de EnBus.`;
 

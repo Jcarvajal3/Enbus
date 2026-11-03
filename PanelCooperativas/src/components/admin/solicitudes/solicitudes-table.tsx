@@ -13,6 +13,7 @@ import { formatFechaHoraVE, formatFechaVE } from "@/lib/fechas";
 import { formatTelefono } from "@/lib/ve";
 import type { CuentaSolicitud, SolicitudesAdmin, SolicitudPendiente } from "@/lib/types/admin-solicitudes";
 import { SolicitudAcciones } from "./solicitud-acciones";
+import { CeldaEnlace } from "@/components/celda-enlace";
 
 interface SolicitudesTableProps {
   solicitudes: SolicitudesAdmin;
@@ -86,6 +87,7 @@ export function SolicitudesTable({ solicitudes }: SolicitudesTableProps) {
           <TableHeader className="border-b bg-muted/50">
             <TableRow className="hover:bg-transparent">
               <TableHead>Cooperativa</TableHead>
+              <TableHead>RIF</TableHead>
               <TableHead>Representante</TableHead>
               <TableHead>Contacto</TableHead>
               <TableHead>Recibida</TableHead>
@@ -97,7 +99,7 @@ export function SolicitudesTable({ solicitudes }: SolicitudesTableProps) {
           <TableBody>
             {filtradas.length === 0 ? (
               <TableRow className="hover:bg-transparent">
-                <TableCell colSpan={7} className="h-32 text-center text-muted-foreground">
+                <TableCell colSpan={8} className="h-32 text-center text-muted-foreground">
                   {termino
                     ? "Ninguna solicitud coincide con tu búsqueda."
                     : pestana === "pendientes"
@@ -107,21 +109,18 @@ export function SolicitudesTable({ solicitudes }: SolicitudesTableProps) {
               </TableRow>
             ) : (
               filtradas.map((sol) => (
-                <TableRow key={sol.id} className="cursor-pointer" onClick={() => setSeleccionId(sol.id)}>
+                <TableRow key={sol.id} className="relative">
+                  <CeldaEnlace
+                    onAbrir={() => setSeleccionId(sol.id)}
+                    etiqueta={`Ver la solicitud de ${sol.nombre}`}
+                    className="py-3 align-top"
+                  >
+                    {sol.nombre}
+                  </CeldaEnlace>
                   <TableCell className="py-3 align-top">
-                    <button
-                      type="button"
-                      className="text-left font-medium text-foreground underline decoration-primary underline-offset-4 outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSeleccionId(sol.id);
-                      }}
-                    >
-                      {sol.nombre}
-                    </button>
-                    <div className="mt-1 flex flex-wrap items-center gap-1.5 text-muted-foreground">
-                      <span className="font-mono text-xs">{sol.rif}</span>
-                      <RifIncompletoBadge rif={sol.rif} />
+                    <div className="flex flex-wrap items-center gap-1.5 text-muted-foreground">
+                      <span className="font-mono text-sm">{sol.rif}</span>
+                      <RifIncompletoBadge rif={sol.rif} className="relative z-10" />
                     </div>
                   </TableCell>
                   <TableCell className="py-3 align-top text-sm">
@@ -146,8 +145,8 @@ export function SolicitudesTable({ solicitudes }: SolicitudesTableProps) {
                     )}
                   </TableCell>
                   <TableCell className="py-3 align-top">
-                    {/* Los clics dentro de los diálogos (portales) también suben por aquí: no abren la hoja. */}
-                    <div className="flex justify-end" onClick={(e) => e.stopPropagation()}>
+                    {/* Encima del enlace de la fila (relative z-10): estos botones no abren la hoja. */}
+                    <div className="relative z-10 flex justify-end">
                       <SolicitudAcciones solicitud={sol} />
                     </div>
                   </TableCell>

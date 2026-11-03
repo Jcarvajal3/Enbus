@@ -25,7 +25,14 @@ import { formatTelefono } from "@/lib/ve";
 import { estadoInfo, etiquetaMetodoPago, etiquetaRol } from "@/lib/estados";
 import { StatusBadge } from "@/components/status-badge";
 import { useTasaBCVAdmin } from "@/components/admin/dashboard/use-tasa-bcv-admin";
-import { RifIncompletoBadge } from "./cooperativas-table";
+import { Calificacion, RifIncompletoBadge, formatPorcentaje } from "./cooperativas-table";
+import { useTabEnUrl } from "@/components/admin/use-tab-url";
+import { formatCiudad } from "@/lib/ciudades";
+import { formatDuracion } from "@/lib/fechas";
+import { formatNumeroVE } from "@/lib/dinero";
+
+const PESTANAS = ["general", "sucursales", "metodos", "rutas", "empleados", "calificaciones", "balance"] as const;
+const CLASE_ACTIVA = "bg-success-light text-success-deep";
 
 interface CooperativaDetailTabsProps {
   cooperativa: CooperativaDetalle;
@@ -35,30 +42,31 @@ export function CooperativaDetailTabs({ cooperativa }: CooperativaDetailTabsProp
   
   // Montos en USD de referencia, con el equivalente en Bs a la tasa BCV de hoy.
   const tasa = useTasaBCVAdmin();
+  const [tab, setTab] = useTabEnUrl(PESTANAS, "general");
 
   return (
-    <Tabs defaultValue="general" className="w-full">
-      <TabsList className="bg-muted border border-border p-1 flex flex-wrap h-auto gap-1 rounded-xl text-muted-foreground">
-        <TabsTrigger value="general" className="data-[state=active]:bg-background data-[state=active]:text-foreground flex items-center gap-2 py-2 px-3 rounded-lg text-sm">
-          <Info className="h-4 w-4" /> General
+    <Tabs value={tab} onValueChange={(v) => setTab(String(v))} className="w-full">
+      <TabsList className="flex h-auto max-w-full flex-wrap gap-1 rounded-xl border p-1">
+        <TabsTrigger value="general" className="flex items-center gap-2 px-3 py-2 text-sm">
+          <Info className="h-4 w-4" aria-hidden /> General
         </TabsTrigger>
-        <TabsTrigger value="sucursales" className="data-[state=active]:bg-background data-[state=active]:text-foreground flex items-center gap-2 py-2 px-3 rounded-lg text-sm">
-          <MapPin className="h-4 w-4" /> Sucursales
+        <TabsTrigger value="sucursales" className="flex items-center gap-2 px-3 py-2 text-sm">
+          <MapPin className="h-4 w-4" aria-hidden /> Sucursales
         </TabsTrigger>
-        <TabsTrigger value="metodos" className="data-[state=active]:bg-background data-[state=active]:text-foreground flex items-center gap-2 py-2 px-3 rounded-lg text-sm">
-          <CreditCard className="h-4 w-4" /> Métodos de Pago
+        <TabsTrigger value="metodos" className="flex items-center gap-2 px-3 py-2 text-sm">
+          <CreditCard className="h-4 w-4" aria-hidden /> Métodos de pago
         </TabsTrigger>
-        <TabsTrigger value="rutas" className="data-[state=active]:bg-background data-[state=active]:text-foreground flex items-center gap-2 py-2 px-3 rounded-lg text-sm">
-          <MapTrifold className="h-4 w-4" /> Rutas
+        <TabsTrigger value="rutas" className="flex items-center gap-2 px-3 py-2 text-sm">
+          <MapTrifold className="h-4 w-4" aria-hidden /> Rutas
         </TabsTrigger>
-        <TabsTrigger value="empleados" className="data-[state=active]:bg-background data-[state=active]:text-foreground flex items-center gap-2 py-2 px-3 rounded-lg text-sm">
-          <Users className="h-4 w-4" /> Empleados
+        <TabsTrigger value="empleados" className="flex items-center gap-2 px-3 py-2 text-sm">
+          <Users className="h-4 w-4" aria-hidden /> Empleados
         </TabsTrigger>
-        <TabsTrigger value="calificaciones" className="data-[state=active]:bg-background data-[state=active]:text-foreground flex items-center gap-2 py-2 px-3 rounded-lg text-sm">
-          <Star className="h-4 w-4" /> Calificaciones
+        <TabsTrigger value="calificaciones" className="flex items-center gap-2 px-3 py-2 text-sm">
+          <Star className="h-4 w-4" aria-hidden /> Calificaciones
         </TabsTrigger>
-        <TabsTrigger value="balance" className="data-[state=active]:bg-background data-[state=active]:text-foreground flex items-center gap-2 py-2 px-3 rounded-lg text-sm">
-          <Coins className="h-4 w-4" /> Balance
+        <TabsTrigger value="balance" className="flex items-center gap-2 px-3 py-2 text-sm">
+          <Coins className="h-4 w-4" aria-hidden /> Balance
         </TabsTrigger>
       </TabsList>
 
@@ -66,13 +74,13 @@ export function CooperativaDetailTabs({ cooperativa }: CooperativaDetailTabsProp
       <TabsContent value="general" className="mt-4">
         <Card className="bg-card border-border text-foreground">
           <CardHeader>
-            <CardTitle className="text-lg">Datos Básicos</CardTitle>
+            <CardTitle className="text-lg">Datos básicos</CardTitle>
             <CardDescription className="text-muted-foreground">Información administrativa de la cooperativa.</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-6 md:grid-cols-2">
             <div className="space-y-4">
               <div>
-                <span className="text-sm text-muted-foreground block mb-1">Nombre Comercial</span>
+                <span className="text-sm text-muted-foreground block mb-1">Nombre comercial</span>
                 <span className="text-foreground font-medium text-base">{cooperativa.nombre}</span>
               </div>
               <div>
@@ -84,7 +92,7 @@ export function CooperativaDetailTabs({ cooperativa }: CooperativaDetailTabsProp
               </div>
               <div>
                 <span className="text-sm text-muted-foreground block mb-1">Comisión de EnBus</span>
-                <span className="text-base font-semibold text-foreground">{cooperativa.comision_porcentaje} %</span>
+                <span className="text-base font-semibold text-foreground">{formatPorcentaje(cooperativa.comision_porcentaje)}</span>
               </div>
               <div>
                 <span className="text-sm text-muted-foreground block mb-1">Representante legal</span>
@@ -120,15 +128,13 @@ export function CooperativaDetailTabs({ cooperativa }: CooperativaDetailTabsProp
                 </div>
               </div>
               <div>
-                <span className="text-sm text-muted-foreground block mb-1">Calificación Promedio</span>
-                <div className="flex items-center gap-1.5 mt-1">
-                  <Star className="h-5 w-5 fill-amber-400 text-amber-400" />
-                  <span className="text-lg font-bold text-foreground">{Number(cooperativa.calificacion_promedio).toFixed(1)}</span>
-                  <span className="text-sm text-muted-foreground">basada en {cooperativa.total_calificaciones} calificaciones</span>
+                <span className="text-sm text-muted-foreground block mb-1">Calificación promedio</span>
+                <div className="mt-1">
+                  <Calificacion promedio={cooperativa.calificacion_promedio} total={cooperativa.total_calificaciones} />
                 </div>
               </div>
               <div>
-                <span className="text-sm text-muted-foreground block mb-1">Fecha de Registro</span>
+                <span className="text-sm text-muted-foreground block mb-1">Fecha de registro</span>
                 <span className="text-foreground text-sm">
                   {formatFechaVE(cooperativa.created_at, { dateStyle: "long" })}
                 </span>
@@ -172,12 +178,12 @@ export function CooperativaDetailTabs({ cooperativa }: CooperativaDetailTabsProp
                     {cooperativa.sucursales.map((suc) => (
                       <TableRow key={suc.id} className="border-border hover:bg-muted/10">
                         <TableCell className="font-medium text-foreground">{suc.nombre}</TableCell>
-                        <TableCell className="text-muted-foreground">{suc.ciudad}, {suc.estado_geografico}</TableCell>
+                        <TableCell className="text-muted-foreground">{formatCiudad(suc.ciudad)}, {suc.estado_geografico}</TableCell>
                         <TableCell className="text-muted-foreground text-sm max-w-xs truncate">{suc.direccion}</TableCell>
                         <TableCell className="text-muted-foreground">{suc.telefono || "-"}</TableCell>
                         <TableCell className="text-right">
                           {suc.activa ? (
-                            <Badge className="border-transparent bg-emerald-100 text-emerald-900 dark:bg-emerald-400/15 dark:text-emerald-200">Activa</Badge>
+                            <Badge variant="secondary" className={CLASE_ACTIVA}>Activa</Badge>
                           ) : (
                             <Badge variant="secondary" className="bg-muted text-muted-foreground border-border">Inactiva</Badge>
                           )}
@@ -196,7 +202,7 @@ export function CooperativaDetailTabs({ cooperativa }: CooperativaDetailTabsProp
       <TabsContent value="metodos" className="mt-4">
         <Card className="bg-card border-border text-foreground">
           <CardHeader>
-            <CardTitle className="text-lg">Cuentas y Métodos de Pago ({cooperativa.metodos_pago.length})</CardTitle>
+            <CardTitle className="text-lg">Cuentas y métodos de pago ({cooperativa.metodos_pago.length})</CardTitle>
             <CardDescription className="text-muted-foreground">Métodos habilitados para compras digitales y recepción de transferencias.</CardDescription>
           </CardHeader>
           <CardContent>
@@ -211,7 +217,7 @@ export function CooperativaDetailTabs({ cooperativa }: CooperativaDetailTabsProp
                         <Badge className="bg-muted border-border text-muted-foreground font-medium">
                           {etiquetaMetodoPago(metodo.tipo)}
                         </Badge>
-                        <Circle className={`h-2 w-2 fill-current ${metodo.activo ? "text-success-text" : "text-muted-foreground"}`} />
+                        <span className="flex items-center gap-1 text-xs text-muted-foreground"><Circle weight="fill" aria-hidden className={`h-2 w-2 ${metodo.activo ? "text-success-text" : "text-muted-foreground"}`} />{metodo.activo ? "Activo" : "Inactivo"}</span>
                       </div>
                     </CardHeader>
                     <CardContent className="space-y-2 text-sm text-muted-foreground pb-4">
@@ -227,7 +233,7 @@ export function CooperativaDetailTabs({ cooperativa }: CooperativaDetailTabsProp
                       </div>
                       {metodo.numero_cuenta && (
                         <div>
-                          <span className="text-xs text-muted-foreground block">Número de Cuenta</span>
+                          <span className="text-xs text-muted-foreground block">Número de cuenta</span>
                           <span className="font-mono text-muted-foreground">{metodo.numero_cuenta}</span>
                         </div>
                       )}
@@ -262,7 +268,7 @@ export function CooperativaDetailTabs({ cooperativa }: CooperativaDetailTabsProp
       <TabsContent value="rutas" className="mt-4">
         <Card className="bg-card border-border text-foreground">
           <CardHeader>
-            <CardTitle className="text-lg">Rutas Registradas ({cooperativa.rutas.length})</CardTitle>
+            <CardTitle className="text-lg">Rutas registradas ({cooperativa.rutas.length})</CardTitle>
             <CardDescription className="text-muted-foreground">Destinos y tarifas configurados para viajes y encomiendas.</CardDescription>
           </CardHeader>
           <CardContent>
@@ -275,8 +281,8 @@ export function CooperativaDetailTabs({ cooperativa }: CooperativaDetailTabsProp
                     <TableRow className="border-border hover:bg-transparent">
                       <TableHead className="text-muted-foreground">Origen</TableHead>
                       <TableHead className="text-muted-foreground">Destino</TableHead>
-                      <TableHead className="text-muted-foreground text-right">Duración Estimada</TableHead>
-                      <TableHead className="text-muted-foreground text-right">Precio Pasaje (USD)</TableHead>
+                      <TableHead className="text-muted-foreground text-right">Duración estimada</TableHead>
+                      <TableHead className="text-muted-foreground text-right">Precio del pasaje (USD)</TableHead>
                       <TableHead className="text-muted-foreground text-right">Estado</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -284,23 +290,20 @@ export function CooperativaDetailTabs({ cooperativa }: CooperativaDetailTabsProp
                     {cooperativa.rutas.map((ruta) => (
                       <TableRow key={ruta.id} className="border-border hover:bg-muted/10">
                         <TableCell className="font-medium text-foreground">
-                          {ruta.ciudad_origen} <span className="text-xs text-muted-foreground font-normal">({ruta.estado_origen})</span>
+                          {formatCiudad(ruta.ciudad_origen)} <span className="text-xs text-muted-foreground font-normal">({ruta.estado_origen})</span>
                         </TableCell>
                         <TableCell className="font-medium text-foreground">
-                          {ruta.ciudad_destino} <span className="text-xs text-muted-foreground font-normal">({ruta.estado_destino})</span>
+                          {formatCiudad(ruta.ciudad_destino)} <span className="text-xs text-muted-foreground font-normal">({ruta.estado_destino})</span>
                         </TableCell>
                         <TableCell className="text-right text-muted-foreground">
-                          {ruta.duracion_estimada_min >= 60 
-                            ? `${Math.floor(ruta.duracion_estimada_min / 60)}h ${ruta.duracion_estimada_min % 60}min`
-                            : `${ruta.duracion_estimada_min} min`
-                          }
+                          {formatDuracion(ruta.duracion_estimada_min)}
                         </TableCell>
-                        <TableCell className="text-right font-semibold text-success-text">
+                        <TableCell className="text-right font-semibold">
                           {ruta.precio_pasaje === null || ruta.precio_pasaje === undefined ? "—" : <Monto usd={Number(ruta.precio_pasaje)} tasa={tasa} moneda="USD" size="sm" align="right" />}
                         </TableCell>
                         <TableCell className="text-right">
                           {ruta.activa ? (
-                            <Badge className="border-transparent bg-emerald-100 text-emerald-900 dark:bg-emerald-400/15 dark:text-emerald-200">Activa</Badge>
+                            <Badge variant="secondary" className={CLASE_ACTIVA}>Activa</Badge>
                           ) : (
                             <Badge variant="secondary" className="bg-muted text-muted-foreground border-border">Inactiva</Badge>
                           )}
@@ -319,7 +322,7 @@ export function CooperativaDetailTabs({ cooperativa }: CooperativaDetailTabsProp
       <TabsContent value="empleados" className="mt-4">
         <Card className="bg-card border-border text-foreground">
           <CardHeader>
-            <CardTitle className="text-lg">Nómina de Empleados ({cooperativa.empleados.length})</CardTitle>
+            <CardTitle className="text-lg">Empleados ({cooperativa.empleados.length})</CardTitle>
             <CardDescription className="text-muted-foreground">Administradores y taquilleros con acceso al sistema.</CardDescription>
           </CardHeader>
           <CardContent>
@@ -331,7 +334,7 @@ export function CooperativaDetailTabs({ cooperativa }: CooperativaDetailTabsProp
                   <TableHeader className="bg-muted/40 border-border">
                     <TableRow className="border-border hover:bg-transparent">
                       <TableHead className="text-muted-foreground">Nombre</TableHead>
-                      <TableHead className="text-muted-foreground">Correo Electrónico</TableHead>
+                      <TableHead className="text-muted-foreground">Correo</TableHead>
                       <TableHead className="text-muted-foreground">Cédula / RIF</TableHead>
                       <TableHead className="text-muted-foreground">Teléfono</TableHead>
                       <TableHead className="text-muted-foreground">Rol</TableHead>
@@ -347,16 +350,16 @@ export function CooperativaDetailTabs({ cooperativa }: CooperativaDetailTabsProp
                         <TableCell className="text-muted-foreground">{emp.telefono}</TableCell>
                         <TableCell className="py-2">
                           {emp.role === "admin_cooperativa" ? (
-                            <Badge className="border-transparent bg-violet-100 text-violet-900 dark:bg-violet-400/15 dark:text-violet-200 font-medium">{etiquetaRol(emp.role)}</Badge>
+                            <Badge variant="secondary" className="bg-primary/15 text-foreground font-medium">{etiquetaRol(emp.role)}</Badge>
                           ) : (
-                            <Badge className="border-transparent bg-blue-100 text-blue-900 dark:bg-blue-400/15 dark:text-blue-200 font-medium">{etiquetaRol(emp.role)}</Badge>
+                            <Badge variant="secondary" className="bg-info-light text-info-deep font-medium">{etiquetaRol(emp.role)}</Badge>
                           )}
                         </TableCell>
                         <TableCell className="text-right">
                           {emp.isBanned ? (
-                            <Badge className="border-transparent bg-red-100 text-red-900 dark:bg-red-400/15 dark:text-red-200">Bloqueado</Badge>
+                            <Badge variant="secondary" className="bg-destructive-light text-destructive-deep">Bloqueado</Badge>
                           ) : (
-                            <Badge className="border-transparent bg-emerald-100 text-emerald-900 dark:bg-emerald-400/15 dark:text-emerald-200">Activo</Badge>
+                            <Badge variant="secondary" className={CLASE_ACTIVA}>Activo</Badge>
                           )}
                         </TableCell>
                       </TableRow>
@@ -373,7 +376,7 @@ export function CooperativaDetailTabs({ cooperativa }: CooperativaDetailTabsProp
       <TabsContent value="calificaciones" className="mt-4">
         <Card className="bg-card border-border text-foreground">
           <CardHeader>
-            <CardTitle className="text-lg">Calificaciones y Reseñas ({cooperativa.calificaciones.length})</CardTitle>
+            <CardTitle className="text-lg">Calificaciones y reseñas ({cooperativa.calificaciones.length})</CardTitle>
             <CardDescription className="text-muted-foreground">Historial de comentarios y valoraciones recibidas de los pasajeros.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -384,38 +387,42 @@ export function CooperativaDetailTabs({ cooperativa }: CooperativaDetailTabsProp
                 <span className="text-xs text-muted-foreground uppercase tracking-wider block font-semibold">Calificación General</span>
                 <div className="flex items-center justify-center sm:justify-start gap-2 mt-1">
                   <span className="text-4xl font-extrabold text-foreground">
-                    {Number(cooperativa.calificacion_promedio).toFixed(1)}
+                    {cooperativa.total_calificaciones > 0 ? formatNumeroVE(Number(cooperativa.calificacion_promedio), 1) : "—"}
                   </span>
                   <div className="flex flex-col items-start">
                     <div className="flex gap-0.5">
                       {Array.from({ length: 5 }).map((_, i) => (
                         <Star 
                           key={i} 
-                          className={`h-4 w-4 ${i < Math.round(Number(cooperativa.calificacion_promedio)) ? "fill-amber-400 text-amber-400" : "text-muted"}`} 
+                          weight={i < Math.round(Number(cooperativa.calificacion_promedio)) ? "fill" : "regular"}
+                          aria-hidden
+                          className={`h-4 w-4 ${i < Math.round(Number(cooperativa.calificacion_promedio)) ? "text-primary-text" : "text-muted-foreground"}`} 
                         />
                       ))}
                     </div>
-                    <span className="text-xs text-muted-foreground mt-0.5">{cooperativa.total_calificaciones} opiniones en total</span>
+                    <span className="text-xs text-muted-foreground mt-0.5">{cooperativa.total_calificaciones > 0 ? `${cooperativa.total_calificaciones} opiniones en total` : "Sin calificaciones"}</span>
                   </div>
                 </div>
               </div>
 
               {/* Graphical distribution mockup or indicator */}
               <div className="text-sm text-muted-foreground bg-background px-4 py-2 rounded-lg border border-border text-center sm:text-right">
-                {cooperativa.calificacion_promedio >= 4.0 ? (
+                {cooperativa.total_calificaciones === 0 ? (
+                  <div className="font-medium text-foreground">Todavía no la califican</div>
+                ) : cooperativa.calificacion_promedio >= 4.0 ? (
                   <div className="flex items-center gap-2 text-success-text font-medium">
-                    <ShieldCheck className="h-5 w-5" /> Reputación Excelente
+                    <ShieldCheck className="h-5 w-5" /> Reputación excelente
                   </div>
                 ) : cooperativa.calificacion_promedio >= 3.0 ? (
                   <div className="flex items-center gap-2 text-warning-text font-medium">
-                    <Warning className="h-5 w-5" /> Reputación Regular
+                    <Warning className="h-5 w-5" /> Reputación regular
                   </div>
                 ) : (
                   <div className="flex items-center gap-2 text-destructive-text font-medium">
-                    <Warning className="h-5 w-5" /> Requiere Revisión
+                    <Warning className="h-5 w-5" /> Requiere revisión
                   </div>
                 )}
-                <span className="text-xs text-muted-foreground">Métrica calculada dinámicamente</span>
+                <span className="text-xs text-muted-foreground">Según el promedio de calificaciones</span>
               </div>
             </div>
 
@@ -444,7 +451,9 @@ export function CooperativaDetailTabs({ cooperativa }: CooperativaDetailTabsProp
                         {Array.from({ length: 5 }).map((_, i) => (
                           <Star 
                             key={i} 
-                            className={`h-3.5 w-3.5 ${i < cal.estrellas ? "fill-amber-400 text-amber-400" : "text-muted"}`} 
+                            weight={i < cal.estrellas ? "fill" : "regular"}
+                            aria-hidden
+                            className={`h-3.5 w-3.5 ${i < cal.estrellas ? "text-primary-text" : "text-muted-foreground"}`} 
                           />
                         ))}
                       </div>
@@ -466,7 +475,7 @@ export function CooperativaDetailTabs({ cooperativa }: CooperativaDetailTabsProp
       <TabsContent value="balance" className="mt-4">
         <Card className="bg-card border-border text-foreground">
           <CardHeader>
-            <CardTitle className="text-lg">Balance General de Facturación</CardTitle>
+            <CardTitle className="text-lg">Balance de comisiones</CardTitle>
             <CardDescription className="text-muted-foreground">Estado de cuentas y liquidaciones pendientes de la cooperativa.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -475,14 +484,14 @@ export function CooperativaDetailTabs({ cooperativa }: CooperativaDetailTabsProp
               {/* Card 1: Comisión pendiente */}
               <Card className="bg-muted/30 border-border text-foreground">
                 <CardContent className="pt-6">
-                  <span className="text-sm text-muted-foreground block font-medium">Comisiones Pendientes del Ciclo</span>
+                  <span className="text-sm text-muted-foreground block font-medium">Comisiones pendientes</span>
                   <div className="mt-2">
                     <Monto
                       usd={Number(cooperativa.comisiones_pendientes ?? 0)}
                       tasa={tasa}
                       moneda="USD"
                       size="lg"
-                      className={cooperativa.comisiones_pendientes > 0 ? "text-destructive-text" : "text-success-text"}
+                      className={cooperativa.comisiones_pendientes > 0 ? "text-warning-text" : "text-success-text"}
                     />
                   </div>
                   <p className="mt-2 text-xs text-muted-foreground">
@@ -499,14 +508,14 @@ export function CooperativaDetailTabs({ cooperativa }: CooperativaDetailTabsProp
                   <div className="mt-1">
                     {cooperativa.comisiones_pendientes > 0 ? (
                       <div className="space-y-1">
-                        <Badge className="border-transparent bg-amber-100 text-amber-900 dark:bg-amber-400/15 dark:text-amber-200 text-sm font-medium">
+                        <Badge variant="secondary" className="bg-warning-light text-warning-deep text-sm font-medium">
                           Con comisiones pendientes
                         </Badge>
                         <p className="text-xs text-muted-foreground">Tiene ciclos de comisiones sin pagar. Regístralos en Comisiones cuando pague.</p>
                       </div>
                     ) : (
                       <div className="space-y-1">
-                        <Badge className="border-transparent bg-emerald-100 text-emerald-900 dark:bg-emerald-400/15 dark:text-emerald-200 text-sm font-medium">
+                        <Badge variant="secondary" className="bg-success-light text-success-deep text-sm font-medium">
                           Al día
                         </Badge>
                         <p className="text-xs text-muted-foreground">Todos sus ciclos de comisiones están pagados.</p>

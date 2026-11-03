@@ -42,7 +42,7 @@ import {
 import { supabase } from '@/src/utils/supabase';
 import { useAuth } from '@/src/contexts/AuthContext';
 import { useToast } from '@/src/components/Toast';
-import { dateFull, formatCity, formatDate, timeOnly } from '@/src/utils/formatters';
+import { dateFull, formatCity, formatDate, formatDuracion, timeOnly } from '@/src/utils/formatters';
 import {
   METODO_PAGO,
   getEstadoBoletoUi,
@@ -840,7 +840,7 @@ export default function DetalleBoletoScreen() {
                 <RouteSummary
                   origen={ruta?.ciudad_origen}
                   destino={ruta?.ciudad_destino}
-                  duration={`${Math.floor(minutos / 60)}h ${minutos % 60}m`}
+                  duration={minutos > 0 ? formatDuracion(minutos) : undefined}
                 />
               </View>
 

@@ -165,7 +165,7 @@ export function AprobarDialog({ cooperativaId, nombre, rif, trigger, onHecho }: 
               Cancelar
             </Button>
             <Button type="submit" disabled={loading} aria-busy={loading || undefined}>
-              {loading && <SpinnerIcon className="animate-spin" aria-hidden />}
+              {loading && <SpinnerIcon className="motion-safe:animate-spin" aria-hidden />}
               {loading ? "Aprobando…" : "Aprobar y avisar"}
             </Button>
           </div>

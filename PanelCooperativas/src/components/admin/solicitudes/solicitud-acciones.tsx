@@ -41,7 +41,7 @@ export function ReabrirSolicitudButton({ cooperativaId, nombre, onHecho }: { coo
 
   return (
     <Button size="sm" variant="outline" className="gap-1.5" onClick={reabrir} disabled={cargando} aria-busy={cargando || undefined}>
-      {cargando ? <SpinnerIcon className="size-4 animate-spin" aria-hidden /> : <ArrowCounterClockwise className="size-4" aria-hidden />}
+      {cargando ? <SpinnerIcon className="size-4 motion-safe:animate-spin" aria-hidden /> : <ArrowCounterClockwise className="size-4" aria-hidden />}
       {cargando ? "Reabriendo…" : "Reabrir solicitud"}
     </Button>
   );

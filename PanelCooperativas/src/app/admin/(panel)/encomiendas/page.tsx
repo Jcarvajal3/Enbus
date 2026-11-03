@@ -12,6 +12,8 @@ import { requireSuperAdmin } from "@/lib/supabase/auth-guards";
 import { formatFechaHoraVE } from "@/lib/fechas";
 import { formatCedula, formatTelefono } from "@/lib/ve";
 import { MODALIDAD_PAGO, estadoInfo } from "@/lib/estados";
+import { formatCiudad } from "@/lib/ciudades";
+import { PIN_MAX_INTENTOS } from "@/lib/artefactos.generated";
 import { buscarEncomiendaAdmin, type EncomiendaAdmin } from "./actions";
 
 interface PageProps {
@@ -20,7 +22,7 @@ interface PageProps {
 
 const CLASE_ENLACE = "text-foreground underline decoration-primary underline-offset-4";
 const ESTADOS_CERRADOS = ["ENTREGADA", "CANCELADA", "DEVUELTA"];
-const MAX_INTENTOS_PIN = 10;
+const MAX_INTENTOS_PIN = PIN_MAX_INTENTOS;
 
 function legible(valor: string | null | undefined, formato: (v: string) => string) {
   if (!valor || valor.toUpperCase().startsWith("PENDIENTE")) return "Sin dato";
@@ -29,10 +31,8 @@ function legible(valor: string | null | undefined, formato: (v: string) => strin
 }
 
 function ciudad(nombre: string, estado: string) {
-  // Mayúscula al inicio de cada palabra (`\b` no sirve con tildes: "mérida" daría "MéRida").
-  const bonito = (s: string) =>
-    s.replace(/_/g, " ").replace(/(^|[\s-])(\p{L})/gu, (_, sep: string, c: string) => sep + c.toUpperCase());
-  return estado ? `${bonito(nombre)} (${bonito(estado)})` : bonito(nombre);
+  const c = formatCiudad(nombre) || nombre;
+  return estado ? `${c} (${formatCiudad(estado) || estado})` : c;
 }
 
 function Dato({ etiqueta, children }: { etiqueta: string; children: React.ReactNode }) {

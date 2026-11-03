@@ -38,6 +38,7 @@ import { humanizeError } from '@/src/utils/errores';
 import { getEstadoBoletoVisual, getEstadoReembolso, getEstadoBoletoUi } from '@/src/utils/estados';
 import { formatCedula } from '@/src/utils/validation';
 import { formatCodigoBoleto } from '@/src/utils/codigos';
+import { formatDuracion } from '@/src/utils/formatters';
 import { tasaRefDe } from '@/src/utils/dinero';
 import {
   formatHora,
@@ -286,7 +287,7 @@ export default function CompraScreen() {
             <RouteSummary
               origen={ruta?.ciudad_origen}
               destino={ruta?.ciudad_destino}
-              duration={minutos > 0 ? `${Math.floor(minutos / 60)}h ${minutos % 60}m` : undefined}
+              duration={minutos > 0 ? formatDuracion(minutos) : undefined}
             />
             <Divider spacing={Spacing.lg} />
             <View style={s.resumenFila}>

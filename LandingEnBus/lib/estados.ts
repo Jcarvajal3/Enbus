@@ -70,11 +70,11 @@ export const ETAPAS_ENCOMIENDA = [
 
 /** Clases de Tailwind por tono (texto ≥ 4,5:1 sobre su fondo). */
 export const CLASES_TONO: Record<TonoEstado, string> = {
-  pendiente: "bg-amber-100 text-amber-900",
-  info: "bg-blue-100 text-blue-900",
-  exito: "bg-emerald-100 text-emerald-900",
-  peligro: "bg-red-100 text-red-900",
-  terminado: "bg-slate-200 text-slate-800",
+  pendiente: "bg-warning-light text-warning-deep",
+  info: "bg-info-light text-info-deep",
+  exito: "bg-success-light text-success-deep",
+  peligro: "bg-destructive-light text-destructive-deep",
+  terminado: "bg-muted text-foreground",
   neutro: "border border-border bg-background text-foreground",
 };
 

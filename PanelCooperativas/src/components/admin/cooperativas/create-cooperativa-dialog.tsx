@@ -127,7 +127,7 @@ export function CreateCooperativaDialog() {
       <DialogContent className="max-w-md overflow-hidden">
         {inviteLink ? (
           <div className="space-y-6 py-4 text-center">
-            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-emerald-900 dark:bg-emerald-400/15 dark:text-emerald-200">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-success-light text-success-deep">
               <ShieldCheck className="h-8 w-8" />
             </div>
             <div className="space-y-2">
@@ -143,9 +143,9 @@ export function CreateCooperativaDialog() {
                 onClick={copyToClipboard} 
                 size="sm" 
                 variant="secondary"
-                aria-label="Copiar enlace"
+                aria-label={copied ? "Enlace de invitación copiado" : "Copiar enlace de invitación"}
               >
-                {copied ? <Check className="h-4 w-4 text-success-text" /> : <Copy className="h-4 w-4" />}
+                {copied ? <Check className="h-4 w-4 text-success-text" aria-hidden /> : <Copy className="h-4 w-4" aria-hidden />}
               </Button>
             </div>
 

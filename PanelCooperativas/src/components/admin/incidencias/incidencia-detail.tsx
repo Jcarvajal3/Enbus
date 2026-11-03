@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
-  ArrowLeft,
   Calendar,
   CheckSquare,
   HandPointing,
@@ -28,7 +27,10 @@ import { humanizeError } from "@/lib/errores";
 import { formatUsd } from "@/lib/dinero";
 import { formatFechaHoraVE } from "@/lib/fechas";
 import { formatTelefono, telefonoWhatsApp } from "@/lib/ve";
-import { codigoIncidencia, tipoConCategoria } from "./incidencias-table";
+import { codigoIncidencia, PrioridadBadge, tipoConCategoria } from "./incidencias-table";
+import { PageHeader } from "@/components/page-header";
+import { etiquetaRol } from "@/lib/estados";
+import { formatCodigoBoleto } from "@/lib/artefactos.generated";
 
 interface IncidenciaDetailProps {
   incidencia: Incidencia;
@@ -118,6 +120,10 @@ export function IncidenciaDetail({ incidencia, currentUser }: IncidenciaDetailPr
   // Spec: cobertura = 3× valor declarado
   const montoSeguro = valorDeclarado * 3;
 
+  const puedeActivarSeguro =
+    incidencia.tipo === "PERDIDA" && Boolean(incidencia.encomienda) && incidencia.estado === "EN_PROCESO" && valorDeclarado > 0;
+  const seguroSinValor = incidencia.tipo === "PERDIDA" && Boolean(incidencia.encomienda) && valorDeclarado <= 0;
+
   const reportante = incidencia.reportado_por_profile;
   const telefono = reportante?.telefono ? formatTelefono(reportante.telefono) : "—";
   const whatsapp = telefonoWhatsApp(reportante?.telefono);
@@ -125,25 +131,26 @@ export function IncidenciaDetail({ incidencia, currentUser }: IncidenciaDetailPr
 
   return (
     <div className="space-y-6">
-      <div>
-        <Link
-          href="/admin/incidencias"
-          className="inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
-        >
-          <ArrowLeft className="h-4 w-4" aria-hidden /> Volver a incidencias
-        </Link>
-      </div>
+      <PageHeader
+        title={tipoConCategoria(incidencia)}
+        migas={[{ label: "Incidencias", href: "/admin/incidencias" }, { label: codigo }]}
+        description={
+          <div className="mt-1 flex flex-wrap items-center gap-2">
+            <span className="font-mono text-sm">{codigo}</span>
+            <StatusBadge status={incidencia.estado} dominio="incidencia" />
+            <span className="text-sm">Prioridad</span>
+            <PrioridadBadge incidencia={incidencia} />
+          </div>
+        }
+      />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
           <Card>
             <CardHeader className="border-b pb-5">
               <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
-                <div className="space-y-1">
-                  <span className="font-mono text-xs text-muted-foreground">{codigo}</span>
-                  <CardTitle className="text-xl font-semibold">{tipoConCategoria(incidencia)}</CardTitle>
-                </div>
-                <StatusBadge status={incidencia.estado} dominio="incidencia" className="w-fit" />
+                <CardTitle className="text-lg font-semibold">Detalle del caso</CardTitle>
+                <span className="text-sm text-muted-foreground">Reportada {formatFechaHoraVE(incidencia.created_at)}</span>
               </div>
             </CardHeader>
             <CardContent className="space-y-6 pt-6">
@@ -160,10 +167,22 @@ export function IncidenciaDetail({ incidencia, currentUser }: IncidenciaDetailPr
                     <CheckSquare className="h-4 w-4" aria-hidden />
                     Cómo se resolvió
                   </span>
-                  <div className="rounded-lg border border-emerald-600/30 bg-emerald-50 p-4 text-sm leading-relaxed text-emerald-950 dark:bg-emerald-400/10 dark:text-emerald-100">
+                  <div className="rounded-lg border border-success/40 bg-success-light p-4 text-sm leading-relaxed text-success-deep">
                     {incidencia.resolucion || "Se resolvió sin detalles."}
                   </div>
                 </div>
+              )}
+
+              {seguroSinValor && incidencia.estado !== "RESUELTA" && (
+                <p className="rounded-lg border border-warning/40 bg-warning-light p-3 text-sm text-warning-deep">
+                  Esta encomienda no declaró valor: el seguro no aplica. Registra la compensación manualmente en la
+                  resolución.
+                </p>
+              )}
+              {incidencia.tipo === "PERDIDA" && !seguroSinValor && incidencia.estado === "ABIERTA" && (
+                <p className="text-sm text-muted-foreground">
+                  Toma el caso para poder activar el seguro (cubre hasta 3 veces el valor declarado).
+                </p>
               )}
 
               {showResolveForm && (
@@ -210,7 +229,7 @@ export function IncidenciaDetail({ incidencia, currentUser }: IncidenciaDetailPr
                       Cancelar
                     </Button>
                     <Button type="submit" size="sm" disabled={resolviendo} aria-busy={resolviendo || undefined}>
-                      {resolviendo && <SpinnerIcon className="animate-spin" aria-hidden />}
+                      {resolviendo && <SpinnerIcon className="motion-safe:animate-spin" aria-hidden />}
                       {resolviendo ? "Guardando…" : "Marcar como resuelta"}
                     </Button>
                   </div>
@@ -220,7 +239,8 @@ export function IncidenciaDetail({ incidencia, currentUser }: IncidenciaDetailPr
 
             {!showResolveForm && incidencia.estado !== "RESUELTA" && (
               <CardFooter className="flex flex-wrap justify-end gap-3 border-t bg-muted/30 pt-5">
-                {incidencia.tipo === "PERDIDA" && incidencia.encomienda && (
+                {/* Seguro (AD-20): solo con el caso tomado y un valor declarado mayor que 0. */}
+                {puedeActivarSeguro && (
                   <Button
                     variant="outline"
                     className="gap-1.5 border-destructive/40 text-destructive-text hover:bg-destructive/10"
@@ -235,7 +255,7 @@ export function IncidenciaDetail({ incidencia, currentUser }: IncidenciaDetailPr
                 {incidencia.estado === "ABIERTA" && (
                   <Button onClick={handleTomarCaso} className="gap-1.5" disabled={ocupado} aria-busy={tomando || undefined}>
                     {tomando ? (
-                      <SpinnerIcon className="h-4 w-4 animate-spin" aria-hidden />
+                      <SpinnerIcon className="h-4 w-4 motion-safe:animate-spin" aria-hidden />
                     ) : (
                       <HandPointing className="h-4 w-4" aria-hidden />
                     )}
@@ -312,7 +332,7 @@ export function IncidenciaDetail({ incidencia, currentUser }: IncidenciaDetailPr
                 >
                   <span className="font-medium">
                     {incidencia.resuelta_por_profile?.nombre_completo ||
-                      (incidencia.resuelta_por === currentUser.id ? currentUser.nombre_completo : "Administrador EnBus")}
+                      (incidencia.resuelta_por === currentUser.id ? currentUser.nombre_completo : etiquetaRol("super_admin"))}
                   </span>
                 </Dato>
               )}
@@ -329,7 +349,7 @@ export function IncidenciaDetail({ incidencia, currentUser }: IncidenciaDetailPr
               </CardHeader>
               <CardContent className="space-y-3">
                 <Dato icono={<Ticket className="h-4 w-4" />} etiqueta="Código">
-                  <span className="font-mono font-semibold">{incidencia.boleto.codigo_boleto}</span>
+                  <span className="font-mono font-semibold">{formatCodigoBoleto(incidencia.boleto.codigo_boleto)}</span>
                 </Dato>
                 {incidencia.boleto.asiento && (
                   <Dato icono={<Ticket className="h-4 w-4" />} etiqueta="Asiento">
