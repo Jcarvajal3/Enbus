@@ -330,7 +330,7 @@ export function RecepcionModal({ encomienda, isOpen, onClose, onSuccess, onRecha
                 id="peso"
                 inputMode="decimal"
                 autoComplete="off"
-                placeholder="Ej. 2,5"
+                placeholder="Ej.: 2,5"
                 value={peso}
                 autoFocus
                 onChange={(e) => setPeso(e.target.value)}

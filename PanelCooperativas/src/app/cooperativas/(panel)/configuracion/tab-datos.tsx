@@ -15,7 +15,7 @@ import { actualizarDatosCooperativa, uploadLogo } from "@/app/cooperativas/(pane
 import type { CooperativaData } from "@/lib/types/configuracion";
 import { requireOnline } from "@/components/connectivity-banner";
 import { humanizeError } from "@/lib/errores";
-import { normalizeRif, RIF_AYUDA, RIF_PLACEHOLDER } from "@/lib/rif";
+import { normalizeRif, RIF_AYUDA, RIF_AYUDA_CORTA, RIF_PLACEHOLDER } from "@/lib/rif";
 import { formatNumeroVE } from "@/lib/dinero";
 import { telefonoWhatsApp } from "@/lib/ve";
 
@@ -186,7 +186,7 @@ export function DatosCooperativaTab({ cooperativa, estado }: DatosCooperativaTab
         {editable ? (
           <form onSubmit={guardarDatos} noValidate className="flex flex-col items-start gap-4">
             <div className="grid w-full gap-4 sm:grid-cols-2">
-              <div className="grid gap-2">
+              <div className="grid content-start gap-2">
                 <Label htmlFor={`${uid}-nombre`}>Nombre de la cooperativa</Label>
                 <Input
                   id={`${uid}-nombre`}
@@ -197,7 +197,7 @@ export function DatosCooperativaTab({ cooperativa, estado }: DatosCooperativaTab
                   onChange={(e) => setNombre(e.target.value)}
                 />
               </div>
-              <div className="grid gap-2">
+              <div className="grid content-start gap-2">
                 <Label htmlFor={`${uid}-rif`}>RIF</Label>
                 <Input
                   id={`${uid}-rif`}
@@ -211,7 +211,7 @@ export function DatosCooperativaTab({ cooperativa, estado }: DatosCooperativaTab
                   onBlur={() => setRif((actual) => normalizeRif(actual) ?? actual)}
                 />
                 <p id={`${uid}-rif-ayuda`} className="text-sm text-muted-foreground">
-                  {RIF_AYUDA}
+                  {RIF_AYUDA_CORTA}
                 </p>
               </div>
             </div>

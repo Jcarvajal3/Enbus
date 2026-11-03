@@ -70,7 +70,7 @@ export function RastreoForm({ variante = "pagina", codigoInicial = "", className
           autoCapitalize="characters"
           spellCheck={false}
           defaultValue={codigoInicial}
-          placeholder={`Código de seguimiento, ej. ${CODIGO_EJEMPLO}`}
+          placeholder={`Ej.: ${CODIGO_EJEMPLO}`}
           aria-invalid={error ? true : undefined}
           aria-describedby={error ? `${errorId} ${ayudaId}` : ayudaId}
           onChange={() => error && setError(null)}
@@ -102,7 +102,7 @@ export function RastreoForm({ variante = "pagina", codigoInicial = "", className
         </p>
       )}
       <p id={ayudaId} className={cn("campo-ayuda", enHero && "text-foreground/80")}>
-        Lo encuentras en la app o en el comprobante de la taquilla (empieza por EB-).
+        Está en la app o en el comprobante de la taquilla.
       </p>
     </Form>
   )

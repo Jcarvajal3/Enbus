@@ -639,7 +639,7 @@ function Contenido({
                 <Input
                   id={id("contenido")}
                   autoComplete="off"
-                  placeholder="Ej. Ropa y zapatos"
+                  placeholder="Ej.: Ropa y zapatos"
                   maxLength={500}
                   value={contenido}
                   aria-invalid={errPaquete.contenido ? true : undefined}
@@ -757,7 +757,7 @@ function Campo({
   children: ReactNode;
 }) {
   return (
-    <div className={cn("grid gap-2", className)}>
+    <div className={cn("grid content-start gap-2", className)}>
       <Label htmlFor={id}>{etiqueta}</Label>
       {children}
       {error ? (

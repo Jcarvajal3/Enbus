@@ -27,7 +27,7 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { AvisoError } from "@/components/aviso-error";
 import { useTasaBCVAdmin } from "@/components/admin/dashboard/use-tasa-bcv-admin";
 import { MenuMas } from "@/components/admin/menu-mas";
-import { normalizeRif, RIF_AYUDA, RIF_PLACEHOLDER } from "@/lib/rif";
+import { normalizeRif, RIF_AYUDA_CORTA, RIF_PLACEHOLDER } from "@/lib/rif";
 import { humanizeError } from "@/lib/errores";
 import { avisarExito } from "@/lib/avisos";
 import { formatMoney } from "@/lib/dinero";
@@ -124,7 +124,7 @@ export function CooperativaActions({ cooperativa }: CooperativaActionsProps) {
         ]}
         motivo={{
           etiqueta: "Motivo de la suspensión",
-          placeholder: "Ej. Comisiones de dos ciclos sin pagar.",
+          placeholder: "Ej.: Comisiones de dos ciclos sin pagar.",
           chips: ["Comisiones sin pagar", "Reclamos de pasajeros", "Datos sin verificar", "Otro"],
         }}
         verbo="Suspender cooperativa"
@@ -162,7 +162,7 @@ export function CooperativaActions({ cooperativa }: CooperativaActionsProps) {
         impacto={impactoDesactivar}
         motivo={{
           etiqueta: "Motivo de la desactivación",
-          placeholder: "Ej. La cooperativa dejó de operar.",
+          placeholder: "Ej.: La cooperativa dejó de operar.",
           chips: ["La cooperativa dejó de operar", "Incumplimiento grave", "Solicitud de la cooperativa", "Otro"],
         }}
         confirmarEscribiendo={cooperativa.rif ? [cooperativa.nombre, cooperativa.rif] : cooperativa.nombre}
@@ -289,7 +289,7 @@ function EditarDialog({
                 id="editar-rif"
                 name="rif"
                 defaultValue={cooperativa.rif}
-                placeholder={`Ej. ${RIF_PLACEHOLDER}`}
+                placeholder={`Ej.: ${RIF_PLACEHOLDER}`}
                 required
                 disabled={guardando}
                 autoCapitalize="characters"
@@ -299,7 +299,7 @@ function EditarDialog({
                   if (normalizado) e.target.value = normalizado;
                 }}
               />
-              <FieldDescription id="editar-rif-ayuda">{RIF_AYUDA}</FieldDescription>
+              <FieldDescription id="editar-rif-ayuda">{RIF_AYUDA_CORTA}</FieldDescription>
             </Field>
             <CampoComision
               valor={comision}
@@ -391,7 +391,7 @@ function InvitarDialog({
                 name="email"
                 type="email"
                 autoComplete="off"
-                placeholder="Ej. admin@cooperativa.com"
+                placeholder="Ej.: admin@cooperativa.com"
                 required
                 disabled={invitando}
               />

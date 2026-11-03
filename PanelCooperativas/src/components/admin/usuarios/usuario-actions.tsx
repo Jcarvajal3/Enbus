@@ -112,7 +112,7 @@ export function UsuarioActions({
           ]}
           motivo={{
             etiqueta: "Motivo de la suspensión",
-            placeholder: "Ej. Pagos con referencias falsas.",
+            placeholder: "Ej.: Pagos con referencias falsas.",
             chips: ["Pagos falsos o duplicados", "Uso indebido de la cuenta", "Lo pidió el usuario", "Otro"],
           }}
           confirmarEscribiendo={esAdmin ? nombre : undefined}
@@ -214,7 +214,7 @@ export function AccionesPinEncomienda({ encomienda: e }: { encomienda: Encomiend
         descripcion={`Quien retira podrá intentar el PIN otra vez (hasta ${PIN_MAX_INTENTOS} intentos). Hazlo solo si confirmaste su identidad.`}
         motivo={{
           etiqueta: "Motivo",
-          placeholder: "Ej. El destinatario confirmó su cédula por WhatsApp.",
+          placeholder: "Ej.: El destinatario confirmó su cédula por WhatsApp.",
           chips: ["Destinatario verificado por teléfono", "Se equivocó al escribir el PIN", "Otro"],
         }}
         verbo="Desbloquear PIN"

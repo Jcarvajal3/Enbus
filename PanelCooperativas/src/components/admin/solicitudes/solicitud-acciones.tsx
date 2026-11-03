@@ -94,7 +94,7 @@ function DescartarDialog({
       ]}
       motivo={{
         etiqueta: "Motivo",
-        placeholder: "Ej. Solicitud repetida de otra cooperativa ya registrada.",
+        placeholder: "Ej.: Solicitud repetida de otra cooperativa ya registrada.",
         chips: ["Solicitud repetida", "Datos falsos", "La cooperativa desistió", "Otro"],
       }}
       confirmarEscribiendo={solicitud.nombre}

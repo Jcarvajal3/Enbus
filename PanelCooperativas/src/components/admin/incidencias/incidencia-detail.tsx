@@ -357,7 +357,7 @@ function ResolverDialog({
               id="resolucion"
               rows={4}
               autoFocus
-              placeholder="Ej. La cooperativa devolvió el pago por Pago Móvil."
+              placeholder="Ej.: La cooperativa devolvió el pago por Pago Móvil."
               value={texto}
               onChange={(e) => {
                 setTexto(e.target.value);

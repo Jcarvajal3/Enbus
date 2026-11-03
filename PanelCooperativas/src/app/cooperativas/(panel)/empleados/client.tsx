@@ -684,7 +684,7 @@ function FormularioInvitacion({
           <DialogDescription>Recibirá un enlace para crear su cuenta. Vence en 48 horas.</DialogDescription>
         </DialogHeader>
 
-        <div className="grid gap-2">
+        <div className="grid content-start gap-2">
           <Label htmlFor={`${uid}-sucursal`}>Sucursal</Label>
           <Select
             value={sucursalId}
@@ -724,7 +724,7 @@ function FormularioInvitacion({
           </GrupoOpciones>
         </div>
 
-        <div className="grid gap-2">
+        <div className="grid content-start gap-2">
           <Label htmlFor={`${uid}-email`}>Correo del empleado</Label>
           <Input
             id={`${uid}-email`}

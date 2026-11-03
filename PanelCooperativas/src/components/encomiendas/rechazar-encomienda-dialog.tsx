@@ -50,7 +50,7 @@ export function RechazarEncomiendaDialog({ encomienda, open, onOpenChange, onRec
       ]}
       motivo={{
         etiqueta: "¿Por qué no la recibes?",
-        placeholder: "Ej. No tenemos ruta a Maturín",
+        placeholder: "Ej.: No tenemos ruta a Maturín",
         minimo: 5,
         chips,
       }}

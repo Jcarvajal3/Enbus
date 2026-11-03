@@ -17,7 +17,8 @@ interface PageHeaderProps {
 
 export function PageHeader({ title, description, estado, children }: PageHeaderProps) {
   return (
-    <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
+    // min-h-9 = alto de un botón: el H1 queda a la misma altura con o sin acciones.
+    <div className="flex flex-col items-start justify-between gap-4 sm:min-h-9 sm:flex-row sm:items-center">
       <div className="flex min-w-0 flex-col gap-1">
         <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">{title}</h1>

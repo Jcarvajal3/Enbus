@@ -528,7 +528,7 @@ export function EntregaModal({ encomiendaId, isOpen, onClose, onSuccess }: Entre
 
       {tercero && (
         <div className="grid gap-3 sm:grid-cols-2">
-          <div className="grid gap-2">
+          <div className="grid content-start gap-2">
             <Label htmlFor={id("tercero-nombre")}>Nombre de quien retira</Label>
             <Input
               id={id("tercero-nombre")}

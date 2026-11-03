@@ -181,7 +181,7 @@ export default async function AdminEncomiendasPage({ searchParams }: PageProps) 
               name="codigo"
               type="search"
               defaultValue={busqueda}
-              placeholder="Ej. EB-261003-12345"
+              placeholder="Ej.: EB-261003-12345"
               autoComplete="off"
               autoCapitalize="characters"
               spellCheck={false}

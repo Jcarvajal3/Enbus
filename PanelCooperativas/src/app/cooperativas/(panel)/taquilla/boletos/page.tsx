@@ -780,7 +780,7 @@ function TaquillaBoletos() {
                   ...Object.fromEntries(viajesHoy.map((v) => [v.id, etiquetaViaje(v)])),
                 }}
               >
-                <SelectTrigger id="bus-embarque" className="w-full" disabled={cargandoViajesHoy}>
+                <SelectTrigger id="bus-embarque" className="w-full min-w-0 flex-1" disabled={cargandoViajesHoy}>
                   <SelectValue placeholder="Elige el bus" />
                 </SelectTrigger>
                 <SelectContent>
@@ -795,6 +795,7 @@ function TaquillaBoletos() {
               <Button
                 variant="outline"
                 size="icon"
+                className="shrink-0"
                 onClick={() => void fetchViajesHoy()}
                 disabled={cargandoViajesHoy}
                 aria-label="Actualizar los viajes de hoy"

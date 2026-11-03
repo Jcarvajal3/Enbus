@@ -453,22 +453,22 @@ function Formulario({
       </DialogHeader>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        {campoNumero("tarifa_por_kg", "Precio por kilo (USD)", porKg, setPorKg, "Ej. 2,50")}
+        {campoNumero("tarifa_por_kg", "Precio por kilo (USD)", porKg, setPorKg, "Ej.: 2,50")}
         {campoNumero(
           "factor_distancia_por_min",
           "Recargo por minuto de viaje",
           factor,
           setFactor,
-          "Ej. 0,0010",
+          "Ej.: 0,0010",
           recargo8h === null ? "Se suma por cada minuto de viaje." : `Viaje de 8 h: +${formatNumeroVE(recargo8h, 0)} %`
         )}
-        {campoNumero("peso_max_kg", "Peso máximo (kg)", pesoMax, setPesoMax, "Ej. 25")}
+        {campoNumero("peso_max_kg", "Peso máximo (kg)", pesoMax, setPesoMax, "Ej.: 25")}
         {campoNumero(
           "dimensiones_max_cm",
           "Medida máxima (cm)",
           medidaMax,
           setMedidaMax,
-          "Ej. 50",
+          "Ej.: 50",
           "El lado más largo del paquete.",
           "numeric"
         )}
@@ -546,7 +546,7 @@ function Formulario({
           id={id("nota")}
           rows={2}
           maxLength={300}
-          placeholder="Ej. Ajuste por el aumento del combustible."
+          placeholder="Ej.: Ajuste por el aumento del combustible."
           value={nota}
           onChange={(e) => setNota(e.target.value)}
           disabled={publicando}

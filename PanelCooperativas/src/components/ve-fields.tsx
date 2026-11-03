@@ -4,6 +4,8 @@
 // CedulaField: letra (V, E, J, G, P) + número con puntos mientras se escribe.
 // TelefonoField: un campo con la máscara "0414-123.45.67" en vivo; acepta
 // "+58 414 1234567", "58…", "414…".
+// Ambos: `content-start` para que, en una fila con otro campo de ayuda más larga,
+// la rejilla no estire sus filas (la etiqueta y el campo bajarían unos px).
 // Ambos: label asociado, aria-invalid / aria-describedby con el error y, si se
 // pasa `name`, un <input type="hidden"> con la forma en que se guarda
 // ("V-12345678", "0414-1234567") para formularios con server actions.
@@ -181,7 +183,7 @@ export function CedulaField({
   };
 
   return (
-    <div className="grid gap-2">
+    <div className="grid content-start gap-2">
       <Label htmlFor={id}>{label}</Label>
       <div className="flex gap-2">
         <select
@@ -224,7 +226,7 @@ export function CedulaField({
         <MensajeError id={errorId} error={error} />
       ) : (
         <p id={ayudaId} className="text-sm text-muted-foreground">
-          Elige la letra y escribe los números. Ej.: {CEDULA_PLACEHOLDER}
+          Ej.: {CEDULA_PLACEHOLDER}
         </p>
       )}
       {name && <input type="hidden" name={name} value={value ? cedulaParaGuardar(value) ?? value : ""} />}
@@ -269,7 +271,7 @@ export function TelefonoField({
   };
 
   return (
-    <div className="grid gap-2">
+    <div className="grid content-start gap-2">
       <Label htmlFor={id}>{label}</Label>
       <Input
         id={id}

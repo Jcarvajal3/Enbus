@@ -20,7 +20,7 @@ import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/c
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { AvisoError } from "@/components/aviso-error";
 import { createCooperativa } from "@/app/admin/(panel)/cooperativas/actions";
-import { normalizeRif, RIF_AYUDA, RIF_PLACEHOLDER } from "@/lib/rif";
+import { normalizeRif, RIF_AYUDA_CORTA, RIF_PLACEHOLDER } from "@/lib/rif";
 import { humanizeError } from "@/lib/errores";
 import { avisarExito } from "@/lib/avisos";
 import { CampoComision, ERROR_COMISION, leerComision } from "./campo-comision";
@@ -229,7 +229,7 @@ export function CreateCooperativaDialog() {
             <FieldGroup className="gap-4">
               <Field>
                 <FieldLabel htmlFor="nombre">Nombre de la cooperativa</FieldLabel>
-                <Input id="nombre" name="nombre" placeholder="Ej. Expresos del Táchira" required disabled={loading} />
+                <Input id="nombre" name="nombre" placeholder="Ej.: Expresos del Táchira" required disabled={loading} />
               </Field>
 
               <Field data-invalid={rifError ? true : undefined}>
@@ -237,7 +237,7 @@ export function CreateCooperativaDialog() {
                 <Input
                   id="rif"
                   name="rif"
-                  placeholder={`Ej. ${RIF_PLACEHOLDER}`}
+                  placeholder={`Ej.: ${RIF_PLACEHOLDER}`}
                   required
                   disabled={loading}
                   autoCapitalize="characters"
@@ -252,7 +252,7 @@ export function CreateCooperativaDialog() {
                 {rifError ? (
                   <FieldError id="rif-ayuda">{rifError}</FieldError>
                 ) : (
-                  <FieldDescription id="rif-ayuda">{RIF_AYUDA}</FieldDescription>
+                  <FieldDescription id="rif-ayuda">{RIF_AYUDA_CORTA}</FieldDescription>
                 )}
               </Field>
 
@@ -271,7 +271,7 @@ export function CreateCooperativaDialog() {
                 <FieldLabel htmlFor="email_admin">
                   Correo del administrador <span className="font-normal text-muted-foreground">(opcional)</span>
                 </FieldLabel>
-                <Input id="email_admin" name="email_admin" type="email" placeholder="Ej. admin@cooperativa.com" disabled={loading} />
+                <Input id="email_admin" name="email_admin" type="email" placeholder="Ej.: admin@cooperativa.com" disabled={loading} />
               </Field>
             </FieldGroup>
 

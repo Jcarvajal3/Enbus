@@ -378,7 +378,7 @@ export function RutasClient({ rutas, errorCarga }: { rutas: Ruta[]; errorCarga: 
             <div className="grid gap-4">
               {formError && <AvisoError>{formError}</AvisoError>}
               <div className="grid grid-cols-2 gap-4">
-                <div className="grid gap-2">
+                <div className="grid content-start gap-2">
                   <Label htmlFor={`${uid}-estado-origen`}>Estado de origen</Label>
                   <Select name="estado_origen" value={estadoOrigen} onValueChange={(val) => { setEstadoOrigen(val ?? ""); setCiudadOrigen(""); }} required>
                     <SelectTrigger id={`${uid}-estado-origen`} className="w-full"><SelectValue placeholder="Elige el estado" /></SelectTrigger>
@@ -387,7 +387,7 @@ export function RutasClient({ rutas, errorCarga }: { rutas: Ruta[]; errorCarga: 
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="grid gap-2">
+                <div className="grid content-start gap-2">
                   <Label htmlFor={`${uid}-ciudad-origen`}>Ciudad de origen</Label>
                   <Select name="ciudad_origen" value={ciudadOrigen} onValueChange={(val) => { setCiudadOrigen(val ?? ""); if (errorCampo === "destino") { setFormError(null); setErrorCampo(null); } }} disabled={!estadoOrigen} required>
                     <SelectTrigger id={`${uid}-ciudad-origen`} className="w-full"><SelectValue placeholder="Elige la ciudad" /></SelectTrigger>
@@ -399,7 +399,7 @@ export function RutasClient({ rutas, errorCarga }: { rutas: Ruta[]; errorCarga: 
               </div>
 
               <div className="grid grid-cols-2 gap-4">
-                <div className="grid gap-2">
+                <div className="grid content-start gap-2">
                   <Label htmlFor={`${uid}-estado-destino`}>Estado de destino</Label>
                   <Select name="estado_destino" value={estadoDestino} onValueChange={(val) => { setEstadoDestino(val ?? ""); setCiudadDestino(""); }} required>
                     <SelectTrigger id={`${uid}-estado-destino`} className="w-full"><SelectValue placeholder="Elige el estado" /></SelectTrigger>
@@ -408,7 +408,7 @@ export function RutasClient({ rutas, errorCarga }: { rutas: Ruta[]; errorCarga: 
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="grid gap-2">
+                <div className="grid content-start gap-2">
                   <Label htmlFor={`${uid}-ciudad-destino`}>Ciudad de destino</Label>
                   <Select name="ciudad_destino" value={ciudadDestino} onValueChange={(val) => { setCiudadDestino(val ?? ""); if (errorCampo === "destino") { setFormError(null); setErrorCampo(null); } }} disabled={!estadoDestino} required>
                     <SelectTrigger
@@ -434,7 +434,7 @@ export function RutasClient({ rutas, errorCarga }: { rutas: Ruta[]; errorCarga: 
               <fieldset className="grid gap-2">
                 <legend className="mb-2 text-sm font-medium text-foreground">Duración del viaje</legend>
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="grid gap-2">
+                  <div className="grid content-start gap-2">
                     <Label htmlFor={`${uid}-horas`}>Horas</Label>
                     <Input
                       id={`${uid}-horas`}
@@ -449,7 +449,7 @@ export function RutasClient({ rutas, errorCarga }: { rutas: Ruta[]; errorCarga: 
                       aria-invalid={errorCampo === "duracion" ? true : undefined}
                     />
                   </div>
-                  <div className="grid gap-2">
+                  <div className="grid content-start gap-2">
                     <Label htmlFor={`${uid}-minutos`}>Minutos</Label>
                     <Input
                       id={`${uid}-minutos`}
@@ -467,7 +467,7 @@ export function RutasClient({ rutas, errorCarga }: { rutas: Ruta[]; errorCarga: 
                 </div>
               </fieldset>
 
-              <div className="grid gap-2">
+              <div className="grid content-start gap-2">
                 <Label htmlFor={`${uid}-precio`}>Precio del pasaje (USD)</Label>
                 <Input
                   id={`${uid}-precio`}

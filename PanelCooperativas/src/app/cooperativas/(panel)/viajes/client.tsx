@@ -225,7 +225,7 @@ function FormularioProgramar({
         <div className="grid gap-6">
           {formError && <AvisoError>{formError}</AvisoError>}
 
-          <div className="grid gap-2">
+          <div className="grid content-start gap-2">
             <Label htmlFor={`${uid}-ruta`}>Ruta</Label>
             <Select value={rutaSeleccionada} onValueChange={(val) => setRutaSeleccionada(val ?? "")} items={opcionesRuta}>
               <SelectTrigger id={`${uid}-ruta`}><SelectValue placeholder="Elige una ruta activa" /></SelectTrigger>
@@ -288,16 +288,16 @@ function FormularioProgramar({
                   })}
                 </div>
               </div>
-              <div className="grid gap-2">
+              <div className="grid content-start gap-2">
                 <Label htmlFor={`${uid}-hora`}>Hora de salida</Label>
                 <Input id={`${uid}-hora`} type="time" value={hora} onChange={(e) => setHora(e.target.value)} required />
               </div>
               <div className="grid grid-cols-2 gap-4">
-                <div className="grid gap-2">
+                <div className="grid content-start gap-2">
                   <Label htmlFor={`${uid}-desde`}>Desde</Label>
                   <Input id={`${uid}-desde`} type="date" value={desde} onChange={(e) => setDesde(e.target.value)} required />
                 </div>
-                <div className="grid gap-2">
+                <div className="grid content-start gap-2">
                   <Label htmlFor={`${uid}-hasta`}>Hasta</Label>
                   <Input
                     id={`${uid}-hasta`}
@@ -321,14 +321,14 @@ function FormularioProgramar({
               </div>
             </div>
           ) : (
-            <div className="grid gap-2">
+            <div className="grid content-start gap-2">
               <Label htmlFor={`${uid}-salida`}>Fecha y hora de salida</Label>
               <Input id={`${uid}-salida`} type="datetime-local" value={salida} onChange={(e) => setSalida(e.target.value)} required />
             </div>
           )}
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <div className="grid gap-2">
+            <div className="grid content-start gap-2">
               <Label htmlFor={`${uid}-asientos`}>Asientos</Label>
               <Input
                 id={`${uid}-asientos`}
@@ -341,11 +341,11 @@ function FormularioProgramar({
                 required
               />
             </div>
-            <div className="grid gap-2">
+            <div className="grid content-start gap-2">
               <Label htmlFor={`${uid}-unidad`}>Unidad (opcional)</Label>
               <Input id={`${uid}-unidad`} type="text" maxLength={40} value={unidad} onChange={(e) => setUnidad(e.target.value)} />
             </div>
-            <div className="grid gap-2">
+            <div className="grid content-start gap-2">
               <Label htmlFor={`${uid}-chofer`}>Chofer (opcional)</Label>
               <Input id={`${uid}-chofer`} type="text" maxLength={80} value={chofer} onChange={(e) => setChofer(e.target.value)} />
             </div>
@@ -531,7 +531,7 @@ function FormularioEditar({
 
         {errorGeneral && <AvisoError>{errorGeneral}</AvisoError>}
 
-        <div className="grid gap-2">
+        <div className="grid content-start gap-2">
           <Label htmlFor={`${uid}-salida`}>Fecha y hora de salida</Label>
           <Input
             id={`${uid}-salida`}
@@ -565,7 +565,7 @@ function FormularioEditar({
                   : plural(pasajeros, "Avisaremos a 1 pasajero del cambio de hora.", "Avisaremos a {n} pasajeros del cambio de hora.")}
             </p>
             {pideMotivo && (
-              <div className="grid gap-2">
+              <div className="grid content-start gap-2">
                 <Label htmlFor={`${uid}-motivo`} className="text-warning-deep">Motivo del cambio (se lo enviaremos)</Label>
                 <Textarea
                   id={`${uid}-motivo`}
@@ -591,17 +591,17 @@ function FormularioEditar({
         )}
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div className="grid gap-2">
+          <div className="grid content-start gap-2">
             <Label htmlFor={`${uid}-unidad`}>Unidad</Label>
             <Input id={`${uid}-unidad`} value={unidad} maxLength={40} disabled={enviando} onChange={(e) => setUnidad(e.target.value)} />
           </div>
-          <div className="grid gap-2">
+          <div className="grid content-start gap-2">
             <Label htmlFor={`${uid}-chofer`}>Chofer</Label>
             <Input id={`${uid}-chofer`} value={chofer} maxLength={80} disabled={enviando} onChange={(e) => setChofer(e.target.value)} />
           </div>
         </div>
 
-        <div className="grid gap-2">
+        <div className="grid content-start gap-2">
           <Label htmlFor={`${uid}-asientos`}>Asientos</Label>
           <Input
             id={`${uid}-asientos`}
@@ -1033,7 +1033,7 @@ export function ViajesClient({
         impacto={lineasImpacto(viajeCancelar?.impacto ?? null)}
         motivo={{
           etiqueta: "Motivo (lo verán los pasajeros)",
-          placeholder: "Ej. Falla mecánica de la unidad",
+          placeholder: "Ej.: Falla mecánica de la unidad",
           minimo: 5,
           chips: MOTIVOS_CANCELAR_VIAJE,
         }}

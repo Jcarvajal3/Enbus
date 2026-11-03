@@ -2,7 +2,7 @@
 
 import { useActionState, useEffect, useRef, useState, type FormEvent } from "react";
 import { registrarCooperativa, verificarCorreoRegistro, type ActionState, type CampoRegistro } from "./actions";
-import { normalizeRif, RIF_AYUDA, RIF_PLACEHOLDER } from "@/lib/rif";
+import { normalizeRif, RIF_AYUDA, RIF_AYUDA_CORTA, RIF_PLACEHOLDER } from "@/lib/rif";
 import { CLAVE_AYUDA, CLAVE_ERROR, CLAVE_MINIMO, telefonoValido, TELEFONO_ERROR } from "@/lib/ve";
 import { TelefonoField } from "@/components/ve-fields";
 import { AuthLayout } from "@/components/auth-layout";
@@ -299,7 +299,7 @@ export default function RegistroCooperativaPage() {
               {errores.rif ? (
                 <FieldError id="rif-error">{errores.rif}</FieldError>
               ) : (
-                <FieldDescription id="rif-ayuda">{RIF_AYUDA}</FieldDescription>
+                <FieldDescription id="rif-ayuda">{RIF_AYUDA_CORTA}</FieldDescription>
               )}
             </Field>
 

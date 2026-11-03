@@ -137,7 +137,7 @@ export function Calculadora({ origenes }: { origenes: OrigenConDestinos[] }) {
             type="text"
             inputMode="decimal"
             autoComplete="off"
-            placeholder="Ej. 2,5"
+            placeholder="Ej.: 2,5"
             value={peso}
             onChange={(e) => setPeso(e.target.value)}
             aria-invalid={campos.peso ? true : undefined}

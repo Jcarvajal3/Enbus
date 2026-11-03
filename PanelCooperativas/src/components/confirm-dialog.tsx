@@ -201,7 +201,7 @@ function Contenido({
         )}
 
         {motivo && (
-          <div className="grid gap-2">
+          <div className="grid content-start gap-2">
             <Label htmlFor={id("motivo")}>{motivo.etiqueta}</Label>
             {motivo.chips && motivo.chips.length > 0 && (
               <div className="flex flex-wrap gap-2" role="group" aria-label="Motivos frecuentes">
@@ -255,7 +255,7 @@ function Contenido({
         )}
 
         {opciones.length > 0 && (
-          <div className="grid gap-2">
+          <div className="grid content-start gap-2">
             <Label htmlFor={id("escribir")}>
               <span>
                 Para confirmar, escribe{" "}

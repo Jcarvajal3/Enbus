@@ -180,7 +180,7 @@ export function ResumenVista({
               <TableHeader>
                 <TableRow>
                   <TableHead>Código</TableHead>
-                  <TableHead className="hidden lg:table-cell">Remitente</TableHead>
+                  <TableHead className="hidden xl:table-cell">Remitente</TableHead>
                   <TableHead className="hidden sm:table-cell">Destinatario</TableHead>
                   <TableHead className="hidden lg:table-cell">Ruta</TableHead>
                   <TableHead>Estado</TableHead>
@@ -198,15 +198,15 @@ export function ResumenVista({
                       >
                         {enc.tracking_id}
                       </CeldaEnlace>
-                      <TableCell className="hidden lg:table-cell">{nombreRemitente(enc)}</TableCell>
-                      <TableCell className="hidden sm:table-cell">{enc.receiver_nombre}</TableCell>
+                      <TableCell className="hidden max-w-48 truncate xl:table-cell">{nombreRemitente(enc)}</TableCell>
+                      <TableCell className="hidden max-w-48 truncate sm:table-cell">{enc.receiver_nombre}</TableCell>
                       <TableCell className="hidden lg:table-cell">
                         {formatCiudad(enc.ciudad_origen)} → {formatCiudad(enc.ciudad_destino)}
                       </TableCell>
                       <TableCell>
                         <StatusBadge status={enc.estado} dominio="encomienda" />
                       </TableCell>
-                      <TableCell className="hidden tabular-nums sm:table-cell">{formatFechaHoraCortaVE(enc.created_at)}</TableCell>
+                      <TableCell className="hidden whitespace-nowrap tabular-nums sm:table-cell">{formatFechaHoraCortaVE(enc.created_at)}</TableCell>
                     </TableRow>
                   ))
                 ) : (

@@ -388,7 +388,7 @@ export function PhotoCaptureModal({ encomiendaId, trackingId, isOpen, onClose, o
               ))}
             </div>
             {chip === "Otro" && (
-              <div className="grid gap-2">
+              <div className="grid content-start gap-2">
                 <Label htmlFor={`${uid}-motivo`}>Motivo</Label>
                 <Textarea
                   id={`${uid}-motivo`}

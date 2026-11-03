@@ -15,7 +15,7 @@ import {
 import { BrandMark } from "@/components/brand-mark";
 import { buttonVariants } from "@/components/ui/button";
 import { reenviarInvitacion, type CampoReenvio, type ReenvioState } from "./actions";
-import { normalizeRif, RIF_AYUDA, RIF_PLACEHOLDER } from "@/lib/rif";
+import { normalizeRif, RIF_AYUDA_CORTA, RIF_PLACEHOLDER } from "@/lib/rif";
 import { cooperativasUrl, RUTAS_LEGALES, soporteWhatsApp } from "@/lib/urls";
 
 const FOCO =
@@ -107,7 +107,7 @@ function ReenviarInvitacion({ panel }: { panel: string | null }) {
         />
         <ErrorCampo id="reenvio-rif-error" mensaje={fe.rif} />
         <p id="reenvio-rif-ayuda" className="campo-ayuda">
-          {RIF_AYUDA}
+          {RIF_AYUDA_CORTA}
         </p>
       </div>
 

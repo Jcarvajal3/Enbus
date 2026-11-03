@@ -26,7 +26,7 @@ export function DesbloquearPinButton({ encomiendaId, tracking }: { encomiendaId:
         descripcion={`Quien retira podrá intentar el PIN otra vez (hasta ${PIN_MAX_INTENTOS} intentos). Hazlo solo si confirmaste su identidad.`}
         motivo={{
           etiqueta: "Motivo",
-          placeholder: "Ej. El destinatario confirmó su cédula por WhatsApp.",
+          placeholder: "Ej.: El destinatario confirmó su cédula por WhatsApp.",
           chips: ["Destinatario verificado por teléfono", "Se equivocó al escribir el PIN", "Lo pidió la cooperativa", "Otro"],
         }}
         verbo="Desbloquear PIN"

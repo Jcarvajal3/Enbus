@@ -324,7 +324,7 @@ export function CobroTaquillaForm({ totalUsd, enviando, errorCampo, onCobrar, on
               inputMode="decimal"
               autoComplete="off"
               autoFocus
-              placeholder={esperado !== null ? `Ej. ${formatNumeroVE(esperado)}` : ""}
+              placeholder={esperado !== null ? `Ej.: ${formatNumeroVE(esperado)}` : ""}
               value={recibidoTexto}
               aria-invalid={ayudaMonto ? true : undefined}
               aria-describedby={`${ids}-recibido-ayuda`}
@@ -1031,7 +1031,7 @@ export function VentaFlow({ isOpen, onClose, viajeIdInicial }: VentaFlowProps) {
                       <Input
                         id={`${ids}-cedula-${asiento}`}
                         autoComplete="off"
-                        placeholder={`Ej. ${CEDULA_PLACEHOLDER}`}
+                        placeholder={`Ej.: ${CEDULA_PLACEHOLDER}`}
                         value={p.cedula}
                         aria-invalid={err.cedula ? true : undefined}
                         onChange={(e) => actualizarPasajero(asiento, "cedula", e.target.value)}
@@ -1047,7 +1047,7 @@ export function VentaFlow({ isOpen, onClose, viajeIdInicial }: VentaFlowProps) {
                         id={`${ids}-telefono-${asiento}`}
                         type="tel"
                         autoComplete="off"
-                        placeholder={`Ej. ${TELEFONO_PLACEHOLDER}`}
+                        placeholder={`Ej.: ${TELEFONO_PLACEHOLDER}`}
                         value={p.telefono}
                         onChange={(e) => actualizarPasajero(asiento, "telefono", e.target.value)}
                       />

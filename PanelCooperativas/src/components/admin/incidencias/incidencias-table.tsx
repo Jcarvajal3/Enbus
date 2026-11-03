@@ -93,7 +93,7 @@ export function IncidenciasTable({ data, ahora }: IncidenciasTableProps) {
               <TableHead>Prioridad</TableHead>
               <TableHead className="hidden md:table-cell">Tipo</TableHead>
               <TableHead className="hidden lg:table-cell">Sobre</TableHead>
-              <TableHead className="hidden lg:table-cell">Reportada por</TableHead>
+              <TableHead className="hidden xl:table-cell">Reportada por</TableHead>
               <TableHead>Estado</TableHead>
               <TableHead className="hidden md:table-cell">Antigüedad</TableHead>
             </TableRow>
@@ -136,7 +136,7 @@ export function IncidenciasTable({ data, ahora }: IncidenciasTableProps) {
                       <Vacio />
                     )}
                   </TableCell>
-                  <TableCell className="hidden lg:table-cell">{item.reportado_por_profile?.nombre_completo || "Sistema"}</TableCell>
+                  <TableCell className="hidden xl:table-cell">{item.reportado_por_profile?.nombre_completo || "Sistema"}</TableCell>
                   <TableCell>
                     <StatusBadge status={item.estado} dominio="incidencia" />
                   </TableCell>

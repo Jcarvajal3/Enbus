@@ -181,7 +181,7 @@ export function TasaBCVCard({ tasa, hoy, className }: TasaBCVCardProps) {
                     id="tasa-valor"
                     inputMode="decimal"
                     autoComplete="off"
-                    placeholder="Ej. 100,81"
+                    placeholder="Ej.: 100,81"
                     value={tasaTexto}
                     onChange={(e) => setTasaTexto(e.target.value)}
                     aria-invalid={errorDe("tasa") ? true : undefined}
@@ -204,7 +204,7 @@ export function TasaBCVCard({ tasa, hoy, className }: TasaBCVCardProps) {
                 <Textarea
                   id="tasa-motivo"
                   rows={2}
-                  placeholder="Ej. La tarea automática no actualizó la tasa de hoy."
+                  placeholder="Ej.: La tarea automática no actualizó la tasa de hoy."
                   value={motivo}
                   onChange={(e) => setMotivo(e.target.value)}
                   aria-invalid={errorDe("motivo") ? true : undefined}

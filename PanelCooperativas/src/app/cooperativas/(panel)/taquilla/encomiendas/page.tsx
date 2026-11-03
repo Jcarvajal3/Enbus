@@ -321,7 +321,7 @@ function TaquillaEncomiendas() {
                       <TableHead>Ruta</TableHead>
                       <TableHead>Estado</TableHead>
                       <TableHead className="text-right">Costo</TableHead>
-                      <TableHead className="hidden xl:table-cell">Fecha</TableHead>
+                      <TableHead className="hidden 2xl:table-cell">Fecha</TableHead>
                       <TableHead className="w-12 text-right">
                         <span className="sr-only">Guía</span>
                       </TableHead>
@@ -356,8 +356,8 @@ function TaquillaEncomiendas() {
                           >
                             {encomienda.tracking_id}
                           </CeldaEnlace>
-                          <TableCell className="hidden max-w-40 truncate xl:table-cell">{remitenteDe(encomienda).nombre}</TableCell>
-                          <TableCell className="max-w-40 truncate">{encomienda.receiver_nombre}</TableCell>
+                          <TableCell className="hidden max-w-40 truncate xl:table-cell 2xl:max-w-48">{remitenteDe(encomienda).nombre}</TableCell>
+                          <TableCell className="max-w-40 truncate 2xl:max-w-48">{encomienda.receiver_nombre}</TableCell>
                           <TableCell>
                             <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
                               <span className="max-w-28 truncate" title={formatCiudad(encomienda.ciudad_origen)}>
@@ -387,7 +387,7 @@ function TaquillaEncomiendas() {
                               <span className="text-sm text-muted-foreground">Por calcular</span>
                             )}
                           </TableCell>
-                          <TableCell className="hidden text-sm whitespace-nowrap text-muted-foreground xl:table-cell">
+                          <TableCell className="hidden text-sm whitespace-nowrap text-muted-foreground 2xl:table-cell">
                             {capitalizarInicio(formatHaceTiempo(encomienda.created_at))}
                           </TableCell>
                           <TableCell className="text-right">

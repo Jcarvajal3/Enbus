@@ -139,7 +139,8 @@ export default async function AdminDashboardPage() {
 
       <DashboardCharts activityData={activityData} topCooperativas={topCooperativas} rutasPopulares={rutasPopulares} />
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+      {/* Dos tablas lado a lado solo con ancho de sobra: a 1024–1440 se cortaban columnas. */}
+      <div className="grid grid-cols-1 gap-6 2xl:grid-cols-2">
         <IncidenciasRecientesTable data={incidencias} />
         <CooperativasBalanceTable data={cooperativasBalance} tasa={tasa} />
       </div>

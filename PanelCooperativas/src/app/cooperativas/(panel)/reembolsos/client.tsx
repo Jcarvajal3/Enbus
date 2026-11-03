@@ -598,7 +598,7 @@ function FormularioDevolucion({
           </GrupoOpciones>
         </div>
 
-        <div className="grid gap-2">
+        <div className="grid content-start gap-2">
           <Label htmlFor={`${uid}-referencia`}>
             Referencia de la devolución{metodo === "EFECTIVO" ? " (opcional)" : ""}
           </Label>
@@ -625,7 +625,7 @@ function FormularioDevolucion({
           )}
         </div>
 
-        <div className="grid gap-2">
+        <div className="grid content-start gap-2">
           <Label htmlFor={`${uid}-nota`}>Nota (opcional)</Label>
           <Textarea
             id={`${uid}-nota`}

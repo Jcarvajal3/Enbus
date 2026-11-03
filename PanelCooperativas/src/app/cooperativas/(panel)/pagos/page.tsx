@@ -38,7 +38,7 @@ const PESTANAS: { id: Pestana; titulo: string }[] = [
   { id: "encomienda", titulo: "Encomiendas" },
 ];
 
-const COLUMNAS = 8;
+const COLUMNAS = 7;
 
 const METODO: Record<string, string> = {
   PAGO_MOVIL: "Pago Móvil",
@@ -188,12 +188,11 @@ function BandejaPagos() {
             <TableHeader>
               <TableRow>
                 <TableHead>Cliente</TableHead>
-                <TableHead className="hidden md:table-cell">Registrado</TableHead>
+                <TableHead className="hidden 2xl:table-cell">Registrado</TableHead>
                 <TableHead className="hidden sm:table-cell">Concepto</TableHead>
-                <TableHead className="hidden lg:table-cell">Método</TableHead>
+                <TableHead className="hidden xl:table-cell">Método</TableHead>
                 <TableHead className="hidden md:table-cell">Referencia</TableHead>
                 <TableHead className="text-right">Monto</TableHead>
-                <TableHead className="hidden text-right lg:table-cell">Diferencia</TableHead>
                 <TableHead className="text-right">
                   <span className="sr-only">Acciones</span>
                 </TableHead>
@@ -216,13 +215,13 @@ function BandejaPagos() {
                           .join(" · ")}
                       </span>
                     </CeldaEnlace>
-                    <TableCell className="hidden whitespace-nowrap md:table-cell">
+                    <TableCell className="hidden whitespace-nowrap 2xl:table-cell">
                       <span className="block text-sm">{ahora > 0 ? formatHaceTiempo(p.creado_at, new Date(ahora)) : ""}</span>
                       <span className="block text-xs text-muted-foreground tabular-nums">
                         {formatFechaHoraCortaVE(p.creado_at)}
                       </span>
                     </TableCell>
-                    <TableCell className="hidden max-w-[18rem] sm:table-cell">
+                    <TableCell className="hidden min-w-56 max-w-[18rem] sm:table-cell">
                       <span className="block text-sm whitespace-normal">{conceptoDePago(p)}</span>
                       {(viajeSalio || p.recurso_vencido) && (
                         <span className="mt-1 flex flex-wrap gap-1">
@@ -235,7 +234,7 @@ function BandejaPagos() {
                         </span>
                       )}
                     </TableCell>
-                    <TableCell className="hidden lg:table-cell">
+                    <TableCell className="hidden xl:table-cell">
                       <span className="block text-sm">{(p.metodo_tipo && METODO[p.metodo_tipo]) || "Pago digital"}</span>
                       {p.metodo_tipo !== "ZELLE" && p.banco_emisor && (
                         <span className="block text-xs text-muted-foreground">Desde {p.banco_emisor}</span>
@@ -252,9 +251,10 @@ function BandejaPagos() {
                     </TableCell>
                     <TableCell className="text-right">
                       <Monto usd={p.monto_usd} bs={p.monto_bs} tasa={tasa} moneda={p.moneda} size="sm" align="right" />
-                    </TableCell>
-                    <TableCell className="hidden text-right lg:table-cell">
-                      <Diferencia pago={p} />
+                      {/* Lo declarado frente a lo esperado, bajo el monto (sin columna propia: la tabla cabe a 1024). */}
+                      <span className="mt-1 hidden justify-end lg:flex">
+                        <Diferencia pago={p} />
+                      </span>
                     </TableCell>
                     <TableCell className="text-right">
                       <Button

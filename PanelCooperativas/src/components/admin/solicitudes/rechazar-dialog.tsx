@@ -35,7 +35,7 @@ export function RechazarDialog({ cooperativaId, nombre, open, onOpenChange, onHe
       descripcion="Recibirá el motivo por correo y en su panel. Podrá corregir sus datos y pedir otra revisión."
       motivo={{
         etiqueta: "Motivo del rechazo",
-        placeholder: "Ej. El RIF no corresponde a la cooperativa registrada.",
+        placeholder: "Ej.: El RIF no corresponde a la cooperativa registrada.",
         chips: MOTIVOS_RECHAZO,
       }}
       verbo="Rechazar y avisar"

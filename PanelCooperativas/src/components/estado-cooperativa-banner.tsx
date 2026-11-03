@@ -253,7 +253,7 @@ function FormularioRevision({
           <DialogDescription>Corrige antes lo que indicaba el motivo. Respondemos en 24 a 48 horas hábiles.</DialogDescription>
         </DialogHeader>
 
-        <div className="grid gap-2">
+        <div className="grid content-start gap-2">
           <Label htmlFor={`${uid}-mensaje`}>Mensaje para el equipo de EnBus (opcional)</Label>
           <Textarea
             id={`${uid}-mensaje`}

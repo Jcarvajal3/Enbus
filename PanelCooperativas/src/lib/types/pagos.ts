@@ -183,7 +183,8 @@ export function conceptoDePago(p: PagoPorVerificar): string {
   const n = p.boleto_ids?.length ?? 1;
   const partes = [n === 1 ? "1 boleto" : `${n} boletos`];
   if (p.ruta) partes.push(p.ruta);
-  if (p.viaje_salida) partes.push(formatSalidaCorta(p.viaje_salida));
+  // "3:56 a. m." sin cortes de línea dentro de la hora (el concepto se ajusta en la tabla).
+  if (p.viaje_salida) partes.push(formatSalidaCorta(p.viaje_salida).replace(/ ([ap])\. m\./g, "\u00a0$1.\u00a0m."));
   if (p.asientos) partes.push(`${p.asientos.includes(",") ? "asientos" : "asiento"} ${p.asientos}`);
   return partes.join(" · ");
 }

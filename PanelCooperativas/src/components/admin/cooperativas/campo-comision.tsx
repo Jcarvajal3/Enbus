@@ -50,7 +50,7 @@ export function CampoComision({
         id={id}
         inputMode="decimal"
         autoComplete="off"
-        placeholder="Ej. 10"
+        placeholder="Ej.: 10"
         value={valor}
         autoFocus={autoFocus}
         disabled={disabled}

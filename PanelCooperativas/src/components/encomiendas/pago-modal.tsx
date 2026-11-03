@@ -327,7 +327,7 @@ export function CobroEncomiendaForm({ encomienda, onCobrado, onCambioExterno, di
                   id={id("recibido")}
                   inputMode="decimal"
                   autoComplete="off"
-                  placeholder={esperado != null ? `Ej. ${formatEnMoneda(esperado, moneda)}` : undefined}
+                  placeholder={esperado != null ? `Ej.: ${formatEnMoneda(esperado, moneda)}` : undefined}
                   value={recibido}
                   // Al elegir efectivo el foco va al monto; Enter pide confirmar el cobro.
                   autoFocus
@@ -445,7 +445,7 @@ export function CobroEncomiendaForm({ encomienda, onCobrado, onCambioExterno, di
                       id={id("banco")}
                       list={id("bancos")}
                       autoComplete="off"
-                      placeholder="Ej. 0134 · Banesco"
+                      placeholder="Ej.: 0134 · Banesco"
                       value={banco}
                       disabled={disabled || enviando}
                       aria-invalid={errores.banco ? true : undefined}

@@ -176,7 +176,7 @@ function Formulario({
               id={`${uid}-referencia`}
               value={referencia}
               autoComplete="off"
-              placeholder="Ej. 00123456"
+              placeholder="Ej.: 00123456"
               inputMode="numeric"
               onChange={(e) => {
                 setReferencia(e.target.value);
