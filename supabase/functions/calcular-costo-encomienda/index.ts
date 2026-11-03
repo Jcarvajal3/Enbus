@@ -1,150 +1,58 @@
-import "@supabase/functions-js/edge-runtime.d.ts"
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.0'
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
-
-function normalizeForDb(val: string | null | undefined): string {
-  if (!val) return "";
-  const clean = val.trim().toLowerCase();
-  if (clean === "san fernando de apure") return "san_fernando";
-  if (clean === "san juan de los morros") return "san_juan";
-  return val
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .trim()
-    .replace(/\s+/g, "_");
-}
+// calcular-costo-encomienda
+// Compatibilidad: el panel ya llama directo a las RPC. Aquí se delega en ellas con el JWT del
+// empleado (mismo permiso, misma fórmula y mismas transiciones de estado):
+//   preview = true  → fn_cotizar_encomienda (no cambia nada)
+//   preview = false → fn_confirmar_recepcion_origen (EN_RECEPCION → POR_PAGAR, sucursales, PIN)
+import '@supabase/functions-js/edge-runtime.d.ts';
+import { ErrorEntrada, errorInterno, esUuid, fallar, filtrarMetodo, leerJson, numero, responder } from '../_shared/http.ts';
+import { clienteUsuario, respuestaErrorRpc, usuarioDelToken } from '../_shared/supabase.ts';
 
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
-  }
+  const metodo = filtrarMetodo(req);
+  if (metodo) return metodo;
 
   try {
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: "No authorization header" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    const usuario = await usuarioDelToken(req);
+    if (!usuario) return fallar(401, 'EB_NO_AUTENTICADO', 'Tu sesión expiró. Inicia sesión de nuevo.');
+
+    const body = await leerJson(req, 4096);
+    const peso = numero(body.peso_kg);
+    if (!esUuid(body.encomienda_id)) return fallar(400, 'EB_DATOS_INVALIDOS', 'Falta la encomienda.');
+    if (peso === null || peso <= 0) {
+      return fallar(400, 'EB_PESO_INVALIDO', 'Escribe un peso mayor que 0.', { detalle: { campo: 'peso' } });
+    }
+    const pesoKg = Math.round(peso * 100) / 100;
+    const supabase = clienteUsuario(usuario.token);
+
+    if (body.preview === true) {
+      const { data, error } = await supabase.rpc('fn_cotizar_encomienda', { p_encomienda_id: body.encomienda_id, p_peso_kg: pesoKg });
+      if (error) {
+        const r = respuestaErrorRpc(error);
+        if (r) return r;
+        throw new Error(`fn_cotizar_encomienda: ${error.message}`);
+      }
+      const cot = data as { costo_usd: number; costo_bs: number | null; tasa_bcv: number | null; tasa_bcv_fecha: string | null };
+      const { data: enc } = await supabase.from('encomiendas').select('estado').eq('id', body.encomienda_id).maybeSingle();
+      return responder(200, {
+        costo: cot.costo_usd, costo_calculado: cot.costo_usd, estado: enc?.estado ?? null, moneda: 'USD',
+        costo_bs: cot.costo_bs, tasa_bcv: cot.tasa_bcv, tasa_bcv_fecha: cot.tasa_bcv_fecha,
+      });
     }
 
-    const { encomienda_id, peso_kg, preview } = await req.json();
-
-    if (!encomienda_id || !peso_kg || peso_kg <= 0) {
-      return new Response(JSON.stringify({ error: "Datos inválidos" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    const { data, error } = await supabase.rpc('fn_confirmar_recepcion_origen', { p_encomienda_id: body.encomienda_id, p_peso_kg: pesoKg });
+    if (error) {
+      const r = respuestaErrorRpc(error);
+      if (r) return r;
+      throw new Error(`fn_confirmar_recepcion_origen: ${error.message}`);
     }
-
-    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
-    const supabaseKey = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
-    // Service role se necesita para hacer updates en base si el RLS requiere que el auth header pertenezca, 
-    // pero idealmente creamos el cliente en nombre del usuario:
-    const supabaseClient = createClient(supabaseUrl, supabaseKey, {
-      global: { headers: { Authorization: authHeader } }
+    const rec = data as { estado: string; costo_usd: number; costo_bs: number | null; tasa_bcv: number | null; tasa_bcv_fecha: string | null };
+    // Tarifas en USD de referencia; se cobra en Bs a la tasa BCV del día.
+    return responder(200, {
+      costo_calculado: rec.costo_usd, estado: rec.estado, costo: rec.costo_usd, moneda: 'USD',
+      costo_bs: rec.costo_bs, tasa_bcv: rec.tasa_bcv, tasa_bcv_fecha: rec.tasa_bcv_fecha,
     });
-
-    const token = authHeader.replace("Bearer ", "");
-    const { data: { user }, error: userError } = await supabaseClient.auth.getUser(token);
-    if (userError || !user) {
-      throw new Error("Usuario no autenticado: " + (userError?.message || "token inválido o nulo"));
-    }
-
-    // Verificar rol directamente (o confiar en RLS, pero la spec pide validarlo aquí)
-    const { data: profile, error: profileError } = await supabaseClient
-      .from('profiles')
-      .select('role, cooperativa_id')
-      .eq('id', user.id)
-      .single();
-
-    if (profileError || !['taquillero', 'admin_cooperativa'].includes(profile.role)) {
-      throw new Error("No tienes permisos para esta acción");
-    }
-
-    // Usar service_role o continuar con user client (RLS debería validarlo)
-    // 1. Obtener la encomienda
-    const { data: enc, error: encError } = await supabaseClient
-      .from('encomiendas')
-      .select('estado, estado_origen, ciudad_origen, estado_destino, ciudad_destino, cooperativa_id')
-      .eq('id', encomienda_id)
-      .single();
-
-    if (encError || !enc) throw new Error("Encomienda no encontrada");
-    if (enc.cooperativa_id !== profile.cooperativa_id) throw new Error("Acceso denegado a cooperativa");
-
-    // 2. Obtener tarifa activa
-    const { data: tarifaData, error: tarifaError } = await supabaseClient
-      .from('tarifas')
-      .select('tarifa_por_kg, factor_distancia_por_min, peso_max_kg')
-      .eq('activa', true)
-      .single();
-
-    if (tarifaError || !tarifaData) throw new Error("No hay tarifa activa");
-
-    if (peso_kg > tarifaData.peso_max_kg) {
-      throw new Error(`Peso excede el máximo permitido de ${tarifaData.peso_max_kg} kg`);
-    }
-
-    // 3. Obtener ruta aplicable
-    const { data: ruta, error: rutaError } = await supabaseClient
-      .from('rutas')
-      .select('duracion_estimada_min')
-      .eq('estado_origen', normalizeForDb(enc.estado_origen))
-      .eq('ciudad_origen', normalizeForDb(enc.ciudad_origen))
-      .eq('estado_destino', normalizeForDb(enc.estado_destino))
-      .eq('ciudad_destino', normalizeForDb(enc.ciudad_destino))
-      .eq('cooperativa_id', profile.cooperativa_id)
-      .eq('activa', true)
-      .limit(1)
-      .single();
-
-    if (rutaError || !ruta) throw new Error("La cooperativa no tiene una ruta activa para este destino");
-
-    // 4. Calcular costo
-    const costo = parseFloat((peso_kg * tarifaData.tarifa_por_kg * (1 + tarifaData.factor_distancia_por_min * ruta.duracion_estimada_min)).toFixed(2));
-
-    if (preview) {
-      return new Response(JSON.stringify({
-        costo: costo,
-        costo_calculado: costo,
-        estado: enc.estado,
-        moneda: "USD"
-      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
-
-    // 5. Actualizar encomienda (RLS lo permite porque es taquillero de la cooperativa)
-    // Para cumplir con el trigger de transición validar_transicion_encomienda:
-    if (enc.estado === 'PENDIENTE_DE_ESCANEO') {
-      const { error: step1Error } = await supabaseClient
-        .from('encomiendas')
-        .update({ estado: 'EN_RECEPCION' })
-        .eq('id', encomienda_id)
-        .eq('estado', 'PENDIENTE_DE_ESCANEO');
-      
-      if (step1Error) throw new Error("Error en transición intermedia a EN_RECEPCION: " + step1Error.message);
-    }
-
-    const { data: updateRes, error: updateError } = await supabaseClient
-      .from('encomiendas')
-      .update({ 
-        peso_kg: peso_kg,
-        costo_calculado: costo,
-        estado: 'POR_PAGAR'
-      })
-      .eq('id', encomienda_id)
-      .select('costo_calculado, estado')
-      .single();
-
-    if (updateError) throw new Error("Error actualizando la encomienda: " + updateError.message);
-
-    const responseData = {
-      ...updateRes,
-      costo: updateRes.costo_calculado,
-      moneda: "USD" // tarifas en USD de referencia; se cobra en Bs a la tasa BCV del día
-    };
-
-    return new Response(JSON.stringify(responseData), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
-  } catch (error: any) {
-    return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+  } catch (e) {
+    if (e instanceof ErrorEntrada) return e.respuesta();
+    return errorInterno('calcular-costo-encomienda', e);
   }
 });

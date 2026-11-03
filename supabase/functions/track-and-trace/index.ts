@@ -1,96 +1,59 @@
-import "@supabase/functions-js/edge-runtime.d.ts"
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.0'
+// track-and-trace
+// Rastreo público de una encomienda por su código (EB-AAMMDD-NNNNN). Usa la misma RPC que la
+// landing (fn_rastrear_encomienda_publico): solo estado, ciudades, cooperativa y fechas; nunca PIN,
+// cédulas, teléfonos, nombres ni notas internas del historial.
+import '@supabase/functions-js/edge-runtime.d.ts';
+import { ErrorEntrada, errorInterno, fallar, filtrarMetodo, ipCliente, leerJson, responder } from '../_shared/http.ts';
+import { aplicarLimite, clienteAdmin } from '../_shared/supabase.ts';
 
-const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+const TRACKING_RE = /^[A-Z0-9]{2,4}-\d{6}-[A-Z0-9]{4,8}$/;
 
-function checkRateLimit(ip: string, maxRequests: number, windowMs: number): boolean {
-  const now = Date.now();
-  const entry = rateLimitMap.get(ip);
-  if (!entry || now > entry.resetAt) {
-    rateLimitMap.set(ip, { count: 1, resetAt: now + windowMs });
-    return true;
-  }
-  if (entry.count >= maxRequests) return false;
-  entry.count++;
-  return true;
+interface Rastreo {
+  tracking_id: string;
+  estado: string;
+  cooperativa: string | null;
+  origen: { estado: string | null; ciudad: string | null };
+  destino: { estado: string | null; ciudad: string | null };
+  creada_at: string;
+  actualizada_at: string;
+  historial: { estado: string; fecha: string }[];
 }
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+const lugar = (l: { estado: string | null; ciudad: string | null }) => [l.ciudad, l.estado].filter(Boolean).join(', ');
 
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
-  }
-
-  const clientIp = req.headers.get("x-forwarded-for") || "unknown-ip";
-  const isAllowed = checkRateLimit(clientIp, 30, 60000); // 30 reqs per minute
-
-  if (!isAllowed) {
-    return new Response(JSON.stringify({ error: "Too many requests" }), { 
-      status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } 
-    });
-  }
+  const metodo = filtrarMetodo(req);
+  if (metodo) return metodo;
 
   try {
-    const { tracking_id } = await req.json();
+    // 30 consultas por minuto por IP (compartido entre instancias vía fn_consumir_limite).
+    const limite = await aplicarLimite(`rastreo:${ipCliente(req)}`, 30, 60);
+    if (limite) return limite;
 
-    if (!tracking_id) {
-      return new Response(JSON.stringify({ error: "tracking_id es requerido" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    const body = await leerJson(req, 2048);
+    const tracking = typeof body.tracking_id === 'string' ? body.tracking_id.trim().toUpperCase() : '';
+    if (!tracking) return fallar(400, 'EB_DATOS_INVALIDOS', 'Escribe el código de seguimiento.');
+    if (tracking.length > 30 || !TRACKING_RE.test(tracking)) {
+      return fallar(400, 'EB_DATOS_INVALIDOS', 'El código de seguimiento no es válido. Revisa que esté completo (EB-AAMMDD-NNNNN).');
     }
 
-    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    const { data, error } = await clienteAdmin().rpc('fn_rastrear_encomienda_publico', { p_tracking: tracking });
+    if (error) throw new Error(`fn_rastrear_encomienda_publico: ${error.message}`);
+    const e = data as Rastreo | null;
+    if (!e) return fallar(404, 'EB_NO_ENCONTRADO', 'No encontramos una encomienda con ese código.');
 
-    // 1. Obtener datos públicos de la encomienda
-    const { data: encData, error: encError } = await supabase
-      .from('encomiendas')
-      .select(`
-        id,
-        tracking_id,
-        estado,
-        estado_origen,
-        ciudad_origen,
-        estado_destino,
-        ciudad_destino,
-        created_at,
-        updated_at,
-        cooperativas (nombre)
-      `)
-      .eq('tracking_id', tracking_id)
-      .single();
-
-    if (encError || !encData) {
-       return new Response(JSON.stringify({ error: "Tracking ID no encontrado" }), { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
-
-    // 2. Obtener historial de estados
-    const { data: historialData, error: historialError } = await supabase
-      .from('encomienda_estado_historial')
-      .select('estado_nuevo, created_at, nota')
-      .eq('encomienda_id', encData.id)
-      .order('created_at', { ascending: false });
-
-    if (historialError) throw new Error("Error obteniendo historial");
-
-    const responsePayload = {
-      tracking_id: encData.tracking_id,
-      estado: encData.estado,
-      origen: `${encData.ciudad_origen}, ${encData.estado_origen}`,
-      destino: `${encData.ciudad_destino}, ${encData.estado_destino}`,
-      cooperativa: encData.cooperativas ? encData.cooperativas.nombre : null,
-      fechas: {
-        creado: encData.created_at,
-        actualizado: encData.updated_at
-      },
-      historial_estados: historialData
-    };
-
-    return new Response(JSON.stringify(responsePayload), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
-  } catch (error: any) {
-    return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    return responder(200, {
+      tracking_id: e.tracking_id,
+      estado: e.estado,
+      origen: lugar(e.origen),
+      destino: lugar(e.destino),
+      cooperativa: e.cooperativa ?? null,
+      fechas: { creado: e.creada_at, actualizado: e.actualizada_at },
+      // Más reciente primero (mismo orden que antes); sin la nota interna.
+      historial_estados: [...(e.historial ?? [])].reverse().map((h) => ({ estado_nuevo: h.estado, created_at: h.fecha })),
+    });
+  } catch (e) {
+    if (e instanceof ErrorEntrada) return e.respuesta();
+    return errorInterno('track-and-trace', e);
   }
 });
