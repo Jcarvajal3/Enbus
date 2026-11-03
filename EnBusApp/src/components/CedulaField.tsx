@@ -26,6 +26,8 @@ const NOMBRE_LETRA: Record<LetraCedula, string> = {
 };
 
 const MAX_DIGITOS = 10;
+/** Ancho en que caben "Ej. 12345678" y diez cifras sin recortar. */
+const NUMERO_ANCHO_MINIMO = 160;
 
 export interface CedulaFieldProps {
   label?: string;
@@ -167,8 +169,11 @@ const s = StyleSheet.create({
     marginBottom: Spacing.sm,
     marginLeft: Spacing.xl,
   },
+  // Si no cabe el número junto a las letras (cuatro letras en 360 pt), el campo
+  // baja a su propia línea en vez de recortar la cifra.
   row: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     gap: Spacing.sm,
   },
@@ -177,7 +182,10 @@ const s = StyleSheet.create({
     gap: Spacing.xs,
   },
   numero: {
-    flex: 1,
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: NUMERO_ANCHO_MINIMO,
+    minWidth: NUMERO_ANCHO_MINIMO,
     marginBottom: 0,
   },
 });

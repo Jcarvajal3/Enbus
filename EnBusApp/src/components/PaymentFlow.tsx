@@ -597,7 +597,7 @@ export function PaymentFlow({
     return envolver(
       <>
         {volver}
-        {enTarjeta ? <Text variant="heading" style={s.titulo}>Pagar en taquilla</Text> : null}
+        {enTarjeta ? <Text variant="subheading" style={s.titulo}>Pagar en taquilla</Text> : null}
 
         <AmountBadge label="Monto a pagar en taquilla" cotizacion={cotizacion} moneda="VES" />
 
@@ -640,7 +640,7 @@ export function PaymentFlow({
     return envolver(
       <>
         {volver}
-        {enTarjeta ? <Text variant="heading" style={s.titulo}>{info.label}</Text> : null}
+        {enTarjeta ? <Text variant="subheading" style={s.titulo}>{info.label}</Text> : null}
 
         <AmountBadge
           label={isZelle ? 'Monto a enviar por Zelle' : 'Monto a transferir'}
@@ -899,7 +899,8 @@ export function PaymentFlow({
     <>
       {enTarjeta ? (
         <>
-          <Text variant="heading">¿Cómo vas a pagar?</Text>
+          {/* Título de tarjeta como sus hermanas del detalle ("Seguimiento", "Detalles"). */}
+          <Text variant="subheading">Pago</Text>
           {concepto ? (
             <Text variant="secondary" color="muted" style={s.concepto} numberOfLines={2}>
               {concepto}

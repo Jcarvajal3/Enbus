@@ -20,7 +20,6 @@ import {
   Card,
   EmptyState,
   Field,
-  FloatingBar,
   Screen,
   ScreenHeader,
   scrollContent,
@@ -73,20 +72,16 @@ export default function RestablecerScreen() {
       <Screen>
         <ScreenHeader variant="compact" title="Contraseña nueva" onBack={salirSinSesion} />
         <ScrollView
-          contentContainerStyle={scrollContent({ top: 0, floatingAction: true })}
+          contentContainerStyle={scrollContent({ top: 0 })}
           showsVerticalScrollIndicator={false}
         >
           <EmptyState
             icon={LinkBreak}
             title="Abre el enlace desde este teléfono"
             description="El enlace del correo solo funciona en el teléfono donde lo pediste."
+            action={{ children: 'Pedir otro enlace', onPress: () => router.replace('/recuperar') }}
           />
         </ScrollView>
-        <FloatingBar fade={false}>
-          <Button fullWidth onPress={() => router.replace('/recuperar')}>
-            Pedir otro enlace
-          </Button>
-        </FloatingBar>
       </Screen>
     );
   }

@@ -32,6 +32,7 @@ import { UserCircle, WarningCircle } from 'phosphor-react-native';
 import * as Haptics from 'expo-haptics';
 import { Card, Chip, Field, Text } from '@/src/components/ui';
 import { CedulaField } from '@/src/components/CedulaField';
+import { TelefonoField } from '@/src/components/TelefonoField';
 import {
   MENSAJE_CEDULA,
   MENSAJE_TELEFONO,
@@ -374,15 +375,14 @@ export function PasajerosForm({
               editable={!guardando}
             />
 
-            <Field
+            {/* El mismo campo de teléfono (máscara e icono) que el envío y el perfil. */}
+            <TelefonoField
               ref={registrar(`${asiento}:telefono`)}
               label="Teléfono (opcional)"
-              placeholder="Ej. 0414-1234567"
               value={d.telefono}
               onChangeText={(v) => actualizar(asiento, 'telefono', v)}
               error={e.telefono}
               tone="light"
-              keyboardType="phone-pad"
               autoComplete={esYo ? 'tel' : 'off'}
               returnKeyType={siguiente ? 'next' : 'done'}
               submitBehavior={siguiente ? 'submit' : undefined}

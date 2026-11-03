@@ -145,22 +145,35 @@ const FADE_LOCATIONS = [0, 0.3, 0.45] as const;
 
 // ─── Empty state ─────────────────────────────────────────────────────────────
 
+/** Acción de un `EmptyState`: un `Button md` (admite deshabilitado y carga). */
+export type EmptyStateAction = Pick<
+  ButtonProps,
+  'children' | 'onPress' | 'variant' | 'icon' | 'disabled' | 'loading' | 'accessibilityLabel'
+>;
+
 /**
  * Every "nothing here yet" block. Previously five copies with icon circles of
  * 64 or 96pt and titles between 16 and 20pt.
+ *
+ * Las acciones van bajo el texto (no en una `FloatingBar`): `action` es la
+ * principal y `secondaryAction`, si la hay, una salida `ghost` debajo
+ * ("Revisa tu correo": "Reenviar correo" + "Usar otro correo").
  */
 export function EmptyState({
   icon: Icon,
   title,
   description,
   action,
+  secondaryAction,
   compact,
 }: {
   icon: React.ComponentType<IconProps>;
   title: string;
   description?: string;
   /** Optional recovery action — an empty state should offer a way forward */
-  action?: Pick<ButtonProps, 'children' | 'onPress' | 'variant' | 'icon'>;
+  action?: EmptyStateAction;
+  /** Segunda salida, `ghost` por defecto, bajo la principal. */
+  secondaryAction?: EmptyStateAction;
   compact?: boolean;
 }) {
   return (
@@ -180,9 +193,12 @@ export function EmptyState({
           {description}
         </Text>
       ) : null}
-      {action ? (
-        <View style={s.emptyAction}>
-          <Button size="md" {...action} variant={action.variant ?? 'primary'} />
+      {action || secondaryAction ? (
+        <View style={s.emptyActions}>
+          {action ? <Button size="md" {...action} variant={action.variant ?? 'primary'} /> : null}
+          {secondaryAction ? (
+            <Button size="md" {...secondaryAction} variant={secondaryAction.variant ?? 'ghost'} />
+          ) : null}
         </View>
       ) : null}
     </View>
@@ -384,6 +400,11 @@ const s = StyleSheet.create({
   },
   emptyAction: {
     marginTop: Spacing.xl,
+  },
+  emptyActions: {
+    marginTop: Spacing.xl,
+    alignItems: 'center',
+    gap: Spacing.sm,
   },
   errorIcon: {
     backgroundColor: Colors.destructiveLight,

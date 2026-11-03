@@ -6,7 +6,7 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet } from 'react-native';
 import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { EnvelopeSimple } from 'phosphor-react-native';
 import * as Haptics from 'expo-haptics';
@@ -15,8 +15,7 @@ import { humanizeError } from '@/src/utils/errores';
 import { redirectAuth } from '@/src/utils/authLinks';
 import { useVolver } from '@/src/hooks/useVolver';
 import { useToast } from '@/src/components/Toast';
-import { Button, EmptyState, FloatingBar, Screen, ScreenHeader, scrollContent } from '@/src/components/ui';
-import { Spacing } from '@/src/theme';
+import { EmptyState, Screen, ScreenHeader, scrollContent } from '@/src/components/ui';
 
 type TipoCorreo = 'registro' | 'recuperar';
 
@@ -112,37 +111,29 @@ export default function RevisaCorreoScreen() {
       />
 
       <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
-        <EmptyState icon={EnvelopeSimple} title="Revisa tu correo" description={texto} />
+        <EmptyState
+          icon={EnvelopeSimple}
+          title="Revisa tu correo"
+          description={texto}
+          action={
+            email
+              ? {
+                  children: espera > 0 ? `Reenviar en ${mmss(espera)}` : 'Reenviar correo',
+                  onPress: reenviar,
+                  loading: reenviando,
+                  disabled: espera > 0,
+                  accessibilityLabel:
+                    espera > 0 ? `Podrás reenviar el correo en ${espera} segundos` : 'Reenviar correo',
+                }
+              : undefined
+          }
+          secondaryAction={{ children: 'Usar otro correo', onPress: usarOtroCorreo }}
+        />
       </ScrollView>
-
-      <FloatingBar fade={false}>
-        <View style={s.acciones}>
-          {email ? (
-            <Button
-              fullWidth
-              loading={reenviando}
-              disabled={espera > 0}
-              onPress={reenviar}
-              accessibilityLabel={
-                espera > 0 ? `Podrás reenviar el correo en ${espera} segundos` : 'Reenviar correo'
-              }
-            >
-              {espera > 0 ? `Reenviar en ${mmss(espera)}` : 'Reenviar correo'}
-            </Button>
-          ) : null}
-
-          <Button variant="ghost" fullWidth onPress={usarOtroCorreo}>
-            Usar otro correo
-          </Button>
-        </View>
-      </FloatingBar>
     </Screen>
   );
 }
 
 const s = StyleSheet.create({
-  scroll: scrollContent({ top: 0, floatingAction: true }),
-  acciones: {
-    gap: Spacing.sm,
-  },
+  scroll: scrollContent({ top: 0 }),
 });

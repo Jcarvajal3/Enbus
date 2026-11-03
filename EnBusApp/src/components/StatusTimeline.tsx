@@ -116,7 +116,6 @@ export function StatusTimeline({ estados }: { estados: EstadoItem[] }) {
                         ? 'foreground'
                         : 'muted'
                   }
-                  style={s.label}
                 >
                   {item.label}
                 </Text>
@@ -219,14 +218,9 @@ const s = StyleSheet.create({
     marginLeft: Spacing.lg,
     paddingTop: Spacing.xs,
   },
+  /** Etapa y, debajo, su fecha: en 360 pt la fecha al lado partía la etapa en dos líneas. */
   header: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: Spacing.sm,
-  },
-  label: {
-    flex: 1,
+    gap: Spacing.xs,
   },
   description: {
     marginTop: Spacing.xs,

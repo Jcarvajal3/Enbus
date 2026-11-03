@@ -125,7 +125,7 @@ export function InfoRow({
   valueColor?: string;
 }) {
   return (
-    <View style={[s.infoRow, divided && s.infoRowDivided]}>
+    <View style={[s.infoRow, align === 'left' && s.infoRowShrink, divided && s.infoRowDivided]}>
       {icon}
       <View style={[s.infoRowBody, align === 'right' && s.infoRowBodyEnd]}>
         <Text variant="caption" color="muted" align={align === 'right' ? 'right' : 'left'}>
@@ -152,6 +152,13 @@ const s = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.md,
     paddingVertical: Spacing.md,
+  },
+  /**
+   * En una fila de dos (Contenido | Peso) cede ancho la de la izquierda y parte
+   * su valor en vez de salirse de la tarjeta; la derecha (cifra corta) no.
+   */
+  infoRowShrink: {
+    flexShrink: 1,
   },
   infoRowDivided: {
     borderTopWidth: Sizes.hairline,

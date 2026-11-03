@@ -15,7 +15,6 @@ import {
   CreditCard,
   IdentificationCard,
   Info,
-  Lifebuoy,
   MapPin,
   ShareNetwork,
   Ticket,
@@ -37,7 +36,6 @@ import {
 import { PasajerosForm, type PasajerosFormHandle } from '@/src/components/PasajerosForm';
 import { ReservaTimer } from '@/src/components/ReservaTimer';
 import { ScreenSkeleton, SkeletonLoader } from '@/src/components/SkeletonLoader';
-import { PressableScale } from '@/src/components/PressableScale';
 import { useVolver } from '@/src/hooks/useVolver';
 import {
   BottomSheet,
@@ -55,6 +53,7 @@ import {
   StaleBanner,
   StatusBadge,
   Text,
+  TextLink,
   scrollContent,
 } from '@/src/components/ui';
 import { supabase } from '@/src/utils/supabase';
@@ -1082,20 +1081,17 @@ export default function DetalleBoletoScreen() {
           </View>
         ) : null}
 
-        {/* ── Ayuda (#28) ─────────────────────────────────────────────── */}
-        <PressableScale
-          onPress={irAAyuda}
-          haptic
-          hapticType="selection"
-          style={s.ayuda}
-          accessibilityRole="link"
-          accessibilityLabel="Reportar un problema con este boleto"
-        >
-          <Lifebuoy size={Sizes.icon.md} color={Colors.link} weight="bold" />
-          <Text variant="label" color="link" style={s.enlace}>
-            Reportar un problema
+        {/* ── Ayuda (#28): igual que en el detalle de una encomienda ─── */}
+        <View style={s.reportar}>
+          <Text variant="caption" color="muted" align="center">
+            ¿Problemas con este boleto?
           </Text>
-        </PressableScale>
+          <View style={s.reportarEnlace}>
+            <TextLink onPress={irAAyuda} accessibilityLabel="Reportar un problema con este boleto">
+              Reportar un problema
+            </TextLink>
+          </View>
+        </View>
       </ScrollView>
 
       {/* ── Sin pagar: "Registrar pago" fijo abajo (AN-10) ────────────── */}
@@ -1530,15 +1526,13 @@ const s = StyleSheet.create({
   ultimoCampo: {
     marginBottom: 0,
   },
-  ayuda: {
-    flexDirection: 'row',
+  reportar: {
     alignItems: 'center',
-    gap: Spacing.sm,
-    minHeight: Sizes.touchTarget,
-    marginTop: Spacing.sm,
+    marginTop: Spacing['2xl'],
   },
-  enlace: {
-    textDecorationLine: 'underline',
+  /** `TextLink` se alinea al inicio: este envoltorio lo centra. */
+  reportarEnlace: {
+    alignSelf: 'center',
   },
 
   // ── Hoja de pago

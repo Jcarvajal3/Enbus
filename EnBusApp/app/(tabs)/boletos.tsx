@@ -6,7 +6,7 @@ import { ClockCounterClockwise, Ticket } from 'phosphor-react-native';
 import { useAuth } from '@/src/contexts/AuthContext';
 import { useRealtime } from '@/src/hooks/useRealtime';
 import { TransactionCard } from '@/src/components/TransactionCard';
-import { CardSkeleton } from '@/src/components/CardSkeleton';
+import { ScreenSkeleton } from '@/src/components/SkeletonLoader';
 import { StaggerItem } from '@/src/components/StaggerItem';
 import { HeaderActions } from '@/src/components/HeaderActions';
 import {
@@ -243,49 +243,50 @@ export default function BoletosScreen() {
     <Screen>
       <ScreenHeader title="Mis boletos" right={<HeaderActions />} />
 
-      <Gutter style={{ paddingBottom: Spacing.lg }}>
-        <SegmentedControl<TabType>
-          value={activeTab}
-          onChange={setActiveTab}
-          options={[
-            { value: 'activos', label: 'Activos', icon: Ticket, badge: counts.activos },
-            { value: 'historial', label: 'Historial', icon: ClockCounterClockwise },
-          ]}
-        />
-      </Gutter>
-
+      {/* Misma espera que "Mis encomiendas": la forma de la pestaña (§2.3). */}
       {loading ? (
-        <Gutter>
-          <CardSkeleton count={3} />
-        </Gutter>
+        <ScreenSkeleton variante="lista" />
       ) : (
-        <FlatList
-          data={errorSinDatos ? [] : filteredData}
-          renderItem={renderItem}
-          keyExtractor={(item) => item.id}
-          ListHeaderComponent={
-            error && !sinDatos ? <StaleBanner actualizadoAt={actualizadoAt} onRetry={() => void refetch()} /> : null
-          }
-          ListEmptyComponent={emptyComponent}
-          contentContainerStyle={scrollContent({
-            tabbed: true,
-            floatingAction: filteredData.length > 0,
-            top: 0,
-          })}
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              colors={[Colors.accentStrong]}
-              tintColor={Colors.accentStrong}
+        <>
+          <Gutter style={{ paddingBottom: Spacing.lg }}>
+            <SegmentedControl<TabType>
+              value={activeTab}
+              onChange={setActiveTab}
+              options={[
+                { value: 'activos', label: 'Activos', icon: Ticket, badge: counts.activos },
+                { value: 'historial', label: 'Historial', icon: ClockCounterClockwise },
+              ]}
             />
-          }
-          removeClippedSubviews
-          maxToRenderPerBatch={10}
-          windowSize={5}
-          initialNumToRender={8}
-        />
+          </Gutter>
+
+          <FlatList
+            data={errorSinDatos ? [] : filteredData}
+            renderItem={renderItem}
+            keyExtractor={(item) => item.id}
+            ListHeaderComponent={
+              error && !sinDatos ? <StaleBanner actualizadoAt={actualizadoAt} onRetry={() => void refetch()} /> : null
+            }
+            ListEmptyComponent={emptyComponent}
+            contentContainerStyle={scrollContent({
+              tabbed: true,
+              floatingAction: filteredData.length > 0,
+              top: 0,
+            })}
+            showsVerticalScrollIndicator={false}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                colors={[Colors.accentStrong]}
+                tintColor={Colors.accentStrong}
+              />
+            }
+            removeClippedSubviews
+            maxToRenderPerBatch={10}
+            windowSize={5}
+            initialNumToRender={8}
+          />
+        </>
       )}
 
       {/* Oculto en el estado vacío: el estado vacío ya ofrece la acción. */}

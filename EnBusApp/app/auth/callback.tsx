@@ -16,7 +16,7 @@ import { supabase } from '@/src/utils/supabase';
 import { completarSesionDesdeUrl } from '@/src/utils/authLinks';
 import { humanizeError } from '@/src/utils/errores';
 import { BrandMark } from '@/src/components/BrandMark';
-import { Button, EmptyState, FloatingBar, Screen, ScreenHeader, scrollContent } from '@/src/components/ui';
+import { EmptyState, Screen, ScreenHeader, scrollContent } from '@/src/components/ui';
 
 type Params = {
   code?: string;
@@ -134,17 +134,17 @@ export default function AuthCallbackScreen() {
       <ScreenHeader variant="compact" title={titulo} onBack={() => router.replace('/login')} />
       <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
         <View accessibilityRole="alert">
-          <EmptyState icon={LinkBreak} title="No pudimos abrir el enlace" description={descripcion} />
+          <EmptyState
+            icon={LinkBreak}
+            title="No pudimos abrir el enlace"
+            description={descripcion}
+            action={{
+              children: esRecuperar ? 'Pedir otro enlace' : 'Volver a iniciar sesión',
+              onPress: () => router.replace(esRecuperar ? '/recuperar' : '/login'),
+            }}
+          />
         </View>
       </ScrollView>
-      <FloatingBar fade={false}>
-        <Button
-          fullWidth
-          onPress={() => router.replace(esRecuperar ? '/recuperar' : '/login')}
-        >
-          {esRecuperar ? 'Pedir otro enlace' : 'Volver a iniciar sesión'}
-        </Button>
-      </FloatingBar>
     </Screen>
   );
 }
@@ -155,5 +155,5 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  scroll: scrollContent({ top: 0, floatingAction: true }),
+  scroll: scrollContent({ top: 0 }),
 });

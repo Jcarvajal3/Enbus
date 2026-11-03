@@ -8,7 +8,7 @@
  * `validatePhone` de `src/utils/validation.ts`.
  */
 import React, { type Ref } from 'react';
-import type { ReturnKeyTypeOptions, TextInput } from 'react-native';
+import type { ReturnKeyTypeOptions, TextInput, TextInputProps, ViewStyle } from 'react-native';
 import { Phone } from 'phosphor-react-native';
 import { Field, type FieldTone } from '@/src/components/ui';
 import { mascaraTelefono, telefonoParaGuardar } from '@/src/utils/ve.generated';
@@ -26,6 +26,11 @@ export interface TelefonoFieldProps {
   tone?: FieldTone;
   /** Al `TextInput` (para encadenar "Siguiente"). */
   ref?: Ref<TextInput>;
+  /** `submit` mantiene el teclado al pasar al campo siguiente. */
+  submitBehavior?: TextInputProps['submitBehavior'];
+  /** Por defecto `tel`; `off` cuando no es el teléfono de quien usa la app. */
+  autoComplete?: TextInputProps['autoComplete'];
+  containerStyle?: ViewStyle;
 }
 
 const digitos = (v: string) => v.replace(/\D/g, '');
@@ -44,6 +49,9 @@ export function TelefonoField({
   editable = true,
   tone,
   ref,
+  submitBehavior,
+  autoComplete = 'tel',
+  containerStyle,
 }: TelefonoFieldProps) {
   // Los marcadores 'PENDIENTE-…' del alta con Google no son un teléfono.
   const crudo = /^\s*pendiente/i.test(value ?? '') ? '' : value ?? '';
@@ -75,9 +83,11 @@ export function TelefonoField({
       keyboardType="phone-pad"
       inputMode="tel"
       textContentType="telephoneNumber"
-      autoComplete="tel"
+      autoComplete={autoComplete}
       autoCorrect={false}
       returnKeyType={returnKeyType}
+      submitBehavior={submitBehavior}
+      containerStyle={containerStyle}
       onSubmitEditing={onSubmitEditing}
       editable={editable}
       tone={tone}

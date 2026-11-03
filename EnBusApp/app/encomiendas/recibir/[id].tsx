@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Image, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { CheckCircle, Clock, Copy, Info, LockKey, Storefront, XCircle } from 'phosphor-react-native';
+import { CheckCircle, Clock, Copy, Info, LockKey, Package, Storefront, XCircle } from 'phosphor-react-native';
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -14,6 +14,7 @@ import {
   Button,
   Card,
   Divider,
+  EmptyState,
   ErrorState,
   InfoRow,
   Monto,
@@ -80,6 +81,8 @@ export default function DetalleRecibirScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [errorCarga, setErrorCarga] = useState<string | null>(null);
+  /** Sin fila (enlace viejo o de otra cuenta): vacío con salida, no "Reintentar". */
+  const [noEncontrada, setNoEncontrada] = useState(false);
   const [actualizadoAt, setActualizadoAt] = useState<number | null>(null);
 
   const isMountedRef = useRef(true);
@@ -160,6 +163,7 @@ export default function DetalleRecibirScreen() {
     } catch (err) {
       if (__DEV__) console.warn('[recibir] Error cargando encomienda:', err);
       if (isMountedRef.current) setErrorCarga(humanizeError(err, 'carga'));
+      if (isMountedRef.current) setNoEncontrada((err as { code?: string } | null)?.code === 'PGRST116');
     } finally {
       if (isMountedRef.current) setLoading(false);
     }
@@ -217,11 +221,24 @@ export default function DetalleRecibirScreen() {
     return (
       <Screen>
         <ScreenHeader variant="compact" eyebrow={CEJA} title="Encomienda" onBack={volver} />
-        <ErrorState
-          title="No pudimos cargar la encomienda"
-          description={errorCarga ?? 'Revisa tu conexión.'}
-          onRetry={fetchData}
-        />
+        {noEncontrada ? (
+          <EmptyState
+            icon={Package}
+            title="Encomienda no encontrada"
+            description="Puede ser de otra cuenta o ya no estar disponible."
+            action={{
+              children: 'Ir a Mis encomiendas',
+              icon: Package,
+              onPress: () => router.dismissTo('/(tabs)/encomiendas?vista=para-mi'),
+            }}
+          />
+        ) : (
+          <ErrorState
+            title="No pudimos cargar la encomienda"
+            description={errorCarga ?? 'Revisa tu conexión.'}
+            onRetry={fetchData}
+          />
+        )}
       </Screen>
     );
   }
@@ -359,7 +376,7 @@ export default function DetalleRecibirScreen() {
               value={
                 Number(encomienda.peso_kg) > 0
                   ? `${formatNumeroVE(Number(encomienda.peso_kg), 1)} kg`
-                  : '—'
+                  : 'Por pesar'
               }
               align="right"
             />
@@ -469,9 +486,6 @@ export default function DetalleRecibirScreen() {
         {/* Nunca un formulario con costo 0: `puedePagarEncomienda` exige costo calculado. */}
         {debePagar && encomienda.cooperativa_id ? (
           <View style={s.card}>
-            <Text variant="subheading" style={s.cardTitle}>
-              Pago
-            </Text>
             {pago.cargandoTasa || !pago.cotizacion ? (
               <SkeletonLoader height={Sizes.control.xl * 3} borderRadius={Radius.xl} />
             ) : (

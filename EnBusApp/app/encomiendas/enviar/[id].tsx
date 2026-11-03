@@ -5,6 +5,7 @@ import {
   CheckCircle,
   Clock,
   Info,
+  Package,
   Storefront,
   UserCircle,
   WhatsappLogo,
@@ -20,6 +21,7 @@ import {
   Button,
   Card,
   Divider,
+  EmptyState,
   ErrorState,
   InfoRow,
   Monto,
@@ -47,7 +49,7 @@ import {
   puedePagarEncomienda,
 } from '@/src/utils/estados';
 import { humanizeError } from '@/src/utils/errores';
-import { formatMoney, tasaRefDe } from '@/src/utils/dinero';
+import { formatMoney, formatNumeroVE, tasaRefDe } from '@/src/utils/dinero';
 import { useTasaBCV } from '@/src/hooks/useTasaBCV';
 import { useVolver } from '@/src/hooks/useVolver';
 import {
@@ -99,6 +101,8 @@ export default function DetalleEnvioScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [errorCarga, setErrorCarga] = useState<string | null>(null);
+  /** Sin fila (enlace viejo o de otra cuenta): vacío con salida, no "Reintentar". */
+  const [noEncontrada, setNoEncontrada] = useState(false);
   const [actualizadoAt, setActualizadoAt] = useState<number | null>(null);
   /** M-47: con "Paga quien recibe" el pago del remitente es opcional y va plegado. */
   const [pagarYo, setPagarYo] = useState(false);
@@ -195,6 +199,7 @@ export default function DetalleEnvioScreen() {
       } catch (err) {
         if (__DEV__) console.warn('[enviar] Error cargando encomienda:', err);
         if (isMountedRef.current) setErrorCarga(humanizeError(err, 'carga'));
+        if (isMountedRef.current) setNoEncontrada((err as { code?: string } | null)?.code === 'PGRST116');
       } finally {
         if (isMountedRef.current && !reintentando) setLoading(false);
       }
@@ -278,11 +283,24 @@ export default function DetalleEnvioScreen() {
     return (
       <Screen>
         <ScreenHeader variant="compact" eyebrow={CEJA} title="Encomienda" onBack={volver} />
-        <ErrorState
-          title="No pudimos cargar la encomienda"
-          description={errorCarga ?? 'No la encontramos en tu cuenta. Revisa tu conexión.'}
-          onRetry={() => fetchData(0)}
-        />
+        {noEncontrada ? (
+          <EmptyState
+            icon={Package}
+            title="Encomienda no encontrada"
+            description="Puede ser de otra cuenta o ya no estar disponible."
+            action={{
+              children: 'Ir a Mis encomiendas',
+              icon: Package,
+              onPress: () => router.dismissTo('/(tabs)/encomiendas?vista=enviadas'),
+            }}
+          />
+        ) : (
+          <ErrorState
+            title="No pudimos cargar la encomienda"
+            description={errorCarga ?? 'No la encontramos en tu cuenta. Revisa tu conexión.'}
+            onRetry={() => fetchData(0)}
+          />
+        )}
       </Screen>
     );
   }
@@ -490,9 +508,6 @@ export default function DetalleEnvioScreen() {
 
         {mostrarFormulario && encomienda.cooperativa_id ? (
           <View style={s.card}>
-            <Text variant="subheading" style={s.cardTitle}>
-              Pago
-            </Text>
             {pago.cargandoTasa || !pago.cotizacion ? (
               <SkeletonLoader height={Sizes.control.xl * 3} borderRadius={Radius.xl} />
             ) : (
@@ -533,7 +548,19 @@ export default function DetalleEnvioScreen() {
         <Card tone="sunken" style={s.card}>
           <Text variant="subheading">Detalles</Text>
 
-          <InfoRow label="Contenido" value={encomienda.descripcion_contenido || 'Sin descripción'} />
+          {/* Mismo orden de filas que el detalle de "Para mí". */}
+          <View style={s.row}>
+            <InfoRow label="Contenido" value={encomienda.descripcion_contenido || 'Sin descripción'} />
+            <InfoRow
+              label="Peso"
+              value={
+                Number(encomienda.peso_kg) > 0
+                  ? `${formatNumeroVE(Number(encomienda.peso_kg), 1)} kg`
+                  : 'Por pesar'
+              }
+              align="right"
+            />
+          </View>
           <Divider spacing={Spacing.xs} />
 
           <View style={s.costRow}>
@@ -558,36 +585,30 @@ export default function DetalleEnvioScreen() {
 
           <Divider spacing={Spacing.xs} />
 
-          <View style={s.row}>
-            <InfoRow
-              label="Origen"
-              value={
-                [formatCity(encomienda.ciudad_origen), encomienda.estado_origen]
-                  .filter(Boolean)
-                  .join(', ') || '—'
-              }
-            />
-            <InfoRow
-              label="Destino"
-              value={
-                [formatCity(encomienda.ciudad_destino), encomienda.estado_destino]
-                  .filter(Boolean)
-                  .join(', ') || '—'
-              }
-              align="right"
-            />
-          </View>
+          {/* Mismo trayecto que la fila de la lista y el resumen del asistente. */}
+          <InfoRow
+            label="Trayecto"
+            value={`${formatCity(encomienda.ciudad_origen) || '—'} → ${formatCity(encomienda.ciudad_destino) || '—'}`}
+          />
 
           <Divider spacing={Spacing.xs} />
 
           <InfoRow label="Quien recibe" value={encomienda.receiver_nombre || 'Sin nombre'} />
           <Divider spacing={Spacing.xs} />
-          <InfoRow label="Dónde la retira" value={capitalizarInicio(puntoRetiro.completo)} />
-          {puntoRetiro.detalle ? (
-            <Text variant="caption" color="muted" style={s.puntoDetalle}>
-              {puntoRetiro.detalle}
-            </Text>
-          ) : null}
+          <View style={[s.puntoRow, s.puntoRowDetalles]}>
+            <Storefront size={Sizes.icon.md} color={Colors.foreground} weight="bold" />
+            <View style={s.flex}>
+              <Text variant="caption" color="muted">
+                Dónde la retira
+              </Text>
+              <Text variant="bodyStrong">{capitalizarInicio(puntoRetiro.completo)}</Text>
+              {puntoRetiro.detalle ? (
+                <Text variant="caption" color="muted">
+                  {puntoRetiro.detalle}
+                </Text>
+              ) : null}
+            </View>
+          </View>
         </Card>
 
         {/* ── Fotos ───────────────────────────────────────────────────── */}
@@ -732,8 +753,8 @@ const s = StyleSheet.create({
     alignItems: 'flex-start',
     gap: Spacing.md,
   },
-  puntoDetalle: {
-    marginBottom: Spacing.sm,
+  puntoRowDetalles: {
+    paddingTop: Spacing.md,
   },
   row: {
     flexDirection: 'row',

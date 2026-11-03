@@ -18,7 +18,8 @@ interface TransactionCardProps {
 const NOMBRE: Record<TransactionType, string> = {
   boleto: 'Boleto',
   encomienda_envio: 'Encomienda enviada',
-  encomienda_recepcion: 'Encomienda para ti',
+  // Mismo nombre que el segmento y la ceja del detalle (§2.1: "Enviadas | Para mí").
+  encomienda_recepcion: 'Encomienda para mí',
 };
 
 /**

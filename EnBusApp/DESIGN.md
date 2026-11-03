@@ -189,7 +189,7 @@ Pantalla blanca (`Screen`) → `ScreenHeader` → contenido con margen
 | `Badge` · `StatusBadge` · `CountPill` · `Chip` | Pastillas y estados. |
 | `SegmentedControl` | Los 4 toggles animados duplicados. |
 | `ScreenHeader` · `StepIndicator` | Las 4 cabeceras distintas y los steppers. |
-| `Screen` · `Gutter` · `FloatingBar` · `EmptyState` · `ErrorState` · `StaleBanner` · `scrollContent` | Chrome de pantalla. Vacío: título sin punto + 1 línea + 1 acción. |
+| `Screen` · `Gutter` · `FloatingBar` · `EmptyState` · `ErrorState` · `StaleBanner` · `scrollContent` | Chrome de pantalla. Vacío: título sin punto + 1 línea + 1 acción (`action`; `secondaryAction` `ghost` solo para una segunda salida, p. ej. "Usar otro correo"), bajo el texto y sin `FloatingBar`. |
 | `EntityCard` | La fila de lista: insignia + código, título, subtítulo, flecha si abre algo; `selectable` = borde `accentStrong` + check. |
 | `RouteSummary` | El bloque origen ──── destino (glifos neutros). |
 | `BottomSheet` | Toda hoja; `onBack` para subpasos; pie con área segura. |
