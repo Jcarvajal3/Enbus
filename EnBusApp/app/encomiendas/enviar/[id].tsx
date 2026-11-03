@@ -34,6 +34,7 @@ import {
   scrollContent,
 } from '@/src/components/ui';
 import { supabase } from '@/src/utils/supabase';
+import { useRecargaEnVivo } from '@/src/hooks/useRecargaEnVivo';
 import { useAuth } from '@/src/contexts/AuthContext';
 import { useToast } from '@/src/components/Toast';
 import { urlFotoEncomienda } from '@/src/utils/fotos';
@@ -135,7 +136,7 @@ export default function DetalleEnvioScreen() {
             .select('id, estado_nuevo, created_at')
             .eq('encomienda_id', id)
             .order('created_at', { ascending: true })
-            .limit(20),
+            .limit(100),
           cargarPagosEncomienda(id).then(
             (data) => ({ data, error: null as unknown }),
             (error: unknown) => ({ data: null, error })
@@ -200,6 +201,13 @@ export default function DetalleEnvioScreen() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // La taquilla recibe, despacha o entrega el paquete: la pantalla se actualiza sola.
+  useRecargaEnVivo(
+    'encomiendas',
+    id && /^[0-9a-f-]{36}$/i.test(id) ? `id=eq.${id}` : null,
+    fetchData
+  );
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);

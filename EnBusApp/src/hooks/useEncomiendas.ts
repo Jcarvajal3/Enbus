@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { AppState } from 'react-native';
 import { supabase } from '@/src/utils/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useToast } from '@/src/components/Toast';
@@ -71,29 +72,55 @@ export function useEncomiendas(
   const [error, setError] = useState<string | null>(null);
   /** `Date.now()` de la última carga buena (de red o de la caché), para `StaleBanner` */
   const [actualizadoAt, setActualizadoAt] = useState<number | null>(null);
+  /** La última lectura llenó la página: puede haber más envíos (`cargarMas`). */
+  const [hayMas, setHayMas] = useState(false);
   const setDataRef = useRef(setData);
   setDataRef.current = setData;
 
   const cacheKey = `cache:encomiendas_or:${userId || 'anon'}:${limit}`;
 
+  /** Filas pedidas: `limit` y una página más con cada `cargarMas` (máx. 1000). */
+  const filasRef = useRef(limit);
+  const claveFilasRef = useRef(cacheKey);
+  if (claveFilasRef.current !== cacheKey) {
+    claveFilasRef.current = cacheKey;
+    filasRef.current = limit;
+  }
+  /** Descarta respuestas viejas (dos lecturas en vuelo) y las que llegan tras desmontar. */
+  const turnoRef = useRef(0);
+  const montadoRef = useRef(true);
+  useEffect(() => {
+    montadoRef.current = true;
+    return () => {
+      montadoRef.current = false;
+    };
+  }, []);
+  const ultimaLecturaRef = useRef(0);
+
   const fetchData = useCallback(async (): Promise<void> => {
+    const turno = ++turnoRef.current;
+    const vigente = () => montadoRef.current && turno === turnoRef.current;
     if (!userId) {
       setLoading(false);
       return;
     }
     setLoading(true); // REF-05: Show spinner on manual refetch too
+    const pedidas = filasRef.current;
     try {
       const { data: result, error: err } = await supabase
         .from('encomiendas')
         .select('*')
         .or(`sender_id.eq.${userId},receiver_user_id.eq.${userId}`)
         .order('created_at', { ascending: false })
-        .limit(limit);
+        .limit(pedidas);
 
       if (err) throw err;
+      if (!vigente()) return;
       const filas = (result ?? []) as Encomienda[];
       const ahora = Date.now();
+      ultimaLecturaRef.current = ahora;
       setData(filas);
+      setHayMas(filas.length >= pedidas && pedidas < 1000);
       setError(null);
       setActualizadoAt(ahora);
       // Persist fresh data to cache, with the time so the stale banner can say "hace 2 h"
@@ -105,11 +132,18 @@ export function useEncomiendas(
     } catch (err) {
       if (__DEV__) console.warn('[useEncomiendas] Error cargando encomiendas:', err);
       // APP-37: la pantalla decide entre ErrorState (sin datos) y StaleBanner (con caché).
-      setError(humanizeError(err, 'carga'));
+      if (vigente()) setError(humanizeError(err, 'carga'));
     } finally {
-      setLoading(false);
+      if (vigente()) setLoading(false);
     }
-  }, [userId, limit, cacheKey]);
+  }, [userId, cacheKey]);
+
+  /** Página siguiente (lista con más de `limit` envíos). */
+  const cargarMas = useCallback(() => {
+    if (!hayMas || filasRef.current >= 1000) return;
+    filasRef.current = Math.min(filasRef.current + limit, 1000);
+    void fetchData();
+  }, [hayMas, limit, fetchData]);
 
   // ── Efecto principal: cache secuencial → fetch → dos canales Realtime ───────
   //
@@ -191,6 +225,28 @@ export function useEncomiendas(
 
     const uniqueId = Math.random().toString(36).substring(2, 9);
 
+    // Tras una caída del socket (o al volver a primer plano) lo que cambió en el
+    // hueco no llegó por los canales: se relee la lista una vez.
+    let recargaTimer: ReturnType<typeof setTimeout> | null = null;
+    const programarRecarga = () => {
+      if (recargaTimer) clearTimeout(recargaTimer);
+      recargaTimer = setTimeout(() => {
+        recargaTimer = null;
+        if (isMounted) void fetchData();
+      }, 400);
+    };
+    const alSuscribir = () => {
+      let suscritoAntes = false;
+      return (status: string) => {
+        if (status !== 'SUBSCRIBED') return;
+        if (suscritoAntes) programarRecarga();
+        suscritoAntes = true;
+      };
+    };
+    const appState = AppState.addEventListener('change', (estado) => {
+      if (estado === 'active' && Date.now() - ultimaLecturaRef.current >= 30_000) programarRecarga();
+    });
+
     // Canal A: encomiendas enviadas por este usuario
     const channelSender = supabase
       .channel(`rt:enc:sender:${userId}:${uniqueId}`)
@@ -204,7 +260,7 @@ export function useEncomiendas(
         },
         makeRealtimeHandler()
       )
-      .subscribe();
+      .subscribe(alSuscribir());
 
     // Canal B: encomiendas recibidas por este usuario
     const channelReceiver = supabase
@@ -219,17 +275,19 @@ export function useEncomiendas(
         },
         makeRealtimeHandler()
       )
-      .subscribe();
+      .subscribe(alSuscribir());
 
     return () => {
       isMounted = false;
+      if (recargaTimer) clearTimeout(recargaTimer);
+      appState.remove();
       supabase.removeChannel(channelSender);
       supabase.removeChannel(channelReceiver);
     };
   // fetchData is stable (useCallback), re-run only on enabled/userId change
   }, [enabled, userId, fetchData, cacheKey]);
 
-  return { data, loading, error, actualizadoAt, setData, refetch: fetchData };
+  return { data, loading, error, actualizadoAt, setData, refetch: fetchData, hayMas, cargarMas };
 }
 
 // ─── Pago de una encomienda desde la app (#5, P-29) ───────────────────────────

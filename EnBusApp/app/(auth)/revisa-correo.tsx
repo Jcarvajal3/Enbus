@@ -4,7 +4,7 @@
  * contraseña. Antes solo había un toast que desaparecía en 3 segundos.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { EnvelopeSimple } from 'phosphor-react-native';
@@ -43,6 +43,8 @@ export default function RevisaCorreoScreen() {
 
   const [espera, setEspera] = useState(params.enviado === '0' ? 0 : ESPERA_REENVIO_S);
   const [reenviando, setReenviando] = useState(false);
+  /** Anti doble toque (Supabase limita los correos por hora). */
+  const enviandoRef = useRef(false);
 
   useEffect(() => {
     if (espera <= 0) return;
@@ -51,8 +53,9 @@ export default function RevisaCorreoScreen() {
   }, [espera]);
 
   async function reenviar() {
-    if (!email || espera > 0 || reenviando) return;
+    if (!email || espera > 0 || reenviando || enviandoRef.current) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    enviandoRef.current = true;
     setReenviando(true);
     try {
       const { error } =
@@ -73,6 +76,7 @@ export default function RevisaCorreoScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       toast.show('error', humanizeError(err, 'recuperar'));
     } finally {
+      enviandoRef.current = false;
       setReenviando(false);
     }
   }

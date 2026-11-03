@@ -133,6 +133,8 @@ export default function BoletosScreen() {
     error,
     refetch,
     actualizadoAt,
+    hayMas,
+    cargarMas,
   } = useRealtime<BoletoRow>('boletos', 'comprador_id', user?.id, SELECT_BOLETOS, {
     enabled: isFocused && !!user?.id,
     limit: 30,
@@ -286,6 +288,9 @@ export default function BoletosScreen() {
               tintColor={Colors.accent}
             />
           }
+          // Más de 30 boletos (o asientos cambiados antes de pagar): la página siguiente.
+          onEndReached={hayMas && !error ? cargarMas : undefined}
+          onEndReachedThreshold={0.5}
           removeClippedSubviews
           maxToRenderPerBatch={10}
           windowSize={5}

@@ -35,6 +35,7 @@ import {
   scrollContent,
 } from '@/src/components/ui';
 import { supabase } from '@/src/utils/supabase';
+import { useRecargaEnVivo } from '@/src/hooks/useRecargaEnVivo';
 import { useAuth } from '@/src/contexts/AuthContext';
 import { urlFotoEncomienda } from '@/src/utils/fotos';
 import { SOPORTE_WHATSAPP } from '@/src/utils/soporte';
@@ -120,7 +121,8 @@ export default function DetalleRecibirScreen() {
           .from('encomienda_estado_historial')
           .select('estado_nuevo, created_at')
           .eq('encomienda_id', id)
-          .order('created_at', { ascending: true }),
+          .order('created_at', { ascending: true })
+          .limit(100),
         // M-50: el destinatario no puede leer el perfil del remitente (RLS).
         supabase.rpc('fn_remitente_de_encomienda', { p_encomienda_id: id }),
         cargarPagosEncomienda(id).then(
@@ -172,6 +174,13 @@ export default function DetalleRecibirScreen() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // La taquilla recibe, despacha o entrega el paquete: la pantalla se actualiza sola.
+  useRecargaEnVivo(
+    'encomiendas',
+    id && /^[0-9a-f-]{36}$/i.test(id) ? `id=eq.${id}` : null,
+    fetchData
+  );
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);

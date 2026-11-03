@@ -40,6 +40,14 @@
             "backgroundColor": "#000000"
           }
         }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "EnBus usa tus fotos para que adjuntes una foto del paquete que vas a enviar.",
+          "cameraPermission": "EnBus usa la cámara para que tomes una foto del paquete que vas a enviar.",
+          "microphonePermission": false
+        }
       ]
     ],
     "experiments": {

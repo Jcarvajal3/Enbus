@@ -4,6 +4,7 @@ import * as Notifications from 'expo-notifications';
 import { useRouter } from 'expo-router';
 import Constants from 'expo-constants';
 import { supabase } from '@/src/utils/supabase';
+import { anotarTokenPush } from '@/src/utils/sesionLocal';
 import { Colors } from '@/src/theme';
 
 // ── Configurar handler global de notificaciones ───────────────────────────────
@@ -120,6 +121,8 @@ export function usePushNotifications(
           .eq('id', userId);
 
         if (error) throw error;
+        // Para quitarlo del perfil al cerrar la sesión (`AuthContext.signOut`).
+        anotarTokenPush(token);
         if (vigente) setEstadoRegistro('activo');
       } catch (err: unknown) {
         if (vigente) setEstadoRegistro('error');

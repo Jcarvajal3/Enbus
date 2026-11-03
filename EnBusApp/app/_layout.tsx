@@ -20,6 +20,7 @@ import { ErrorBoundary } from '@/src/components/ErrorBoundary';
 import { ToastProvider, useToast } from '@/src/components/Toast';
 import { usePushNotifications } from '@/src/hooks/usePushNotifications';
 import { abrirRecurso } from '@/src/utils/notificaciones';
+import { configuracionFaltante } from '@/src/utils/supabase';
 import { Text } from '@/src/components/ui';
 import { Colors, Motion, Radius, Sizes, Spacing } from '@/src/theme';
 
@@ -203,6 +204,23 @@ function RootLayoutNav() {
   );
 }
 
+/**
+ * Build sin `EXPO_PUBLIC_SUPABASE_URL` / `EXPO_PUBLIC_SUPABASE_ANON_KEY`: en vez
+ * de cerrarse al abrir, la app dice qué falta (solo lo ve quien prueba el build).
+ */
+function ConfiguracionFaltante() {
+  return (
+    <View style={s.splash} accessibilityRole="alert">
+      <Text variant="heading" align="center">
+        La app no está configurada
+      </Text>
+      <Text variant="secondary" color="muted" align="center" style={s.configTexto}>
+        {`Faltan las variables ${configuracionFaltante.join(' y ')} en este build. Defínelas en el .env o en el perfil de EAS y vuelve a compilar.`}
+      </Text>
+    </View>
+  );
+}
+
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({
     Roobert: require('../assets/fonts/Roobert.ttf'),
@@ -213,6 +231,7 @@ export default function RootLayout() {
   }, [fontsLoaded, fontError]);
 
   if (!fontsLoaded && !fontError) return null;
+  if (configuracionFaltante.length > 0) return <ConfiguracionFaltante />;
 
   return (
     <SafeAreaProvider>
@@ -234,6 +253,10 @@ const s = StyleSheet.create({
     backgroundColor: Colors.background,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  configTexto: {
+    marginTop: Spacing.md,
+    paddingHorizontal: Spacing.xl,
   },
   splashLogo: {
     width: Sizes.iconBox.xl + Spacing.lg,

@@ -16,7 +16,7 @@ import {
   ScreenHeader,
 } from '@/src/components/ui';
 import { supabase } from '@/src/utils/supabase';
-import { formatCity, toDateKey } from '@/src/utils/formatters';
+import { fechaVE, formatCity, toDateKey } from '@/src/utils/formatters';
 import { humanizeError } from '@/src/utils/errores';
 
 interface ViajeEnlace {
@@ -75,7 +75,8 @@ export default function ViajeEnlaceScreen() {
         params: {
           origen: formatCity(ruta.ciudad_origen),
           destino: formatCity(ruta.ciudad_destino),
-          fecha: Number.isNaN(salida.getTime()) ? toDateKey(new Date()) : toDateKey(salida),
+          // Día de Venezuela, el mismo con el que `boletos/buscar` lista las salidas.
+          fecha: Number.isNaN(salida.getTime()) ? toDateKey(new Date()) : fechaVE(salida),
           viajeId: viaje.id,
         },
       });

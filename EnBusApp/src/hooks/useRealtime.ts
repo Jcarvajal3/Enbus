@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { AppState } from 'react-native';
 import { supabase } from '@/src/utils/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -14,9 +15,14 @@ interface UseRealtimeOptions {
    * Defaults to true.
    */
   enabled?: boolean;
-  /** Max rows to fetch. Defaults to 50. */
+  /** Filas por página (la primera carga y cada `cargarMas`). Por defecto 50. */
   limit?: number;
 }
+
+/** Tope de filas que `cargarMas` puede llegar a pedir (máximo de PostgREST). */
+const MAX_FILAS = 1000;
+/** Al volver a primer plano tras este tiempo, se vuelve a leer la lista. */
+const RECARGA_AL_VOLVER_MS = 30_000;
 
 /** Resuelve las promesas de `refetch` que esperaban la recarga. */
 function resolverPendientes(ref: { current: (() => void)[] }) {
@@ -34,12 +40,16 @@ function resolverPendientes(ref: { current: (() => void)[] }) {
  * 3. Opens a Supabase Realtime WebSocket for live INSERT/UPDATE/DELETE patches.
  *
  * Race-condition-safe: cache and network fetch run SEQUENTIALLY inside a
- * single useEffect, guaranteeing that:
+ * single effect, guaranteeing that:
  *   - Cache is shown first for instant rendering
  *   - Fresh network data always overwrites stale cache (never the other way)
  *
- * The previous implementation used two separate async Effects which could
- * race each other, causing stale cached data to overwrite fresh fetched data.
+ * La lectura y el canal Realtime van en efectos separados: una recarga
+ * (pull-to-refresh, "Reintentar", `cargarMas`, un UPDATE con embeds) ya no
+ * cierra y vuelve a abrir el canal, así no se pierden eventos en el hueco ni
+ * se multiplica la carga del servidor de Realtime. Los eventos que se pierden
+ * igual (teléfono en segundo plano, socket caído) se recuperan releyendo al
+ * volver a primer plano y cuando el canal se vuelve a suscribir.
  */
 export function useRealtime<T extends WithId>(
   tableName: string,
@@ -54,36 +64,49 @@ export function useRealtime<T extends WithId>(
   const [refreshCount, setRefreshCount] = useState(0);
   /** Momento (ms) de la última lectura correcta de la red, para "Actualizado hace X". */
   const [actualizadoAt, setActualizadoAt] = useState<number | null>(null);
+  /** La última lectura llenó la página: puede haber más filas (`cargarMas`). */
+  const [hayMas, setHayMas] = useState(false);
+  const [cargandoMas, setCargandoMas] = useState(false);
+
+  const cacheKey = `cache:${tableName}:${filterColumn || 'all'}:${filterValue || 'all'}:${limit}`;
+
+  // Filas pedidas: `limit` y, con `cargarMas`, una página más cada vez. Vuelve a
+  // `limit` cuando cambia la consulta (otra cuenta, otro filtro).
+  const [paginado, setPaginado] = useState({ clave: cacheKey, filas: limit });
+  const filas = paginado.clave === cacheKey ? paginado.filas : limit;
 
   // `refetch` se resuelve cuando termina la recarga (bien o con error), así un
   // "Reintentar" o un pull-to-refresh muestran la carga el tiempo real.
   const pendientesRef = useRef<(() => void)[]>([]);
 
-  const refetch = (): Promise<void> => {
+  const refetch = useCallback((): Promise<void> => {
     if (!enabled) return Promise.resolve();
     return new Promise((resolve) => {
       pendientesRef.current.push(resolve);
       setRefreshCount((prev) => prev + 1);
     });
-  };
+  }, [enabled]);
+
+  const cargarMas = useCallback(() => {
+    if (!enabled || !hayMas || cargandoMas || filas >= MAX_FILAS) return;
+    setCargandoMas(true);
+    setPaginado({ clave: cacheKey, filas: Math.min(filas + limit, MAX_FILAS) });
+  }, [enabled, hayMas, cargandoMas, filas, limit, cacheKey]);
 
   // Keep a stable ref so the WebSocket callback never closes over a stale setter.
   const setDataRef = useRef(setData);
   setDataRef.current = setData;
 
-  const cacheKey = `cache:${tableName}:${filterColumn || 'all'}:${filterValue || 'all'}:${limit}`;
+  /** Clave cuya caché ya se mostró (se lee una sola vez por consulta). */
+  const cacheLeidaRef = useRef<string | null>(null);
+  /** Última lectura correcta de la red, para decidir si recargar al volver. */
+  const ultimaLecturaRef = useRef(0);
 
-  // ── Efecto principal: inicialización secuencial (cache → fetch) + Realtime ──
-  //
-  // CRÍTICO — el orden garantizado es:
-  //   await cache  → setData(cached)  ← render inmediato sin spinner
-  //   await fetch  → setData(fresh)   ← dato más reciente, siempre gana
-  //
-  // Hacer estos pasos en efectos separados crea una race condition donde el
-  // efecto de cache puede resolverse DESPUÉS del fetch y sobreescribir datos frescos.
+  // ── Lectura: caché (solo la primera vez) → red, que siempre gana ────────────
   useEffect(() => {
     if (!enabled) {
       setLoading(false);
+      setCargandoMas(false);
       resolverPendientes(pendientesRef);
       return;
     }
@@ -92,14 +115,23 @@ export function useRealtime<T extends WithId>(
 
     const initialize = async () => {
       // ── Paso 1: Cache ─── respuesta instantánea para el usuario ─────────────
-      try {
-        const cached = await AsyncStorage.getItem(cacheKey);
-        if (cached && isMounted) {
-          setData(JSON.parse(cached));
-          setLoading(false); // ocultar spinner inmediatamente si hay caché
+      if (cacheLeidaRef.current !== cacheKey) {
+        const primeraVez = cacheLeidaRef.current === null;
+        cacheLeidaRef.current = cacheKey;
+        // Otra consulta (p. ej. otra cuenta): nada de la anterior en pantalla.
+        if (!primeraVez) {
+          setData([]);
+          setLoading(true);
         }
-      } catch (err) {
-        console.warn('[useRealtime] Error cargando cache local:', err);
+        try {
+          const cached = await AsyncStorage.getItem(cacheKey);
+          if (cached && isMounted) {
+            setData(JSON.parse(cached));
+            setLoading(false); // ocultar spinner inmediatamente si hay caché
+          }
+        } catch (err) {
+          if (__DEV__) console.warn('[useRealtime] Error cargando cache local:', err);
+        }
       }
 
       // ── Paso 2: Fetch de red ─── siempre posterior, siempre gana ────────────
@@ -108,7 +140,7 @@ export function useRealtime<T extends WithId>(
           .from(tableName)
           .select(selectQuery)
           .order('created_at', { ascending: false })
-          .limit(limit);
+          .limit(filas);
 
         if (filterColumn && filterValue) {
           query = query.eq(filterColumn, filterValue);
@@ -122,27 +154,42 @@ export function useRealtime<T extends WithId>(
           const fresh = (result as unknown as T[]) ?? [];
           setData(fresh);
           setError(null);
-          setActualizadoAt(Date.now());
+          setHayMas(fresh.length >= filas && filas < MAX_FILAS);
+          ultimaLecturaRef.current = Date.now();
+          setActualizadoAt(ultimaLecturaRef.current);
 
           // Persistir datos frescos en caché (solo si el array no está vacío)
           if (fresh.length > 0) {
             AsyncStorage.setItem(cacheKey, JSON.stringify(fresh)).catch((e) => {
-              console.warn('[useRealtime] Error guardando cache local:', e);
+              if (__DEV__) console.warn('[useRealtime] Error guardando cache local:', e);
             });
           }
         }
       } catch (e: unknown) {
-        console.warn(`[useRealtime] Fetch fallido para ${tableName} (offline/error):`, e);
+        if (__DEV__) console.warn(`[useRealtime] Fetch fallido para ${tableName} (offline/error):`, e);
         // Si ya hay datos de cache, el usuario los ve — no bloquear UI con error
         if (isMounted) setError(e instanceof Error ? e : new Error(String(e)));
       } finally {
-        if (isMounted) setLoading(false);
-        // Si el efecto se reinició (otra recarga), la nueva ejecución resuelve.
-        if (isMounted) resolverPendientes(pendientesRef);
+        if (isMounted) {
+          setLoading(false);
+          setCargandoMas(false);
+          // Si el efecto se reinició (otra recarga), la nueva ejecución resuelve.
+          resolverPendientes(pendientesRef);
+        }
       }
     };
 
     initialize();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [enabled, tableName, filterColumn, filterValue, selectQuery, filas, cacheKey, refreshCount]);
+
+  // ── Realtime WebSocket (uno por consulta, no por recarga) ───────────────────
+  useEffect(() => {
+    if (!enabled) return;
+    let isMounted = true;
 
     // Realtime entrega solo las columnas de la tabla, sin los embeds del select
     // (p. ej. `viajes(...)`, `pago:pagos!...(...)`). Si el select tiene embeds,
@@ -158,7 +205,6 @@ export function useRealtime<T extends WithId>(
       }, 400);
     };
 
-    // ── Realtime WebSocket ────────────────────────────────────────────────────
     const uniqueId = Math.random().toString(36).substring(2, 9);
     const channelName = filterColumn && filterValue
       ? `rt:${tableName}:${filterColumn}:${filterValue}:${uniqueId}`
@@ -168,6 +214,7 @@ export function useRealtime<T extends WithId>(
       ? `${filterColumn}=eq.${filterValue}`
       : undefined;
 
+    let suscritoAntes = false;
     const channel = supabase
       .channel(channelName)
       .on(
@@ -191,7 +238,8 @@ export function useRealtime<T extends WithId>(
             let updatedList = prev;
 
             if (payload.eventType === 'INSERT') {
-              updatedList = [payload.new as T, ...prev];
+              const nueva = payload.new as T;
+              updatedList = prev.some((item) => item.id === nueva.id) ? prev : [nueva, ...prev];
             } else if (payload.eventType === 'UPDATE') {
               updatedList = prev.map((item) =>
                 item.id === (payload.new as T).id
@@ -218,18 +266,32 @@ export function useRealtime<T extends WithId>(
           if (tieneEmbeds && payload.eventType === 'UPDATE') programarRecarga();
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        if (status !== 'SUBSCRIBED') return;
+        // Se volvió a suscribir tras una caída del socket: lo que cambió en el
+        // hueco no llegó por el canal, así que se relee.
+        if (suscritoAntes) programarRecarga();
+        suscritoAntes = true;
+      });
+
+    // Volver a primer plano: en segundo plano el socket se duerme y los cambios
+    // (pago aprobado, reserva vencida) no llegan.
+    const appState = AppState.addEventListener('change', (estado) => {
+      if (estado !== 'active') return;
+      if (Date.now() - ultimaLecturaRef.current >= RECARGA_AL_VOLVER_MS) programarRecarga();
+    });
 
     // ── Cleanup ───────────────────────────────────────────────────────────────
     return () => {
       isMounted = false;
       if (recargaTimer) clearTimeout(recargaTimer);
+      appState.remove();
       supabase.removeChannel(channel);
     };
-  }, [enabled, tableName, filterColumn, filterValue, selectQuery, limit, cacheKey, refreshCount]);
+  }, [enabled, tableName, filterColumn, filterValue, selectQuery, cacheKey]);
 
   // Al desmontar, nadie queda esperando una recarga que no llegará.
   useEffect(() => () => resolverPendientes(pendientesRef), []);
 
-  return { data, loading, error, setData, refetch, actualizadoAt };
+  return { data, loading, error, setData, refetch, actualizadoAt, hayMas, cargandoMas, cargarMas };
 }
