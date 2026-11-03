@@ -6,7 +6,16 @@
 // Uso en server actions:
 //   if (error) return { error: humanizeError(error, "guardar la ruta") };
 // Uso en clientes:
-//   toast.error(humanizeError(err, { accion: "enviar el enlace", email }));
+//   avisarError(humanizeError(err, { accion: "enviar el enlace", email }));
+//
+// Los textos comunes con la app y la landing salen de shared/errores.ts
+// (./errores.generated.ts): `MSG`, `mensajeAuth`, `mensajePostgres`. Aquí solo
+// quedan los propios del panel (columna duplicada, "Otro compañero ya resolvió…").
+
+import { MSG, mensajeAuth, mensajePostgres } from "./errores.generated";
+
+export { MSG, mensajeAuth, mensajePostgres };
+export type { CatalogoMensajes } from "./errores.generated";
 
 export type ContextoError =
   | string
@@ -27,9 +36,6 @@ type ErrorNormalizado = {
   name: string;
 };
 
-const MSG_RED = "No pudimos conectarnos. Revisa tu conexión a internet e intenta de nuevo.";
-const MSG_INTERNO =
-  "Tuvimos un problema interno al procesar tu solicitud. Intenta de nuevo en unos minutos; si sigue pasando, avísanos.";
 
 function normalizar(err: unknown): ErrorNormalizado {
   if (typeof err === "string") {
@@ -113,7 +119,11 @@ const TEXTOS_EB: Partial<Record<CodigoEB, string>> = {
 
 /** Texto cuando el error no trae `hint` (códigos que también genera el cliente). */
 const RESPALDO_EB: Partial<Record<CodigoEB, string>> = {
-  EB_DEMASIADOS_INTENTOS: "Hiciste demasiados intentos seguidos. Espera unos minutos y vuelve a intentarlo.",
+  EB_DEMASIADOS_INTENTOS: MSG.demasiadosIntentos,
+  EB_NO_AUTENTICADO: MSG.sesionVencida,
+  EB_SIN_PERMISO: MSG.sinPermiso,
+  EB_NO_ENCONTRADO: MSG.noEncontrado,
+  EB_ESTADO_CAMBIO: MSG.estadoCambiado,
 };
 
 /** "1 minuto", "10 minutos", "45 segundos" (redondeo hacia arriba a minutos desde 60 s). */
@@ -224,11 +234,11 @@ function segundosTexto(n: number) {
 function mensajeDuplicado(texto: string) {
   const t = texto.toLowerCase();
   if (t.includes("rif")) return "Ya existe una cooperativa registrada con este RIF.";
-  if (t.includes("email") || t.includes("correo")) return "Ya existe una cuenta con este correo. Inicia sesión o usa otro correo.";
-  if (t.includes("cedula")) return "Ya existe un registro con esta cédula.";
-  if (t.includes("telefono")) return "Ya existe un registro con este teléfono.";
+  if (t.includes("email") || t.includes("correo")) return MSG.cuentaExiste;
+  if (t.includes("cedula")) return MSG.cedulaDuplicada;
+  if (t.includes("telefono")) return MSG.telefonoDuplicado;
   if (t.includes("placa")) return "Ya existe un vehículo registrado con esta placa.";
-  return "Ese registro ya existe. Revisa los datos e intenta con otros.";
+  return MSG.duplicado;
 }
 
 /**
@@ -254,102 +264,38 @@ export function humanizeError(err: unknown, contexto?: ContextoError): string {
 
   // ── Red ──
   if (name === "AuthRetryableFetchError" || name === "TimeoutError" || esMensajeDeRed(msg)) {
-    return MSG_RED;
+    return MSG.sinRed;
   }
 
-  // ── Límite de intentos (Supabase Auth) ──
+  // ── Límite de intentos (Supabase Auth): la espera lleva el número ──
   const espera = message.match(/after (\d+) seconds?/i);
   if (espera) {
     return `Ya pediste un enlace hace poco. Espera ${segundosTexto(Number(espera[1]))} y vuelve a intentarlo.`;
   }
-  if (code === "over_email_send_rate_limit" || msg.includes("email rate limit")) {
-    return "Enviamos demasiados correos en poco tiempo. Espera unos minutos y vuelve a intentarlo.";
-  }
-  if (code === "over_request_rate_limit" || code === "over_sms_send_rate_limit" || status === 429 || msg.includes("rate limit")) {
-    return "Hiciste demasiados intentos seguidos. Espera un momento y vuelve a intentarlo.";
-  }
 
-  // ── Supabase Auth ──
-  if (code === "invalid_credentials" || msg.includes("invalid login credentials")) {
-    return "Correo o contraseña incorrectos. Revisa los datos o recupera tu contraseña.";
+  // ── Supabase Auth (catálogo común) ──
+  if ((code === "email_not_confirmed" || msg.includes("email not confirmed")) && ctx.email) {
+    return `Confirma tu correo: te enviamos un enlace a ${ctx.email}.`;
   }
-  if (code === "email_not_confirmed" || msg.includes("email not confirmed")) {
-    return ctx.email
-      ? `Confirma tu correo: te enviamos un enlace a ${ctx.email}.`
-      : "Confirma tu correo: revisa tu bandeja de entrada (y la carpeta de spam) y abre el enlace que te enviamos.";
-  }
-  if (
-    code === "user_already_exists" ||
-    code === "email_exists" ||
-    msg.includes("user already registered") ||
-    msg.includes("a user with this email")
-  ) {
-    return "Ya existe una cuenta con este correo. Inicia sesión o usa otro correo.";
-  }
-  if (code === "weak_password" || msg.includes("password should be")) {
-    return "La contraseña es muy débil. Usa al menos 8 caracteres, combinando letras y números.";
-  }
-  if (code === "same_password" || msg.includes("should be different from the old password")) {
-    return "La nueva contraseña debe ser distinta a la anterior.";
-  }
-  if (code === "otp_expired" || msg.includes("invalid or has expired") || msg.includes("token has expired")) {
-    return "El enlace venció o ya se usó. Pide uno nuevo e intenta de nuevo.";
-  }
-  if (code === "user_banned") {
-    return "Tu cuenta está suspendida. Comunícate con el administrador para reactivarla.";
-  }
-  if (code === "user_not_found" || msg.includes("user not found")) {
-    return "No encontramos una cuenta con esos datos. Revisa el correo e intenta de nuevo.";
-  }
-  if (code === "email_address_invalid" || msg.includes("unable to validate email address")) {
-    return "El correo no es válido. Revisa que esté bien escrito (por ejemplo, nombre@correo.com).";
-  }
-  if (
-    code === "session_not_found" ||
-    code === "refresh_token_not_found" ||
-    msg.includes("auth session missing") ||
-    msg.includes("jwt expired")
-  ) {
-    return "Tu sesión expiró. Inicia sesión de nuevo para continuar.";
-  }
+  const auth = mensajeAuth(code) ?? mensajeAuth(message);
+  if (auth) return auth;
+  if (status === 429) return MSG.demasiadosIntentos;
 
-  // ── Postgres ──
-  switch (code) {
-    case "23505":
-      return mensajeDuplicado(`${message} ${details}`);
-    case "23503":
-      return msg.includes("update or delete")
-        ? "No se puede eliminar porque tiene información relacionada (por ejemplo, viajes, boletos o encomiendas). Desactívalo en su lugar."
-        : "Uno de los datos seleccionados ya no existe. Actualiza la página y vuelve a intentarlo.";
-    case "23514":
-      return "Algún dato no tiene un valor permitido. Revisa el formulario e intenta de nuevo.";
-    case "23502":
-      return "Falta un dato obligatorio. Completa todos los campos marcados e intenta de nuevo.";
-    case "22P02":
-    case "22007":
-    case "22008":
-      return "Algún dato tiene un formato inválido. Revisa el formulario e intenta de nuevo.";
-    case "42501":
-      return "No tienes permiso para hacer esta acción. Si crees que es un error, avísale al administrador.";
-    case "42703":
-    case "42P01":
-    case "42883":
-    case "PGRST204":
-    case "PGRST202":
-      return MSG_INTERNO;
-    case "PGRST116":
-      return "No encontramos el registro. Puede que se haya eliminado; actualiza la página e intenta de nuevo.";
+  // ── Postgres (catálogo común, con textos propios del panel) ──
+  if (code === "23505") return mensajeDuplicado(`${message} ${details}`);
+  if (code === "23503" && msg.includes("update or delete")) {
+    return "No se puede eliminar porque tiene información relacionada (viajes, boletos o encomiendas). Desactívalo en su lugar.";
   }
+  const postgres = mensajePostgres(code);
+  if (postgres) return postgres;
+  // Errores de esquema (columna, tabla o función inexistente): fallo interno.
+  if (["42703", "42P01", "42883", "PGRST204", "PGRST202"].includes(code)) return MSG.generico;
   // Triggers de máquina de estados ("Transición no válida: X -> Y").
   if (msg.includes("transición no válida") || msg.includes("no se permite salir de un estado terminal")) {
-    return "Este registro cambió de estado mientras trabajabas. Actualiza la página e intenta de nuevo.";
+    return MSG.estadoCambiado;
   }
-  if (msg.includes("row-level security")) {
-    return "No tienes permiso para hacer esta acción. Si crees que es un error, avísale al administrador.";
-  }
+  if (msg.includes("row-level security")) return MSG.sinPermiso;
 
   // ── Genérico ──
-  return ctx.accion
-    ? `No pudimos ${ctx.accion}. Intenta de nuevo; si sigue fallando, avísanos.`
-    : "Algo salió mal. Intenta de nuevo; si sigue fallando, avísanos.";
+  return ctx.accion ? `No pudimos ${ctx.accion}. Intenta de nuevo en unos segundos.` : MSG.generico;
 }

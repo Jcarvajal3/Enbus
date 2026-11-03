@@ -81,17 +81,6 @@ export const CLASES_TONO: Record<TonoEstado, string> = {
 /** Ejemplo y formato del código de seguimiento (EB-AAMMDD-NNNNN). */
 export const CODIGO_EJEMPLO = "EB-261003-12345";
 
-/**
- * Limpia el código como lo escriba la persona: " eb 261003 12345" o "EB26100312345"
- * -> "EB-261003-12345". Si no tiene la forma esperada, lo devuelve en mayúsculas y
- * sin espacios (la base decide si existe). Cadena vacía si no hay nada.
- */
-export function normalizarCodigoSeguimiento(entrada: string | null | undefined): string {
-  const limpio = (entrada ?? "").toUpperCase().replace(/[\s_.]/g, "").slice(0, 40);
-  const m = /^EB-?(\d{6})-?(\d{5})$/.exec(limpio);
-  return m ? `EB-${m[1]}-${m[2]}` : limpio;
-}
-
 /** Estado de encomienda listo para mostrar al público; nunca lanza con un estado desconocido. */
 export function estadoEncomienda(estado: string | null | undefined): EstadoPublico {
   if (!estado) return { etiqueta: "Sin estado", tono: "neutro", ayuda: "" };
@@ -105,60 +94,4 @@ export function estadoEncomienda(estado: string | null | undefined): EstadoPubli
       ayuda: "",
     }
   );
-}
-
-// ─── Nombres de ciudades y estados ───────────────────────────────────────────
-// Las rutas guardan la localidad normalizada ("puerto_la_cruz", "anzoategui"), igual
-// que `normalizar_localidad` en la base. Para mostrarla se usa el nombre con tildes
-// (copia de las etiquetas de PanelCooperativas/src/lib/data/venezuela.ts).
-
-const NOMBRES_LOCALIDAD: Record<string, string> = {
-  // Estados
-  amazonas: "Amazonas", anzoategui: "Anzoátegui", apure: "Apure", aragua: "Aragua", barinas: "Barinas",
-  bolivar: "Bolívar", carabobo: "Carabobo", cojedes: "Cojedes", delta_amacuro: "Delta Amacuro",
-  distrito_capital: "Distrito Capital", falcon: "Falcón", guarico: "Guárico", lara: "Lara", merida: "Mérida",
-  miranda: "Miranda", monagas: "Monagas", nueva_esparta: "Nueva Esparta", portuguesa: "Portuguesa",
-  sucre: "Sucre", tachira: "Táchira", trujillo: "Trujillo", la_guaira: "La Guaira", yaracuy: "Yaracuy",
-  zulia: "Zulia",
-  // Ciudades
-  puerto_ayacucho: "Puerto Ayacucho", barcelona: "Barcelona", puerto_la_cruz: "Puerto La Cruz",
-  lecheria: "Lechería", el_tigre: "El Tigre", san_fernando: "San Fernando de Apure", guadualito: "Guadualito",
-  maracay: "Maracay", turmero: "Turmero", cagua: "Cagua", la_victoria: "La Victoria", socopo: "Socopó",
-  ciudad_bolivar: "Ciudad Bolívar", puerto_ordaz: "Puerto Ordaz", san_felix: "San Félix", upata: "Upata",
-  valencia: "Valencia", puerto_cabello: "Puerto Cabello", guacara: "Guacara", san_diego: "San Diego",
-  san_carlos: "San Carlos", tinaquillo: "Tinaquillo", tucupita: "Tucupita", caracas: "Caracas", coro: "Coro",
-  punto_fijo: "Punto Fijo", san_juan: "San Juan de los Morros", valle_de_la_pascua: "Valle de la Pascua",
-  calabozo: "Calabozo", barquisimeto: "Barquisimeto", cabudare: "Cabudare", carora: "Carora",
-  el_vigia: "El Vigía", tovar: "Tovar", los_teques: "Los Teques", guarenas: "Guarenas", guatire: "Guatire",
-  charallave: "Charallave", maturin: "Maturín", punta_de_mata: "Punta de Mata", porlamar: "Porlamar",
-  la_asuncion: "La Asunción", pampatar: "Pampatar", guanare: "Guanare", acarigua: "Acarigua",
-  araure: "Araure", cumana: "Cumaná", carupano: "Carúpano", san_cristobal: "San Cristóbal", tario: "Táriba",
-  tariba: "Táriba", rubio: "Rubio", valera: "Valera", bocono: "Boconó", maiquetia: "Maiquetía",
-  catia_la_mar: "Catia La Mar", san_felipe: "San Felipe", yritagua: "Yaritagua", yaritagua: "Yaritagua",
-  chivacoa: "Chivacoa", maracaibo: "Maracaibo", cabimas: "Cabimas", ciudad_ojeda: "Ciudad Ojeda",
-  machiques: "Machiques",
-};
-
-const CONECTORES = new Set(["de", "del", "la", "las", "los", "y"]);
-
-/**
- * "puerto_la_cruz" -> "Puerto La Cruz"; "merida" -> "Mérida". Si ya viene con
- * mayúsculas y no está en la lista, se respeta tal cual. Cadena vacía si no hay dato.
- */
-export function nombreLocalidad(valor: string | null | undefined): string {
-  const original = (valor ?? "").trim();
-  if (!original) return "";
-  const clave = original
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .toLowerCase()
-    .replace(/[_\s]+/g, "_");
-  const conocido = NOMBRES_LOCALIDAD[clave];
-  if (conocido) return conocido;
-  if (/[A-ZÁÉÍÓÚÑ]/.test(original) && !original.includes("_")) return original;
-  return clave
-    .split("_")
-    .filter(Boolean)
-    .map((p, i) => (i > 0 && CONECTORES.has(p) ? p : p.charAt(0).toUpperCase() + p.slice(1)))
-    .join(" ");
 }

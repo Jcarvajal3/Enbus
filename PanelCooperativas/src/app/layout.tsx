@@ -3,6 +3,7 @@ import localFont from "next/font/local";
 import "./globals.css";
 import { cn } from "@/lib/utils";
 import { Toaster } from "@/components/ui/sonner";
+import { ThemeProvider } from "@/components/theme-provider";
 
 const roobert = localFont({
   src: "../../public/fonts/RoobertVF.ttf",
@@ -10,12 +11,14 @@ const roobert = localFont({
   display: "swap",
 });
 
+// Pestaña del navegador: "<Sección> · EnBus" (SY-19). Las secciones del panel la ponen
+// desde el shell (`seccionDe`); el admin tiene su propio valor por defecto.
 export const metadata: Metadata = {
   title: {
-    default: "EnBus — Envios seguros por toda Venezuela",
-    template: "%s | EnBus",
+    default: "Panel de cooperativas · EnBus",
+    template: "%s · EnBus",
   },
-  description: "Conectamos tu envio con cooperativas de transporte verificadas. Cobertura en mas de 50 ciudades con seguimiento en tiempo real.",
+  description: "Panel de EnBus para cooperativas de transporte: taquilla, encomiendas, despacho y viajes.",
   manifest: "/manifest.json",
 };
 
@@ -29,10 +32,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="es" className="light scroll-smooth" style={{ colorScheme: "light" }} suppressHydrationWarning>
-      <body className={cn("min-h-full flex flex-col antialiased font-sans", roobert.variable)}>
-        {children}
-        <Toaster />
+    <html lang="es" className="motion-safe:scroll-smooth" suppressHydrationWarning>
+      <body className={cn("min-h-full flex flex-col bg-background text-foreground antialiased font-sans", roobert.variable)}>
+        {/* Un solo proveedor de tema (D14): panel, admin y pantallas públicas siguen el tema elegido. */}
+        <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+          {children}
+          <Toaster />
+        </ThemeProvider>
       </body>
     </html>
   );

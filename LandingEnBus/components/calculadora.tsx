@@ -3,8 +3,9 @@
 import * as React from "react"
 import { Clock, Spinner, Star, WarningCircle } from "@phosphor-icons/react"
 
+import { buttonVariants } from "@/components/ui/button"
 import { formatMoney, formatNumeroVE } from "@/lib/dinero"
-import { nombreLocalidad } from "@/lib/estados"
+import { formatCiudad } from "@/lib/ve.generated"
 import type { OrigenConDestinos } from "@/lib/consultas"
 import { cotizarEnvio, type CampoCalculadora, type EstadoCalculadora } from "@/app/rastrear/actions"
 
@@ -67,11 +68,11 @@ export function Calculadora({ origenes }: { origenes: OrigenConDestinos[] }) {
   const resultado = state.resultado
 
   return (
-    <div className="rounded-sm border border-foreground/15 bg-background p-5 text-left shadow-sm sm:p-6">
+    <div className="rounded-md border border-foreground/15 bg-card p-5 text-left sm:p-6">
       <form action={formAction} noValidate className="grid gap-4 sm:grid-cols-[1fr_1fr_9rem_auto] sm:items-start">
         <div className="flex flex-col gap-1.5">
           <label htmlFor="calc-origen" className="campo-etiqueta">
-            Desde
+            Origen
           </label>
           <select
             id="calc-origen"
@@ -89,7 +90,7 @@ export function Calculadora({ origenes }: { origenes: OrigenConDestinos[] }) {
             <option value="">Elige la ciudad</option>
             {origenes.map((o) => (
               <option key={o.origen} value={o.origen}>
-                {nombreLocalidad(o.origen)}
+                {formatCiudad(o.origen)}
               </option>
             ))}
           </select>
@@ -98,7 +99,7 @@ export function Calculadora({ origenes }: { origenes: OrigenConDestinos[] }) {
 
         <div className="flex flex-col gap-1.5">
           <label htmlFor="calc-destino" className="campo-etiqueta">
-            Hasta
+            Destino
           </label>
           <select
             id="calc-destino"
@@ -113,7 +114,7 @@ export function Calculadora({ origenes }: { origenes: OrigenConDestinos[] }) {
             <option value="">{origen ? "Elige la ciudad" : "Primero elige el origen"}</option>
             {destinos.map((d) => (
               <option key={d} value={d}>
-                {nombreLocalidad(d)}
+                {formatCiudad(d)}
               </option>
             ))}
           </select>
@@ -161,7 +162,7 @@ export function Calculadora({ origenes }: { origenes: OrigenConDestinos[] }) {
           <button
             type="submit"
             disabled={pendiente}
-            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-sm bg-foreground px-5 text-sm font-semibold text-background transition-colors outline-none hover:bg-foreground/90 focus-visible:ring-2 focus-visible:ring-foreground focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-70"
+            className={`${buttonVariants({ size: "lg" })} focus-visible:ring-2 focus-visible:ring-foreground focus-visible:ring-offset-2`}
           >
             {pendiente && <Spinner className="size-4 animate-spin" aria-hidden />}
             {pendiente ? "Calculando…" : "Calcular"}
@@ -170,7 +171,7 @@ export function Calculadora({ origenes }: { origenes: OrigenConDestinos[] }) {
       </form>
 
       {errorGeneral && (
-        <p role="alert" className="campo-error mt-4 flex items-start gap-1.5 rounded-sm bg-destructive-light p-3">
+        <p role="alert" className="campo-error mt-4 flex items-start gap-1.5 rounded-md bg-destructive-light p-3">
           <WarningCircle className="mt-0.5 size-4 shrink-0" aria-hidden />
           {errorGeneral}
         </p>
@@ -180,7 +181,7 @@ export function Calculadora({ origenes }: { origenes: OrigenConDestinos[] }) {
         {resultado && (
           <div className="mt-6 border-t border-border pt-5">
             <h3 className="text-base font-semibold text-foreground">
-              {nombreLocalidad(resultado.origen)} → {nombreLocalidad(resultado.destino)} · {pesoTexto(resultado.pesoKg)} kg
+              {formatCiudad(resultado.origen)} → {formatCiudad(resultado.destino)} · {pesoTexto(resultado.pesoKg)} kg
             </h3>
 
             {resultado.opciones.length === 0 ? (

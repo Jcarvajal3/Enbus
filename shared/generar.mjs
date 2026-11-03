@@ -90,9 +90,19 @@ const extraWeb = {
   ...Object.fromEntries(Object.entries(movimiento.duration).map(([k, v]) => [`duration-${k}`, `${v}ms`])),
 };
 
+// Escala de radios de Tailwind (rounded-xs … rounded-3xl, rounded-full) desde tokens.radio.
+// `full` se escribe como 9999px (en la app, Radius.full = 999 basta para una píldora).
+const radiosTheme = Object.fromEntries(
+  Object.entries(radio).map(([k, v]) => [`radius-${k}`, k === "full" ? "9999px" : `${v}px`])
+);
+const bloqueTheme =
+  `/* Escala de radios (D9): rounded-xs…3xl y rounded-full. No redefinir --radius-* en globals.css. */\n` +
+  bloqueCSS("@theme", radiosTheme);
+
 const cabeceraCSS = `/* ${AVISO}. Fuente: shared/tokens.json */\n\n`;
-const cssPanel = cabeceraCSS + bloqueCSS(":root", claro, extraWeb) + "\n" + bloqueCSS(".dark", oscuro);
-const cssLanding = cabeceraCSS + bloqueCSS(":root", claro, extraWeb);
+const cssPanel =
+  cabeceraCSS + bloqueCSS(":root", claro, extraWeb) + "\n" + bloqueCSS(".dark", oscuro) + "\n" + bloqueTheme;
+const cssLanding = cabeceraCSS + bloqueCSS(":root", claro, extraWeb) + "\n" + bloqueTheme;
 
 const tsApp =
   `// ${AVISO}. Fuente: shared/tokens.json\n` +
@@ -107,22 +117,33 @@ const tsApp =
 
 // ─── Copias de los módulos TS ────────────────────────────────────────────────
 
+// Un módulo de shared/ puede importar otro con `from "./ve"`: en la copia pasa a
+// `from "./ve.generated"` (los generados de cada proyecto viven en la misma carpeta).
 const copia = (nombre) =>
-  `// ${AVISO}. Fuente: shared/${nombre}\n\n` + leer(join(SHARED, nombre));
+  `// ${AVISO}. Fuente: shared/${nombre}\n\n` +
+  leer(join(SHARED, nombre)).replace(/from "\.\/([a-z]+)";/g, 'from "./$1.generated";');
 
 const ve = copia("ve.ts");
 const artefactos = copia("artefactos.ts");
+const errores = copia("errores.ts");
+const dinero = copia("dinero.ts");
 
 const salidas = [
   ["EnBusApp/src/tokens.generated.ts", tsApp],
   ["EnBusApp/src/utils/ve.generated.ts", ve],
   ["EnBusApp/src/utils/artefactos.generated.ts", artefactos],
+  ["EnBusApp/src/utils/errores.generated.ts", errores],
+  ["EnBusApp/src/utils/dinero.generated.ts", dinero],
   ["PanelCooperativas/src/app/tokens.generated.css", cssPanel],
   ["PanelCooperativas/src/lib/ve.generated.ts", ve],
   ["PanelCooperativas/src/lib/artefactos.generated.ts", artefactos],
+  ["PanelCooperativas/src/lib/errores.generated.ts", errores],
+  ["PanelCooperativas/src/lib/dinero.generated.ts", dinero],
   ["LandingEnBus/app/tokens.generated.css", cssLanding],
   ["LandingEnBus/lib/ve.generated.ts", ve],
   ["LandingEnBus/lib/artefactos.generated.ts", artefactos],
+  ["LandingEnBus/lib/errores.generated.ts", errores],
+  ["LandingEnBus/lib/dinero.generated.ts", dinero],
 ];
 
 // ─── Escribir o comprobar ────────────────────────────────────────────────────

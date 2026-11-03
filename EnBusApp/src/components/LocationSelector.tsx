@@ -1,23 +1,26 @@
+/**
+ * LocationSelector — hoja para elegir una ciudad (origen o destino).
+ *
+ * Título de la hoja = el campo ("Origen" / "Destino"); arriba "Recientes" y
+ * "Populares" en píldoras, luego las ciudades agrupadas por estado. Las filas
+ * no llevan icono (AU-31): el nombre basta. `opciones` limita las ciudades (p.
+ * ej. solo las que tienen ruta); `excluir` muestra una deshabilitada con su
+ * motivo ("Ya es tu origen").
+ */
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FlatList, StyleSheet, View, type TextInput } from 'react-native';
-import {
-  CaretDown,
-  CaretUp,
-  ClockCounterClockwise,
-  MagnifyingGlass,
-  MapPin,
-  Star,
-} from 'phosphor-react-native';
+import { CaretDown, CaretUp, MagnifyingGlass, MapPin } from 'phosphor-react-native';
 import { PressableScale } from './PressableScale';
 import {
   BottomSheet,
   EmptyState,
   Field,
+  SectionLabel,
   SelectField,
   Text,
 } from '@/src/components/ui';
 import { Localidad, VENEZUELA_LOCATIONS, normalizeCityForDb } from '../utils/venezuela';
-import { Colors, Layout, Motion, Opacity, Radius, Sizes, Spacing } from '@/src/theme';
+import { Colors, Layout, Motion, Radius, Sizes, Spacing } from '@/src/theme';
 
 interface LocationSelectorProps {
   label: string;
@@ -36,6 +39,8 @@ interface LocationSelectorProps {
   recientes?: Localidad[];
   /** Sección "Populares" (con la búsqueda vacía), p. ej. `CIUDADES_POPULARES`. */
   populares?: Localidad[];
+  /** Ciudades que se ofrecen. Por defecto, todo el catálogo. */
+  opciones?: Localidad[];
 }
 
 /** Retraso para enfocar la búsqueda: el `Modal` tiene que estar montado (Android). */
@@ -65,6 +70,7 @@ export function LocationSelector({
   excluirAyuda,
   recientes,
   populares,
+  opciones,
 }: LocationSelectorProps) {
   const [visible, setVisible] = useState(false);
   const [search, setSearch] = useState('');
@@ -81,11 +87,12 @@ export function LocationSelector({
 
   const grouped = useMemo(() => {
     const needle = normalize(search);
+    const catalogo = opciones ?? VENEZUELA_LOCATIONS;
     const matches = needle
-      ? VENEZUELA_LOCATIONS.filter(
+      ? catalogo.filter(
           (l) => normalize(l.ciudad).includes(needle) || normalize(l.estado).includes(needle)
         )
-      : VENEZUELA_LOCATIONS;
+      : catalogo;
 
     const groups = new Map<string, Localidad[]>();
     matches.forEach((loc) => {
@@ -107,7 +114,7 @@ export function LocationSelector({
           a.ciudad.localeCompare(b.ciudad, 'es')
         ),
       }));
-  }, [search]);
+  }, [search, opciones]);
 
   const handleSelect = useCallback(
     (loc: Localidad) => {
@@ -121,10 +128,21 @@ export function LocationSelector({
   const open = () => setVisible(true);
 
   const buscando = search.trim().length > 0;
-  const listaRecientes = useMemo(() => dedupe(recientes ?? []), [recientes]);
+  // Con `opciones`, los atajos solo muestran ciudades que se pueden elegir.
+  const disponible = useCallback(
+    (l: Localidad) => !opciones || opciones.some((o) => mismaCiudad(o, l)),
+    [opciones]
+  );
+  const listaRecientes = useMemo(
+    () => dedupe(recientes ?? []).filter(disponible),
+    [recientes, disponible]
+  );
   const listaPopulares = useMemo(
-    () => dedupe(populares ?? []).filter((p) => !listaRecientes.some((r) => mismaCiudad(r, p))),
-    [populares, listaRecientes]
+    () =>
+      dedupe(populares ?? [])
+        .filter(disponible)
+        .filter((p) => !listaRecientes.some((r) => mismaCiudad(r, p))),
+    [populares, listaRecientes, disponible]
   );
   const conAtajos = !buscando && (listaRecientes.length > 0 || listaPopulares.length > 0);
 
@@ -133,7 +151,6 @@ export function LocationSelector({
       {listaRecientes.length > 0 && (
         <AtajoSeccion
           titulo="Recientes"
-          icon={ClockCounterClockwise}
           ciudades={listaRecientes}
           esExcluida={esExcluida}
           excluirAyuda={excluirAyuda}
@@ -143,16 +160,13 @@ export function LocationSelector({
       {listaPopulares.length > 0 && (
         <AtajoSeccion
           titulo="Populares"
-          icon={Star}
           ciudades={listaPopulares}
           esExcluida={esExcluida}
           excluirAyuda={excluirAyuda}
           onSelect={handleSelect}
         />
       )}
-      <Text variant="overline" color="muted" uppercase style={s.seccionTitulo}>
-        Por estado
-      </Text>
+      <SectionLabel style={s.seccionTitulo}>Por estado</SectionLabel>
     </View>
   ) : null;
 
@@ -164,7 +178,7 @@ export function LocationSelector({
         <SelectField
           label={label}
           value={value ? `${value.ciudad}, ${value.estado}` : undefined}
-          placeholder={placeholder ?? 'Seleccionar localidad'}
+          placeholder={placeholder ?? 'Elige la ciudad'}
           icon={MapPin}
           onPress={open}
         />
@@ -173,14 +187,14 @@ export function LocationSelector({
       <BottomSheet
         visible={visible}
         onClose={() => setVisible(false)}
-        title={`Seleccionar ${label.toLowerCase() || 'localidad'}`}
+        title={label || 'Ciudad'}
         height={Layout.sheetMaxHeight}
       >
         <View style={s.search}>
           <Field
             ref={searchRef}
             icon={MagnifyingGlass}
-            placeholder="Buscar ciudad o estado…"
+            placeholder="Ej. Mérida"
             value={search}
             onChangeText={setSearch}
             autoCorrect={false}
@@ -237,27 +251,20 @@ function dedupe(lista: Localidad[]): Localidad[] {
 
 function AtajoSeccion({
   titulo,
-  icon: Icon,
   ciudades,
   esExcluida,
   excluirAyuda,
   onSelect,
 }: {
   titulo: string;
-  icon: typeof MapPin;
   ciudades: Localidad[];
   esExcluida: (loc: Localidad) => boolean;
   excluirAyuda?: string;
   onSelect: (loc: Localidad) => void;
 }) {
   return (
-    <View style={s.seccion}>
-      <View style={s.seccionCabecera}>
-        <Icon size={Sizes.icon.sm} color={Colors.mutedForeground} weight="bold" />
-        <Text variant="overline" color="muted" uppercase>
-          {titulo}
-        </Text>
-      </View>
+    <View>
+      <SectionLabel style={s.seccionCabecera}>{titulo}</SectionLabel>
       <View style={s.pills}>
         {ciudades.map((loc) => {
           const deshabilitada = esExcluida(loc);
@@ -276,7 +283,7 @@ function AtajoSeccion({
               }`}
               accessibilityState={{ disabled: deshabilitada }}
             >
-              <Text variant="label" weight="bold" color={deshabilitada ? 'muted' : 'foreground'} compact>
+              <Text variant="label" color={deshabilitada ? 'muted' : 'foreground'} compact>
                 {loc.ciudad}
               </Text>
               {deshabilitada && excluirAyuda ? (
@@ -320,14 +327,9 @@ const StateGroup = memo(function StateGroup({
         accessibilityState={{ expanded }}
         accessibilityLabel={`Estado ${group.estado}, ${group.ciudades.length} ciudades`}
       >
-        <View style={s.groupTitle}>
-          <View style={s.groupIcon}>
-            <MapPin color={Colors.accent} size={Sizes.icon.md} weight="fill" />
-          </View>
-          <Text variant="bodyStrong" weight="bold">
-            {group.estado}
-          </Text>
-        </View>
+        <Text variant="bodyStrong" style={s.groupTitle}>
+          {group.estado}
+        </Text>
 
         {expanded ? (
           <CaretUp size={Sizes.icon.md} weight="bold" color={Colors.mutedForeground} />
@@ -354,7 +356,6 @@ const StateGroup = memo(function StateGroup({
                 }`}
                 accessibilityState={{ disabled: deshabilitada }}
               >
-                <View style={[s.cityDot, deshabilitada && s.cityDotOff]} />
                 <Text
                   variant="body"
                   weight="medium"
@@ -404,17 +405,7 @@ const s = StyleSheet.create({
     minHeight: Sizes.touchTarget + Spacing.sm,
   },
   groupTitle: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.md,
-  },
-  groupIcon: {
-    width: Sizes.iconBox.sm + 2,
-    height: Sizes.iconBox.sm + 2,
-    borderRadius: Radius.md,
-    backgroundColor: Colors.white,
-    alignItems: 'center',
-    justifyContent: 'center',
+    flex: 1,
   },
   cities: {
     backgroundColor: Colors.white,
@@ -430,16 +421,6 @@ const s = StyleSheet.create({
     borderBottomWidth: Sizes.hairline,
     borderBottomColor: Colors.borderLight,
   },
-  cityDot: {
-    width: Spacing.sm - 2,
-    height: Spacing.sm - 2,
-    borderRadius: Radius.full,
-    backgroundColor: Colors.accent,
-  },
-  cityDotOff: {
-    backgroundColor: Colors.mutedForeground,
-    opacity: Opacity.disabled,
-  },
   cityName: {
     flex: 1,
   },
@@ -447,16 +428,12 @@ const s = StyleSheet.create({
     gap: Spacing.lg,
     marginBottom: Spacing.md,
   },
-  seccion: {
-    gap: Spacing.sm,
-  },
   seccionCabecera: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.xs,
+    marginBottom: Spacing.sm,
   },
   seccionTitulo: {
     marginTop: Spacing.xs,
+    marginBottom: 0,
   },
   pills: {
     flexDirection: 'row',

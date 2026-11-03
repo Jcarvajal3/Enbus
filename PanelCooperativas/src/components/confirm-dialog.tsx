@@ -1,7 +1,7 @@
 "use client";
 
 import { useId, useRef, useState, type FormEvent, type ReactNode, type RefObject } from "react";
-import { SpinnerIcon, WarningCircle } from "@phosphor-icons/react";
+import { SpinnerIcon } from "@phosphor-icons/react";
 import {
   AlertDialog,
   AlertDialogContent,
@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { AvisoError } from "@/components/aviso-error";
 import { humanizeError } from "@/lib/errores";
 import { cn } from "@/lib/utils";
 
@@ -43,7 +44,10 @@ export type ConfirmDialogProps = {
    * cualquiera de las opciones (p. ej. [nombre, RIF]).
    */
   confirmarEscribiendo?: string | string[];
-  /** Texto del botón para salir sin hacer nada (por defecto "Cancelar"). */
+  /**
+   * Texto del botón para salir sin hacer nada. Por defecto (D12): "Volver" si
+   * el verbo empieza por "Cancelar" (no se lee "Cancelar" dos veces), si no "Cancelar".
+   */
   textoCancelar?: string;
   onConfirm(motivo?: string): Promise<ResultadoConfirmacion>;
 };
@@ -105,7 +109,7 @@ function Contenido({
   tono = "default",
   motivo,
   confirmarEscribiendo,
-  textoCancelar = "Cancelar",
+  textoCancelar,
   onConfirm,
   enCurso,
   setEnCurso,
@@ -129,6 +133,7 @@ function Contenido({
   const minimo = motivo?.minimo ?? MINIMO_MOTIVO;
   const opciones = opcionesEscribir(confirmarEscribiendo);
   const destructivo = tono === "destructive";
+  const salir = textoCancelar ?? (/^cancelar\b/i.test(verbo.trim()) ? "Volver" : "Cancelar");
 
   const enviar = async (e?: FormEvent) => {
     e?.preventDefault();
@@ -173,9 +178,7 @@ function Contenido({
 
   return (
     <AlertDialogContent
-      /* Mismos modificadores que AlertDialogContent para que tailwind-merge los reemplace
-         (un `sm:max-w-lg` suelto pierde contra `data-[size=default]:sm:max-w-md`). */
-      className="max-h-[calc(100dvh-2rem)] overflow-y-auto data-[size=default]:max-w-[calc(100%-2rem)] data-[size=default]:sm:max-w-lg"
+      /* Ancho "confirmar" (D18): sm:max-w-md; alto máximo y desplazamiento en la base. */
       initialFocus={destructivo ? cancelarRef : undefined}
     >
       <form onSubmit={enviar} noValidate className="grid gap-5">
@@ -187,8 +190,8 @@ function Contenido({
         </AlertDialogHeader>
 
         {impacto && impacto.length > 0 && (
-          <div className="rounded-xl border bg-muted/40 p-4 text-sm">
-            <p className="mb-2 font-medium">Qué va a pasar</p>
+          <div className="rounded-md border border-border bg-muted/50 p-4 text-sm">
+            <p className="mb-2 font-semibold">Qué va a pasar</p>
             <ul className="list-disc space-y-1.5 pl-5 text-foreground">
               {impacto.map((linea, i) => (
                 <li key={i}>{linea}</li>
@@ -209,8 +212,12 @@ function Contenido({
                       key={chip}
                       type="button"
                       size="sm"
-                      variant={activo ? "default" : "outline"}
+                      variant="outline"
                       aria-pressed={activo}
+                      className={cn(
+                        activo &&
+                          "border-accent-strong bg-accent-strong text-accent-strong-foreground hover:bg-accent-strong/90"
+                      )}
                       disabled={enCurso}
                       onClick={() => elegirChip(chip)}
                     >
@@ -240,7 +247,7 @@ function Contenido({
                 {errorMotivo}
               </p>
             ) : (
-              <p id={id("motivo-ayuda")} className="text-xs text-muted-foreground">
+              <p id={id("motivo-ayuda")} className="text-sm text-muted-foreground">
                 Obligatorio · mínimo {minimo} caracteres.
               </p>
             )}
@@ -282,15 +289,7 @@ function Contenido({
           </div>
         )}
 
-        {error && (
-          <div
-            role="alert"
-            className="flex items-start gap-2 rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive-text"
-          >
-            <WarningCircle className="mt-0.5 size-4 shrink-0" weight="fill" aria-hidden />
-            <p>{error}</p>
-          </div>
-        )}
+        {error && <AvisoError>{error}</AvisoError>}
 
         <AlertDialogFooter>
           <Button
@@ -300,17 +299,13 @@ function Contenido({
             disabled={enCurso}
             onClick={() => onOpenChange(false)}
           >
-            {textoCancelar}
+            {salir}
           </Button>
           <Button
             type="submit"
+            variant={destructivo ? "destructive" : "default"}
             disabled={enCurso}
             aria-busy={enCurso || undefined}
-            className={cn(
-              // Texto de fondo sobre `destructive-text`: ≥ 6:1 en claro y en oscuro.
-              destructivo &&
-                "bg-destructive-text text-background hover:bg-destructive-text/90 focus-visible:ring-destructive/40"
-            )}
           >
             {enCurso && <SpinnerIcon className="motion-safe:animate-spin" aria-hidden />}
             {enCurso ? verboCargando ?? "Procesando…" : verbo}

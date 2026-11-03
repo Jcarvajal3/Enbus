@@ -1,32 +1,52 @@
 "use client";
 
-import { AdminSidebar } from "@/components/admin-sidebar";
-import { Separator } from "@/components/ui/separator";
-import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
-import { UserProvider, type UserProfile } from "@/hooks/use-user";
 import { usePathname } from "next/navigation";
-import { ADMIN_NAV_ITEMS } from "@/lib/admin-navigation";
+import { AdminSidebar } from "@/components/admin-sidebar";
+import { BarraSuperior, SaltarAlContenido, useMenuLateral } from "@/components/panel-shell";
+import { MigaObjetoProvider } from "@/components/miga-objeto";
+import { ConnectivityBanner } from "@/components/connectivity-banner";
+import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
+import { UserProvider, type UserProfile } from "@/hooks/use-user";
+import { seccionAdminDe } from "@/lib/admin-navigation";
 
-export function AdminShell({ user, children }: { user: UserProfile; children: React.ReactNode }) {
+// Mismo shell que el panel de cooperativas (D15): barra "Grupo › Sección" o
+// "Sección › Objeto" (con <MigaObjeto>), tasa BCV a la derecha (sin impresora).
+export function AdminShell({
+  user,
+  menuAbierto = null,
+  headerExtra,
+  children,
+}: {
+  user: UserProfile;
+  /** Estado del menú guardado en la cookie `sidebar_state` (null = sin elegir). */
+  menuAbierto?: boolean | null;
+  /** Contexto global a la derecha de la barra superior (tasa BCV). */
+  headerExtra?: React.ReactNode;
+  children: React.ReactNode;
+}) {
   const pathname = usePathname();
-  const currentItem = ADMIN_NAV_ITEMS.find((item) => pathname === item.href || pathname.startsWith(`${item.href}/`));
-  const seccion = currentItem ? currentItem.title : "Administración";
+  const menu = useMenuLateral(menuAbierto);
 
   return (
     <UserProvider initialUser={user}>
-      <SidebarProvider>
-        <AdminSidebar />
-        <SidebarInset>
-          {/* La ruta completa ("Cooperativas › Expresos del Táchira") la dibuja PageHeader con `migas`;
-              aquí solo queda el nombre de la sección, sin un segundo landmark de navegación. */}
-          <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
-            <SidebarTrigger className="-ml-1" />
-            <Separator orientation="vertical" className="mr-2 h-4" />
-            <p className="text-sm font-medium text-foreground">{seccion}</p>
-          </header>
-          <main className="flex-1 p-4 sm:p-6">{children}</main>
-        </SidebarInset>
-      </SidebarProvider>
+      <SaltarAlContenido />
+      <MigaObjetoProvider>
+        <SidebarProvider open={menu.open} onOpenChange={menu.onOpenChange}>
+          <AdminSidebar />
+          <SidebarInset className="min-w-0">
+            <ConnectivityBanner />
+            <BarraSuperior
+              seccion={seccionAdminDe(pathname)}
+              tituloPorDefecto="Administración · EnBus"
+              extra={headerExtra}
+            />
+            {/* SidebarInset ya es el <main>: el destino de "Saltar al contenido" es este bloque. */}
+            <div id="contenido" tabIndex={-1} className="flex min-w-0 flex-1 flex-col p-4 outline-none sm:p-6">
+              {children}
+            </div>
+          </SidebarInset>
+        </SidebarProvider>
+      </MigaObjetoProvider>
     </UserProvider>
   );
 }

@@ -35,7 +35,7 @@ export default async function Home() {
 
   return (
     <>
-      <Navbar secciones={secciones} />
+      <Navbar secciones={secciones} sobreMarca />
       <main>
         <Hero estadisticas={stats} calculadora={secciones.calcular} />
         <HowItWorks />

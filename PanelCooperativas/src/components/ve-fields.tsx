@@ -191,7 +191,7 @@ export function CedulaField({
           disabled={disabled}
           onChange={(e) => emitir(e.target.value, numero)}
           className={cn(
-            "h-9 shrink-0 rounded-4xl border border-input bg-input/30 px-3 text-base font-medium outline-none transition-colors md:text-sm",
+            "h-9 shrink-0 rounded-full border border-input-border bg-background px-3 text-base font-medium text-foreground outline-none transition-colors md:text-sm",
             "focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50",
             "disabled:cursor-not-allowed disabled:opacity-50"
           )}
@@ -223,8 +223,8 @@ export function CedulaField({
       {error ? (
         <MensajeError id={errorId} error={error} />
       ) : (
-        <p id={ayudaId} className="text-xs text-muted-foreground">
-          Elige la letra y escribe solo los números. Ejemplo: {CEDULA_PLACEHOLDER}.
+        <p id={ayudaId} className="text-sm text-muted-foreground">
+          Elige la letra y escribe los números. Ej.: {CEDULA_PLACEHOLDER}
         </p>
       )}
       {name && <input type="hidden" name={name} value={value ? cedulaParaGuardar(value) ?? value : ""} />}
@@ -290,8 +290,8 @@ export function TelefonoField({
       {error ? (
         <MensajeError id={errorId} error={error} />
       ) : (
-        <p id={ayudaId} className="text-xs text-muted-foreground">
-          Móvil o fijo venezolano. Ejemplo: {TELEFONO_PLACEHOLDER}.
+        <p id={ayudaId} className="text-sm text-muted-foreground">
+          Móvil o fijo. Ej.: {TELEFONO_PLACEHOLDER}
         </p>
       )}
       {name && <input type="hidden" name={name} value={value ? telefonoParaGuardar(value) ?? value : ""} />}

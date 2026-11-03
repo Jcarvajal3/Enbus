@@ -15,7 +15,7 @@ export function CalculatorCTA({ origenes }: { origenes: OrigenConDestinos[] }) {
       <div className="mx-auto max-w-4xl px-6">
         <div className="text-center">
           <Calculator className="mx-auto size-12 text-foreground" aria-hidden />
-          <h2 className="mt-6 font-serif text-3xl font-bold tracking-tight text-foreground lg:text-4xl">
+          <h2 className="mt-6 font-serif text-3xl font-semibold tracking-tight text-foreground lg:text-4xl">
             Calcula el costo de tu envío
           </h2>
           <p className="mt-4 text-lg text-foreground/85">

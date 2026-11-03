@@ -53,7 +53,7 @@ function DialogOverlay({
     <DialogPrimitive.Backdrop
       data-slot="dialog-overlay"
       className={cn(
-        "fixed inset-0 isolate z-50 bg-black/80 duration-100 supports-backdrop-filter:backdrop-blur-xs data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0",
+        "fixed inset-0 isolate z-50 bg-black/50 duration-100 supports-backdrop-filter:backdrop-blur-xs data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0",
         className
       )}
       {...props}
@@ -61,21 +61,36 @@ function DialogOverlay({
   )
 }
 
+// Tres anchos de diálogo (D18). El alto máximo y el desplazamiento viven aquí:
+// los usos no ponen `max-w-*` ni `max-h-*` propios.
+const ANCHO_DIALOGO = {
+  confirmar: "sm:max-w-md",
+  formulario: "sm:max-w-lg",
+  flujo: "sm:max-w-2xl",
+} as const
+
+export type TamanoDialogo = keyof typeof ANCHO_DIALOGO
+
 function DialogContent({
   className,
   children,
   showCloseButton = true,
+  tamano = "formulario",
   ...props
 }: DialogPrimitive.Popup.Props & {
   showCloseButton?: boolean
+  /** "confirmar" 448 px · "formulario" 512 px (por defecto) · "flujo" 672 px. */
+  tamano?: TamanoDialogo
 }) {
   return (
     <DialogPortal>
       <DialogOverlay />
       <DialogPrimitive.Popup
         data-slot="dialog-content"
+        data-tamano={tamano}
         className={cn(
-          "fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-6 rounded-4xl bg-popover p-6 text-sm text-popover-foreground ring-1 ring-foreground/5 duration-100 outline-none sm:max-w-md data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+          "fixed top-1/2 left-1/2 z-50 grid max-h-[calc(100dvh-2rem)] w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-6 overflow-y-auto overscroll-contain rounded-lg border border-border bg-popover p-6 text-sm text-popover-foreground shadow-xl duration-100 outline-none data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+          ANCHO_DIALOGO[tamano],
           className
         )}
         {...props}
@@ -92,8 +107,7 @@ function DialogContent({
               />
             }
           >
-            <XIcon
-            />
+            <XIcon aria-hidden />
             <span className="sr-only">Cerrar</span>
           </DialogPrimitive.Close>
         )}
@@ -106,7 +120,7 @@ function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="dialog-header"
-      className={cn("flex flex-col gap-2", className)}
+      className={cn("flex flex-col gap-1.5 pr-8", className)}
       {...props}
     />
   )
@@ -144,7 +158,7 @@ function DialogTitle({ className, ...props }: DialogPrimitive.Title.Props) {
     <DialogPrimitive.Title
       data-slot="dialog-title"
       className={cn(
-        "font-heading text-base leading-none font-medium",
+        "font-heading text-base leading-snug font-semibold",
         className
       )}
       {...props}
@@ -160,7 +174,7 @@ function DialogDescription({
     <DialogPrimitive.Description
       data-slot="dialog-description"
       className={cn(
-        "text-sm text-muted-foreground *:[a]:underline *:[a]:underline-offset-3 *:[a]:hover:text-foreground",
+        "text-sm text-muted-foreground *:[a]:text-info-text *:[a]:underline *:[a]:underline-offset-3",
         className
       )}
       {...props}

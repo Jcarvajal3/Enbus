@@ -11,9 +11,11 @@
   --primary-foreground: #202020;
   --primary-text: #8A5A00;
   --secondary: #FF7648;
-  --secondary-foreground: #FFFFFF;
+  --secondary-foreground: #202020;
   --accent: #4A7FF8;
   --accent-foreground: #FFFFFF;
+  --accent-strong: #2F5FD0;
+  --accent-strong-foreground: #FFFFFF;
   --muted: #F0EFEB;
   --muted-foreground: #666666;
   --destructive: #dc2626;
@@ -21,9 +23,9 @@
   --border-strong: #8C8C8C;
   --input: #E8E6E1;
   --input-border: #8C8C8C;
-  --ring: #202020;
+  --ring: #2F5FD0;
   --chart-1: #FFC757;
-  --chart-2: #FF7648;
+  --chart-2: #E5562A;
   --chart-3: #4A7FF8;
   --chart-4: #8A8A8A;
   --chart-5: #202020;
@@ -54,7 +56,7 @@
   --sidebar-accent: #E8E6E1;
   --sidebar-accent-foreground: #202020;
   --sidebar-border: #E8E6E1;
-  --sidebar-ring: #202020;
+  --sidebar-ring: #2F5FD0;
   --radius: 16px;
   --duration-instant: 110ms;
   --duration-fast: 160ms;
@@ -75,22 +77,24 @@
   --primary-foreground: #202020;
   --primary-text: #FFC757;
   --secondary: #FF7648;
-  --secondary-foreground: #FFFFFF;
+  --secondary-foreground: #202020;
   --accent: #4A7FF8;
   --accent-foreground: #FFFFFF;
-  --muted: #2A2A2A;
+  --accent-strong: #2F5FD0;
+  --accent-strong-foreground: #FFFFFF;
+  --muted: #2E2E2E;
   --muted-foreground: #9A9A9A;
   --destructive: #dc2626;
   --border: #2E2E2E;
-  --border-strong: #5A5A5A;
+  --border-strong: #757575;
   --input: #2E2E2E;
-  --input-border: #5A5A5A;
-  --ring: #FFC757;
+  --input-border: #757575;
+  --ring: #5C8DFA;
   --chart-1: #FFC757;
   --chart-2: #FF7648;
   --chart-3: #4A7FF8;
   --chart-4: #8A8A8A;
-  --chart-5: #202020;
+  --chart-5: #D4D2CC;
   --primary-light: rgba(255, 199, 87, 0.15);
   --secondary-light: rgba(255, 118, 72, 0.12);
   --accent-light: rgba(74, 127, 248, 0.12);
@@ -118,5 +122,17 @@
   --sidebar-accent: #2A2A2A;
   --sidebar-accent-foreground: #F0EFEB;
   --sidebar-border: #2E2E2E;
-  --sidebar-ring: #FFC757;
+  --sidebar-ring: #5C8DFA;
+}
+
+/* Escala de radios (D9): rounded-xs…3xl y rounded-full. No redefinir --radius-* en globals.css. */
+@theme {
+  --radius-xs: 6px;
+  --radius-sm: 10px;
+  --radius-md: 16px;
+  --radius-lg: 20px;
+  --radius-xl: 24px;
+  --radius-2xl: 28px;
+  --radius-3xl: 36px;
+  --radius-full: 9999px;
 }

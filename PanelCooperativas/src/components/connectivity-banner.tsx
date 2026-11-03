@@ -9,7 +9,7 @@ import { WifiHigh, WifiSlash } from "@phosphor-icons/react";
 
 const POLL_INTERVAL_MS = 30_000;        // ← was 10s, 30s is plenty
 const PROBE_TIMEOUT_MS = 5_000;
-const RESTORED_BANNER_TTL_MS = 5_000;
+const RESTORED_BANNER_TTL_MS = 3_000; // §2.3: "Conexión restaurada" 3 s
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Hook — useConnectivity
@@ -126,40 +126,30 @@ export function ConnectivityBanner() {
     return () => clearTimeout(timer);
   }, [wasOffline, clearWasOffline]);
 
-  // ── Sin conexión: tono peligro, no se puede cerrar ──────────────────────────────────
+  // ── Sin conexión: tono aviso (ámbar, SY-09), no se puede cerrar ────────────────────
   if (!online) {
     return (
       <div
         role="alert"
         aria-live="assertive"
-        className="
-          flex items-center justify-center gap-2
-          border-b border-destructive/40 bg-destructive-light text-destructive-deep
-          px-4 py-2 text-sm font-medium text-center
-          motion-safe:animate-in motion-safe:slide-in-from-top motion-safe:duration-300
-        "
+        className="flex items-center justify-center gap-2 border-b border-warning/40 bg-warning-light px-4 py-2 text-center text-sm font-medium text-warning-deep motion-safe:animate-in motion-safe:slide-in-from-top motion-safe:duration-300"
       >
-        <WifiSlash size={16} weight="bold" aria-hidden />
-        Sin conexión a internet. No podrás guardar cambios hasta que vuelva la conexión.
+        <WifiSlash className="size-4 shrink-0 text-warning-text" weight="fill" aria-hidden />
+        Sin conexión. No se guardarán cambios.
       </div>
     );
   }
 
-  // ── Restaurada: tono éxito, se oculta sola ─────────────────────────────────────────
+  // ── Restaurada: tono éxito, se oculta sola a los 3 s ───────────────────────────────
   if (wasOffline) {
     return (
       <div
         role="status"
         aria-live="polite"
-        className="
-          flex items-center justify-center gap-2
-          border-b border-success/40 bg-success-light text-success-deep
-          px-4 py-2 text-sm font-medium text-center
-          motion-safe:animate-in motion-safe:slide-in-from-top motion-safe:duration-300
-        "
+        className="flex items-center justify-center gap-2 border-b border-success/40 bg-success-light px-4 py-2 text-center text-sm font-medium text-success-deep motion-safe:animate-in motion-safe:slide-in-from-top motion-safe:duration-300"
       >
-        <WifiHigh size={16} weight="bold" aria-hidden />
-        Conexión restaurada.
+        <WifiHigh className="size-4 shrink-0 text-success-text" weight="fill" aria-hidden />
+        Conexión restaurada
       </div>
     );
   }
@@ -183,7 +173,7 @@ export function ConnectivityBanner() {
 export function requireOnline<T>(action: () => Promise<T>): () => Promise<T> {
   return async () => {
     if (!navigator.onLine) {
-      throw new Error("Esta operación requiere conexión a internet.");
+      throw new Error("Sin conexión. Revisa tu internet e intenta de nuevo.");
     }
     return action();
   };

@@ -11,9 +11,9 @@ import {
   CODIGO_EJEMPLO,
   ETAPAS_ENCOMIENDA,
   estadoEncomienda,
-  nombreLocalidad,
-  normalizarCodigoSeguimiento,
 } from "@/lib/estados"
+import { normalizarTracking } from "@/lib/artefactos.generated"
+import { formatCiudad, formatDiaHoraVE } from "@/lib/ve.generated"
 import { sitioUrl, soporteWhatsApp } from "@/lib/urls"
 import { cn } from "@/lib/utils"
 
@@ -26,24 +26,16 @@ export const metadata: Metadata = {
 
 // ─── Formato ─────────────────────────────────────────────────────────────────
 
-const FECHA_HORA = new Intl.DateTimeFormat("es-VE", {
-  timeZone: "America/Caracas",
-  day: "2-digit",
-  month: "2-digit",
-  year: "numeric",
-  hour: "numeric",
-  minute: "2-digit",
-  hour12: true,
-})
-
+/** "mar. 3 nov. · 2:30 p. m." (D4, hora de Venezuela); null sin fecha válida. */
 function fechaHora(iso: string | null | undefined): string | null {
   if (!iso) return null
-  const d = new Date(iso)
-  return Number.isNaN(d.getTime()) ? null : FECHA_HORA.format(d)
+  return Number.isNaN(new Date(iso).getTime()) ? null : formatDiaHoraVE(iso)
 }
 
+const ENLACE = "w-fit font-medium text-info-text underline underline-offset-4"
+
 function lugar(l: Lugar): string {
-  return [nombreLocalidad(l.ciudad), nombreLocalidad(l.estado)].filter(Boolean).join(", ") || "Sin dato"
+  return [formatCiudad(l.ciudad), formatCiudad(l.estado)].filter(Boolean).join(", ") || "Sin dato"
 }
 
 // ─── Línea de tiempo ─────────────────────────────────────────────────────────
@@ -141,7 +133,7 @@ function LineaDeTiempo({ pasos }: { pasos: Paso[] }) {
 
 function Aviso({ titulo, children }: { titulo: string; children: React.ReactNode }) {
   return (
-    <div role="alert" className="flex items-start gap-3 rounded-sm border border-warning/40 bg-warning-light p-4 text-sm">
+    <div role="alert" className="flex items-start gap-3 rounded-md border border-warning/40 bg-warning-light p-4 text-sm">
       <WarningCircle className="mt-0.5 size-5 shrink-0 text-warning-deep" aria-hidden />
       <div className="flex flex-col gap-1 text-foreground">
         <p className="font-semibold">{titulo}</p>
@@ -154,7 +146,7 @@ function Aviso({ titulo, children }: { titulo: string; children: React.ReactNode
 function Resultado({ resultado, codigo }: { resultado: EstadoRastreo; codigo: string }) {
   const whatsapp = soporteWhatsApp(`Hola, necesito ayuda para rastrear la encomienda ${codigo}.`)
   const enlaceAyuda = whatsapp && (
-    <a href={whatsapp} target="_blank" rel="noopener noreferrer" className="w-fit font-medium underline underline-offset-4">
+    <a href={whatsapp} target="_blank" rel="noopener noreferrer" className={ENLACE}>
       Escríbenos por WhatsApp
     </a>
   )
@@ -175,7 +167,7 @@ function Resultado({ resultado, codigo }: { resultado: EstadoRastreo; codigo: st
           <p>Puede ser un problema de conexión. Intenta de nuevo en unos minutos.</p>
           <a
             href={`/rastrear?codigo=${encodeURIComponent(codigo)}`}
-            className="w-fit font-medium underline underline-offset-4"
+            className={ENLACE}
           >
             Reintentar
           </a>
@@ -195,17 +187,17 @@ function Resultado({ resultado, codigo }: { resultado: EstadoRastreo; codigo: st
       const e = resultado.encomienda
       const estado = estadoEncomienda(e.estado)
       return (
-        <article aria-labelledby="rastreo-titulo" className="rounded-sm border border-border bg-background p-5 sm:p-6">
+        <article aria-labelledby="rastreo-titulo" className="rounded-md border border-border bg-card p-5 sm:p-6">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Código de seguimiento</p>
-              <h2 id="rastreo-titulo" className="font-mono text-xl font-bold text-foreground">
+              <p className="text-xs text-muted-foreground">Código de seguimiento</p>
+              <h2 id="rastreo-titulo" className="font-mono text-lg font-semibold text-foreground">
                 {e.tracking_id}
               </h2>
             </div>
             <span
               className={cn(
-                "inline-flex w-fit items-center rounded-full px-3 py-1 text-sm font-semibold",
+                "inline-flex w-fit items-center rounded-full px-3 py-1 text-xs font-semibold",
                 CLASES_TONO[estado.tono]
               )}
             >
@@ -262,19 +254,19 @@ export default async function RastrearPage({
       <main className="bg-muted/40 pt-24 pb-20 lg:pt-28">
         <div className="mx-auto flex max-w-2xl flex-col gap-6 px-4 sm:px-6">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight text-foreground lg:text-4xl">Rastrear encomienda</h1>
+            <h1 className="text-3xl font-semibold tracking-tight text-foreground lg:text-4xl">Rastrear encomienda</h1>
             <p className="mt-2 text-base text-muted-foreground">
               Escribe el código de seguimiento para ver en qué va tu envío. No necesitas cuenta.
             </p>
           </div>
 
-          <div className="rounded-sm border border-border bg-background p-5 sm:p-6">
+          <div className="rounded-md border border-border bg-card p-5 sm:p-6">
             <RastreoForm codigoInicial={codigo} />
           </div>
 
           {resultado && (
             <section aria-live="polite">
-              <Resultado resultado={resultado} codigo={normalizarCodigoSeguimiento(codigo)} />
+              <Resultado resultado={resultado} codigo={normalizarTracking(codigo.slice(0, 40))} />
             </section>
           )}
         </div>

@@ -9,15 +9,16 @@
  * Muestra el nombre completo de cada ciudad (hasta 2 líneas) y, si se pasan,
  * la hora de salida y la de llegada debajo (APP-58). Antes eran códigos de
  * tres letras tipo aeropuerto ("MER", "CAR") que nadie usa en Venezuela.
+ *
+ * D10: los extremos usan los mismos glifos neutros que `RouteField` (origen
+ * `Circle` bold, destino `MapPin` fill, en `foreground`), nunca azul ni coral.
  */
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Clock } from 'phosphor-react-native';
+import { Circle, Clock, MapPin } from 'phosphor-react-native';
 import { Text } from './Text';
 import { formatCity } from '@/src/utils/formatters';
-import { Colors, Radius, Sizes, Spacing } from '@/src/theme';
-
-const DOT = Spacing.sm;
+import { Colors, Sizes, Spacing } from '@/src/theme';
 
 export interface RouteSummaryProps {
   origen?: string | null;
@@ -62,13 +63,13 @@ export function RouteSummary({
 
       <View style={s.middle}>
         <View style={s.timeline}>
-          <View style={[s.dot, { backgroundColor: Colors.accent }]} />
+          <Circle size={Sizes.icon.sm} color={Colors.foreground} weight="bold" />
           <View style={s.line} />
-          <View style={[s.dot, { backgroundColor: Colors.secondary }]} />
+          <MapPin size={Sizes.icon.sm} color={Colors.foreground} weight="fill" />
         </View>
         {duration ? (
           <View style={s.durationRow}>
-            <Clock color={Colors.mutedForeground} weight="fill" size={Sizes.icon.xs} />
+            <Clock color={Colors.mutedForeground} weight="bold" size={Sizes.icon.xs} />
             <Text variant="caption" color="muted" weight="bold" compact>
               {duration}
             </Text>
@@ -120,16 +121,11 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     width: '100%',
-    marginBottom: Spacing.xs + 2,
-  },
-  dot: {
-    width: DOT,
-    height: DOT,
-    borderRadius: Radius.full,
+    marginBottom: Spacing.sm,
   },
   line: {
     flex: 1,
-    height: 2,
+    height: Sizes.borderStrong,
     backgroundColor: Colors.border,
     marginHorizontal: Spacing.xs,
   },

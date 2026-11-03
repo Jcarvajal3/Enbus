@@ -36,6 +36,11 @@ interface PressableScaleProps {
   onPressOut?: (e: unknown) => void;
   onLongPress?: (e: unknown) => void;
   disabled?: boolean;
+  /**
+   * Atenúa el contenido cuando está deshabilitado (por defecto). `Button` lo
+   * apaga: su estado deshabilitado es un relleno propio, sin opacidad (§2.3).
+   */
+  dimWhenDisabled?: boolean;
   style?: ViewStyle | ViewStyle[] | (ViewStyle | false | undefined | null)[];
   accessibilityLabel?: string;
   accessibilityHint?: string;
@@ -62,6 +67,7 @@ export function PressableScale({
   onPressOut,
   onLongPress,
   disabled,
+  dimWhenDisabled = true,
   style,
   children,
   ...rest
@@ -105,7 +111,7 @@ export function PressableScale({
       onPressOut={handlePressOut}
       onPress={handlePress}
       onLongPress={onLongPress}
-      style={[style, animatedStyle, disabled ? styles.disabled : null]}
+      style={[style, animatedStyle, disabled && dimWhenDisabled ? styles.disabled : null]}
     >
       {children}
     </AnimatedPressable>

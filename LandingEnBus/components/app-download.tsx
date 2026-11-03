@@ -1,5 +1,6 @@
 import { CheckCircle, AppleLogo, GooglePlayLogo, WhatsappLogo } from "@phosphor-icons/react/dist/ssr"
 
+import { buttonVariants } from "@/components/ui/button"
 import { soporteWhatsApp } from "@/lib/urls"
 
 const features = [
@@ -19,7 +20,7 @@ export function AppDownload() {
   return (
     <section className="bg-background py-24 lg:py-32">
       <div className="mx-auto flex max-w-3xl flex-col gap-6 px-6">
-        <h2 className="font-serif text-3xl font-bold tracking-tight lg:text-4xl">Lleva EnBus en tu teléfono</h2>
+        <h2 className="font-serif text-3xl font-semibold tracking-tight lg:text-4xl">Lleva EnBus en tu teléfono</h2>
 
         <p className="text-lg leading-relaxed text-muted-foreground">
           Muy pronto podrás comprar boletos, enviar encomiendas y seguirlas desde la app de EnBus.
@@ -39,7 +40,7 @@ export function AppDownload() {
           {tiendas.map((tienda) => (
             <li
               key={tienda.nombre}
-              className="flex items-center gap-3 rounded-sm border border-input-border bg-background px-5 py-3"
+              className="flex items-center gap-3 rounded-md border border-border bg-card px-5 py-3"
             >
               <tienda.icon className="size-7 text-foreground" weight="fill" aria-hidden />
               <div className="flex flex-col">
@@ -55,7 +56,7 @@ export function AppDownload() {
             href={avisame}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex min-h-11 w-fit items-center gap-2 rounded-sm bg-foreground px-5 text-sm font-semibold text-background transition-colors outline-none hover:bg-foreground/90 focus-visible:ring-2 focus-visible:ring-foreground focus-visible:ring-offset-2"
+            className={`${buttonVariants({ size: "lg" })} w-fit focus-visible:ring-2 focus-visible:ring-foreground focus-visible:ring-offset-2`}
           >
             <WhatsappLogo className="size-5" aria-hidden />
             Avísame por WhatsApp

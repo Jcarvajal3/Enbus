@@ -4,7 +4,7 @@
 // Ambas usan lib/consultas (service role, solo servidor) y nunca lanzan.
 
 import { cotizar, rastrear, type Cotizacion, type ResultadoRastreo } from "@/lib/consultas";
-import { normalizarCodigoSeguimiento } from "@/lib/estados";
+import { normalizarTracking } from "@/lib/artefactos.generated";
 
 // ─── Rastreo ─────────────────────────────────────────────────────────────────
 
@@ -16,7 +16,8 @@ export type EstadoRastreo =
 
 /** Busca una encomienda por su código de seguimiento (EB-AAMMDD-NNNNN). */
 export async function rastrearEncomienda(codigoEntrada: string): Promise<EstadoRastreo> {
-  const codigo = normalizarCodigoSeguimiento(codigoEntrada);
+  // Entrada pública: se recorta antes de normalizar y de llegar a la base.
+  const codigo = normalizarTracking(codigoEntrada.slice(0, 40));
   if (!codigo) return { tipo: "vacio" };
   const resultado = await rastrear(codigo);
   return resultado ?? { tipo: "no_disponible" };

@@ -2,7 +2,7 @@ import { ArrowRight, Clock, CalendarBlank } from "@phosphor-icons/react/dist/ssr
 
 import { formatMoney, formatNumeroVE, type TasaRef } from "@/lib/dinero"
 import type { RutaPopular } from "@/lib/consultas"
-import { nombreLocalidad } from "@/lib/estados"
+import { formatCiudad } from "@/lib/ve.generated"
 
 /** 15 -> "USD 15"; 10.5 -> "USD 10,50" */
 function usdCorto(usd: number) {
@@ -40,7 +40,7 @@ export function PopularRoutes({ rutas, tasa }: PopularRoutesProps) {
     <section id="rutas" className="scroll-mt-20 bg-background py-24 lg:py-32">
       <div className="mx-auto max-w-6xl px-6">
         <div className="mx-auto mb-16 max-w-2xl text-center">
-          <h2 className="text-3xl font-bold tracking-tight lg:text-4xl">Rutas populares</h2>
+          <h2 className="text-3xl font-semibold tracking-tight lg:text-4xl">Rutas populares</h2>
           <p className="mt-4 text-lg text-muted-foreground">Las rutas con más salidas en los próximos días</p>
         </div>
 
@@ -49,12 +49,12 @@ export function PopularRoutes({ rutas, tasa }: PopularRoutesProps) {
             const monto = formatMoney({ usd: ruta.desde_usd, tasa, moneda: "USD" })
             const tiempo = duracion(ruta.duracion_min)
             return (
-              <li key={`${ruta.ciudad_origen}-${ruta.ciudad_destino}`} className="rounded-sm border p-5">
+              <li key={`${ruta.ciudad_origen}-${ruta.ciudad_destino}`} className="rounded-md border border-border bg-card p-5">
                 <p className="flex flex-wrap items-center gap-2 text-lg font-medium">
-                  <span>{nombreLocalidad(ruta.ciudad_origen)}</span>
+                  <span>{formatCiudad(ruta.ciudad_origen)}</span>
                   <ArrowRight className="size-4 text-muted-foreground" aria-hidden />
                   <span className="sr-only">a</span>
-                  <span>{nombreLocalidad(ruta.ciudad_destino)}</span>
+                  <span>{formatCiudad(ruta.ciudad_destino)}</span>
                 </p>
                 <p className="mt-3 text-sm tabular-nums">
                   <span className="sr-only">{`Desde ${monto.accesible}`}</span>
@@ -67,12 +67,12 @@ export function PopularRoutes({ rutas, tasa }: PopularRoutesProps) {
                 </p>
                 <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm text-muted-foreground">
                   <span className="inline-flex items-center gap-1.5">
-                    <CalendarBlank className="size-4" weight="duotone" aria-hidden />
+                    <CalendarBlank className="size-4" aria-hidden />
                     {salidas(ruta.salidas_proximas)}
                   </span>
                   {tiempo && (
                     <span className="inline-flex items-center gap-1.5">
-                      <Clock className="size-4" weight="duotone" aria-hidden />
+                      <Clock className="size-4" aria-hidden />
                       {tiempo}
                     </span>
                   )}

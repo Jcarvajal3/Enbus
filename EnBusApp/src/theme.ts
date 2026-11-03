@@ -11,7 +11,8 @@
  * Palette:
  *   Primary   #FFC757  (warm yellow)
  *   Secondary #FF7648  (coral orange)
- *   Accent    #4A7FF8  (vibrant blue)
+ *   Accent    #4A7FF8  (vibrant blue — tints, dots and borders only)
+ *   Accent strong #2F5FD0 (selection and active state with white text, 5.7:1)
  *   Surface   #F0EFEB  (warm beige)
  *   Text      #202020  (soft black)
  *   White     #FFFFFF
@@ -85,12 +86,23 @@ export const Colors = {
   secondaryBorder: alpha(palette.coral, 0.22),
   secondaryForeground: palette.white,
 
+  /** Vivid blue: tints, dots and borders. Never a fill behind white text (3.7:1). */
   accent: palette.blue,
   accentLight: alpha(palette.blue, 0.12),
   accentBorder: alpha(palette.blue, 0.22),
   accentForeground: palette.white,
   /** Accent at rest inside a disabled CTA */
   accentMuted: alpha(palette.blue, 0.35),
+  /**
+   * Selection and active state (D1): selected chip, seat, option, checkbox,
+   * switch, focus ring, active tab, active counter. White text on it = 5.7:1.
+   * `shared/tokens.json` → `accent-strong` (= `paleta.blue-dark`).
+   */
+  accentStrong: palette.blueDark,
+  accentStrongForeground: palette.white,
+
+  /** Links in running text and text buttons (≥ 4.5:1 on white and beige). */
+  link: palette.blueText,
 
   // Surfaces
   background: palette.white,
@@ -137,7 +149,7 @@ export const Colors = {
   transparent: 'transparent',
 
   // Tab bar specific
-  /** Active pill behind the white label/icon (5.7:1) */
+  /** Active pill behind the white label/icon (5.7:1) — `accentStrong` */
   tabActive: palette.blueDark,
   /** Inactive label/icon on the beige bar (5.0:1) */
   tabInactive: palette.greyText,
@@ -150,6 +162,8 @@ const sizes = {
   /** Counters inside badges — the only size below `xs` */
   micro: 9,
   xs: 11,
+  /** Status badges only (SY-23: 12 pt semibold in app and web) */
+  badge: 12,
   sm: 13,
   base: 15,
   lg: 17,
@@ -177,6 +191,7 @@ export type FontWeightToken = keyof typeof weights;
 const lineHeights: Record<FontSizeToken, number> = {
   micro: 12,
   xs: 15,
+  badge: 16,
   sm: 18,
   base: 22,
   lg: 24,
@@ -203,7 +218,7 @@ const tracking = {
 const presets = {
   /** Hero numbers and monumental figures */
   display: { size: '4xl', weight: 'heavy', tracking: 'tight' },
-  /** Screen title (Mis Viajes, Mis Paquetes) */
+  /** Tab screen title (Mis boletos, Mis encomiendas) */
   title: { size: '3xl', weight: 'bold', tracking: 'tight' },
   /** Section / modal heading */
   heading: { size: 'xl', weight: 'bold', tracking: 'snug' },
@@ -219,7 +234,7 @@ const presets = {
   label: { size: 'sm', weight: 'semibold', tracking: 'normal' },
   /** Metadata, timestamps */
   caption: { size: 'xs', weight: 'medium', tracking: 'normal' },
-  /** Uppercase eyebrow above a value or section */
+  /** Uppercase section label — only inside `SectionLabel` (a noun, never a question) */
   overline: { size: 'xs', weight: 'bold', tracking: 'wider' },
   /** Text inside buttons */
   button: { size: 'base', weight: 'bold', tracking: 'wide' },
@@ -295,6 +310,12 @@ export const Sizes = {
   /** Divider / hairline thickness */
   hairline: 1,
   borderStrong: 1.5,
+  /** Selected outline of a selectable card / option */
+  borderSelected: 2,
+  /** Status badge heights (12 pt label, no icon) */
+  badge: { sm: 22, md: 28 },
+  /** Numeric counter pill (tab bar, bell, segmented control) */
+  counter: 18,
 } as const;
 
 // ─── Radius ──────────────────────────────────────────────────────────────────
@@ -458,8 +479,8 @@ export const Layout = {
     sideInset: Spacing.xl,
     /** Inner padding around the sliding indicator */
     innerPadding: 6,
-    /** Tab label size — 12pt, one step above `xs` so labels read outdoors */
-    labelSize: 12,
+    /** Tab label size — `xs` (11 pt) from the type scale (AU-47) */
+    labelSize: sizes.xs,
   },
 
   /** Bottom padding for lists/scrollviews on tabbed screens (clears the bar) */
@@ -493,7 +514,7 @@ export const Opacity = {
  * `getEstadoVisual` in `src/utils/estados.ts` resolves a domain state to a tone;
  * this turns a tone into pixels. Nothing else should pick status colours.
  */
-export type StatusTone = 'neutral' | 'pending' | 'progress' | 'success' | 'danger' | 'brand';
+export type StatusTone = 'neutral' | 'pending' | 'progress' | 'success' | 'danger' | 'done' | 'brand';
 
 export const StatusPalette: Record<
   StatusTone,
@@ -506,11 +527,19 @@ export const StatusPalette: Record<
     border: string;
   }
 > = {
+  /** Anulado o inactivo (cancelado): contorno, fondo blanco (SY-22). */
   neutral: {
     fg: Colors.mutedForeground,
     text: Colors.mutedForeground,
-    bg: Colors.neutralLight,
-    border: alpha(palette.grey, 0.2),
+    bg: Colors.white,
+    border: Colors.border,
+  },
+  /** Terminado sin incidencia (viaje realizado, vencido, devuelta): relleno sólido. */
+  done: {
+    fg: Colors.foreground,
+    text: Colors.foreground,
+    bg: Colors.surfaceDark,
+    border: Colors.surfaceDark,
   },
   pending: {
     fg: Colors.warning,

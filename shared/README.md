@@ -9,6 +9,8 @@ shared/
   tokens.json     colores (claro y oscuro), paleta de la app, radios y duraciones
   ve.ts           formatos venezolanos: cédula, teléfono, RIF, ciudades, fechas VE, duración
   artefactos.ts   código de boleto, QR del pase, código de seguimiento, PIN de retiro
+  errores.ts      catálogo común de mensajes de error (MSG, mensajeAuth, mensajePostgres)
+  dinero.ts       formato de montos: Bs, USD, tasa BCV (formatMoney)
   generar.mjs     node shared/generar.mjs [--check]   (Node ≥ 18, sin dependencias)
 ```
 
@@ -19,7 +21,7 @@ node shared/generar.mjs           # escribe los archivos generados que cambiaron
 node shared/generar.mjs --check   # no escribe; sale con 1 y lista los que no coinciden
 ```
 
-Después de editar `tokens.json`, `ve.ts` o `artefactos.ts`, ejecuta el script y
+Después de editar `tokens.json` o cualquier `.ts` de `shared/`, ejecuta el script y
 versiona los generados junto con la fuente. `--check` va en el CI (cuando exista) y
 antes de cada entrega.
 
@@ -32,20 +34,24 @@ cambio. Edita la fuente en `shared/` y vuelve a generar.
 | Archivo | Contenido |
 |---|---|
 | `EnBusApp/src/tokens.generated.ts` | `palette` (paleta cruda de la app) y `tokens = { claro, movimiento, radio }` en camelCase. La app no tiene modo oscuro. `src/theme.ts` lo consume. |
-| `EnBusApp/src/utils/ve.generated.ts`, `artefactos.generated.ts` | copias de `ve.ts` y `artefactos.ts` |
-| `PanelCooperativas/src/app/tokens.generated.css` | `:root { … }` y `.dark { … }` con todas las variables de color, `--radius` y `--duration-*` |
-| `PanelCooperativas/src/lib/ve.generated.ts`, `artefactos.generated.ts` | copias |
-| `LandingEnBus/app/tokens.generated.css` | `:root { … }` (la landing no tiene modo oscuro) |
-| `LandingEnBus/lib/ve.generated.ts`, `artefactos.generated.ts` | copias |
+| `EnBusApp/src/utils/{ve,artefactos,errores,dinero}.generated.ts` | copias de los módulos de `shared/` |
+| `PanelCooperativas/src/app/tokens.generated.css` | `:root { … }` y `.dark { … }` con todas las variables de color, `--radius` y `--duration-*`, y `@theme { --radius-xs … --radius-3xl, --radius-full }` |
+| `PanelCooperativas/src/lib/{ve,artefactos,errores,dinero}.generated.ts` | copias |
+| `LandingEnBus/app/tokens.generated.css` | `:root { … }` y el mismo `@theme` de radios (la landing no tiene modo oscuro) |
+| `LandingEnBus/lib/{ve,artefactos,errores,dinero}.generated.ts` | copias |
 
 Los proyectos importan **los módulos de siempre**, que reexportan lo generado con los
 mismos nombres y firmas:
 
 - App: `src/utils/validation.ts` (cédula y teléfono), `src/utils/codigos.ts`
-  (artefactos), `src/utils/formatters.ts` (`formatCity` y los formatos VE), `src/theme.ts`.
-- Panel: `src/lib/ve.ts`, `src/lib/rif.ts`, `src/lib/ciudades.ts`, `src/lib/fechas.ts`;
+  (artefactos), `src/utils/formatters.ts` (`formatCity`, los formatos VE y `CLAVE_*`),
+  `src/utils/errores.ts` (`humanizeError`, `MSG`), `src/utils/dinero.ts` (+ `tasaRefDe`),
+  `src/theme.ts`.
+- Panel: `src/lib/ve.ts` (+ `CLAVE_*`), `src/lib/rif.ts`, `src/lib/ciudades.ts`,
+  `src/lib/fechas.ts`, `src/lib/errores.ts` (`humanizeError`, `MSG`), `src/lib/dinero.ts`;
   los artefactos se importan de `@/lib/artefactos.generated`.
-- Landing: `lib/rif.ts`; el resto, de `@/lib/ve.generated` y `@/lib/artefactos.generated`.
+- Landing: `lib/rif.ts`, `lib/dinero.ts`; el resto, de `@/lib/ve.generated`,
+  `@/lib/artefactos.generated` y `@/lib/errores.generated`.
 
 ## tokens.json
 
@@ -55,7 +61,16 @@ mismos nombres y firmas:
 - `paleta`: la paleta cruda de `theme.ts` (`yellow`, `greenText`, `borderStrong`…).
   Un valor puede apuntar a otro token: `"green-text": "{claro.success-text}"`.
 - `radio` (px) y `movimiento.duration` (ms): `Radius` y `Motion.duration` de la app;
-  en CSS, `--radius` (= `radio.md`) y `--duration-instant|fast|base|slow|slower|ambient`.
+  en CSS, `--radius` (= `radio.md`), la escala de Tailwind `--radius-xs…3xl` en `@theme`
+  (`rounded-xs` 6 · `sm` 10 · `md` 16 · `lg` 20 · `xl` 24 · `2xl` 28 · `3xl` 36;
+  `rounded-full` = 9999px) y `--duration-instant|fast|base|slow|slower|ambient`.
+  `globals.css` no redefine `--radius-*` (no existe `rounded-4xl` propio).
+- Uso de radios por rol (D9): control y chip `full`; web: superficie (tarjeta, tabla,
+  mosaico, aviso) `rounded-md`, capa (diálogo, hoja, menú, popover) `rounded-lg`, ítem
+  interno de menú `rounded-sm`; app: tarjeta `xl`, bloque interno `lg`, hoja `3xl`.
+- `accent-strong` (#2F5FD0, texto `accent-strong-foreground` blanco) = selección y estado
+  activo (chip, asiento, casilla, interruptor, opción elegida) y `ring` (foco). `accent`
+  queda para gráficos y el dominio Boletos; nunca lleva texto pequeño encima.
 - Las claves que empiezan con `$` son comentarios.
 
 ### Tokens de estado (panel y landing, clases de Tailwind v4)
@@ -95,9 +110,11 @@ En la app, `no-restricted-syntax` (`error`) prohíbe literales `#rgb`/`#rrggbb`/
 y `rgb(`/`rgba(` fuera de `src/theme.ts` y `src/tokens.generated.ts`: usa `Colors` y
 `alpha()`.
 
-## ve.ts y artefactos.ts
+## Módulos TS (ve, artefactos, errores, dinero)
 
-TS puro, **sin imports**, sin `\p{…}` ni lookbehind (Hermes no los soporta). Los
+TS puro, sin `\p{…}` ni lookbehind (Hermes no los soporta). Sin imports salvo entre
+módulos de `shared/` con `from "./ve";` (el script lo reescribe a `"./ve.generated"`
+en las copias, que viven juntas en cada proyecto). Los
 `Intl.DateTimeFormat` se crean al primer uso. Lo que ya existía conserva nombre,
 firma y comportamiento; la implementación canónica es la del panel (cédula, teléfono,
 RIF y fechas) y la de la app para los nombres de ciudad con tildes.
@@ -110,10 +127,37 @@ RIF y fechas) y la de la app para los nombres de ciudad con tildes.
 `RIF_ERROR`; `normalizarCiudad` (= `normalizar_localidad` de SQL), `formatCiudad`,
 `formatRuta`, `mismaCiudad`; `ZONA_VE`, `fechaVE`, `hoyVE`, `sumarDiasVE`,
 `fechaHoraVEaISO`, `rangoDiaVE`, `formatFechaVE`, `formatHoraVE`, `formatFechaHoraVE`,
-`formatFechaCalendario`, `formatHaceTiempo`, `formatDuracion`.
+`formatFechaCalendario`, `formatHaceTiempo`, `formatDuracion`; `CLAVE_MINIMO` (8),
+`CLAVE_AYUDA`, `CLAVE_ERROR`; `formatDiaVE`, `formatDiaHoraVE`,
+`formatFechaHoraCortaVE`, `capitalizarInicio`.
+
+Fechas (D4), siempre 12 h y hora de Venezuela, separador " · ":
+
+| Función | Salida | Dónde |
+|---|---|---|
+| `formatDiaVE` | "mar. 3 nov." (otro año: "mar. 3 nov. 2025") | app y landing |
+| `formatDiaHoraVE` | "mar. 3 nov. · 2:30 p. m." | app y landing |
+| `formatHoraVE` | "2:30 p. m." | todas |
+| `formatFechaVE` | "03/11/2026" | panel y admin |
+| `formatFechaHoraVE` | "03/11/2026 · 2:30 p. m." | panel y admin |
+| `formatFechaHoraCortaVE` | "03/11 · 2:30 p. m." | tablas del panel |
+| `formatHaceTiempo` | "hace 5 min", "ayer a las 8:30 p. m.", "vie. 04/10" | listas |
+
+`formatCiudad` sin nombre conocido pone mayúscula inicial salvo en de/del/la/las/los/y
+("San Jose de Guanipa").
+
+`errores.ts`: `MSG` (sinRed, generico, sesionVencida, enlaceVencido, correoInvalido,
+credenciales, usuarioNoExiste, cedulaDuplicada, demasiadosIntentos, claveCorta y los
+demás textos comunes), `mensajeAuth(codigoOMensaje)` y `mensajePostgres(code)` (null si
+no se reconoce). App y panel conservan `humanizeError` con su firma y sus textos de
+contexto.
+
+`dinero.ts`: `formatNumeroVE`, `formatBs`, `formatUsd`, `fechaTasaCorta`, `usdABs`,
+`formatMoney` y los tipos `TasaRef`, `MonedaPago`, `MontoFormateado`. Cada proyecto lo
+reexporta desde su `dinero.ts`.
 
 `artefactos.ts`: `formatCodigoBoleto`, `normalizarCodigoBoleto`, `qrBoleto`,
-`TRACKING_RE`, `normalizarTracking`, `esTracking`, `qrEncomienda`,
+`TRACKING_RE`, `normalizarTracking` (acepta "EB26100312345" sin guiones), `esTracking`, `qrEncomienda`,
 `PIN_RETIRO_LONGITUD`, `PIN_MAX_INTENTOS`, `PIN_VALIDACION_MINUTOS`, `pinValido`.
 Reglas de cada artefacto: `Specs/00_General/Artefactos_Compartidos.md`.
 

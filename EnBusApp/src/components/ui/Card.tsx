@@ -6,6 +6,11 @@
  * for containers playing the same role. Two tones and three sizes cover every
  * case; the tone carries the meaning (raised = white on beige,
  * sunken = beige on white).
+ *
+ * Superficies (§2.3): la tarjeta de contenido es `sunken` sobre la pantalla
+ * blanca y no lleva sombra; la sombra es solo de lo que flota (barra de
+ * pestañas, `FloatingBar`, toast, hoja). `elevated` la pide a propósito.
+ * Radio: tarjeta `xl`; bloque dentro de una tarjeta `lg`.
  */
 import React from 'react';
 import { StyleSheet, View, ViewProps, ViewStyle } from 'react-native';
@@ -18,7 +23,7 @@ export type CardPadding = 'none' | 'sm' | 'md' | 'lg';
 export interface CardProps extends ViewProps {
   tone?: CardTone;
   padding?: CardPadding;
-  /** Elevation. `raised` cards default to a subtle shadow. */
+  /** Sombra. Por defecto ninguna (§2.3: solo lo que flota la lleva). */
   elevated?: boolean;
   radius?: keyof typeof Radius;
   children?: React.ReactNode;
@@ -51,7 +56,7 @@ export function Card({
   children,
   ...rest
 }: CardProps) {
-  const shouldElevate = elevated ?? tone === 'raised';
+  const shouldElevate = elevated ?? false;
 
   return (
     <View
@@ -70,7 +75,11 @@ export function Card({
 
 // ─── Section label ───────────────────────────────────────────────────────────
 
-/** Uppercase eyebrow that introduces a group of fields inside a card. */
+/**
+ * Rótulo de sección en mayúsculas, encima de su tarjeta (no dentro). Es un
+ * sustantivo ("Quién paga", "Datos de quien recibe"), nunca una pregunta. Es el
+ * único sitio donde se usa `overline` (§2.3).
+ */
 export function SectionLabel({
   children,
   style,
@@ -97,7 +106,8 @@ export function Divider({ spacing = Spacing.lg }: { spacing?: number }) {
 
 /**
  * Label-over-value row used in every detail screen (perfil, boleto, encomienda).
- * Optional leading icon, optional top border for stacked groups.
+ * Optional leading icon, optional top border for stacked groups. La etiqueta va
+ * en `caption`, en minúscula (AU-40).
  */
 export function InfoRow({
   label,
@@ -118,7 +128,7 @@ export function InfoRow({
     <View style={[s.infoRow, divided && s.infoRowDivided]}>
       {icon}
       <View style={[s.infoRowBody, align === 'right' && s.infoRowBodyEnd]}>
-        <Text variant="overline" color="muted" uppercase align={align === 'right' ? 'right' : 'left'}>
+        <Text variant="caption" color="muted" align={align === 'right' ? 'right' : 'left'}>
           {label}
         </Text>
         <Text variant="bodyStrong" color={valueColor} align={align === 'right' ? 'right' : 'left'}>
@@ -149,7 +159,6 @@ const s = StyleSheet.create({
   },
   infoRowBody: {
     flex: 1,
-    gap: Spacing.xs / 2,
   },
   infoRowBodyEnd: {
     alignItems: 'flex-end',

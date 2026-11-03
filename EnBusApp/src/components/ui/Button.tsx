@@ -5,35 +5,36 @@
  * (48 / 52 / 54), radius (pill vs 10), disabled treatment (opacity 0.5 vs a
  * hardcoded translucent fill) and label size. One component, one contract.
  *
- *   <Button variant="accent" size="lg" fullWidth onPress={…}>Continuar</Button>
- *   <Button variant="gradient" icon={Bus} onPress={…}>Buscar Viaje</Button>
- *   <Button variant="dangerSoft" onPress={…}>Cancelar Reserva</Button>
+ *   <Button size="lg" fullWidth icon={Ticket} onPress={…}>Buscar viaje</Button>   // primary
+ *   <Button variant="secondary" size="md" onPress={…}>Ver detalle</Button>
+ *   <Button variant="dangerGhost" onPress={pedirConfirmacion}>Cancelar reserva</Button>
+ *   <Button variant="danger" onPress={cancelar}>Cancelar reserva</Button>          // solo en la confirmación
+ *
+ * Reglas (§2.3, D1): la acción principal es amarilla con texto `ink` (una por
+ * pantalla; `lg` en pantalla y `FloatingBar`, `md` en tarjetas y vacíos).
+ * `danger` (relleno `dangerText` + blanco) solo confirma; `dangerGhost` abre la
+ * confirmación. Deshabilitado = relleno `surfaceDark` + texto `mutedForeground`,
+ * sin opacidad. Etiqueta ≤ 3 palabras.
  */
 import React from 'react';
 import { ActivityIndicator, StyleSheet, View, ViewStyle } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import type { IconProps } from 'phosphor-react-native';
 import { PressableScale } from '../PressableScale';
 import { Text } from './Text';
-import {
-  Colors,
-  Gradients,
-  Motion,
-  Radius,
-  Shadows,
-  Sizes,
-  Spacing,
-  type FontSizeToken,
-} from '@/src/theme';
+import { Colors, Motion, Radius, Sizes, Spacing, type FontSizeToken } from '@/src/theme';
 
 export type ButtonVariant =
-  | 'accent'
   | 'primary'
-  | 'gradient'
   | 'secondary'
   | 'outline'
   | 'ghost'
   | 'danger'
+  | 'dangerGhost'
+  /** @deprecated D25 → `primary` */
+  | 'accent'
+  /** @deprecated D25 → `primary` (texto blanco sobre amarillo→coral no llega a AA) */
+  | 'gradient'
+  /** @deprecated D25 → `dangerGhost` */
   | 'dangerSoft';
 
 export type ButtonSize = 'sm' | 'md' | 'lg';
@@ -43,6 +44,7 @@ type PhosphorIcon = React.ComponentType<IconProps>;
 export interface ButtonProps {
   children: string;
   onPress?: () => void;
+  /** Por defecto `primary`. */
   variant?: ButtonVariant;
   size?: ButtonSize;
   /** Leading icon */
@@ -53,40 +55,52 @@ export interface ButtonProps {
   disabled?: boolean;
   fullWidth?: boolean;
   haptic?: boolean;
-  /** Adds a coloured glow — reserve it for the single primary action on screen */
+  /** @deprecated D25: ya no hace nada (la sombra de color se retiró). */
   glow?: boolean;
   style?: ViewStyle | ViewStyle[];
   accessibilityLabel?: string;
 }
 
+type VarianteReal = 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger' | 'dangerGhost';
+
+/** Las variantes retiradas se pintan como su sustituta (D25). */
+const ALIAS: Record<ButtonVariant, VarianteReal> = {
+  primary: 'primary',
+  secondary: 'secondary',
+  outline: 'outline',
+  ghost: 'ghost',
+  danger: 'danger',
+  dangerGhost: 'dangerGhost',
+  accent: 'primary',
+  gradient: 'primary',
+  dangerSoft: 'dangerGhost',
+};
+
 interface VariantSpec {
   background: string;
   foreground: string;
   border?: string;
-  gradient?: readonly [string, string, ...string[]];
 }
 
-const VARIANTS: Record<ButtonVariant, VariantSpec> = {
-  accent: { background: Colors.accent, foreground: Colors.accentForeground },
+const VARIANTS: Record<VarianteReal, VariantSpec> = {
+  // Amarillo + tinta: 10,5:1.
   primary: { background: Colors.primary, foreground: Colors.primaryForeground },
-  gradient: {
-    background: Colors.transparent,
-    foreground: Colors.white,
-    gradient: Gradients.warm,
-  },
   secondary: { background: Colors.surface, foreground: Colors.foreground },
   outline: {
-    background: Colors.white,
+    background: Colors.background,
     foreground: Colors.foreground,
-    border: Colors.border,
+    border: Colors.borderStrong,
   },
   ghost: { background: Colors.transparent, foreground: Colors.foreground },
-  danger: { background: Colors.destructive, foreground: Colors.white },
-  dangerSoft: {
-    background: Colors.destructiveSoft,
-    foreground: Colors.destructive,
-    border: Colors.destructiveBorder,
-  },
+  // Blanco sobre rojo oscuro: 6,5:1 (SY-24).
+  danger: { background: Colors.dangerText, foreground: Colors.white },
+  dangerGhost: { background: Colors.transparent, foreground: Colors.dangerText },
+};
+
+/** Deshabilitado: el mismo para todas las variantes que tienen relleno. */
+const DISABLED: VariantSpec = {
+  background: Colors.surfaceDark,
+  foreground: Colors.mutedForeground,
 };
 
 const SIZES: Record<ButtonSize, { height: number; paddingX: number; text: FontSizeToken; icon: number }> = {
@@ -98,7 +112,7 @@ const SIZES: Record<ButtonSize, { height: number; paddingX: number; text: FontSi
 export function Button({
   children,
   onPress,
-  variant = 'accent',
+  variant = 'primary',
   size = 'lg',
   icon: Icon,
   iconRight: IconRight,
@@ -106,68 +120,57 @@ export function Button({
   disabled = false,
   fullWidth = false,
   haptic = true,
-  glow = false,
   style,
   accessibilityLabel,
 }: ButtonProps) {
-  const spec = VARIANTS[variant];
+  const real = ALIAS[variant];
+  const base = VARIANTS[real];
   const dims = SIZES[size];
   const isInert = disabled || loading;
+  // Mientras carga se conserva el color (la acción está en curso, no prohibida).
+  const sinRelleno = real === 'ghost' || real === 'dangerGhost';
+  const spec: VariantSpec = disabled
+    ? sinRelleno
+      ? { ...base, foreground: Colors.mutedForeground }
+      : DISABLED
+    : base;
 
   const shell: ViewStyle = {
     height: dims.height,
     paddingHorizontal: dims.paddingX,
     borderRadius: Radius.full,
-    backgroundColor: spec.gradient ? Colors.transparent : spec.background,
+    backgroundColor: spec.background,
     borderWidth: spec.border ? Sizes.hairline : 0,
     borderColor: spec.border,
     width: fullWidth ? '100%' : undefined,
-    // The disabled treatment is uniform — `PressableScale` dims the whole
-    // control — rather than a bespoke translucent fill per button.
   };
-
-  const content = (
-    <>
-      {loading ? (
-        <ActivityIndicator size="small" color={spec.foreground} />
-      ) : (
-        <>
-          {Icon && <Icon size={dims.icon} color={spec.foreground} weight="bold" />}
-          <Text variant="button" size={dims.text} color={spec.foreground} compact>
-            {children}
-          </Text>
-          {IconRight && <IconRight size={dims.icon} color={spec.foreground} weight="bold" />}
-        </>
-      )}
-    </>
-  );
 
   return (
     <PressableScale
       onPress={onPress}
       disabled={isInert}
+      dimWhenDisabled={false}
       haptic={haptic && !isInert}
       hapticType="medium"
       scaleValue={Motion.press.button}
-      style={[
-        s.shell,
-        shell,
-        glow && !isInert ? Shadows.glow(spec.gradient ? Colors.secondary : spec.background) : null,
-        ...(Array.isArray(style) ? style : [style]),
-      ]}
+      style={[s.shell, shell, ...(Array.isArray(style) ? style : [style])]}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? children}
       accessibilityState={{ disabled: isInert, busy: loading }}
     >
-      {spec.gradient ? (
-        <LinearGradient
-          colors={[...spec.gradient]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 0 }}
-          style={[StyleSheet.absoluteFill, { borderRadius: Radius.full }]}
-        />
-      ) : null}
-      <View style={s.row}>{content}</View>
+      <View style={s.row}>
+        {loading ? (
+          <ActivityIndicator size="small" color={spec.foreground} />
+        ) : (
+          <>
+            {Icon && <Icon size={dims.icon} color={spec.foreground} weight="bold" />}
+            <Text variant="button" size={dims.text} color={spec.foreground} compact>
+              {children}
+            </Text>
+            {IconRight && <IconRight size={dims.icon} color={spec.foreground} weight="bold" />}
+          </>
+        )}
+      </View>
     </PressableScale>
   );
 }
@@ -182,6 +185,6 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: Spacing.sm + 2,
+    gap: Spacing.sm,
   },
 });

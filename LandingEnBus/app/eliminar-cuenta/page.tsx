@@ -76,7 +76,7 @@ export default function EliminarCuentaPage() {
         </p>
         <p className="text-sm text-muted-foreground">
           Más detalles en la{" "}
-          <a href={RUTAS_LEGALES.privacidad} className="font-semibold text-foreground underline underline-offset-4">
+          <a href={RUTAS_LEGALES.privacidad} className="font-medium text-info-text underline underline-offset-4">
             Política de privacidad
           </a>
           .

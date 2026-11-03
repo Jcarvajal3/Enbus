@@ -10,7 +10,7 @@
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View, ViewStyle } from 'react-native';
-import { SafeAreaView, type Edge } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets, type Edge } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
   ArrowClockwise,
@@ -70,7 +70,8 @@ export function scrollContent({
   const base = tabbed ? Layout.scrollBottomInset : Layout.scrollBottomInsetPlain;
   const withAction = tabbed
     ? Layout.floatingBarBottom + Sizes.control.lg + Spacing.lg
-    : Sizes.control.lg + Spacing['4xl'];
+    : // botón + márgenes de la barra + la línea de resumen (si la hay)
+      Sizes.control.lg + Spacing['4xl'] + Spacing['3xl'];
 
   return {
     paddingHorizontal: horizontal ? Layout.screenPadding : 0,
@@ -83,18 +84,25 @@ export function scrollContent({
 
 /**
  * Pinned bottom action area. On tabbed screens it floats above the tab bar; on
- * stacked screens it sits on the bottom edge with a fade so content scrolling
- * underneath doesn't collide with the button.
+ * stacked screens it sits on the bottom edge (over the safe area) with a fade so
+ * content scrolling underneath doesn't collide with the button.
+ *
+ * `resumen`: una línea sobre el botón con lo elegido en el paso
+ * ("Asiento 6 · Bs 17.822,11"), §2.1 regla 6.
  */
 export function FloatingBar({
   children,
   tabbed = false,
   fade = true,
+  resumen,
 }: {
   children: React.ReactNode;
   tabbed?: boolean;
   fade?: boolean;
+  /** Una línea de resumen encima de la acción */
+  resumen?: string | null;
 }) {
+  const insets = useSafeAreaInsets();
   return (
     <View
       pointerEvents="box-none"
@@ -103,14 +111,37 @@ export function FloatingBar({
       {fade && !tabbed && (
         <LinearGradient
           colors={[...Gradients.fadeToBackground]}
+          locations={FADE_LOCATIONS}
           style={s.floatingFade}
           pointerEvents="none"
         />
       )}
-      <View style={[s.floatingInner, !tabbed && s.floatingInnerPlain]}>{children}</View>
+      <View
+        style={[
+          s.floatingInner,
+          !tabbed && s.floatingInnerPlain,
+          !tabbed && { paddingBottom: Spacing['2xl'] + insets.bottom },
+        ]}
+      >
+        {resumen ? (
+          <Text
+            variant="label"
+            align="center"
+            numberOfLines={1}
+            style={s.floatingResumen}
+            accessibilityLiveRegion="polite"
+          >
+            {resumen}
+          </Text>
+        ) : null}
+        {children}
+      </View>
     </View>
   );
 }
+
+/** El degradado se vuelve opaco antes del texto del resumen y del botón. */
+const FADE_LOCATIONS = [0, 0.3, 0.45] as const;
 
 // ─── Empty state ─────────────────────────────────────────────────────────────
 
@@ -151,7 +182,7 @@ export function EmptyState({
       ) : null}
       {action ? (
         <View style={s.emptyAction}>
-          <Button size="md" variant={action.variant ?? 'secondary'} {...action} />
+          <Button size="md" {...action} variant={action.variant ?? 'primary'} />
         </View>
       ) : null}
     </View>
@@ -299,14 +330,14 @@ export function StaleBanner({
 // ─── Loading state ───────────────────────────────────────────────────────────
 
 /**
- * Centred loading block. Screens used to alternate between `<Spinner />`,
- * `<ActivityIndicator color={primary}>` and `<ActivityIndicator color={accent}>`
- * for the same wait; this is the one spelling.
+ * Centred loading block.
+ * @deprecated D25 (AU-49): una pantalla espera con `ScreenSkeleton` (la forma de
+ * lo que viene); el spinner solo va dentro de los botones.
  */
 export function LoadingState({ label, compact }: { label?: string; compact?: boolean }) {
   return (
     <View style={[s.loading, compact && s.loadingCompact]} accessibilityRole="progressbar">
-      <ActivityIndicator size="large" color={Colors.accent} />
+      <ActivityIndicator size="large" color={Colors.mutedForeground} />
       {label ? (
         <Text variant="secondary" color="muted" align="center" style={s.loadingLabel}>
           {label}
@@ -344,14 +375,16 @@ const s = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    height: Spacing['5xl'] * 2,
+    top: -Spacing['3xl'],
   },
   floatingInner: {
     paddingHorizontal: Layout.screenPadding,
   },
   floatingInnerPlain: {
     paddingTop: Spacing.lg,
-    paddingBottom: Spacing['2xl'],
+  },
+  floatingResumen: {
+    marginBottom: Spacing.sm,
   },
   empty: {
     alignItems: 'center',
@@ -391,7 +424,7 @@ const s = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.sm,
     paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.sm + 2,
+    paddingVertical: Spacing.sm,
     borderRadius: Radius.lg,
     backgroundColor: Colors.warningLight,
     marginBottom: Spacing.md,

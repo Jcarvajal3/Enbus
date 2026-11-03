@@ -10,7 +10,7 @@ const roobert = localFont({
   display: "swap",
 })
 
-const TITULO = "EnBus — Boletos de bus y encomiendas en Venezuela"
+const TITULO = "Boletos de bus y encomiendas en Venezuela · EnBus"
 const DESCRIPCION =
   "Compra tu pasaje de bus o envía tu encomienda por toda Venezuela con cooperativas verificadas. Paga con Pago Móvil o transferencia y sigue tu viaje o tu envío."
 

@@ -10,6 +10,7 @@ import { createClient } from "@/lib/supabase/client";
 import { formatNumeroVE, fechaTasaCorta } from "@/lib/dinero";
 import { esTasaDesactualizada, filaATasaBCV, type TasaBCV } from "@/lib/types/pagos";
 import { cn } from "@/lib/utils";
+import Link from "next/link";
 
 // En Server Components importa `esTasaDesactualizada` desde lib/types/pagos
 // (este módulo es "use client" y sus funciones no se pueden llamar en el servidor).
@@ -58,16 +59,22 @@ export function useTasaBCV(): TasaBCV | null {
   return useContext(TasaBCVContext);
 }
 
-/** Chip con la tasa del día: "BCV 02/10: 100,81 Bs/USD" (tono aviso si está desactualizada). */
-export function TasaBCVChip({ className }: { className?: string }) {
+/**
+ * Chip con la tasa del día en la barra superior: "BCV 02/10: 100,81 Bs/USD" y, en
+ * teléfono, "BCV 100,81" (el texto completo queda en el `title`). Ámbar si está
+ * desactualizada. Con `href` (admin) enlaza a donde se carga la tasa.
+ */
+export function TasaBCVChip({ className, href }: { className?: string; href?: string }) {
   const tasa = useTasaBCV();
   const desactualizada = esTasaDesactualizada(tasa);
+  const aviso = !tasa || desactualizada;
 
   const texto = !tasa
     ? "Sin tasa BCV registrada"
     : desactualizada
       ? `Tasa BCV del ${fechaTasaCorta(tasa.fecha)} (sin actualizar)`
       : `BCV ${fechaTasaCorta(tasa.fecha)}: ${formatNumeroVE(tasa.tasa)} Bs/USD`;
+  const corto = !tasa ? "Sin tasa BCV" : `BCV ${formatNumeroVE(tasa.tasa)}`;
 
   const ayuda = !tasa
     ? "No se pueden cobrar montos en bolívares hasta que el administrador de EnBus cargue la tasa BCV."
@@ -75,24 +82,36 @@ export function TasaBCVChip({ className }: { className?: string }) {
       ? `Se está usando la tasa del ${fechaTasaCorta(tasa.fecha)}: ${formatNumeroVE(tasa.tasa)} Bs/USD. Avísale al administrador de EnBus.`
       : `Tasa oficial BCV del ${fechaTasaCorta(tasa.fecha)}. Los precios en USD se cobran en bolívares a esta tasa.`;
 
+  const clases = cn(
+    "inline-flex h-7 min-w-0 shrink-0 items-center gap-1.5 rounded-full border px-2.5 text-xs font-medium tabular-nums whitespace-nowrap",
+    aviso ? "border-warning/40 bg-warning-light text-warning-deep" : "border-border bg-muted/50 text-muted-foreground",
+    href &&
+      cn(
+        "transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+        aviso ? "hover:border-warning/70" : "hover:bg-muted hover:text-foreground"
+      ),
+    className
+  );
+
+  const contenido = (
+    <>
+      <span aria-hidden className={cn("size-1.5 shrink-0 rounded-full", aviso ? "bg-warning" : "bg-success")} />
+      <span aria-hidden className="sm:hidden">{corto}</span>
+      <span aria-hidden className="hidden sm:inline">{texto}</span>
+      <span className="sr-only">{`${texto}. ${ayuda}`}</span>
+    </>
+  );
+
+  if (href) {
+    return (
+      <Link href={href} title={ayuda} className={clases}>
+        {contenido}
+      </Link>
+    );
+  }
   return (
-    <span
-      role="status"
-      title={ayuda}
-      className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium tabular-nums whitespace-nowrap",
-        desactualizada
-          ? "border-warning/40 bg-warning-light text-warning-deep"
-          : "border-border bg-muted/50 text-muted-foreground",
-        className
-      )}
-    >
-      <span
-        aria-hidden
-        className={cn("size-1.5 rounded-full", desactualizada ? "bg-warning" : "bg-success")}
-      />
-      {texto}
-      <span className="sr-only">. {ayuda}</span>
+    <span role="status" title={ayuda} className={clases}>
+      {contenido}
     </span>
   );
 }

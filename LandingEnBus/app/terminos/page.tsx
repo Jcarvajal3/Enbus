@@ -131,7 +131,7 @@ export default function TerminosPage() {
       <SeccionLegal id="datos" titulo="Tus datos">
         <p>
           Lo que guardamos y para qué está en la{" "}
-          <a href={RUTAS_LEGALES.privacidad} className="font-semibold underline underline-offset-4">
+          <a href={RUTAS_LEGALES.privacidad} className="font-medium text-info-text underline underline-offset-4">
             Política de privacidad
           </a>
           .

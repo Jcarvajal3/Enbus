@@ -7,7 +7,9 @@
  *  - API / Supabase → Network-First (no se guardan datos sensibles en caché)
  */
 
-const CACHE_VERSION = "v2";
+// Subir la versión cuando cambien iconos u otros estáticos sin hash (Cache-First):
+// al activarse, el SW borra las cachés anteriores. v3 = marca EB (fase 5).
+const CACHE_VERSION = "v3";
 const CACHE_NAME = `enbus-panel-${CACHE_VERSION}`;
 
 /** Shell mínimo que garantiza que la app carga aunque no haya red */

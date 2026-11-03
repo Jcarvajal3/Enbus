@@ -13,6 +13,8 @@ export type UserProfile = {
   cooperativa_motivo_estado?: string | null;
   /** Cuándo cambió el estado por última vez (ISO). Fase 3. */
   cooperativa_estado_cambiado_at?: string | null;
+  /** Sucursal desde la que opera el empleado (null = sin sucursal asignada). Fase 5, PN-11. */
+  sucursal_nombre?: string | null;
 };
 
 type UserContextType = {

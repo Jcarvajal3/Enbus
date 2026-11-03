@@ -5,14 +5,18 @@
  * fontWeight: '700', color: … }` blocks. A screen picks a *role* (`variant`)
  * and, when needed, overrides one axis (`size`, `weight`, `color`).
  *
- *   <Text variant="title">Mis Viajes</Text>
- *   <Text variant="secondary">Gestiona y consulta tus pasajes</Text>
- *   <Text variant="overline" color="muted">Total a pagar</Text>
+ *   <Text variant="title">Mis boletos</Text>
+ *   <Text variant="secondary" color="muted">Mérida → Caracas</Text>
+ *   <Text variant="caption" color="muted">Total a pagar</Text>
+ *   <TextLink onPress={…}>¿Olvidaste tu contraseña?</TextLink>
  */
 import React, { useMemo } from 'react';
 import { Text as RNText, StyleSheet, TextProps as RNTextProps, TextStyle } from 'react-native';
+import { PressableScale } from '../PressableScale';
 import {
   Colors,
+  Motion,
+  Sizes,
   Typography,
   type FontSizeToken,
   type FontWeightToken,
@@ -22,35 +26,42 @@ import {
 type TrackingToken = keyof typeof Typography.tracking;
 
 /**
- * Text colours only. The vivid surface colours (`primary`, `success`,
- * `warning`) fail WCAG contrast as text on white (1.6–2.3:1), so they are not
- * tokens here: use the `*Text` variants (all ≥ 4.5:1 on white/surface).
+ * Text colours only. The vivid surface colours (`primary`, `secondary`,
+ * `accent`, `success`, `warning`) fail WCAG contrast as text on white
+ * (1.6–3.7:1), so they are not tokens here: use the `*Text` variants and
+ * `link` (all ≥ 4.5:1 on white/surface).
  */
 export type TextColorToken =
   | 'foreground'
   | 'muted'
   | 'primaryText'
-  | 'secondary'
-  | 'accent'
   | 'successText'
   | 'warningText'
   | 'infoText'
-  | 'danger'
+  | 'link'
   | 'dangerText'
-  | 'inverse';
+  | 'inverse'
+  /** @deprecated D25 → `link` (el azul vivo no llega a 4,5:1 como texto) */
+  | 'accent'
+  /** @deprecated D25 → `foreground` (el coral no llega a 4,5:1 como texto) */
+  | 'secondary'
+  /** @deprecated D25 → `dangerText` */
+  | 'danger';
 
 const COLOR_MAP: Record<TextColorToken, string> = {
   foreground: Colors.foreground,
   muted: Colors.mutedForeground,
   primaryText: Colors.primaryText,
-  secondary: Colors.secondary,
-  accent: Colors.accent,
   successText: Colors.successText,
   warningText: Colors.warningText,
   infoText: Colors.infoText,
-  danger: Colors.destructive,
+  link: Colors.link,
   dangerText: Colors.dangerText,
   inverse: Colors.white,
+  // Alias D25: ya se pintan con el color legible.
+  accent: Colors.link,
+  secondary: Colors.foreground,
+  danger: Colors.dangerText,
 };
 
 export interface TextProps extends RNTextProps {
@@ -110,6 +121,39 @@ export function Text({
 
 Text.displayName = 'Text';
 
+// ─── Text link ───────────────────────────────────────────────────────────────
+
+/**
+ * Enlace de texto ("¿Olvidaste tu contraseña?", "Copiar", "Ver detalle"):
+ * `link` semibold y subrayado, con área táctil de 44 pt aunque el texto sea
+ * pequeño. Es la única forma de pintar un enlace (D1).
+ */
+export function TextLink({
+  children,
+  onPress,
+  accessibilityLabel,
+}: {
+  children: string;
+  onPress(): void;
+  accessibilityLabel?: string;
+}) {
+  return (
+    <PressableScale
+      onPress={onPress}
+      haptic
+      hapticType="selection"
+      scaleValue={Motion.press.chip}
+      style={textStyles.linkBox}
+      accessibilityRole="link"
+      accessibilityLabel={accessibilityLabel ?? children}
+    >
+      <Text variant="label" color="link" style={textStyles.link} compact>
+        {children}
+      </Text>
+    </PressableScale>
+  );
+}
+
 /**
  * Escape hatch for places that need the raw font declaration inside a
  * StyleSheet (e.g. `TextInput`), without repeating the family string.
@@ -126,4 +170,10 @@ export const fontStyle = (
 export const textStyles = StyleSheet.create({
   /** Restores the family on third-party components that render raw strings */
   inherit: { fontFamily: Typography.family },
+  link: { textDecorationLine: 'underline' },
+  linkBox: {
+    minHeight: Sizes.touchTarget,
+    justifyContent: 'center',
+    alignSelf: 'flex-start',
+  },
 });

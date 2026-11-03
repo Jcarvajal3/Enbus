@@ -17,7 +17,7 @@ function Spinner({ className, size = "md", ...props }: SpinnerProps) {
   return (
     <SpinnerIcon
       role="status"
-      aria-label="Loading"
+      aria-label="Cargando"
       className={cn("motion-safe:animate-spin", sizeClass, className)}
       size={iconSize}
       {...props}

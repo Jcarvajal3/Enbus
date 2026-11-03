@@ -1,5 +1,5 @@
 // ─── Formatos venezolanos (fuente única) ─────────────────────────────────────
-// Cédula, teléfono, RIF, ciudades, fechas en hora de Venezuela y duraciones.
+// Cédula, teléfono, RIF, contraseña, ciudades, fechas en hora de Venezuela y duraciones.
 // Espejo de `normalizar_cedula`, `normalizar_telefono` y `normalizar_localidad`
 // (SQL, migración 20260719000001): lo que aceptan la app, el panel y la landing es
 // lo que acepta la base. Los marcadores `PENDIENTE-<id>` (perfiles creados con
@@ -152,6 +152,15 @@ export function isValidRif(input: string | null | undefined): boolean {
   return normalizeRif(input) !== null;
 }
 
+// ─── Contraseña ──────────────────────────────────────────────────────────────
+// Misma regla en la app, el panel y Supabase Auth (`minimum_password_length`).
+
+export const CLAVE_MINIMO = 8;
+/** Ayuda fija bajo el campo (nunca en el marcador). */
+export const CLAVE_AYUDA = "Mínimo 8 caracteres.";
+/** Error cuando la contraseña es más corta que `CLAVE_MINIMO`. */
+export const CLAVE_ERROR = "Usa al menos 8 caracteres.";
+
 // ─── Ciudades ────────────────────────────────────────────────────────────────
 
 const TILDES: Record<string, string> = {
@@ -216,9 +225,14 @@ const NOMBRES_CIUDAD: Record<string, string> = {
   "santa teresa del tuy": "Santa Teresa del Tuy",
 };
 
+/** Partículas que van en minúscula dentro de un nombre ("Valle de la Pascua"), salvo al inicio. */
+const PARTICULAS_CIUDAD: Record<string, true> = { de: true, del: true, la: true, las: true, los: true, y: true };
+
 /**
  * Nombre legible de una ciudad o estado: "merida" → "Mérida", "puerto_la_cruz" → "Puerto La Cruz",
  * "san_juan" → "San Juan de los Morros", "VALENCIA" → "Valencia"; '' si está vacía.
+ * Sin nombre conocido: cada palabra con mayúscula inicial salvo de/del/la/las/los/y
+ * ("SAN JOSE DE GUANIPA" → "San Jose de Guanipa"; "la_victoria" → "La Victoria").
  */
 export function formatCiudad(v: string | null | undefined): string {
   const clave = normalizarCiudad(v);
@@ -230,7 +244,11 @@ export function formatCiudad(v: string | null | undefined): string {
     .replace(/\s+/g, " ")
     .trim()
     .toLowerCase()
-    .replace(/(^|\s)([a-zà-ÿ])/g, (_m, espacio: string, letra: string) => espacio + letra.toUpperCase());
+    .split(" ")
+    .map((palabra, i) =>
+      i > 0 && PARTICULAS_CIUDAD[palabra] ? palabra : palabra.charAt(0).toUpperCase() + palabra.slice(1)
+    )
+    .join(" ");
 }
 
 /** "puerto_la_cruz → valencia" → "Puerto La Cruz → Valencia" */
@@ -374,11 +392,22 @@ export function formatHoraVE(valor: string | number | Date): string {
   return formatterHora().format(d);
 }
 
-/** Fecha y hora legibles en Venezuela, p. ej. "03/10/2026, 2:30 p. m.". */
+/** Separador entre fecha y hora en todo EnBus: "03/11/2026 · 2:30 p. m.". */
+const SEPARADOR_FECHA_HORA = " · ";
+
+/** Fecha y hora legibles en Venezuela (tablas del panel), p. ej. "03/11/2026 · 2:30 p. m.". */
 export function formatFechaHoraVE(valor: string | number | Date): string {
   const d = aDate(valor);
   if (Number.isNaN(d.getTime())) return "";
-  return `${formatterFecha().format(d)}, ${formatterHora().format(d)}`;
+  return `${formatterFecha().format(d)}${SEPARADOR_FECHA_HORA}${formatterHora().format(d)}`;
+}
+
+/** Día y mes con hora (tablas del panel): "03/11 · 2:30 p. m.". Inválido → "". */
+export function formatFechaHoraCortaVE(valor: string | number | Date): string {
+  const d = aDate(valor);
+  if (Number.isNaN(d.getTime())) return "";
+  const [, m, dd] = fechaVE(d).split("-");
+  return `${dd}/${m}${SEPARADOR_FECHA_HORA}${formatterHora().format(d)}`;
 }
 
 /**
@@ -391,6 +420,40 @@ export function formatFechaCalendario(yyyyMmDd: string): string {
 }
 
 const DIAS_CORTOS = ["dom.", "lun.", "mar.", "mié.", "jue.", "vie.", "sáb."];
+const MESES_CORTOS = ["ene.", "feb.", "mar.", "abr.", "may.", "jun.", "jul.", "ago.", "sept.", "oct.", "nov.", "dic."];
+
+/** Día de la semana ("mar.") de una fecha 'YYYY-MM-DD'. */
+function diaSemanaCorto(fecha: string): string {
+  const [y, m, d] = fecha.split("-").map(Number);
+  return DIAS_CORTOS[new Date(Date.UTC(y, m - 1, d)).getUTCDay()];
+}
+
+/**
+ * Día para el pasajero (app y landing): "mar. 3 nov."; con año si no es el actual:
+ * "mar. 3 nov. 2025". Acepta ISO, timestamp, Date o 'YYYY-MM-DD' (sin correr de día).
+ * Hecho a mano (sin Intl de fecha) para que Hermes, Node y el navegador coincidan. Inválido → "".
+ */
+export function formatDiaVE(valor: string | number | Date, ahora: Date = new Date()): string {
+  const d = aDate(valor);
+  if (Number.isNaN(d.getTime())) return "";
+  const dia = fechaVE(d);
+  const [y, m, dd] = dia.split("-");
+  const base = `${diaSemanaCorto(dia)} ${Number(dd)} ${MESES_CORTOS[Number(m) - 1]}`;
+  return y === fechaVE(ahora).slice(0, 4) ? base : `${base} ${y}`;
+}
+
+/** Día y hora para el pasajero: "mar. 3 nov. · 2:30 p. m.". Inválido → "". */
+export function formatDiaHoraVE(valor: string | number | Date, ahora: Date = new Date()): string {
+  const d = aDate(valor);
+  if (Number.isNaN(d.getTime())) return "";
+  return `${formatDiaVE(d, ahora)}${SEPARADOR_FECHA_HORA}${formatHoraVE(d)}`;
+}
+
+/** Primera letra en mayúscula para empezar una frase: "hoy" → "Hoy", "hace 5 min" → "Hace 5 min". */
+export function capitalizarInicio(s: string): string {
+  const texto = s ?? "";
+  return texto.charAt(0).toUpperCase() + texto.slice(1);
+}
 
 /**
  * Tiempo relativo para listas: "hace un momento", "hace 5 min", "hace 2 h" (mismo día),
@@ -409,7 +472,7 @@ export function formatHaceTiempo(v: string | number | Date, ahora: Date = new Da
     if (dia === sumarDiasVE(hoy, -1)) return `ayer a las ${formatHoraVE(d)}`;
   }
   const [y, m, dd] = dia.split("-");
-  const semana = DIAS_CORTOS[new Date(Date.UTC(Number(y), Number(m) - 1, Number(dd))).getUTCDay()];
+  const semana = diaSemanaCorto(dia);
   return y === hoy.slice(0, 4) ? `${semana} ${dd}/${m}` : `${semana} ${dd}/${m}/${y}`;
 }
 

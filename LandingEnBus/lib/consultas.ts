@@ -7,7 +7,7 @@
 import type { PostgrestError } from "@supabase/supabase-js";
 import { obtenerSupabaseAdmin } from "@/lib/supabase";
 import type { TasaRef } from "@/lib/dinero";
-import { nombreLocalidad } from "@/lib/estados";
+import { formatCiudad } from "@/lib/ve.generated";
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 
@@ -70,7 +70,7 @@ export interface Estadisticas {
 
 /**
  * Origen con los destinos a los que hay al menos una ruta activa. Son los valores
- * guardados en `rutas` ("puerto_la_cruz"); para mostrarlos, `nombreLocalidad()`.
+ * guardados en `rutas` ("puerto_la_cruz"); para mostrarlos, `formatCiudad()`.
  */
 export interface OrigenConDestinos {
   origen: string;
@@ -323,7 +323,7 @@ export async function origenesConDestinos(): Promise<OrigenConDestinos[]> {
     }
 
     // Se ordena por el nombre que se muestra ("Mérida"), no por el valor guardado ("merida").
-    const orden = (a: string, b: string) => nombreLocalidad(a).localeCompare(nombreLocalidad(b), "es");
+    const orden = (a: string, b: string) => formatCiudad(a).localeCompare(formatCiudad(b), "es");
     return [...mapa.values()]
       .map((e) => ({ origen: e.origen, destinos: [...e.destinos.values()].sort(orden) }))
       .sort((a, b) => orden(a.origen, b.origen));

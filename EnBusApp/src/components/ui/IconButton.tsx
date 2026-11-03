@@ -71,7 +71,7 @@ export function IconButton({
 
       {badgeCount > 0 && (
         <View style={s.badge}>
-          <Text variant="caption" size="micro" weight="heavy" color="inverse" compact>
+          <Text variant="caption" size="micro" weight="heavy" color="foreground" compact>
             {badgeCount > 9 ? '9+' : String(badgeCount)}
           </Text>
         </View>
@@ -87,15 +87,16 @@ const s = StyleSheet.create({
     justifyContent: 'center',
     position: 'relative',
   },
+  // Mismo contador que la barra de pestañas: amarillo + tinta (≈ 13:1, AU-27).
   badge: {
     position: 'absolute',
     top: Spacing.xs,
     right: Spacing.xs,
-    minWidth: Spacing.lg + 2,
-    height: Spacing.lg + 2,
+    minWidth: Sizes.counter,
+    height: Sizes.counter,
     paddingHorizontal: Spacing.xs,
     borderRadius: Radius.full,
-    backgroundColor: Colors.secondary,
+    backgroundColor: Colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: Sizes.borderStrong,

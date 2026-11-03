@@ -1,4 +1,4 @@
-// ─── Cédula y teléfono venezolanos ───────────────────────────────────────────
+// ─── Cédula, teléfono y contraseña ───────────────────────────────────────────
 // La fuente es shared/ve.ts (copiada en ./ve.generated.ts por shared/generar.mjs).
 // Este módulo conserva los nombres de siempre para el panel. Espejo de
 // `normalizar_cedula` / `normalizar_telefono` (SQL): mismas reglas en la base, la
@@ -22,5 +22,8 @@ export {
   TELEFONO_PLACEHOLDER,
   CEDULA_ERROR,
   TELEFONO_ERROR,
+  CLAVE_MINIMO,
+  CLAVE_AYUDA,
+  CLAVE_ERROR,
 } from "./ve.generated";
 export type { LetraCedula } from "./ve.generated";

@@ -17,7 +17,7 @@ import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Text, type TextColorToken } from './Text';
 import { formatMoney, type MonedaPago, type TasaRef } from '@/src/utils/dinero';
 import { useTasaBCV } from '@/src/hooks/useTasaBCV';
-import { Spacing, type FontSizeToken, type TextVariant } from '@/src/theme';
+import { type FontSizeToken, type TextVariant } from '@/src/theme';
 
 export type MontoSize = 'lg' | 'md' | 'sm';
 
@@ -49,7 +49,8 @@ const PRINCIPAL: Record<MontoSize, { variant: TextVariant; size?: FontSizeToken 
 const SECUNDARIO: Record<MontoSize, { variant: TextVariant; size?: FontSizeToken }> = {
   lg: { variant: 'secondary' },
   md: { variant: 'caption' },
-  sm: { variant: 'caption', size: 'micro' },
+  // 11 pt: la referencia se lee también en las listas (SY-31). `micro` es solo para contadores.
+  sm: { variant: 'caption' },
 };
 
 const ALINEACION = { left: 'flex-start', center: 'center', right: 'flex-end' } as const;
@@ -101,7 +102,5 @@ function MontoBase({
 }
 
 const styles = StyleSheet.create({
-  base: {
-    gap: Spacing.xs / 2,
-  },
+  base: {},
 });

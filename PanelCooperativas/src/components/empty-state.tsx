@@ -1,24 +1,41 @@
-import { ReactNode } from "react";
-import { Icon } from "@phosphor-icons/react";
+import type { ReactNode } from "react";
+import type { Icon } from "@phosphor-icons/react";
+import { cn } from "@/lib/utils";
+
+// ─── Estado vacío (§2.3, PU-15, SY-26) ───────────────────────────────────────
+// Icono del dominio en peso regular, título sin punto final, una línea y una
+// acción. `compacto` para tarjetas, diálogos y tablas pequeñas (en una tabla,
+// mejor `FilaVacia`).
 
 interface EmptyStateProps {
   icon: Icon;
   title: string;
-  description: string;
+  description?: string;
   action?: ReactNode;
+  compacto?: boolean;
 }
 
-export function EmptyState({ icon: IconComponent, title, description, action }: EmptyStateProps) {
+export function EmptyState({ icon: IconComponent, title, description, action, compacto = false }: EmptyStateProps) {
   return (
-    <div className="flex flex-col items-center justify-center p-12 text-center motion-safe:animate-in motion-safe:fade-in-50">
-      <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted mb-4">
-        <IconComponent className="h-8 w-8 text-muted-foreground" weight="duotone" aria-hidden />
+    <div
+      className={cn(
+        "flex flex-col items-center justify-center text-center",
+        compacto ? "gap-3 p-6" : "gap-4 p-12"
+      )}
+    >
+      <div
+        className={cn(
+          "flex items-center justify-center rounded-full bg-muted",
+          compacto ? "size-10" : "size-16"
+        )}
+      >
+        <IconComponent className={cn("text-muted-foreground", compacto ? "size-5" : "size-8")} aria-hidden />
       </div>
-      <h3 className="text-lg font-medium">{title}</h3>
-      <p className="text-sm text-muted-foreground max-w-sm mt-1 mb-6">
-        {description}
-      </p>
-      {action && <div>{action}</div>}
+      <div className="flex max-w-sm flex-col gap-1">
+        <h3 className={cn("font-semibold text-foreground", compacto ? "text-sm" : "text-base")}>{title}</h3>
+        {description && <p className="text-sm text-muted-foreground">{description}</p>}
+      </div>
+      {action && <div className="flex flex-wrap items-center justify-center gap-2">{action}</div>}
     </div>
   );
 }

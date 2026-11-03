@@ -15,6 +15,10 @@
  * Con `bloqueado` (p. ej. mientras se envía el pago) ninguna vía de "atrás"
  * hace nada y el swipe de iOS queda desactivado.
  *
+ * La pregunta de salida es la hoja común (`useConfirm`, D3): "¿Salir sin
+ * terminar?" · "Salir sin guardar" / "Seguir editando" (SY-25). Sin pila
+ * (abierto por enlace) sale a Inicio con `volver`.
+ *
  * Uso:
  *   const { handleBack, allowLeave } = useWizardBack({ step, setStep, isDirty, bloqueado });
  *   <ScreenHeader onBack={handleBack} … />
@@ -24,9 +28,11 @@
  */
 
 import { useCallback, useEffect, useRef } from 'react';
-import { Alert, BackHandler } from 'react-native';
+import { BackHandler } from 'react-native';
 import { useFocusEffect, useNavigation, useRouter } from 'expo-router';
 import { usePreventRemove } from '@react-navigation/native';
+import { useConfirm } from '@/src/components/ui/ConfirmSheet';
+import { volver } from './useVolver';
 
 interface UseWizardBackOptions<S extends number> {
   /** Paso actual (empieza en 1). */
@@ -61,6 +67,7 @@ export function useWizardBack<S extends number>({
 }: UseWizardBackOptions<S>): UseWizardBack {
   const router = useRouter();
   const navigation = useNavigation();
+  const confirmar = useConfirm();
   const leavingRef = useRef(false);
   const bloqueadoRef = useRef(bloqueado);
   // Solo se toca `gestureEnabled` si este hook lo desactivó: así no pisa la
@@ -83,29 +90,25 @@ export function useWizardBack<S extends number>({
     setStep((step - 1) as S);
   }, [step, setStep]);
 
-  const confirmExit = useCallback((onExit: () => void) => {
-    Alert.alert(
-      '¿Salir sin terminar?',
-      'Perderás los datos que ingresaste.',
-      [
-        { text: 'Seguir editando', style: 'cancel' },
-        {
-          text: 'Salir',
-          style: 'destructive',
-          onPress: () => {
-            leavingRef.current = true;
-            onExit();
-          },
-        },
-      ],
-      { cancelable: true }
-    );
-  }, []);
+  const confirmExit = useCallback(
+    (onExit: () => void) => {
+      void confirmar({
+        titulo: '¿Salir sin terminar?',
+        mensaje: 'Perderás los datos que ingresaste.',
+        confirmar: 'Salir sin guardar',
+        salir: 'Seguir editando',
+      }).then((salir) => {
+        if (!salir) return;
+        leavingRef.current = true;
+        onExit();
+      });
+    },
+    [confirmar]
+  );
 
   const exit = useCallback(() => {
     leavingRef.current = true;
-    if (router.canGoBack()) router.back();
-    else router.replace('/(tabs)');
+    volver(router, '/(tabs)');
   }, [router]);
 
   const handleBack = useCallback(() => {

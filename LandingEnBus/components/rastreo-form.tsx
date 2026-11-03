@@ -5,6 +5,7 @@ import Form from "next/form"
 import { useRouter } from "next/navigation"
 import { MagnifyingGlass, Spinner, WarningCircle } from "@phosphor-icons/react"
 
+import { buttonVariants } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { CODIGO_EJEMPLO } from "@/lib/estados"
 
@@ -79,15 +80,17 @@ export function RastreoForm({ variante = "pagina", codigoInicial = "", className
           type="submit"
           aria-disabled={buscando || undefined}
           className={cn(
-            "inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-sm bg-foreground px-5 text-sm font-semibold text-background transition-colors hover:bg-foreground/90 aria-disabled:cursor-wait aria-disabled:opacity-80",
-            "outline-none focus-visible:ring-2 focus-visible:ring-foreground focus-visible:ring-offset-2",
+            // En el héroe (amarillo) el botón va en tinta; en el resto, el amarillo de la acción principal.
+            buttonVariants({ variant: enHero ? "contraste" : "default", size: "lg" }),
+            "aria-disabled:cursor-wait aria-disabled:opacity-80",
+            "focus-visible:ring-2 focus-visible:ring-foreground focus-visible:ring-offset-2",
             enHero ? "focus-visible:ring-offset-primary" : "focus-visible:ring-offset-background"
           )}
         >
           {buscando ? (
             <Spinner className="size-4 animate-spin" aria-hidden />
           ) : (
-            <MagnifyingGlass className="size-4" weight="bold" aria-hidden />
+            <MagnifyingGlass className="size-4" aria-hidden />
           )}
           {buscando ? "Buscando…" : "Rastrear"}
         </button>

@@ -25,18 +25,18 @@ export function PaginaLegal({ titulo, resumen, children }: PaginaLegalProps) {
       <main className="bg-muted/40 pt-24 pb-20 lg:pt-28">
         <article className="mx-auto flex max-w-3xl flex-col gap-8 px-4 sm:px-6">
           <header className="flex flex-col gap-3">
-            <h1 className="text-3xl font-bold tracking-tight text-foreground lg:text-4xl">{titulo}</h1>
+            <h1 className="text-3xl font-semibold tracking-tight text-foreground lg:text-4xl">{titulo}</h1>
             <p className="text-base leading-relaxed text-muted-foreground">{resumen}</p>
             <p className="text-sm text-muted-foreground">Última actualización: {LEGAL_ACTUALIZADO}</p>
             <p
               role="note"
-              className="flex items-start gap-2 rounded-sm border border-info/40 bg-info-light p-3 text-sm text-info-deep"
+              className="flex items-start gap-2 rounded-md border border-info/40 bg-info-light p-3 text-sm text-info-deep"
             >
               <Info className="mt-0.5 size-4 shrink-0" weight="fill" aria-hidden />
               Este texto está en revisión legal.
             </p>
           </header>
-          <div className="flex flex-col gap-8 rounded-sm border border-border bg-background p-5 text-base leading-relaxed text-foreground sm:p-8">
+          <div className="flex flex-col gap-8 rounded-md border border-border bg-card p-5 text-base leading-relaxed text-foreground sm:p-8">
             {children}
           </div>
         </article>
@@ -50,7 +50,7 @@ export function PaginaLegal({ titulo, resumen, children }: PaginaLegalProps) {
 export function SeccionLegal({ id, titulo, children }: { id: string; titulo: string; children: React.ReactNode }) {
   return (
     <section aria-labelledby={id} className="flex flex-col gap-3">
-      <h2 id={id} className="text-xl font-semibold tracking-tight text-foreground">
+      <h2 id={id} className="text-lg font-semibold tracking-tight text-foreground">
         {titulo}
       </h2>
       {children}
@@ -69,7 +69,7 @@ export function ListaLegal({ items }: { items: React.ReactNode[] }) {
   )
 }
 
-const ENLACE = "font-semibold text-foreground underline underline-offset-4"
+const ENLACE = "font-medium text-info-text underline underline-offset-4"
 
 /**
  * Canales de contacto configurados (WhatsApp y correo de soporte). Si no hay ninguno,

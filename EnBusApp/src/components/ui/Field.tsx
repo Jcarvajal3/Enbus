@@ -7,8 +7,12 @@
  * PaymentFlow, recuperar and boletos/[id]. Same job, five appearances.
  *
  * The rule encoded here: single-line inputs are pills, multiline inputs use the
- * large radius, the focused border is always the accent colour, and errors are
- * shown inline rather than only as a toast.
+ * large radius, the focused border is always `accentStrong`, and errors are
+ * shown inline (in `dangerText`) rather than only as a toast.
+ *
+ * Alineación (AU-09): etiqueta, texto del campo y ayuda/error empiezan en el
+ * mismo borde izquierdo (`Spacing.xl` dentro de la píldora). Borde en reposo
+ * `borderStrong` (≥ 3:1, AU-08). Marcador solo de formato: "Ej. 0414-1234567".
  *
  * Accesibilidad (APP-57): el `TextInput` lleva la etiqueta como
  * `accessibilityLabel` y la ayuda como `accessibilityHint` (TalkBack leía el
@@ -18,6 +22,7 @@
  */
 import React, { useState } from 'react';
 import {
+  Platform,
   StyleSheet,
   TextInput,
   TextInputProps,
@@ -35,7 +40,7 @@ import { CaretDown, Eye, EyeSlash, type IconProps } from 'phosphor-react-native'
 import * as Haptics from 'expo-haptics';
 import { PressableScale } from '../PressableScale';
 import { Text, fontStyle } from './Text';
-import { Colors, Motion, Opacity, Radius, Sizes, Spacing, alpha } from '@/src/theme';
+import { Colors, Motion, Opacity, Radius, Sizes, Spacing } from '@/src/theme';
 
 export type FieldTone = 'light' | 'sunken';
 
@@ -50,6 +55,11 @@ export interface FieldProps extends Omit<TextInputProps, 'style'> {
   /** `light` = white on a beige surface, `sunken` = beige on a white surface */
   tone?: FieldTone;
   containerStyle?: ViewStyle;
+  /**
+   * No pinta el mensaje bajo el campo (el error sigue marcando el borde): para
+   * compuestos como `CedulaField`, que lo ponen a todo el ancho.
+   */
+  sinMensaje?: boolean;
 }
 
 const BACKGROUNDS: Record<FieldTone, string> = {
@@ -62,17 +72,17 @@ const BACKGROUNDS: Record<FieldTone, string> = {
  * ve el control (WCAG 1.4.11, ≥ 3:1). `sunken` ya se distingue por el relleno.
  */
 const RESTING_BORDERS: Record<FieldTone, string> = {
-  light: alpha(Colors.foreground, 0.45),
+  light: Colors.borderStrong,
   sunken: Colors.transparent,
 };
 
 /** Error visible y anunciado en cuanto aparece; si no, la ayuda. */
-function FieldMessage({ error, helper }: { error?: string; helper?: string }) {
+export function FieldMessage({ error, helper }: { error?: string | null; helper?: string | null }) {
   if (error) {
     return (
       <Text
         variant="caption"
-        color="danger"
+        color="dangerText"
         style={s.message}
         accessibilityRole="alert"
         accessibilityLiveRegion="assertive"
@@ -98,6 +108,7 @@ export function Field({
   icon: Icon,
   tone = 'light',
   containerStyle,
+  sinMensaje,
   multiline,
   secureTextEntry,
   editable = true,
@@ -116,8 +127,8 @@ export function Field({
 
   const borderStyle = useAnimatedStyle(() => ({
     borderColor: error
-      ? Colors.destructive
-      : interpolateColor(focus.value, [0, 1], [restingBorder, Colors.accent]),
+      ? Colors.dangerText
+      : interpolateColor(focus.value, [0, 1], [restingBorder, Colors.accentStrong]),
   }));
 
   const handleFocus: TextInputProps['onFocus'] = (e) => {
@@ -174,7 +185,7 @@ export function Field({
           placeholderTextColor={Colors.mutedForeground}
           onFocus={handleFocus}
           onBlur={handleBlur}
-          style={[s.input, multiline ? s.inputMultiline : null]}
+          style={[s.input, multiline ? s.inputMultiline : null, WEB_SIN_ANILLO]}
         />
 
         {isPassword && (
@@ -197,10 +208,16 @@ export function Field({
         )}
       </Animated.View>
 
-      <FieldMessage error={error} helper={helper} />
+      {sinMensaje ? null : <FieldMessage error={error} helper={helper} />}
     </View>
   );
 }
+
+/**
+ * En web el `TextInput` dibuja su propio anillo de foco dentro de la píldora
+ * (doble anillo, AU-45); el borde animado ya marca el foco.
+ */
+const WEB_SIN_ANILLO = Platform.OS === 'web' ? ({ outlineStyle: 'none' } as object) : null;
 
 // ─── SelectField ─────────────────────────────────────────────────────────────
 
@@ -260,7 +277,7 @@ export function SelectField({
           {
             backgroundColor: BACKGROUNDS[tone],
             borderRadius: Radius.full,
-            borderColor: error ? Colors.destructive : RESTING_BORDERS[tone],
+            borderColor: error ? Colors.dangerText : RESTING_BORDERS[tone],
             opacity: disabled ? Opacity.dimmed : Opacity.full,
           },
         ]}
@@ -268,7 +285,7 @@ export function SelectField({
         {Icon && (
           <Icon
             size={Sizes.icon.md}
-            color={disabled ? Colors.mutedForeground : Colors.accent}
+            color={disabled ? Colors.mutedForeground : Colors.foreground}
             weight="bold"
           />
         )}
@@ -296,7 +313,7 @@ const s = StyleSheet.create({
   },
   label: {
     marginBottom: Spacing.sm,
-    marginLeft: Spacing.xs,
+    marginLeft: Spacing.xl,
   },
   box: {
     flexDirection: 'row',
@@ -333,7 +350,7 @@ const s = StyleSheet.create({
     flex: 1,
   },
   message: {
-    marginTop: Spacing.xs + 2,
-    marginLeft: Spacing.lg,
+    marginTop: Spacing.sm,
+    marginLeft: Spacing.xl,
   },
 });

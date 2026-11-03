@@ -1,21 +1,30 @@
 {
-  "name": "EnBus — Panel de Cooperativas",
-  "short_name": "EnBus Panel",
-  "description": "Panel de gestión operativa para cooperativas de transporte",
+  "name": "Panel de cooperativas · EnBus",
+  "short_name": "EnBus",
+  "description": "Venta de boletos, encomiendas y operación de tu cooperativa.",
+  "lang": "es-VE",
   "start_url": "/cooperativas/dashboard",
   "display": "standalone",
-  "background_color": "#09090b",
-  "theme_color": "#09090b",
+  "background_color": "#FFFFFF",
+  "theme_color": "#FFC757",
   "icons": [
     {
       "src": "/icon-192.png",
       "sizes": "192x192",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any"
     },
     {
       "src": "/icon-512.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ]
 }

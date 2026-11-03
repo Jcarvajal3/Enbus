@@ -29,7 +29,7 @@ export function HowItWorks() {
     <section id="como-funciona" className="scroll-mt-20 bg-background py-24 lg:py-32">
       <div className="mx-auto max-w-6xl px-6">
         <div className="mx-auto mb-16 max-w-2xl text-center">
-          <h2 className="text-3xl font-bold tracking-tight lg:text-4xl">Cómo funciona</h2>
+          <h2 className="text-3xl font-semibold tracking-tight lg:text-4xl">Cómo funciona</h2>
           <p className="mt-4 text-lg text-muted-foreground">
             Comprar un pasaje o enviar una encomienda, en tres pasos
           </p>
@@ -42,7 +42,7 @@ export function HowItWorks() {
                 {step.number}
               </span>
               <div className="mt-4 flex items-center gap-3">
-                <step.icon className="size-6 shrink-0 text-foreground" weight="duotone" aria-hidden />
+                <step.icon className="size-6 shrink-0 text-foreground" aria-hidden />
                 <h3 className="text-lg font-semibold">{step.title}</h3>
               </div>
               <p className="mt-3 leading-relaxed text-muted-foreground">{step.description}</p>

@@ -6,19 +6,25 @@
  * SearchForm and the login screen — the last one without animation at all, so
  * the same interaction felt different depending on where you were. One
  * implementation now serves all of them.
+ *
+ * D19: pastilla `background` sobre pista `surface`; activo `foreground`
+ * semibold, inactivo `mutedForeground`. No usa azul (es superficie, no
+ * selección de un dato). Con "reducir movimiento" la pastilla salta sin
+ * deslizarse.
  */
 import React, { useCallback, useEffect, useState } from 'react';
 import { StyleSheet, View, ViewStyle } from 'react-native';
 import type { IconProps } from 'phosphor-react-native';
 import Animated, {
   useAnimatedStyle,
+  useReducedMotion,
   useSharedValue,
   withTiming,
 } from 'react-native-reanimated';
 import { PressableScale } from '../PressableScale';
 import { Text } from './Text';
 import { CountPill } from './Badge';
-import { Colors, Motion, Radius, Shadows, Spacing } from '@/src/theme';
+import { Colors, Motion, Radius, Shadows, Sizes, Spacing } from '@/src/theme';
 
 export interface SegmentOption<T extends string> {
   value: T;
@@ -46,6 +52,7 @@ export function SegmentedControl<T extends string>({
   tone = 'sunken',
   style,
 }: SegmentedControlProps<T>) {
+  const reduceMotion = useReducedMotion();
   const [trackWidth, setTrackWidth] = useState(0);
   const translateX = useSharedValue(0);
   const indicatorWidth = useSharedValue(0);
@@ -68,11 +75,11 @@ export function SegmentedControl<T extends string>({
   useEffect(() => {
     if (segmentWidth <= 0) return;
     indicatorWidth.value = segmentWidth;
-    translateX.value = withTiming(activeIndex * segmentWidth, {
-      duration: Motion.duration.base,
-      easing: Motion.easing.out,
-    });
-  }, [activeIndex, segmentWidth, indicatorWidth, translateX]);
+    const destino = activeIndex * segmentWidth;
+    translateX.value = reduceMotion
+      ? destino
+      : withTiming(destino, { duration: Motion.duration.base, easing: Motion.easing.out });
+  }, [activeIndex, segmentWidth, indicatorWidth, translateX, reduceMotion]);
 
   const indicatorStyle = useAnimatedStyle(() => ({
     width: indicatorWidth.value,
@@ -105,17 +112,12 @@ export function SegmentedControl<T extends string>({
           >
             {Icon && (
               <Icon
-                size={Spacing.lg - 1}
+                size={Sizes.icon.sm}
                 color={isActive ? Colors.foreground : Colors.mutedForeground}
-                weight={isActive ? 'fill' : 'regular'}
+                weight="bold"
               />
             )}
-            <Text
-              variant="label"
-              weight={isActive ? 'bold' : 'semibold'}
-              color={isActive ? 'foreground' : 'muted'}
-              compact
-            >
+            <Text variant="label" color={isActive ? 'foreground' : 'muted'} compact numberOfLines={1}>
               {option.label}
             </Text>
             {option.badge ? <CountPill value={option.badge} /> : null}
@@ -144,7 +146,7 @@ const s = StyleSheet.create({
     bottom: TRACK_PADDING,
     left: TRACK_PADDING,
     borderRadius: Radius.full,
-    backgroundColor: Colors.white,
+    backgroundColor: Colors.background,
     ...Shadows.subtle,
   },
   segment: {
@@ -152,8 +154,9 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: Spacing.sm - 2,
-    paddingVertical: Spacing.md - 2,
+    gap: Spacing.xs,
+    minHeight: Sizes.control.sm,
+    paddingHorizontal: Spacing.sm,
     borderRadius: Radius.full,
     zIndex: 1,
   },

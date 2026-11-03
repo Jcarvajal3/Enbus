@@ -7,54 +7,51 @@
  * constructions per frame.
  */
 
-import { formatCiudad } from './ve.generated';
+import { formatCiudad, formatDiaHoraVE, formatDiaVE, formatHoraVE, ZONA_VE } from './ve.generated';
 
 // ─── Date formatters ──────────────────────────────────────────────────────────
+// Fechas y horas: usar `formatDiaVE` ("mar. 3 nov."), `formatHoraVE` ("2:30 p. m.") y
+// `formatDiaHoraVE` ("mar. 3 nov. · 2:30 p. m."), siempre en hora de Venezuela (D4).
+// `dateTime`, `dateFull` y `timeOnly` quedan como alias 12 h sobre esos helpers
+// (misma forma `{ format(fecha) }`); la integración de la fase 5 los borra.
 
 const LOCALE = 'es-VE';
 
-/** "12/05/2025" */
+/** Lo que acepta `formatDate`: un `Intl.DateTimeFormat` o un alias VE. */
+export interface FormateadorFecha {
+  format(fecha: Date): string;
+}
+
+/** "12/05/2025" (hora de Venezuela) */
 export const dateShort = new Intl.DateTimeFormat(LOCALE, {
   day: '2-digit',
   month: '2-digit',
   year: 'numeric',
+  timeZone: ZONA_VE,
 });
 
-/** "12 may" */
+/** "12 may" (hora de Venezuela) */
 export const dateDayMonth = new Intl.DateTimeFormat(LOCALE, {
   day: '2-digit',
   month: 'short',
+  timeZone: ZONA_VE,
 });
 
-/** "12 may, 3:45 PM" */
-export const dateTime = new Intl.DateTimeFormat(LOCALE, {
-  day: '2-digit',
-  month: 'short',
-  hour: 'numeric',
-  minute: '2-digit',
-  hour12: true,
-});
+/** @deprecated Usar `formatDiaHoraVE` ("mar. 3 nov. · 2:30 p. m."). */
+export const dateTime: FormateadorFecha = { format: (d) => formatDiaHoraVE(d) };
 
-/** "lun., 12 may" */
-export const dateFull = new Intl.DateTimeFormat(LOCALE, {
-  weekday: 'short',
-  day: 'numeric',
-  month: 'short',
-});
+/** @deprecated Usar `formatDiaVE` ("mar. 3 nov."). */
+export const dateFull: FormateadorFecha = { format: (d) => formatDiaVE(d) };
 
-/** "3:45 PM" */
-export const timeOnly = new Intl.DateTimeFormat(LOCALE, {
-  hour: '2-digit',
-  minute: '2-digit',
-  hour12: false,
-});
+/** @deprecated Usar `formatHoraVE` ("2:30 p. m."). */
+export const timeOnly: FormateadorFecha = { format: (d) => formatHoraVE(d) };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 /** Safe wrapper — returns fallback if dateString is invalid */
 export function formatDate(
   dateString: string | null | undefined,
-  formatter: Intl.DateTimeFormat = dateShort
+  formatter: FormateadorFecha = dateShort
 ): string {
   if (!dateString) return '—';
   try {
@@ -108,6 +105,13 @@ export {
   formatFechaVE,
   formatHoraVE,
   formatFechaHoraVE,
+  formatFechaHoraCortaVE,
+  formatDiaVE,
+  formatDiaHoraVE,
+  capitalizarInicio,
+  CLAVE_MINIMO,
+  CLAVE_AYUDA,
+  CLAVE_ERROR,
   formatFechaCalendario,
   formatHaceTiempo,
   formatDuracion,

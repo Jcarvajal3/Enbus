@@ -16,8 +16,12 @@
  */
 
 import type { DetalleEB } from '@/src/types';
+import { MSG as COMUN, mensajeAuth, mensajePostgres } from './errores.generated';
 
 export type { DetalleEB };
+// Catálogo común con el panel y la landing (shared/errores.ts).
+export { COMUN as MSG, mensajeAuth, mensajePostgres };
+export type { CatalogoMensajes } from './errores.generated';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -52,37 +56,26 @@ export class AppError extends Error {
 }
 
 // ─── Copy ─────────────────────────────────────────────────────────────────────
+// Los textos comunes salen de shared/errores.ts (mismo texto en app, panel y landing);
+// aquí solo quedan los propios de la app.
 
-const MSG = {
-  generico: 'Algo salió mal. Intenta de nuevo en unos segundos.',
-  red: 'No pudimos conectarnos. Revisa tu conexión e intenta de nuevo.',
-  timeout: 'La conexión está tardando demasiado. Revisa tu señal e intenta de nuevo.',
-  servidor: 'El servicio no responde en este momento. Intenta de nuevo en unos minutos.',
-  credenciales: 'Correo o contraseña incorrectos. Revisa los datos o recupera tu contraseña.',
-  correoSinConfirmar:
-    'Confirma tu correo: te enviamos un enlace a tu bandeja de entrada (revisa también Spam).',
-  cuentaExiste: 'Ya existe una cuenta con este correo. Inicia sesión.',
-  correoInvalido: 'Ese correo no parece válido. Revísalo e intenta de nuevo.',
-  claveIgual: 'La nueva contraseña debe ser distinta a la anterior.',
-  sesionExpirada: 'Tu sesión expiró. Inicia sesión de nuevo.',
-  enlaceVencido: 'El enlace venció o ya se usó. Pide uno nuevo.',
-  cuentaSuspendida: 'Tu cuenta está suspendida. Contacta a soporte para revisarla.',
-  registroCerrado: 'El registro no está disponible en este momento. Intenta más tarde.',
-  usuarioNoExiste: 'No encontramos una cuenta con ese correo. Revísalo o regístrate.',
-  demasiadosIntentos: 'Hiciste demasiados intentos. Espera un minuto y vuelve a intentarlo.',
-  enlaceReciente: 'Ya pediste un enlace hace poco. Espera 1 minuto y vuelve a intentarlo.',
+const TEXTO = {
+  generico: COMUN.generico,
+  red: COMUN.sinRed,
+  timeout: COMUN.tiempoAgotado,
+  servidor: COMUN.servidor,
+  sesionExpirada: COMUN.sesionVencida,
+  enlaceVencido: COMUN.enlaceVencido,
+  enlaceReciente: COMUN.enlaceReciente,
+  demasiadosIntentos: COMUN.demasiadosIntentos,
+  telefonoDuplicado: COMUN.telefonoDuplicado,
+  cedulaDuplicada: COMUN.cedulaDuplicada,
+  duplicado: COMUN.duplicado,
+  sinPermiso: COMUN.sinPermiso,
+  noEncontrado: COMUN.noEncontrado,
+  estadoCambiado: COMUN.estadoCambiado,
   asientoTomado: 'Ese asiento acaba de ser tomado. Elige otro.',
   yaCalificaste: 'Ya calificaste este viaje.',
-  telefonoDuplicado: 'Ese teléfono ya está registrado en otra cuenta.',
-  cedulaDuplicada: 'Esa cédula o RIF ya está registrada en otra cuenta.',
-  duplicado: 'Ese registro ya existe.',
-  referenciaRota:
-    'No pudimos guardar porque un dato relacionado ya no existe. Actualiza la pantalla e intenta de nuevo.',
-  datoFaltante: 'Falta completar un dato obligatorio. Revisa el formulario.',
-  datoInvalido: 'Algún dato no es válido. Revísalo e intenta de nuevo.',
-  sinPermiso: 'No tienes permiso para hacer esto. Si crees que es un error, inicia sesión de nuevo.',
-  noEncontrado: 'No encontramos lo que buscas. Puede que ya no esté disponible.',
-  estadoCambiado: 'Esto cambió de estado hace un momento. Actualiza la pantalla e intenta de nuevo.',
   archivoGrande: 'La imagen es demasiado grande. El tamaño máximo es 10 MB.',
   archivoIlegible: 'No pudimos leer la imagen. Selecciónala de nuevo.',
 } as const;
@@ -230,7 +223,7 @@ function mensajeEB(codigo: CodigoEB, detalle: DetalleEB): string | null {
       const asientos = Array.isArray(detalle.asientos)
         ? detalle.asientos.filter((a): a is string => typeof a === 'string' && a.trim() !== '')
         : [];
-      if (asientos.length === 0) return MSG.asientoTomado;
+      if (asientos.length === 0) return TEXTO.asientoTomado;
       return asientos.length === 1
         ? `El asiento ${asientos[0]} ya no está disponible. Elige otro.`
         : `Los asientos ${listaAsientos(asientos)} ya no están disponibles. Elige otros.`;
@@ -238,7 +231,7 @@ function mensajeEB(codigo: CodigoEB, detalle: DetalleEB): string | null {
     case 'EB_OPERACION_NO_PERMITIDA':
       return 'Esta acción la hace la cooperativa.';
     case 'EB_NO_AUTENTICADO':
-      return MSG.sesionExpirada;
+      return TEXTO.sesionExpirada;
     default:
       return null;
   }
@@ -248,15 +241,15 @@ function mensajeEB(codigo: CodigoEB, detalle: DetalleEB): string | null {
 function respaldoEB(codigo: CodigoEB): string {
   switch (codigo) {
     case 'EB_SIN_PERMISO':
-      return MSG.sinPermiso;
+      return TEXTO.sinPermiso;
     case 'EB_NO_ENCONTRADO':
-      return MSG.noEncontrado;
+      return TEXTO.noEncontrado;
     case 'EB_ESTADO_CAMBIO':
-      return MSG.estadoCambiado;
+      return TEXTO.estadoCambiado;
     case 'EB_DEMASIADOS_INTENTOS':
-      return 'Hiciste muchos intentos seguidos. Espera unos minutos y vuelve a intentarlo.';
+      return TEXTO.demasiadosIntentos;
     default:
-      return MSG.generico;
+      return TEXTO.generico;
   }
 }
 
@@ -306,41 +299,9 @@ export function humanizeError(err: unknown, contexto?: ContextoError): string {
   const code = info.code;
 
   // Network first: offline errors come wrapped in every client.
-  if (isNetworkError(err)) return esTimeout(info) ? MSG.timeout : MSG.red;
+  if (isNetworkError(err)) return esTimeout(info) ? TEXTO.timeout : TEXTO.red;
 
-  // ── Supabase Auth ──────────────────────────────────────────────────────────
-  if (code === 'invalid_credentials' || msg.includes('invalid login credentials')) {
-    return MSG.credenciales;
-  }
-  if (code === 'email_not_confirmed' || msg.includes('email not confirmed')) {
-    return MSG.correoSinConfirmar;
-  }
-  if (
-    code === 'user_already_exists' ||
-    code === 'email_exists' ||
-    msg.includes('already registered') ||
-    msg.includes('already been registered')
-  ) {
-    return MSG.cuentaExiste;
-  }
-  if (
-    code === 'weak_password' ||
-    info.name === 'AuthWeakPasswordError' ||
-    /password should|weak password|password is too weak|password.*at least/.test(msg)
-  ) {
-    const min = msg.match(/at least (\d+) characters/)?.[1] ?? '6';
-    return `La contraseña es muy débil. Usa al menos ${min} caracteres, combinando letras y números.`;
-  }
-  if (code === 'same_password' || msg.includes('should be different from the old password')) {
-    return MSG.claveIgual;
-  }
-  if (
-    code === 'email_address_invalid' ||
-    (code === 'validation_failed' && msg.includes('email')) ||
-    msg.includes('unable to validate email address')
-  ) {
-    return MSG.correoInvalido;
-  }
+  // ── Supabase Auth (catálogo común) ─────────────────────────────────────────
   // "For security purposes, you can only request this after 42 seconds."
   const espera = msg.match(/for security purposes.*?after (\d+) seconds?/);
   if (espera) {
@@ -354,62 +315,31 @@ export function humanizeError(err: unknown, contexto?: ContextoError): string {
     msg.includes('rate limit')
   ) {
     return contexto === 'recuperar' || code === 'over_email_send_rate_limit'
-      ? MSG.enlaceReciente
-      : MSG.demasiadosIntentos;
+      ? TEXTO.enlaceReciente
+      : TEXTO.demasiadosIntentos;
   }
-  if (code === 'otp_expired' || msg.includes('link is invalid or has expired')) {
-    return MSG.enlaceVencido;
-  }
-  // PKCE: el código ya se canjeó, venció o se abrió en otro teléfono/navegador
-  // (falta el code verifier que guardó la app al pedir el enlace).
-  if (
-    code === 'flow_state_not_found' ||
-    code === 'flow_state_expired' ||
-    code === 'bad_code_verifier' ||
-    code === 'bad_oauth_state' ||
-    code === 'bad_oauth_callback' ||
-    info.name === 'AuthPKCEGrantCodeExchangeError' ||
-    /code verifier|flow state|auth code|invalid grant|code challenge/.test(msg)
-  ) {
-    return MSG.enlaceVencido;
-  }
-  if (
-    code === 'session_expired' ||
-    code === 'session_not_found' ||
-    code === 'refresh_token_not_found' ||
-    code === 'refresh_token_already_used' ||
-    code === 'bad_jwt' ||
-    code === 'invalid_jwt' ||
-    code === 'PGRST301' || // PostgREST: JWT invalid/expired
-    code === 'PGRST303' ||
-    info.name === 'AuthSessionMissingError' ||
-    /jwt expired|invalid refresh token|auth session missing/.test(msg)
-  ) {
-    return MSG.sesionExpirada;
-  }
-  if (code === 'user_banned') return MSG.cuentaSuspendida;
-  if (code === 'signup_disabled') return MSG.registroCerrado;
-  if (code === 'user_not_found') return MSG.usuarioNoExiste;
+  if (info.name === 'AuthWeakPasswordError') return COMUN.claveCorta;
+  if (code === 'validation_failed' && msg.includes('email')) return COMUN.correoInvalido;
+  if (info.name === 'AuthPKCEGrantCodeExchangeError') return TEXTO.enlaceVencido;
+  if (info.name === 'AuthSessionMissingError') return TEXTO.sesionExpirada;
+  const auth = mensajeAuth(code) ?? mensajeAuth(info.message);
+  if (auth) return auth;
 
   // ── Postgres / PostgREST ───────────────────────────────────────────────────
   if (code === '23505') {
     const detalle = `${msg} ${info.details.toLowerCase()}`;
-    if (contexto === 'asiento' || detalle.includes('asiento')) return MSG.asientoTomado;
-    if (contexto === 'calificacion' || detalle.includes('calificaciones')) return MSG.yaCalificaste;
-    if (detalle.includes('telefono')) return MSG.telefonoDuplicado;
-    if (detalle.includes('cedula')) return MSG.cedulaDuplicada;
-    return MSG.duplicado;
+    if (contexto === 'asiento' || detalle.includes('asiento')) return TEXTO.asientoTomado;
+    if (contexto === 'calificacion' || detalle.includes('calificaciones')) return TEXTO.yaCalificaste;
+    if (detalle.includes('telefono')) return TEXTO.telefonoDuplicado;
+    if (detalle.includes('cedula')) return TEXTO.cedulaDuplicada;
+    return TEXTO.duplicado;
   }
-  if (code === '23503') return MSG.referenciaRota;
-  if (code === '23502') return MSG.datoFaltante;
-  if (code === '23514' || code === '22P02' || code === '22001' || code === '22003') {
-    return MSG.datoInvalido;
-  }
-  if (code === '42501' || msg.includes('row-level security')) return MSG.sinPermiso;
-  if (code === 'PGRST116') return MSG.noEncontrado;
+  const postgres = mensajePostgres(code);
+  if (postgres) return postgres;
+  if (msg.includes('row-level security')) return TEXTO.sinPermiso;
   // State-machine triggers (RAISE EXCEPTION in the transition guards)
   if (msg.includes('transición no válida') || msg.includes('estado terminal')) {
-    return MSG.estadoCambiado;
+    return TEXTO.estadoCambiado;
   }
 
   // ── Storage / own upload helpers ───────────────────────────────────────────
@@ -419,18 +349,18 @@ export function humanizeError(err: unknown, contexto?: ContextoError): string {
     msg.includes('maximum allowed size') ||
     msg.includes('demasiado grande')
   ) {
-    return MSG.archivoGrande;
+    return TEXTO.archivoGrande;
   }
-  if (msg.includes('el archivo de imagen no existe')) return MSG.archivoIlegible;
+  if (msg.includes('el archivo de imagen no existe')) return TEXTO.archivoIlegible;
 
   // ── HTTP fallbacks ─────────────────────────────────────────────────────────
-  if (info.status === 401) return MSG.sesionExpirada;
-  if (info.status === 403) return MSG.sinPermiso;
-  if (info.status !== undefined && info.status >= 500) return MSG.servidor;
+  if (info.status === 401) return TEXTO.sesionExpirada;
+  if (info.status === 403) return TEXTO.sinPermiso;
+  if (info.status !== undefined && info.status >= 500) return TEXTO.servidor;
 
   // Un enlace de correo o de Google que no se pudo canjear: casi siempre venció
   // o ya se usó; la salida es pedir otro.
-  if (contexto === 'auth') return MSG.enlaceVencido;
+  if (contexto === 'auth') return TEXTO.enlaceVencido;
 
-  return MSG.generico;
+  return TEXTO.generico;
 }

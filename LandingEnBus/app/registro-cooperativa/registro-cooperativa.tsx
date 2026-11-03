@@ -5,7 +5,6 @@ import Link from "next/link";
 import {
   ArrowLeft,
   ArrowRight,
-  Bus,
   CheckCircle,
   PaperPlaneTilt,
   Spinner,
@@ -13,6 +12,8 @@ import {
   WhatsappLogo,
 } from "@phosphor-icons/react";
 
+import { BrandMark } from "@/components/brand-mark";
+import { buttonVariants } from "@/components/ui/button";
 import { reenviarInvitacion, type CampoReenvio, type ReenvioState } from "./actions";
 import { normalizeRif, RIF_AYUDA, RIF_PLACEHOLDER } from "@/lib/rif";
 import { cooperativasUrl, RUTAS_LEGALES, soporteWhatsApp } from "@/lib/urls";
@@ -132,7 +133,7 @@ function ReenviarInvitacion({ panel }: { panel: string | null }) {
 
       <div ref={resumenRef} tabIndex={-1} className="outline-none" aria-live="polite">
         {state.success && state.enviadoA && (
-          <p role="status" className="flex items-start gap-2 rounded-sm bg-success-light p-3 text-sm text-success-deep">
+          <p role="status" className="flex items-start gap-2 rounded-md bg-success-light p-3 text-sm text-success-deep">
             <CheckCircle className="mt-0.5 size-4 shrink-0" weight="fill" aria-hidden />
             Listo. Te reenviamos la invitación a {state.enviadoA}. Si no llega en 10 minutos, revisa la carpeta de spam.
           </p>
@@ -140,7 +141,7 @@ function ReenviarInvitacion({ panel }: { panel: string | null }) {
         {errorGeneral && (
           <div
             role="alert"
-            className={`flex flex-col gap-2 rounded-sm p-3 text-sm ${
+            className={`flex flex-col gap-2 rounded-md p-3 text-sm ${
               state.codigo === "EB_DEMASIADOS_INTENTOS"
                 ? "bg-warning-light text-warning-deep"
                 : "bg-destructive-light text-destructive-deep"
@@ -151,7 +152,7 @@ function ReenviarInvitacion({ panel }: { panel: string | null }) {
               {errorGeneral}
             </p>
             {state.cuentaCreada && panel && (
-              <a href={`${panel}/cooperativas/login`} className={`w-fit rounded-sm font-semibold underline underline-offset-4 ${FOCO}`}>
+              <a href={`${panel}/cooperativas/login`} className={`w-fit rounded-sm font-medium text-info-text underline underline-offset-4 ${FOCO}`}>
                 Iniciar sesión en el panel
               </a>
             )}
@@ -162,7 +163,7 @@ function ReenviarInvitacion({ panel }: { panel: string | null }) {
       <button
         type="submit"
         disabled={pendiente}
-        className={`inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-sm border border-input-border bg-background px-4 text-sm font-semibold text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60 sm:w-fit ${FOCO}`}
+        className={`${buttonVariants({ variant: "outline", size: "lg" })} w-full sm:w-fit ${FOCO}`}
       >
         {pendiente ? <Spinner className="size-4 animate-spin" aria-hidden /> : <PaperPlaneTilt className="size-4" aria-hidden />}
         {pendiente ? "Reenviando…" : "Reenviar invitación"}
@@ -179,11 +180,8 @@ export function RegistroCooperativa() {
     <div className="min-h-screen bg-background font-sans text-foreground">
       <header className="border-b border-border">
         <div className="mx-auto flex h-16 max-w-5xl items-center justify-between px-4 sm:px-6">
-          <Link href="/" className={`flex items-center gap-2 rounded-sm ${FOCO}`}>
-            <span className="flex size-9 items-center justify-center rounded-sm bg-primary text-primary-foreground">
-              <Bus weight="fill" className="size-5" aria-hidden />
-            </span>
-            <span className="text-xl font-bold tracking-tight">EnBus</span>
+          <Link href="/" aria-label="EnBus, inicio" className={`rounded-sm ${FOCO}`}>
+            <BrandMark conNombre />
           </Link>
           <Link href="/" className={`inline-flex items-center gap-1.5 rounded-sm text-sm font-medium text-foreground/80 hover:text-foreground ${FOCO}`}>
             <ArrowLeft className="size-4" aria-hidden />
@@ -195,7 +193,7 @@ export function RegistroCooperativa() {
       <main className="mx-auto flex max-w-5xl flex-col gap-14 px-4 py-12 sm:px-6 lg:py-16">
         {/* Presentación y CTA */}
         <section className="flex flex-col gap-6">
-          <h1 className="max-w-3xl text-4xl leading-tight font-bold tracking-tight lg:text-5xl">
+          <h1 className="max-w-3xl text-4xl leading-tight font-semibold tracking-tight lg:text-5xl">
             Afilia tu cooperativa a EnBus
           </h1>
           <p className="max-w-2xl text-lg leading-relaxed text-muted-foreground">
@@ -207,20 +205,20 @@ export function RegistroCooperativa() {
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
               <a
                 href={`${panel}/cooperativas/registro`}
-                className={`inline-flex min-h-11 w-fit items-center gap-2 rounded-sm bg-primary px-5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 ${FOCO}`}
+                className={`${buttonVariants({ size: "lg" })} w-fit ${FOCO}`}
               >
                 Crear la cuenta de mi cooperativa
                 <ArrowRight className="size-4" aria-hidden />
               </a>
               <p className="text-sm text-muted-foreground">
                 ¿Ya tienes cuenta?{" "}
-                <a href={`${panel}/cooperativas/login`} className={`rounded-sm font-semibold text-foreground underline underline-offset-4 ${FOCO}`}>
+                <a href={`${panel}/cooperativas/login`} className={`rounded-sm font-medium text-info-text underline underline-offset-4 ${FOCO}`}>
                   Inicia sesión
                 </a>
               </p>
             </div>
           ) : (
-            <div role="status" className="flex max-w-2xl flex-col gap-2 rounded-sm border border-warning/40 bg-warning-light p-4 text-sm text-foreground">
+            <div role="status" className="flex max-w-2xl flex-col gap-2 rounded-md border border-warning/40 bg-warning-light p-4 text-sm text-foreground">
               <p className="flex items-start gap-2 font-medium">
                 <WarningCircle className="mt-0.5 size-5 shrink-0 text-warning-deep" aria-hidden />
                 El registro no está disponible en este momento. Escríbenos por WhatsApp.
@@ -230,7 +228,7 @@ export function RegistroCooperativa() {
                   href={whatsapp}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className={`inline-flex w-fit items-center gap-2 rounded-sm font-semibold underline underline-offset-4 ${FOCO}`}
+                  className={`inline-flex w-fit items-center gap-2 rounded-sm font-medium text-info-text underline underline-offset-4 ${FOCO}`}
                 >
                   <WhatsappLogo className="size-4" aria-hidden />
                   Escribir por WhatsApp
@@ -242,12 +240,12 @@ export function RegistroCooperativa() {
 
         {/* Beneficios */}
         <section aria-labelledby="beneficios-titulo" className="flex flex-col gap-6">
-          <h2 id="beneficios-titulo" className="text-2xl font-bold tracking-tight">
+          <h2 id="beneficios-titulo" className="text-2xl font-semibold tracking-tight">
             Qué obtiene tu cooperativa
           </h2>
           <ul className="grid grid-cols-1 gap-4 md:grid-cols-3">
             {BENEFICIOS.map((b) => (
-              <li key={b.titulo} className="rounded-sm border border-border bg-surface p-5">
+              <li key={b.titulo} className="rounded-md border border-border bg-surface p-5">
                 <CheckCircle className="size-6 text-foreground" weight="fill" aria-hidden />
                 <h3 className="mt-3 font-semibold">{b.titulo}</h3>
                 <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">{b.texto}</p>
@@ -258,7 +256,7 @@ export function RegistroCooperativa() {
 
         {/* Pasos */}
         <section aria-labelledby="pasos-titulo" className="flex flex-col gap-6">
-          <h2 id="pasos-titulo" className="text-2xl font-bold tracking-tight">
+          <h2 id="pasos-titulo" className="text-2xl font-semibold tracking-tight">
             Cómo afiliarte
           </h2>
           <ol className="flex flex-col gap-4">
@@ -266,7 +264,7 @@ export function RegistroCooperativa() {
               <li key={paso} className="flex gap-4">
                 <span
                   aria-hidden
-                  className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground"
+                  className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground"
                 >
                   {i + 1}
                 </span>
@@ -277,7 +275,7 @@ export function RegistroCooperativa() {
         </section>
 
         {/* Solicitudes antiguas */}
-        <section aria-labelledby="reenvio-titulo" className="max-w-xl rounded-sm border border-border p-5 sm:p-6">
+        <section aria-labelledby="reenvio-titulo" className="max-w-xl rounded-md border border-border bg-card p-5 sm:p-6">
           <h2 id="reenvio-titulo" className="text-lg font-semibold">
             ¿Te registraste antes y no te llegó la invitación?
           </h2>

@@ -1,31 +1,46 @@
-import { getUserProfile } from "@/lib/supabase/cached";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { getUserProfile } from "@/lib/supabase/cached";
 import { PanelShell } from "@/components/panel-shell";
-import { ThemeProvider } from "@/components/theme-provider";
 import { TasaBCVChip, TasaBCVProvider } from "@/components/tasa-bcv-provider";
+import { ImpresoraChip } from "@/components/impresora-chip";
 import { obtenerTasaBCV } from "@/lib/tasa-bcv";
+import { INICIO_ADMIN } from "@/lib/admin-navigation";
 
 export default async function PanelLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const [user, tasa] = await Promise.all([getUserProfile(), obtenerTasaBCV()]);
+  const [user, tasa, almacen] = await Promise.all([getUserProfile(), obtenerTasaBCV(), cookies()]);
 
-  // Redirigir si no hay sesión, si el rol no es de cooperativa,
-  // o si no tiene cooperativa_id asignada (invariante de diseño).
-  if (!user || user.role === "super_admin" || !user.cooperativa_id) {
-    redirect("/cooperativas/login");
+  // PN-01: nunca devolver al login "pelado" con sesión abierta (el proxy lo mandaría
+  // de vuelta aquí y no se saldría nunca). El super_admin va a su panel; cualquier otro
+  // caso sin acceso va al login con `motivo`, que cierra la sesión y lo explica.
+  if (user?.role === "super_admin") redirect(INICIO_ADMIN);
+  if (!user || (user.role !== "admin_cooperativa" && user.role !== "taquillero") || !user.cooperativa_id) {
+    redirect("/cooperativas/login?motivo=sin-acceso");
   }
 
+  // Menú: el último estado elegido (cookie del sidebar); sin cookie decide el ancho (< 1280 px plegado).
+  const estadoMenu = almacen.get("sidebar_state")?.value;
+  const menuAbierto = estadoMenu === "true" ? true : estadoMenu === "false" ? false : null;
+
   return (
-    <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-      <TasaBCVProvider tasaInicial={tasa}>
-        {/* Tasa del día visible en todas las pantallas: es la que se usa para cobrar en Bs. */}
-        <PanelShell user={user} headerExtra={<TasaBCVChip />}>
-          {children}
-        </PanelShell>
-      </TasaBCVProvider>
-    </ThemeProvider>
+    <TasaBCVProvider tasaInicial={tasa}>
+      {/* Contexto global en la barra superior: tasa del día (con la que se cobra en Bs) e impresora. */}
+      <PanelShell
+        user={user}
+        menuAbierto={menuAbierto}
+        headerExtra={
+          <>
+            <ImpresoraChip />
+            <TasaBCVChip />
+          </>
+        }
+      >
+        {children}
+      </PanelShell>
+    </TasaBCVProvider>
   );
 }

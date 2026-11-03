@@ -97,7 +97,7 @@ export default function PrivacidadPage() {
             </>,
             <>
               <strong>Eliminar tu cuenta</strong> desde la app o pidiéndolo por escrito. Te explicamos cómo en{" "}
-              <a href={RUTAS_LEGALES.eliminarCuenta} className="font-semibold underline underline-offset-4">
+              <a href={RUTAS_LEGALES.eliminarCuenta} className="font-medium text-info-text underline underline-offset-4">
                 Eliminar tu cuenta
               </a>
               .

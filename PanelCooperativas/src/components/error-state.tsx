@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { ArrowClockwise, CloudWarning, SpinnerIcon } from "@phosphor-icons/react";
+import { ArrowClockwise, SpinnerIcon, WarningCircle } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -61,15 +61,15 @@ export function ErrorState({ titulo, descripcion, onReintentar, compacto = false
       <div
         role="alert"
         className={cn(
-          "flex flex-col gap-3 rounded-xl border border-destructive/40 bg-destructive-light p-4 sm:flex-row sm:items-center sm:justify-between",
+          "flex flex-col gap-3 rounded-md border border-destructive/30 bg-destructive-light p-4 sm:flex-row sm:items-center sm:justify-between",
           className
         )}
       >
         <div className="flex items-start gap-2">
-          <CloudWarning className="mt-0.5 size-5 shrink-0 text-destructive-deep" weight="duotone" aria-hidden />
-          <div className="text-sm">
-            <p className="font-medium text-destructive-deep">{titulo}</p>
-            {descripcion && <p className="text-destructive-deep">{descripcion}</p>}
+          <WarningCircle className="mt-0.5 size-5 shrink-0 text-destructive-text" aria-hidden />
+          <div className="flex flex-col gap-0.5 text-sm text-destructive-deep">
+            <p className="font-semibold">{titulo}</p>
+            {descripcion && <p>{descripcion}</p>}
           </div>
         </div>
         {boton}
@@ -80,14 +80,15 @@ export function ErrorState({ titulo, descripcion, onReintentar, compacto = false
   return (
     <div
       role="alert"
-      className={cn("flex flex-col items-center justify-center p-12 text-center", className)}
+      className={cn("flex flex-col items-center justify-center gap-4 p-12 text-center", className)}
     >
-      <div className="mb-4 flex size-16 items-center justify-center rounded-full bg-destructive-light">
-        <CloudWarning className="size-8 text-destructive-deep" weight="duotone" aria-hidden />
+      <div className="flex size-16 items-center justify-center rounded-full bg-destructive-light">
+        <WarningCircle className="size-8 text-destructive-text" aria-hidden />
       </div>
-      <h3 className="text-lg font-medium">{titulo}</h3>
-      {descripcion && <p className="mt-1 mb-6 max-w-sm text-sm text-muted-foreground">{descripcion}</p>}
-      {!descripcion && <div className="mb-6" />}
+      <div className="flex max-w-sm flex-col gap-1">
+        <h3 className="text-base font-semibold text-foreground">{titulo}</h3>
+        {descripcion && <p className="text-sm text-muted-foreground">{descripcion}</p>}
+      </div>
       {boton}
     </div>
   );

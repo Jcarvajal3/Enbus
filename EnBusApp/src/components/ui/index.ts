@@ -12,7 +12,7 @@ import type { ReactElement, Ref } from 'react';
 import type { TextInput } from 'react-native';
 import { Field as FieldBase, type FieldProps } from './Field';
 
-export { Text, fontStyle, textStyles } from './Text';
+export { Text, TextLink, fontStyle, textStyles } from './Text';
 export type { TextProps, TextColorToken } from './Text';
 
 export { Button } from './Button';
@@ -53,7 +53,10 @@ export type { RouteSummaryProps } from './RouteSummary';
 export { BottomSheet } from './BottomSheet';
 export type { BottomSheetProps } from './BottomSheet';
 
-export { SelectField } from './Field';
+export { ConfirmSheet, ConfirmProvider, useConfirm } from './ConfirmSheet';
+export type { ConfirmOptions } from './ConfirmSheet';
+
+export { SelectField, FieldMessage } from './Field';
 export type { FieldProps, FieldTone } from './Field';
 
 /**

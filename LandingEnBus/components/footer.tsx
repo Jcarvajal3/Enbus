@@ -1,5 +1,6 @@
 import { WhatsappLogo } from "@phosphor-icons/react/dist/ssr"
 
+import { BrandMark } from "@/components/brand-mark"
 import { cooperativasUrl, RUTAS_LEGALES, soporteWhatsApp } from "@/lib/urls"
 
 // Sobre fondo oscuro el foco usa el color de fondo de la página (claro).
@@ -40,7 +41,7 @@ export function Footer({ secciones = {} }: FooterProps) {
         <div className="grid grid-cols-1 gap-10 sm:grid-cols-2 lg:grid-cols-3">
           {/* Marca */}
           <div className="flex flex-col gap-4">
-            <span className="font-serif text-xl font-bold">EnBus</span>
+            <BrandMark conNombre className="text-background" />
             <p className="text-sm text-background/80">
               Boletos de bus y encomiendas por toda Venezuela, con cooperativas verificadas.
             </p>

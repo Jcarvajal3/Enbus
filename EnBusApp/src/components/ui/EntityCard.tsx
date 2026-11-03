@@ -1,42 +1,22 @@
 /**
  * EntityCard — the list row used across the whole app.
  *
- * Four near-identical implementations existed (TransactionCard, ResultsList
- * rows, the cooperativa picker in boletos/buscar and the one in
- * encomiendas/nueva). They shared the exact anatomy — badge row, title,
- * subtitle, and a tall letter pill on the right — but differed in radius,
- * padding, background and pill colour. This is that anatomy, once.
+ * Anatomía única (AU-21): insignia + código arriba, título, subtítulo y, si la
+ * fila abre algo, la flecha a la derecha (AN-33). Es la fila de "Mis boletos",
+ * "Mis encomiendas", las salidas y la cooperativa del envío.
  *
- * La píldora con la inicial es opcional (APP-58): sin `initial` no se dibuja,
- * y con `chevron` se muestra una flecha que dice "esto abre algo".
+ * Con `selectable`, tocar la tarjeta la elige (no avanza): elegida = borde
+ * `accentStrong` de 2 pt + `CheckCircle` (D1). La píldora con la inicial ya no
+ * se dibuja (`initial` y `tone` quedan como alias D25).
  */
 import React, { memo } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { CaretRight } from 'phosphor-react-native';
+import { CaretRight, CheckCircle } from 'phosphor-react-native';
 import { PressableScale } from '../PressableScale';
 import { Text } from './Text';
-import {
-  Colors,
-  Motion,
-  Radius,
-  Sizes,
-  Spacing,
-  StatusPalette,
-  type StatusTone,
-} from '@/src/theme';
+import { Colors, Motion, Radius, Sizes, Spacing, type StatusTone } from '@/src/theme';
 
 export type PillTone = StatusTone | 'accent' | 'primary';
-
-const PILL_WIDTH = Sizes.iconBox.lg + Spacing.sm;
-const PILL_HEIGHT = Sizes.iconBox['2xl'];
-
-function pillColors(tone: PillTone, selected: boolean) {
-  if (selected) return { bg: Colors.accent, fg: Colors.white };
-  if (tone === 'accent') return { bg: Colors.accentLight, fg: Colors.accent };
-  if (tone === 'primary') return { bg: Colors.primaryLight, fg: Colors.primary };
-  const spec = StatusPalette[tone];
-  return { bg: spec.bg, fg: spec.fg };
-}
 
 export interface EntityCardProps {
   title: string;
@@ -45,14 +25,18 @@ export interface EntityCardProps {
   badge?: React.ReactNode;
   /** Trailing element of the top row — a code, a price, a seat count */
   meta?: React.ReactNode;
-  /** Letra de la píldora de la derecha. Sin ella no se dibuja la píldora. */
+  /** @deprecated D25 (AU-21): la píldora con la inicial ya no se dibuja. */
   initial?: string;
+  /** @deprecated D25: sin píldora no hay tono que pintar. */
   tone?: PillTone;
-  /** Flecha a la derecha (la tarjeta abre o avanza a otra pantalla). */
+  /**
+   * Flecha a la derecha (la tarjeta abre otra pantalla). Por defecto, sí cuando
+   * hay `onPress` y la tarjeta no es `selectable`.
+   */
   chevron?: boolean;
   /** Líneas máximas del subtítulo (por defecto 1). */
   subtitleLines?: number;
-  /** Selectable variant: draws an accent outline when picked */
+  /** Tarjeta de opción: tocarla la elige */
   selectable?: boolean;
   selected?: boolean;
   onPress?: () => void;
@@ -64,16 +48,15 @@ export const EntityCard = memo(function EntityCard({
   subtitle,
   badge,
   meta,
-  initial,
-  tone = 'accent',
-  chevron = false,
+  chevron,
   subtitleLines = 1,
   selectable = false,
   selected = false,
   onPress,
   accessibilityLabel,
 }: EntityCardProps) {
-  const pill = pillColors(tone, selectable && selected);
+  const conFlecha = chevron ?? (!!onPress && !selectable);
+  const elegida = selectable && selected;
 
   return (
     <PressableScale
@@ -84,18 +67,14 @@ export const EntityCard = memo(function EntityCard({
       accessibilityRole={selectable ? 'radio' : 'button'}
       accessibilityState={selectable ? { selected } : undefined}
       accessibilityLabel={accessibilityLabel ?? `${title}${subtitle ? `. ${subtitle}` : ''}`}
-      style={[
-        s.card,
-        selectable ? s.selectable : null,
-        selectable && selected ? s.selected : null,
-      ]}
+      style={[s.card, selectable ? s.selectable : null, elegida ? s.selected : null]}
     >
       <View style={s.body}>
         {(badge || meta) && (
           <View style={s.topRow}>
             {badge ?? <View />}
             {typeof meta === 'string' ? (
-              <Text variant="caption" color="muted" weight="bold" uppercase compact numberOfLines={1}>
+              <Text variant="caption" color="muted" weight="semibold" compact numberOfLines={1} style={s.meta}>
                 {meta}
               </Text>
             ) : (
@@ -104,26 +83,24 @@ export const EntityCard = memo(function EntityCard({
           </View>
         )}
 
-        <Text variant="subheading" numberOfLines={2} style={s.title}>
+        <Text variant="subheading" numberOfLines={2} style={badge || meta ? s.titleBelow : null}>
           {title}
         </Text>
 
         {subtitle ? (
-          <Text variant="secondary" color="muted" numberOfLines={subtitleLines}>
+          <Text variant="secondary" color="muted" numberOfLines={subtitleLines} style={s.subtitle}>
             {subtitle}
           </Text>
         ) : null}
       </View>
 
-      {initial ? (
-        <View style={[s.pill, { backgroundColor: pill.bg }]}>
-          <Text variant="heading" size="2xl" weight="bold" color={pill.fg} compact>
-            {initial}
-          </Text>
+      {elegida ? (
+        <View style={s.trailing}>
+          <CheckCircle size={Sizes.icon.lg} color={Colors.accentStrong} weight="fill" />
         </View>
-      ) : chevron ? (
-        <View style={s.chevron}>
-          <CaretRight size={Sizes.icon.sm} color={Colors.mutedForeground} weight="bold" />
+      ) : conFlecha ? (
+        <View style={s.trailing}>
+          <CaretRight size={Sizes.icon.md} color={Colors.mutedForeground} weight="bold" />
         </View>
       ) : null}
     </PressableScale>
@@ -139,13 +116,14 @@ const s = StyleSheet.create({
     padding: Spacing.lg,
     marginBottom: Spacing.md,
   },
+  // El borde existe siempre (transparente) para que elegir no mueva el contenido.
   selectable: {
-    backgroundColor: Colors.white,
-    borderWidth: Sizes.borderStrong,
+    borderWidth: Sizes.borderSelected,
     borderColor: Colors.transparent,
   },
   selected: {
-    borderColor: Colors.accent,
+    backgroundColor: Colors.background,
+    borderColor: Colors.accentStrong,
   },
   body: {
     flex: 1,
@@ -156,19 +134,16 @@ const s = StyleSheet.create({
     justifyContent: 'space-between',
     gap: Spacing.sm,
   },
-  title: {
+  meta: {
+    flexShrink: 1,
+  },
+  titleBelow: {
     marginTop: Spacing.sm,
-    marginBottom: Spacing.xs,
   },
-  chevron: {
+  subtitle: {
+    marginTop: Spacing.xs,
+  },
+  trailing: {
     marginLeft: Spacing.md,
-  },
-  pill: {
-    width: PILL_WIDTH,
-    height: PILL_HEIGHT,
-    borderRadius: Radius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginLeft: Spacing.lg,
   },
 });

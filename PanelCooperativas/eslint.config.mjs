@@ -13,6 +13,49 @@ const MENSAJE_TOKENS =
 // (paso manual 9 de Audits/fase4_spec.md).
 const NIVEL = "error";
 
+// ─── Barrido panel de la fase 5 (Audits/fase5/fase5_spec.md §4) ─────────────
+// En "warn" mientras la oleada 2 limpia sus archivos; la integración lo pasa a
+// "error" (§5 paso 1). Regla local, sin dependencias.
+const NIVEL_BARRIDO = "warn";
+const CLASES_BARRIDO = [
+  {
+    re: /(^|[\s:])bg-accent(?![-\w])/,
+    mensaje: "bg-accent está prohibido fuera de gráficos (§2.3): hover/foco = bg-muted text-foreground; selección = bg-accent-strong.",
+  },
+  { re: /\bh-([3-6]) w-\1\b/, mensaje: "Usa size-N en lugar de h-N w-N (§2.3)." },
+  { re: /(^|[\s:])rounded(?![-\w])/, mensaje: "`rounded` suelto: usa rounded-sm (o el radio del rol, D9)." },
+];
+const barrido = {
+  rules: {
+    clases: {
+      meta: { type: "suggestion", schema: [] },
+      create(context) {
+        const revisar = (node, texto) => {
+          if (typeof texto !== "string") return;
+          for (const { re, mensaje } of CLASES_BARRIDO) {
+            if (re.test(texto)) context.report({ node, message: mensaje });
+          }
+        };
+        return {
+          Literal: (node) => revisar(node, node.value),
+          TemplateElement: (node) => revisar(node, node.value.raw),
+          JSXAttribute(node) {
+            if (node.name?.name === "weight" && node.value?.type === "Literal" && node.value.value === "duotone") {
+              context.report({ node, message: 'weight="duotone" está prohibido (D21): regular, o fill en iconos de estado.' });
+            }
+          },
+          CallExpression(node) {
+            const c = node.callee;
+            if (c.type === "MemberExpression" && c.object?.name === "toast" && c.property?.name === "error") {
+              context.report({ node, message: "Usa avisarError(…) de @/lib/avisos (persistente, con cierre) en lugar de toast.error (SY-08)." });
+            }
+          },
+        };
+      },
+    },
+  },
+};
+
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
@@ -37,6 +80,16 @@ const eslintConfig = defineConfig([
       "jsx-a11y/interactive-supports-focus": NIVEL,
       "jsx-a11y/anchor-is-valid": NIVEL,
     },
+  },
+  {
+    files: ["src/**/*.{js,jsx,mjs,ts,tsx,mts,cts}"],
+    plugins: { barrido },
+    rules: { "barrido/clases": NIVEL_BARRIDO },
+  },
+  {
+    // Único punto permitido para toast.error.
+    files: ["src/lib/avisos.ts"],
+    rules: { "barrido/clases": "off" },
   },
   // Override default ignores of eslint-config-next.
   globalIgnores([

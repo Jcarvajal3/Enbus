@@ -11,7 +11,8 @@
  * Las etiquetas son la columna "pasajero" del glosario (fase 3, §4 de
  * `Audits/fase3_spec.md`; `Specs/00_General/Glosario.md`). Los tonos del
  * glosario se traducen así: pendiente → `pending`, exito → `success`,
- * info → `progress`, peligro → `danger`, terminado y neutro → `neutral`.
+ * info → `progress`, peligro → `danger`, terminado → `done` (relleno sólido) y
+ * neutro → `neutral` (contorno) (SY-22).
  */
 
 import type { StatusTone } from '@/src/theme';
@@ -68,7 +69,7 @@ const BOLETO: Record<string, EstadoVisual> = {
   },
   USADO: {
     label: 'Viaje realizado',
-    tone: 'neutral',
+    tone: 'done',
     hint: 'Ya abordaste con este boleto.',
   },
   CANCELADO: {
@@ -78,7 +79,7 @@ const BOLETO: Record<string, EstadoVisual> = {
   },
   EXPIRADO: {
     label: 'Vencido',
-    tone: 'neutral',
+    tone: 'done',
     hint: 'La reserva venció sin pago y el asiento se liberó.',
   },
   // Derivados de un boleto CANCELADO con devolución (`getEstadoReembolso`).
@@ -139,7 +140,7 @@ const ENCOMIENDA: Record<string, EstadoVisual> = {
   },
   DEVUELTA: {
     label: 'Devuelta al remitente',
-    tone: 'neutral',
+    tone: 'done',
     hint: 'Nadie la retiró a tiempo y volvió a quien la envió.',
   },
 };
@@ -149,7 +150,7 @@ const ENCOMIENDA: Record<string, EstadoVisual> = {
 const VIAJE: Record<string, EstadoVisual> = {
   PROGRAMADO: { label: 'Programado', tone: 'progress' },
   EN_CURSO: { label: 'En ruta', tone: 'progress' },
-  COMPLETADO: { label: 'Completado', tone: 'neutral' },
+  COMPLETADO: { label: 'Completado', tone: 'done' },
   CANCELADO: { label: 'Cancelado', tone: 'neutral' },
 };
 
@@ -174,7 +175,7 @@ const REEMBOLSO: Record<string, EstadoVisual> = {
 
 /** Reportes del usuario (`incidencias`). */
 const INCIDENCIA: Record<string, EstadoVisual> = {
-  ABIERTA: { label: 'Recibido', tone: 'danger', hint: 'Recibimos tu reporte.' },
+  ABIERTA: { label: 'Recibido', tone: 'progress', hint: 'Recibimos tu reporte.' },
   EN_PROCESO: { label: 'En revisión', tone: 'pending', hint: 'Estamos revisando tu reporte.' },
   RESUELTA: { label: 'Resuelto', tone: 'success' },
 };

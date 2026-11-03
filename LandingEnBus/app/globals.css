@@ -1,6 +1,7 @@
 @import "tailwindcss";
 @import "tw-animate-css";
-/* Colores, --radius y --duration-*: fuente shared/tokens.json (node shared/generar.mjs). No escribir hex aquí. */
+/* Colores, radios (--radius-*) y --duration-*: fuente shared/tokens.json (node shared/generar.mjs).
+   No escribir hex ni radios aquí. */
 @import "./tokens.generated.css";
 
 @custom-variant dark (&:is(.dark *));
@@ -34,6 +35,9 @@
   --color-destructive: var(--destructive);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
+  /* Selección y estado activo (D1) */
+  --color-accent-strong: var(--accent-strong);
+  --color-accent-strong-foreground: var(--accent-strong-foreground);
   --color-muted-foreground: var(--muted-foreground);
   --color-muted: var(--muted);
   --color-secondary-foreground: var(--secondary-foreground);
@@ -72,16 +76,6 @@
   --color-warning-deep: var(--warning-deep);
   --color-info-deep: var(--info-deep);
   --color-destructive-deep: var(--destructive-deep);
-
-  /* Precise border radius overrides */
-  --radius-sm: 10px;
-  --radius-md: 16px;
-  --radius-lg: 20px;
-  --radius-xl: 24px;
-  --radius-2xl: 28px;
-  --radius-3xl: 32px;
-  --radius-4xl: 40px;
-  --radius-full: 9999px;
 }
 
 /* ── Custom variants (from shadcn) ── */
@@ -158,7 +152,7 @@
 
 /* ─── Formularios (LP-07) ───────────────────────────────────────────────── */
 /* Etiqueta 14 px en foreground, ayuda ≥ 12 px en muted-foreground, borde     */
-/* --input-border (= border-strong, ≥ 3:1) y foco                             */
+/* --input-border (= border-strong, ≥ 3:1), píldora como en app y panel y foco */
 /* oscuro con separación (también sobre secciones bg-primary).              */
 @layer components {
   .campo-etiqueta {
@@ -181,10 +175,10 @@
     width: 100%;
     min-height: 2.75rem;
     border: 1px solid var(--input-border);
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-full);
     background-color: var(--background);
     color: var(--foreground);
-    padding: 0.625rem 0.875rem;
+    padding: 0.625rem 1rem;
     font-size: 1rem;
     line-height: 1.5rem;
     transition: border-color 150ms;

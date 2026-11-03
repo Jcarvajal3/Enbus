@@ -9,11 +9,16 @@
  *
  * Con "reducir movimiento" la hoja aparece y se cierra sin deslizarse (solo el
  * fundido del fondo).
+ *
+ * Subpasos (p. ej. la forma de pago dentro de "Registrar pago"): `onBack`
+ * dibuja la ← a la izquierda del título y cierra el subpaso; el título cambia
+ * con el paso. El pie respeta el área segura inferior (AU-45).
  */
 import React, { useCallback, useEffect, useRef } from 'react';
 import {
   Animated,
   Dimensions,
+  Easing as RNEasing,
   Modal,
   PanResponder,
   Pressable,
@@ -21,16 +26,20 @@ import {
   View,
   ViewStyle,
 } from 'react-native';
-import { X } from 'phosphor-react-native';
+import { ArrowLeft, X } from 'phosphor-react-native';
 import { useReducedMotion } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { IconButton } from './IconButton';
 import { Text } from './Text';
-import { Colors, Layout, Radius, Shadows, Sizes, Spacing } from '@/src/theme';
+import { Colors, Layout, Motion, Radius, Shadows, Sizes, Spacing } from '@/src/theme';
 
 const SCREEN_HEIGHT = Dimensions.get('window').height;
 /** Drag distance (or fling velocity) past which the sheet dismisses. */
 const DISMISS_DISTANCE = 120;
 const DISMISS_VELOCITY = 0.4;
+/** Curvas de `Motion.easing` para el `Animated` de React Native (no Reanimated). */
+const EASE_OUT = RNEasing.out(RNEasing.cubic);
+const EASE_IN = RNEasing.in(RNEasing.cubic);
 
 export interface BottomSheetProps {
   visible: boolean;
@@ -40,6 +49,8 @@ export interface BottomSheetProps {
   height?: ViewStyle['height'];
   /** Pinned area at the bottom of the sheet — e.g. an "Apply" button */
   footer?: React.ReactNode;
+  /** Flecha ← a la izquierda del título: vuelve al subpaso anterior. */
+  onBack?: () => void;
   children: React.ReactNode;
 }
 
@@ -49,8 +60,10 @@ export function BottomSheet({
   title,
   height,
   footer,
+  onBack,
   children,
 }: BottomSheetProps) {
+  const insets = useSafeAreaInsets();
   const translateY = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
   const reduceMotion = useReducedMotion();
   // El PanResponder se crea una vez: lee la preferencia por ref.
@@ -62,11 +75,11 @@ export function BottomSheet({
       translateY.setValue(0);
       return;
     }
-    Animated.spring(translateY, {
+    Animated.timing(translateY, {
       toValue: 0,
+      duration: Motion.duration.slow,
+      easing: EASE_OUT,
       useNativeDriver: true,
-      tension: 45,
-      friction: 9,
     }).start();
   }, [translateY]);
 
@@ -75,9 +88,11 @@ export function BottomSheet({
       onClose();
       return;
     }
+    // La salida es más rápida que la entrada.
     Animated.timing(translateY, {
       toValue: SCREEN_HEIGHT,
-      duration: 220,
+      duration: Motion.duration.base,
+      easing: EASE_IN,
       useNativeDriver: true,
     }).start(({ finished }) => {
       if (finished) onClose();
@@ -137,11 +152,14 @@ export function BottomSheet({
             { transform: [{ translateY }] },
           ]}
         >
-          <View {...panResponder.panHandlers} style={s.header}>
+          <View {...panResponder.panHandlers} style={[s.header, title ? s.headerDivided : null]}>
             <View style={s.handle} />
             {title ? (
               <View style={s.headerRow}>
-                <Text variant="heading" numberOfLines={1} style={s.headerTitle}>
+                {onBack ? (
+                  <IconButton icon={ArrowLeft} label="Atrás" onPress={onBack} size="md" variant="surface" />
+                ) : null}
+                <Text variant="heading" numberOfLines={1} style={s.headerTitle} accessibilityRole="header">
                   {title}
                 </Text>
                 <IconButton icon={X} label="Cerrar" onPress={animateOut} size="md" variant="surface" />
@@ -149,9 +167,11 @@ export function BottomSheet({
             ) : null}
           </View>
 
-          <View style={s.body}>{children}</View>
+          <View style={[s.body, footer ? null : { paddingBottom: insets.bottom }]}>{children}</View>
 
-          {footer ? <View style={s.footer}>{footer}</View> : null}
+          {footer ? (
+            <View style={[s.footer, { paddingBottom: Spacing['2xl'] + insets.bottom }]}>{footer}</View>
+          ) : null}
         </Animated.View>
       </View>
     </Modal>
@@ -174,13 +194,16 @@ const s = StyleSheet.create({
   header: {
     paddingTop: Spacing.md,
     paddingHorizontal: Layout.screenPadding,
+    paddingBottom: Spacing.sm,
+  },
+  headerDivided: {
     paddingBottom: Spacing.lg,
     borderBottomWidth: Sizes.hairline,
     borderBottomColor: Colors.borderLight,
   },
   handle: {
     width: Spacing['4xl'],
-    height: Spacing.xs + 1,
+    height: Spacing.xs,
     borderRadius: Radius.full,
     backgroundColor: Colors.border,
     alignSelf: 'center',
@@ -201,7 +224,6 @@ const s = StyleSheet.create({
   footer: {
     paddingHorizontal: Layout.screenPadding,
     paddingTop: Spacing.lg,
-    paddingBottom: Spacing['2xl'],
     borderTopWidth: Sizes.hairline,
     borderTopColor: Colors.borderLight,
   },

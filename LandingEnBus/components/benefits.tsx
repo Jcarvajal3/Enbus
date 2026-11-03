@@ -40,7 +40,7 @@ export function Benefits({ estadisticas }: { estadisticas?: Estadisticas | null 
     <section className="bg-muted/50 py-24 lg:py-32">
       <div className="mx-auto max-w-6xl px-6">
         <div className="mx-auto mb-16 max-w-2xl text-center">
-          <h2 className="text-3xl font-bold tracking-tight lg:text-4xl">Por qué EnBus</h2>
+          <h2 className="text-3xl font-semibold tracking-tight lg:text-4xl">Por qué EnBus</h2>
           <p className="mt-4 text-lg text-muted-foreground">
             Boletos y encomiendas con cooperativas en las que puedes confiar
           </p>
@@ -48,9 +48,9 @@ export function Benefits({ estadisticas }: { estadisticas?: Estadisticas | null 
 
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
           {benefits.map((benefit) => (
-            <div key={benefit.title} className="rounded-sm border bg-background p-6 shadow-sm">
-              <div className="flex size-12 items-center justify-center rounded-sm bg-primary/20">
-                <benefit.icon className="size-6 text-foreground" weight="duotone" aria-hidden />
+            <div key={benefit.title} className="rounded-md border border-border bg-card p-6">
+              <div className="flex size-12 items-center justify-center rounded-md bg-primary-light">
+                <benefit.icon className="size-6 text-foreground" aria-hidden />
               </div>
               <h3 className="mt-4 font-semibold">{benefit.title}</h3>
               <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{benefit.description}</p>

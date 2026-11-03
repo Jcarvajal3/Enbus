@@ -1,46 +1,36 @@
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
+import { ZONA_VE, formatFechaHoraCortaVE, formatFechaHoraVE, formatFechaVE } from "@/lib/fechas";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-// ─── Pre-created Intl formatters (expensive to create, free to reuse) ────────
-// Las fechas siempre en hora de Venezuela: el servidor (Vercel, UTC) y el
-// navegador deben mostrar la misma hora de salida.
+// ─── Fechas (alias retirados, D25) ───────────────────────────────────────────
+// Las fechas se escriben con lib/fechas (shared/ve.ts): 12 h y hora de Venezuela.
+// Estos alias conservan la forma `{ format(fecha) }` para que el código existente
+// compile mientras se migra; la integración de la fase 5 los borra.
 
-/** Zona horaria de todas las fechas del panel. */
-export const ZONA_HORARIA_VE = "America/Caracas";
+type FormateadorVE = { format(valor: string | number | Date): string };
 
-export const dateFormatterShort = new Intl.DateTimeFormat("es-VE", {
-  dateStyle: "short",
-  timeStyle: "short",
-  timeZone: ZONA_HORARIA_VE,
-});
+/** @deprecated Usar `ZONA_VE` de `@/lib/fechas`. */
+export const ZONA_HORARIA_VE = ZONA_VE;
 
-export const dateFormatterDayMonth = new Intl.DateTimeFormat("es-VE", {
-  day: "2-digit",
-  month: "2-digit",
-  timeZone: ZONA_HORARIA_VE,
-});
+/** @deprecated Usar `formatFechaHoraVE` ("03/11/2026 · 2:30 p. m."). */
+export const dateFormatterShort: FormateadorVE = { format: (v) => formatFechaHoraVE(v) };
 
-export const dateFormatterDayMonthTime = new Intl.DateTimeFormat("es-VE", {
-  day: "2-digit",
-  month: "short",
-  hour: "numeric",
-  minute: "numeric",
-  timeZone: ZONA_HORARIA_VE,
-});
+/** @deprecated Usar `formatFechaVE(v, { day: "2-digit", month: "2-digit" })` ("03/11"). */
+export const dateFormatterDayMonth: FormateadorVE = {
+  format: (v) => formatFechaVE(v, { day: "2-digit", month: "2-digit" }),
+};
 
-export const dateFormatterDayMonthTime12h = new Intl.DateTimeFormat("es-VE", {
-  day: "2-digit",
-  month: "short",
-  hour: "numeric",
-  minute: "numeric",
-  hour12: true,
-  timeZone: ZONA_HORARIA_VE,
-});
+/** @deprecated Usar `formatFechaHoraCortaVE` ("03/11 · 2:30 p. m."). */
+export const dateFormatterDayMonthTime: FormateadorVE = { format: (v) => formatFechaHoraCortaVE(v) };
 
+/** @deprecated Usar `formatFechaHoraCortaVE` ("03/11 · 2:30 p. m."). */
+export const dateFormatterDayMonthTime12h: FormateadorVE = { format: (v) => formatFechaHoraCortaVE(v) };
+
+/** Para listas, preferir `formatHaceTiempo` de `@/lib/fechas`. */
 export const relativeTimeFormatter = new Intl.RelativeTimeFormat("es-VE", {
   numeric: "auto",
 });

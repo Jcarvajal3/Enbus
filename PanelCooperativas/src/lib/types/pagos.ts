@@ -4,6 +4,7 @@
 // referencia; `monto_bs` = Bs esperados a la tasa usada; `moneda` = moneda en
 // que pagó el cliente.
 
+import { formatFechaHoraCortaVE } from "@/lib/fechas";
 import type { EstadoBoleto } from "@/lib/types/boletos";
 
 export type TipoPago = "DIGITAL" | "EFECTIVO";
@@ -165,23 +166,14 @@ export interface PagoPorVerificar {
   referencia_repetida: boolean;
 }
 
-const salidaFormatter = new Intl.DateTimeFormat("es-VE", {
-  day: "2-digit",
-  month: "2-digit",
-  hour: "2-digit",
-  minute: "2-digit",
-  hourCycle: "h23",
-  timeZone: "America/Caracas",
-});
-
-/** "04/10 08:00" en hora de Venezuela (salida de un viaje). */
+/** "04/10 · 8:00 a. m." en hora de Venezuela (salida de un viaje) = `formatFechaHoraCortaVE`. */
 export function formatSalidaCorta(iso: string): string {
-  return salidaFormatter.format(new Date(iso)).replace(",", "");
+  return formatFechaHoraCortaVE(iso);
 }
 
 /**
  * Concepto de un pago para la bandeja y el diálogo (servidor y cliente):
- * "2 boletos · Valencia → Caracas · 04/10 08:00 · asientos 14, 15" / "Encomienda EB-… · cobro en destino".
+ * "2 boletos · Valencia → Caracas · 04/10 · 8:00 a. m. · asientos 14, 15" / "Encomienda EB-… · cobro en destino".
  */
 export function conceptoDePago(p: PagoPorVerificar): string {
   if (p.tipo_recurso === "encomienda") {

@@ -6,7 +6,8 @@ import { List } from "@phosphor-icons/react"
 
 import { cn } from "@/lib/utils"
 import { cooperativasUrl } from "@/lib/urls"
-import { Button } from "@/components/ui/button"
+import { BrandMark } from "@/components/brand-mark"
+import { Button, buttonVariants } from "@/components/ui/button"
 import {
   Sheet,
   SheetTrigger,
@@ -22,9 +23,11 @@ const FOCO =
 interface NavbarProps {
   /** Secciones de la portada que se están mostrando (las que no hay se ocultan del menú). */
   secciones?: { rutas?: boolean; calcular?: boolean }
+  /** true si la página empieza con el amarillo de marca (portada): sin desplazar, la marca va invertida. */
+  sobreMarca?: boolean
 }
 
-export function Navbar({ secciones = {} }: NavbarProps) {
+export function Navbar({ secciones = {}, sobreMarca = false }: NavbarProps) {
   const [scrolled, setScrolled] = React.useState(false)
   const [open, setOpen] = React.useState(false)
   const portal = cooperativasUrl()
@@ -58,8 +61,8 @@ export function Navbar({ secciones = {} }: NavbarProps) {
     >
       <nav aria-label="Principal" className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 lg:px-8">
         {/* Logo */}
-        <Link href="/" className={cn("rounded-sm text-xl font-bold tracking-tight text-foreground", FOCO)}>
-          EnBus
+        <Link href="/" aria-label="EnBus, inicio" className={cn("rounded-sm text-foreground", FOCO)}>
+          <BrandMark conNombre invertido={sobreMarca && !scrolled} />
         </Link>
 
         {/* Desktop navigation */}
@@ -69,7 +72,7 @@ export function Navbar({ secciones = {} }: NavbarProps) {
               <a
                 href={link.href}
                 className={cn(
-                  "rounded-md px-3 py-2 text-sm font-medium text-foreground/80 transition-colors hover:text-foreground",
+                  "rounded-full px-3 py-2 text-sm font-medium text-foreground/80 transition-colors hover:text-foreground",
                   FOCO
                 )}
               >
@@ -83,17 +86,14 @@ export function Navbar({ secciones = {} }: NavbarProps) {
         <div className="hidden items-center gap-4 lg:flex">
           <a
             href="/registro-cooperativa"
-            className={cn("rounded-sm text-sm font-medium text-foreground/80 transition-colors hover:text-foreground", FOCO)}
+            className={cn("rounded-full px-1 text-sm font-medium text-foreground/80 transition-colors hover:text-foreground", FOCO)}
           >
             Registrar cooperativa
           </a>
           {portal && (
             <a
               href={`${portal}/cooperativas/login`}
-              className={cn(
-                "inline-flex h-8 items-center rounded-sm bg-foreground px-3 text-sm font-medium text-background transition-colors hover:bg-foreground/90",
-                FOCO
-              )}
+              className={cn(buttonVariants({ variant: "outline" }), FOCO)}
             >
               Entrar al panel
             </a>
@@ -117,13 +117,15 @@ export function Navbar({ secciones = {} }: NavbarProps) {
 
           <SheetContent side="right">
             <SheetHeader>
-              <SheetTitle>EnBus</SheetTitle>
+              <SheetTitle>
+                <BrandMark conNombre />
+              </SheetTitle>
             </SheetHeader>
 
             <div className="flex flex-col gap-1 px-6 py-4">
               {navLinks.map((link) => (
-                <SheetClose key={link.href} render={<a href={link.href} className={cn("rounded-md", FOCO)} />}>
-                  <span className="inline-flex w-full rounded-md px-3 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted">
+                <SheetClose key={link.href} render={<a href={link.href} className={cn("rounded-sm", FOCO)} />}>
+                  <span className="inline-flex w-full rounded-sm px-3 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted">
                     {link.label}
                   </span>
                 </SheetClose>
@@ -134,10 +136,7 @@ export function Navbar({ secciones = {} }: NavbarProps) {
               <p className="text-sm font-medium text-foreground">¿Eres una cooperativa?</p>
               <a
                 href="/registro-cooperativa"
-                className={cn(
-                  "inline-flex min-h-11 items-center justify-center rounded-sm border border-input-border px-4 text-sm font-medium text-foreground transition-colors hover:bg-muted",
-                  FOCO
-                )}
+                className={cn(buttonVariants({ variant: "outline", size: "lg" }), FOCO)}
                 onClick={() => setOpen(false)}
               >
                 Registrar cooperativa
@@ -145,10 +144,7 @@ export function Navbar({ secciones = {} }: NavbarProps) {
               {portal && (
                 <a
                   href={`${portal}/cooperativas/login`}
-                  className={cn(
-                    "inline-flex min-h-11 items-center justify-center rounded-sm bg-foreground px-4 text-sm font-medium text-background transition-colors hover:bg-foreground/90",
-                    FOCO
-                  )}
+                  className={cn(buttonVariants({ size: "lg" }), FOCO)}
                   onClick={() => setOpen(false)}
                 >
                   Entrar al panel

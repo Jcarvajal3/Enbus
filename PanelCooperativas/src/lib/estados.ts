@@ -1,6 +1,7 @@
 // ─── Vocabulario único de estados (#22) ──────────────────────────────────────
 // Fuente única de etiquetas y tonos para el panel y el admin. Tabla de
-// Audits/fase3_spec.md §4: la columna "operador" la ve el personal (panel,
+// Audits/fase5/sistema.md §4.2 (con las correcciones de fase5_spec §2.4) y
+// Specs/00_General/Glosario.md §3: la columna "operador" la ve el personal (panel,
 // admin); la columna "pasajero" es la que ven la app y la landing (se incluye
 // para mostrar "lo que ve el cliente" cuando haga falta).
 //
@@ -22,7 +23,21 @@ export type Dominio =
   | "cooperativa"
   | "incidencia"
   | "ciclo"
-  | "reembolso";
+  | "reembolso"
+  /** Cuenta de usuario o empleado: Activa / Suspendida / Cuenta eliminada. */
+  | "cuenta"
+  /** Ruta, sucursal o método de pago: Activa / Inactiva (también "true"/"false"). */
+  | "recurso"
+  /** Tarifa de encomiendas: Vigente / Programada / Anterior. */
+  | "tarifa"
+  /** Prioridad de una incidencia: Alta / Media / Baja (claves alta|media|baja). */
+  | "prioridad"
+  /** Reputación de una cooperativa: clave con `claveReputacion(promedio, total)`. */
+  | "reputacion"
+  /** Días en la oficina de destino antes de devolverse: `retencionInfo(dias)`. */
+  | "retencion"
+  /** Cobro de una encomienda (`getCobroEncomienda` de la app): COSTO_PENDIENTE, SIN_PAGO… */
+  | "cobro";
 
 export type Tono = "neutro" | "pendiente" | "exito" | "info" | "terminado" | "peligro";
 
@@ -96,9 +111,13 @@ const ENCOMIENDA: Tabla = {
   },
 };
 
-/** En la app, "Lista para retirar" es un logro del cliente: tono éxito solo para el pasajero. */
+/**
+ * Tono distinto para el pasajero: "Lista para retirar" es un logro del cliente (éxito)
+ * y su reporte "Recibido" no es un error suyo (info; para el operador sigue en peligro).
+ */
 const TONO_PASAJERO: Partial<Record<Dominio, Record<string, Tono>>> = {
   encomienda: { EN_OFICINA_DESTINO: "exito" },
+  incidencia: { ABIERTA: "info" },
 };
 
 // ── Boleto (estado real y subestados visibles de RESERVADO) ──
@@ -217,7 +236,7 @@ const COOPERATIVA: Tabla = {
   SUSPENDIDA: {
     pasajero: "Suspendida",
     operador: "Suspendida",
-    tono: "pendiente",
+    tono: "peligro",
     ayuda: "No puede vender en la app hasta que se reactive.",
   },
   DESACTIVADA: {
@@ -251,6 +270,84 @@ const CICLO: Tabla = {
   },
 };
 
+// ── Cuenta (usuarios del admin y empleados; el verbo sigue la etiqueta:
+//    "Suspender cuenta" / "Reactivar cuenta") ──
+const CUENTA: Tabla = {
+  ACTIVA: { pasajero: "Activa", operador: "Activa", tono: "exito", ayuda: "Puede iniciar sesión." },
+  SUSPENDIDA: {
+    pasajero: "Suspendida",
+    operador: "Suspendida",
+    tono: "peligro",
+    ayuda: "No puede iniciar sesión hasta que se reactive.",
+  },
+  ELIMINADA: {
+    pasajero: "Cuenta eliminada",
+    operador: "Cuenta eliminada",
+    tono: "terminado",
+    ayuda: "La persona eliminó su cuenta.",
+  },
+};
+
+// ── Recurso (ruta, sucursal, método de pago) ──
+const RECURSO: Tabla = {
+  ACTIVO: { pasajero: "Activa", operador: "Activa", tono: "exito", ayuda: "Se usa en ventas y envíos." },
+  INACTIVO: { pasajero: "Inactiva", operador: "Inactiva", tono: "neutro", ayuda: "No aparece en ventas ni envíos." },
+};
+
+// ── Tarifa de encomiendas ──
+const TARIFA: Tabla = {
+  VIGENTE: { pasajero: "Vigente", operador: "Vigente", tono: "exito", ayuda: "Es la que se cobra hoy." },
+  PROGRAMADA: { pasajero: "Programada", operador: "Programada", tono: "info", ayuda: "Empieza a regir en la fecha indicada." },
+  ANTERIOR: { pasajero: "Anterior", operador: "Anterior", tono: "neutro", ayuda: "Ya no se cobra." },
+};
+
+// ── Prioridad de incidencia ──
+const PRIORIDAD: Tabla = {
+  ALTA: { pasajero: "Alta", operador: "Alta", tono: "peligro", ayuda: "Pérdida o daño de una encomienda." },
+  MEDIA: { pasajero: "Media", operador: "Media", tono: "pendiente", ayuda: "Reporte de un pago o más de 72 h en tránsito." },
+  BAJA: { pasajero: "Baja", operador: "Baja", tono: "neutro" },
+};
+
+// ── Reputación de una cooperativa (umbrales de `claveReputacion`) ──
+const REPUTACION: Tabla = {
+  EXCELENTE: { pasajero: "Reputación excelente", operador: "Reputación excelente", tono: "exito", ayuda: "Promedio de 4 o más." },
+  REGULAR: { pasajero: "Reputación regular", operador: "Reputación regular", tono: "pendiente", ayuda: "Promedio de 3 a 3,9." },
+  REVISION: { pasajero: "Requiere revisión", operador: "Requiere revisión", tono: "peligro", ayuda: "Promedio por debajo de 3." },
+  SIN_CALIFICACIONES: { pasajero: "Todavía no la califican", operador: "Todavía no la califican", tono: "neutro" },
+};
+
+// ── Retención en la oficina de destino (la etiqueta visible son los días: `retencionInfo`) ──
+const RETENCION: Tabla = {
+  EN_PLAZO: { pasajero: "En plazo", operador: "En plazo", tono: "neutro", ayuda: "Todavía tiene días para retirarse." },
+  POR_VENCER: { pasajero: "Por vencer", operador: "Por vencer", tono: "pendiente", ayuda: "Quedan pocos días para retirarla." },
+  ULTIMO_DIA: {
+    pasajero: "Último día",
+    operador: "Último día",
+    tono: "peligro",
+    ayuda: "Si no se retira, se devuelve al remitente.",
+  },
+};
+
+// ── Cobro de una encomienda ──
+const COBRO: Tabla = {
+  COSTO_PENDIENTE: {
+    pasajero: "Costo por calcular",
+    operador: "Por calcular",
+    tono: "neutro",
+    ayuda: "La taquilla calcula el costo al pesar el paquete.",
+  },
+  SIN_PAGO: { pasajero: "Sin pagar", operador: "Por cobrar", tono: "pendiente", ayuda: "Tiene costo y no tiene pago registrado." },
+  EN_VERIFICACION: {
+    pasajero: "Pago en verificación",
+    operador: "Por verificar",
+    tono: "pendiente",
+    ayuda: "Hay un pago esperando la verificación de la cooperativa.",
+  },
+  RECHAZADO: { pasajero: "Pago rechazado", operador: "Rechazado", tono: "peligro", ayuda: "El pago no se confirmó." },
+  PAGADO: { pasajero: "Pago confirmado", operador: "Pagado", tono: "exito", ayuda: "El cobro está hecho." },
+  NO_APLICA: { pasajero: "Sin cobro", operador: "Sin cobro", tono: "neutro" },
+};
+
 const TABLAS: Record<Dominio, Tabla> = {
   boleto: BOLETO,
   encomienda: ENCOMIENDA,
@@ -260,18 +357,44 @@ const TABLAS: Record<Dominio, Tabla> = {
   incidencia: INCIDENCIA,
   ciclo: CICLO,
   reembolso: REEMBOLSO,
+  cuenta: CUENTA,
+  recurso: RECURSO,
+  tarifa: TARIFA,
+  prioridad: PRIORIDAD,
+  reputacion: REPUTACION,
+  retencion: RETENCION,
+  cobro: COBRO,
 };
 
 /** Dominios con estados booleanos: "true"/"false" se traducen a su clave. */
 const BOOLEANOS: Partial<Record<Dominio, { si: string; no: string }>> = {
   reembolso: { si: "PROCESADO", no: "PENDIENTE" },
   ciclo: { si: "PAGADO", no: "PENDIENTE" },
+  cuenta: { si: "ACTIVA", no: "SUSPENDIDA" },
+  recurso: { si: "ACTIVO", no: "INACTIVO" },
+};
+
+/** Sinónimos que llegan de la base o de código anterior → clave de la tabla. */
+const SINONIMOS: Partial<Record<Dominio, Record<string, string>>> = {
+  cuenta: {
+    ACTIVO: "ACTIVA",
+    SUSPENDIDO: "SUSPENDIDA",
+    BLOQUEADA: "SUSPENDIDA",
+    BLOQUEADO: "SUSPENDIDA",
+    DESACTIVADA: "SUSPENDIDA",
+    DESACTIVADO: "SUSPENDIDA",
+    ELIMINADO: "ELIMINADA",
+  },
+  recurso: { ACTIVA: "ACTIVO", INACTIVA: "INACTIVO" },
+  tarifa: { HISTORICA: "ANTERIOR", HISTORICO: "ANTERIOR" },
 };
 
 function clave(dominio: Dominio, estado: string): string {
   const k = estado.trim().toUpperCase().replace(/[\s-]+/g, "_");
   const bool = BOOLEANOS[dominio];
   if (bool && (k === "TRUE" || k === "FALSE")) return k === "TRUE" ? bool.si : bool.no;
+  const sinonimos = SINONIMOS[dominio];
+  if (sinonimos && Object.prototype.hasOwnProperty.call(sinonimos, k)) return sinonimos[k];
   return k;
 }
 
@@ -287,7 +410,8 @@ export function estadoInfo(dominio: Dominio, estado: string | null | undefined):
     return { pasajero: "Sin estado", operador: "Sin estado", tono: "neutro" };
   }
   const k = clave(dominio, String(estado));
-  const info = TABLAS[dominio][k];
+  const tabla = TABLAS[dominio];
+  const info = Object.prototype.hasOwnProperty.call(tabla, k) ? tabla[k] : undefined;
   if (info) return info;
   const texto = literalLegible(String(estado));
   return { pasajero: texto, operador: texto, tono: "neutro" };
@@ -355,13 +479,36 @@ export function etiquetaCiclo(pagado: boolean, pagadoAt?: string | null): string
   return dia && mes ? `Pagado el ${dia}/${mes}` : CICLO.PAGADO.operador;
 }
 
+/**
+ * Clave de `reputacion` según el promedio de calificaciones (umbrales de la ficha de
+ * cooperativa): sin calificaciones → SIN_CALIFICACIONES; ≥ 4 → EXCELENTE; ≥ 3 → REGULAR;
+ * si no, REVISION.
+ */
+export function claveReputacion(promedio: number | null | undefined, total: number | null | undefined): string {
+  if (!total || total <= 0 || typeof promedio !== "number" || !Number.isFinite(promedio)) return "SIN_CALIFICACIONES";
+  if (promedio >= 4) return "EXCELENTE";
+  if (promedio >= 3) return "REGULAR";
+  return "REVISION";
+}
+
+/**
+ * Retención en la oficina de destino: clave, etiqueta visible ("3 días hábiles") y tono.
+ * `limite` = días hábiles hasta la devolución (DIAS_HABILES_DEVOLUCION, hoy 5):
+ * desde `limite - 1` → peligro; desde `limite - 2` → pendiente; antes, neutro.
+ */
+export function retencionInfo(dias: number, limite = 5): { clave: string; etiqueta: string; tono: Tono } {
+  const n = Number.isFinite(dias) ? Math.max(0, Math.floor(dias)) : 0;
+  const k = n >= limite - 1 ? "ULTIMO_DIA" : n >= limite - 2 ? "POR_VENCER" : "EN_PLAZO";
+  return { clave: k, etiqueta: `${n} ${n === 1 ? "día hábil" : "días hábiles"}`, tono: RETENCION[k].tono };
+}
+
 // ─── Otros vocabularios (§4) ─────────────────────────────────────────────────
 
 export const ROLES: Record<"user" | "taquillero" | "admin_cooperativa" | "super_admin", string> = {
   user: "Pasajero",
   taquillero: "Taquillero",
   admin_cooperativa: "Administrador de cooperativa",
-  super_admin: "Superadministrador",
+  super_admin: "Administrador EnBus",
 };
 
 /** Nombre legible de un rol; desconocido → literal legible. */

@@ -46,9 +46,18 @@ export function qrBoleto(b: { codigo_boleto: string; qr_embarque_data?: string |
 
 export const TRACKING_RE = /^EB-\d{6}-\d{5}$/;
 
-/** Sin espacios (ni a los lados ni dentro) y en mayúsculas: " eb-261004- 46719" → "EB-261004-46719". */
-export function normalizarTracking(entrada: string): string {
-  return (entrada ?? "").replace(/\s+/g, "").toUpperCase();
+const TRACKING_FLEXIBLE_RE = /^EB-?(\d{6})-?(\d{5})$/;
+
+/**
+ * Lo que se escribió o escaneó → código de seguimiento: sin espacios y en mayúsculas,
+ * con o sin guiones: " eb-261004- 46719" → "EB-261004-46719", "EB26100312345" →
+ * "EB-261003-12345" (también ignora "_" y "."). Si no parece un código, devuelve el
+ * texto sin espacios y en mayúsculas.
+ */
+export function normalizarTracking(entrada: string | null | undefined): string {
+  const compacto = (entrada ?? "").replace(/\s+/g, "").toUpperCase();
+  const m = TRACKING_FLEXIBLE_RE.exec(compacto.replace(/[_.]/g, ""));
+  return m ? `EB-${m[1]}-${m[2]}` : compacto;
 }
 
 /** true si el texto (normalizado) es un código de seguimiento. */
