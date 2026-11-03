@@ -42,10 +42,9 @@ export function ServiceWorkerRegistrar() {
           console.info("[SW] Registrado con scope:", registration.scope);
         }
       })
-      .catch((err) => {
-        if (process.env.NODE_ENV === "development") {
-          console.warn("[SW] Error al registrar:", err);
-        }
+      .catch(() => {
+        // Sin service worker el panel funciona igual: solo se pierde la caché para
+        // abrir sin conexión. No hay nada que la persona pueda hacer, así que no se avisa.
       });
   }, []);
 

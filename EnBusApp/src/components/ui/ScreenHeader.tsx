@@ -152,14 +152,14 @@ export function ScreenHeader({
           ) : (
             title
           )}
-          {subtitle ? (
-            <Text variant="secondary" color="muted" style={s.largeSubtitle}>
-              {subtitle}
-            </Text>
-          ) : null}
         </View>
         {right ? <View style={s.rightGroup}>{right}</View> : null}
       </View>
+      {subtitle ? (
+        <Text variant="secondary" color="muted" style={s.largeSubtitle}>
+          {subtitle}
+        </Text>
+      ) : null}
       {status ? <View style={s.status}>{status}</View> : null}
     </View>
   );

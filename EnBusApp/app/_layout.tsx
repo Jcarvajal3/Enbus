@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Stack, useRouter, useSegments } from 'expo-router';
+import { Stack, useGlobalSearchParams, usePathname, useRouter, useSegments } from 'expo-router';
 import * as Notifications from 'expo-notifications';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -16,16 +16,58 @@ import Animated, {
   useReducedMotion,
 } from 'react-native-reanimated';
 import { AuthProvider, useAuth } from '@/src/contexts/AuthContext';
+import { BrandMark } from '@/src/components/BrandMark';
 import { ErrorBoundary } from '@/src/components/ErrorBoundary';
 import { ToastProvider, useToast } from '@/src/components/Toast';
 import { usePushNotifications } from '@/src/hooks/usePushNotifications';
 import { abrirRecurso } from '@/src/utils/notificaciones';
-import { Text } from '@/src/components/ui';
-import { Colors, Motion, Radius, Sizes, Spacing } from '@/src/theme';
+import { ConfirmProvider, Text } from '@/src/components/ui';
+import { Colors, Motion, Sizes, Spacing, StatusPalette } from '@/src/theme';
 
 SplashScreen.preventAutoHideAsync();
 
-/** Branded splash shown while the session is being restored. */
+/**
+ * Con un enlace o una push en frío, la pantalla abierta tiene debajo las
+ * pestañas: la ← siempre tiene adónde volver (AN-01).
+ */
+export const unstable_settings = {
+  initialRouteName: '(tabs)',
+};
+
+/** Solo rutas internas ("/boletos/…"): nunca "//otro-sitio" ni una URL completa. */
+function volverValido(v: unknown): string | null {
+  const ruta = Array.isArray(v) ? v[0] : v;
+  if (typeof ruta !== 'string') return null;
+  if (!ruta.startsWith('/') || ruta.startsWith('//')) return null;
+  if (ruta === '/' || ruta.startsWith('/login') || ruta.startsWith('/auth')) return null;
+  return ruta;
+}
+
+/**
+ * La ruta pedida con su consulta, sin repetir los parámetros que ya van en el
+ * camino (`[id]` de `/boletos/[id]`).
+ */
+function rutaPedida(
+  pathname: string,
+  segments: string[],
+  params: Record<string, string | string[] | undefined>
+): string {
+  const delCamino = new Set(
+    segments
+      .map((seg) => /^\[(?:\.\.\.)?(.+)\]$/.exec(seg)?.[1])
+      .filter((n): n is string => !!n)
+  );
+  const consulta = Object.entries(params)
+    .filter(([k, v]) => !delCamino.has(k) && v != null && k !== 'volver')
+    .flatMap(([k, v]) => (Array.isArray(v) ? v : [v as string]).map((x) => `${encodeURIComponent(k)}=${encodeURIComponent(x)}`))
+    .join('&');
+  return consulta ? `${pathname}?${consulta}` : pathname;
+}
+
+/** Duración del aviso "Conexión restaurada". */
+const AVISO_CONEXION_MS = 3000;
+
+/** Arranque mientras se recupera la sesión: la marca, con un pulso suave. */
 function LoadingScreen() {
   const reduceMotion = useReducedMotion();
   const pulse = useSharedValue(reduceMotion ? 1 : 0);
@@ -50,15 +92,14 @@ function LoadingScreen() {
 
   return (
     <View style={s.splash}>
-      <Animated.View style={[s.splashLogo, animStyle]}>
-        <Text variant="title" size="2xl" weight="heavy" color="foreground" compact>
-          EB
-        </Text>
+      <Animated.View style={animStyle}>
+        <BrandMark size={56} />
       </Animated.View>
     </View>
   );
 }
 
+/** Aviso ámbar sin conexión (SY-09): el mismo tono que el panel. */
 function OfflineBanner() {
   const insets = useSafeAreaInsets();
   return (
@@ -67,9 +108,9 @@ function OfflineBanner() {
       accessibilityRole="alert"
       accessibilityLiveRegion="polite"
     >
-      <WifiSlash size={Sizes.icon.sm} color={Colors.foreground} weight="bold" />
-      <Text variant="caption" weight="bold">
-        Sin conexión — mostrando datos guardados
+      <WifiSlash size={Sizes.icon.sm} color={StatusPalette.pending.text} weight="bold" />
+      <Text variant="caption" weight="semibold" color={StatusPalette.pending.text}>
+        Sin conexión. Ves lo último guardado.
       </Text>
     </View>
   );
@@ -87,8 +128,19 @@ const claveRespuesta = (r: Notifications.NotificationResponse) =>
 function RootLayoutNav() {
   const { session, initialized, isOffline } = useAuth();
   const segments = useSegments();
+  const pathname = usePathname();
+  const params = useGlobalSearchParams();
   const router = useRouter();
   const toast = useToast();
+
+  // Al volver la conexión, un aviso verde de 3 s (SY-09).
+  const estabaSinConexionRef = useRef(isOffline);
+  useEffect(() => {
+    if (estabaSinConexionRef.current && !isOffline) {
+      toast.show('success', 'Conexión restaurada', { duracionMs: AVISO_CONEXION_MS });
+    }
+    estabaSinConexionRef.current = isOffline;
+  }, [isOffline, toast]);
 
   const userId = session?.user?.id;
   const userIdRef = useRef(userId);
@@ -177,10 +229,15 @@ function RootLayoutNav() {
 
     if (enCallback) return;
     if (!session && !inAuthGroup) {
-      router.replace('/(auth)/login');
+      // Un enlace sin sesión vuelve a su destino después de entrar (AN-16).
+      const volver = volverValido(rutaPedida(pathname, segments as string[], params));
+      router.replace(volver ? { pathname: '/(auth)/login', params: { volver } } : '/(auth)/login');
     } else if (session && inAuthGroup && !permitidaConSesion) {
-      router.replace('/(tabs)');
+      const volver = volverValido(params.volver);
+      router.replace((volver ?? '/(tabs)') as Parameters<typeof router.replace>[0]);
     }
+    // `pathname` y `params` se leen al decidir; no deben disparar la redirección solos.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session, initialized, segments, router]);
 
   if (!initialized) return <LoadingScreen />;
@@ -188,16 +245,13 @@ function RootLayoutNav() {
   return (
     <>
       {isOffline && <OfflineBanner />}
+      {/* Una sola transición por tipo (AN-11): toda pantalla empujada entra desde
+          la derecha; lo que sube desde abajo es una hoja (`BottomSheet`). Acceso,
+          retorno de enlaces y pestañas cambian con un fundido. */}
       <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
         <Stack.Screen name="(auth)" options={{ animation: 'fade' }} />
         <Stack.Screen name="auth/callback" options={{ animation: 'fade', gestureEnabled: false }} />
         <Stack.Screen name="(tabs)" options={{ animation: 'fade' }} />
-        <Stack.Screen name="perfil" options={{ animation: 'slide_from_bottom' }} />
-        <Stack.Screen name="notificaciones" options={{ animation: 'slide_from_bottom' }} />
-        <Stack.Screen name="ayuda" options={{ animation: 'slide_from_bottom' }} />
-        {/* Fase 4 (#50): las pantallas las crea W2-APP-CUENTA */}
-        <Stack.Screen name="cuenta/contrasena" options={{ animation: 'slide_from_right' }} />
-        <Stack.Screen name="cuenta/eliminar" options={{ animation: 'slide_from_right' }} />
       </Stack>
     </>
   );
@@ -220,7 +274,9 @@ export default function RootLayout() {
       <AuthProvider>
         <ErrorBoundary>
           <ToastProvider>
-            <RootLayoutNav />
+            <ConfirmProvider>
+              <RootLayoutNav />
+            </ConfirmProvider>
           </ToastProvider>
         </ErrorBoundary>
       </AuthProvider>
@@ -235,20 +291,12 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  splashLogo: {
-    width: Sizes.iconBox.xl + Spacing.lg,
-    height: Sizes.iconBox.xl + Spacing.lg,
-    borderRadius: Radius.xl,
-    backgroundColor: Colors.primaryLight,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   offline: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: Spacing.sm,
-    backgroundColor: Colors.warning,
+    backgroundColor: Colors.warningLight,
     paddingHorizontal: Spacing.lg,
     paddingBottom: Spacing.sm,
   },

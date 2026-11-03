@@ -462,6 +462,9 @@ export const Motion = {
  * scrollable screen must reserve `Layout.scrollBottomInset` at the bottom and
  * every floating action bar must sit at `Layout.floatingBarBottom`.
  */
+/** Altura de la barra de pestañas flotante. */
+const TAB_BAR_HEIGHT = 70;
+
 export const Layout = {
   /** Horizontal gutter for all screen content */
   screenPadding: Spacing['2xl'],
@@ -472,7 +475,7 @@ export const Layout = {
   headerPaddingBottom: Spacing.md,
 
   tabBar: {
-    height: 70,
+    height: TAB_BAR_HEIGHT,
     /** Distance from the bottom safe-area inset */
     bottomOffset: Spacing['2xl'],
     /** Left/right inset of the floating pill */
@@ -484,11 +487,11 @@ export const Layout = {
   },
 
   /** Bottom padding for lists/scrollviews on tabbed screens (clears the bar) */
-  scrollBottomInset: 70 + Spacing['2xl'] + Spacing['3xl'], // 126
+  scrollBottomInset: TAB_BAR_HEIGHT + Spacing['2xl'] + Spacing['3xl'], // 126
   /** Bottom padding for lists on non-tabbed (stacked) screens */
   scrollBottomInsetPlain: Spacing['5xl'],
   /** Where a floating CTA bar sits above the tab bar */
-  floatingBarBottom: 70 + Spacing['2xl'] + Spacing.lg, // 110
+  floatingBarBottom: TAB_BAR_HEIGHT + Spacing['2xl'] + Spacing.lg, // 110
 
   /** Max width for centred modal cards */
   modalMaxWidth: 360,

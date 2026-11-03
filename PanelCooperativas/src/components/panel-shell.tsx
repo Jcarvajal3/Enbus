@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { AppSidebar } from "@/components/app-sidebar";
@@ -36,7 +36,7 @@ export function SaltarAlContenido() {
   return (
     <a
       href="#contenido"
-      className="sr-only rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background"
+      className="sr-only rounded-full bg-primary text-sm font-medium text-primary-foreground focus:not-sr-only focus:px-4 focus:py-2 focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background"
     >
       Saltar al contenido
     </a>
@@ -60,11 +60,25 @@ export function BarraSuperior({
   const objeto = useMigaObjeto();
   const titulo = seccion ? `${seccion.item.title} · EnBus` : tituloPorDefecto;
 
+  // Pestaña del navegador ("<Sección> · EnBus", SY-19). No se usa <title> de React: el de
+  // los metadatos de Next.js va antes en el <head>, gana y además llega en streaming después
+  // de hidratar. Por eso el shell lo fija y lo vuelve a fijar si Next lo reescribe.
+  useEffect(() => {
+    const fijar = () => {
+      if (document.title !== titulo) document.title = titulo;
+    };
+    fijar();
+    const observador = new MutationObserver(fijar);
+    observador.observe(document.head, { subtree: true, childList: true, characterData: true });
+    return () => observador.disconnect();
+  }, [titulo]);
+
   let miga: React.ReactNode = null;
   if (seccion && objeto) {
+    // En teléfono queda solo la sección (enlace de vuelta): el objeto ya es el H1 de la página.
     miga = (
       <>
-        <BreadcrumbItem className="min-w-0 shrink-0">
+        <BreadcrumbItem className="min-w-0">
           <BreadcrumbLink
             render={<Link href={seccion.item.href} />}
             className="truncate rounded-sm underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
@@ -72,8 +86,8 @@ export function BarraSuperior({
             {seccion.item.title}
           </BreadcrumbLink>
         </BreadcrumbItem>
-        <BreadcrumbSeparator />
-        <BreadcrumbItem className="min-w-0">
+        <BreadcrumbSeparator className="hidden sm:inline-flex" />
+        <BreadcrumbItem className="hidden min-w-0 sm:inline-flex">
           <BreadcrumbPage className="truncate">{objeto}</BreadcrumbPage>
         </BreadcrumbItem>
       </>
@@ -92,11 +106,10 @@ export function BarraSuperior({
 
   return (
     <header className="flex h-14 shrink-0 items-center gap-2 border-b border-border px-4 sm:h-16">
-      <title>{titulo}</title>
       <SidebarTrigger className="-ml-1" />
       {miga && (
         <>
-          <Separator orientation="vertical" className="mr-1 h-4" />
+          <Separator orientation="vertical" className="mr-1 data-vertical:h-4 data-vertical:self-center" />
           <Breadcrumb aria-label="Ubicación" className="min-w-0 flex-1">
             <BreadcrumbList className="flex-nowrap">{miga}</BreadcrumbList>
           </Breadcrumb>

@@ -15,7 +15,7 @@
  */
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Circle, Clock, MapPin } from 'phosphor-react-native';
+import { CircleIcon as Circle, Clock, MapPin } from 'phosphor-react-native';
 import { Text } from './Text';
 import { formatCity } from '@/src/utils/formatters';
 import { Colors, Sizes, Spacing } from '@/src/theme';

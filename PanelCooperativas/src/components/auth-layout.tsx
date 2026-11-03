@@ -31,7 +31,9 @@ export function AuthLayout({
       </aside>
 
       <main className="flex min-w-0 flex-1 flex-col items-center justify-center gap-8 px-4 py-10 sm:px-6">
-        <BrandMark tamano="md" conNombre zona={nombreZona} className="lg:hidden" />
+        <div className="w-full max-w-md lg:hidden">
+          <BrandMark tamano="md" conNombre zona={nombreZona} />
+        </div>
         <div className="flex w-full max-w-md flex-col gap-6 rounded-md border-0 bg-transparent shadow-none lg:border lg:border-border lg:bg-card lg:p-8">
           <div className="flex flex-col gap-1.5">
             <h1 className="text-2xl font-semibold tracking-tight text-foreground">{titulo}</h1>

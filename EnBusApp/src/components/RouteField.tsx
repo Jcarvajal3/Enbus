@@ -12,7 +12,7 @@
  */
 import React, { useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { ArrowsDownUp, Circle, MapPin, type IconProps } from 'phosphor-react-native';
+import { ArrowsDownUp, CircleIcon as Circle, MapPin, type IconProps } from 'phosphor-react-native';
 import Animated, {
   useAnimatedStyle,
   useReducedMotion,

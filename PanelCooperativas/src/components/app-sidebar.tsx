@@ -101,7 +101,7 @@ export function ContadorMenu({
           ? "bg-accent-strong text-accent-strong-foreground peer-data-active/menu-button:text-accent-strong-foreground"
           : tono === "aviso"
             ? "bg-warning-light text-warning-deep peer-hover/menu-button:text-warning-deep"
-            : "bg-muted text-foreground peer-hover/menu-button:text-foreground"
+            : "bg-background text-foreground ring-1 ring-border ring-inset peer-hover/menu-button:text-foreground"
       )}
     >
       {n > 99 ? "99+" : n}
