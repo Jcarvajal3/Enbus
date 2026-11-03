@@ -6,6 +6,7 @@
  *
  * El contador sale de `ActivityContext` (un solo canal para toda la app), así
  * que debe usarse dentro de `ActivityProvider` (el grupo de pestañas).
+ * Ambos iconos en peso `regular` (AN-23, D21).
  */
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -29,11 +30,12 @@ export function HeaderActions() {
             : 'Notificaciones'
         }
         badgeCount={notificacionesSinLeer}
+        iconWeight="regular"
         onPress={() => router.push('/notificaciones')}
       />
       <IconButton
         icon={UserCircle}
-        iconWeight="fill"
+        iconWeight="regular"
         label="Mi perfil"
         onPress={() => router.push('/perfil')}
       />

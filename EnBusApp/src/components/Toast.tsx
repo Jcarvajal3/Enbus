@@ -202,7 +202,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
                 accessibilityRole="button"
                 accessibilityLabel={accion.label}
               >
-                <Text variant="label" weight="bold" color="accent" compact>
+                <Text variant="label" color="link" style={s.actionText} compact>
                   {accion.label}
                 </Text>
               </PressableScale>
@@ -253,6 +253,9 @@ const s = StyleSheet.create({
   },
   message: {
     flex: 1,
+  },
+  actionText: {
+    textDecorationLine: 'underline',
   },
   action: {
     minHeight: Sizes.touchTarget,

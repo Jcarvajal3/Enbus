@@ -1,8 +1,7 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
-import { WarningCircle } from 'phosphor-react-native';
-import { Button, Card, Text } from '@/src/components/ui';
-import { Colors, Radius, Sizes, Spacing } from '@/src/theme';
+import { ErrorState, Text } from '@/src/components/ui';
+import { Colors, Layout, Radius, Spacing } from '@/src/theme';
 
 interface Props {
   children: ReactNode;
@@ -14,6 +13,10 @@ interface State {
   error: Error | null;
 }
 
+/**
+ * Pantalla de error cuando algo se rompe al dibujar: el mismo `ErrorState` de
+ * toda la app (`WarningCircle` + "Reintentar"), sobre la pantalla blanca.
+ */
 export class ErrorBoundary extends Component<Props, State> {
   public state: State = { hasError: false, error: null };
 
@@ -22,6 +25,7 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    // Solo para el registro de desarrollo; el usuario ya ve la pantalla de error.
     console.error('Uncaught error inside ErrorBoundary:', error, errorInfo);
   }
 
@@ -35,36 +39,24 @@ export class ErrorBoundary extends Component<Props, State> {
 
     return (
       <View style={s.container}>
-        <Card padding="lg" style={s.card}>
-          <View style={s.icon}>
-            <WarningCircle weight="fill" color={Colors.warning} size={Sizes.icon['2xl']} />
-          </View>
+        <ErrorState
+          title="Algo salió mal"
+          description="No pudimos mostrar esta pantalla. Intenta de nuevo."
+          onRetry={this.handleReset}
+        />
 
-          <Text variant="heading" size="2xl" align="center">
-            Algo salió mal
-          </Text>
-          <Text variant="secondary" color="muted" align="center" style={s.message}>
-            Ocurrió un error inesperado al mostrar esta pantalla. Intenta de nuevo; si persiste,
-            vuelve al inicio.
-          </Text>
-
-          {__DEV__ && this.state.error && (
-            <View style={s.debug}>
-              <Text variant="overline" color="muted" uppercase>
-                Detalles técnicos (desarrollo)
+        {__DEV__ && this.state.error && (
+          <View style={s.debug}>
+            <Text variant="caption" weight="semibold" color="muted">
+              Detalles técnicos (desarrollo)
+            </Text>
+            <ScrollView style={s.debugScroll}>
+              <Text variant="caption" color="dangerText">
+                {this.state.error.toString()}
               </Text>
-              <ScrollView style={s.debugScroll}>
-                <Text variant="caption" color="danger">
-                  {this.state.error.toString()}
-                </Text>
-              </ScrollView>
-            </View>
-          )}
-
-          <Button variant="primary" fullWidth onPress={this.handleReset}>
-            Reintentar
-          </Button>
-        </Card>
+            </ScrollView>
+          </View>
+        )}
       </View>
     );
   }
@@ -73,37 +65,15 @@ export class ErrorBoundary extends Component<Props, State> {
 const s = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.surface,
+    backgroundColor: Colors.background,
     justifyContent: 'center',
-    alignItems: 'center',
-    padding: Spacing['2xl'],
-  },
-  card: {
-    width: '100%',
-  },
-  icon: {
-    width: Sizes.iconBox.xl,
-    height: Sizes.iconBox.xl,
-    borderRadius: Radius.full,
-    backgroundColor: Colors.warningLight,
-    alignItems: 'center',
-    justifyContent: 'center',
-    alignSelf: 'center',
-    marginBottom: Spacing.lg,
-  },
-  message: {
-    marginTop: Spacing.sm,
-    marginBottom: Spacing['2xl'],
+    paddingHorizontal: Layout.screenPadding,
   },
   debug: {
-    width: '100%',
     gap: Spacing.xs,
     backgroundColor: Colors.surface,
-    borderRadius: Radius.md,
-    borderWidth: Sizes.hairline,
-    borderColor: Colors.border,
+    borderRadius: Radius.lg,
     padding: Spacing.md,
-    marginBottom: Spacing['2xl'],
   },
   debugScroll: {
     maxHeight: 120,
