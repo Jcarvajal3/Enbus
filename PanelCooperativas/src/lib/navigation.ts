@@ -1,26 +1,49 @@
 import {
   ChartBar, Package, Ticket, TruckTrailer,
   MapPin, Users, Gear, CalendarBlank,
-  DownloadSimple
+  DownloadSimple, Handshake, Receipt, ArrowCounterClockwise,
+  type Icon,
 } from "@phosphor-icons/react";
 
-export const NAV_ITEMS = [
+export type RolPanel = "admin_cooperativa" | "taquillero";
+
+export type NavItem = {
+  /** Mismo texto en el menú, el H1 y el breadcrumb (glosario, Audits/fase3_spec.md §4). */
+  title: string;
+  href: string;
+  icon: Icon;
+  roles: RolPanel[];
+};
+
+export const NAV_ITEMS: NavItem[] = [
   {
-    title: "Dashboard",
+    title: "Resumen",
     href: "/cooperativas/dashboard",
     icon: ChartBar,
     roles: ["admin_cooperativa", "taquillero"],
   },
   {
-    title: "Taquilla Encomiendas",
+    title: "Taquilla de boletos",
+    href: "/cooperativas/taquilla/boletos",
+    icon: Ticket,
+    roles: ["admin_cooperativa", "taquillero"],
+  },
+  {
+    title: "Taquilla de encomiendas",
     href: "/cooperativas/taquilla/encomiendas",
     icon: Package,
     roles: ["admin_cooperativa", "taquillero"],
   },
   {
-    title: "Taquilla Boletos",
-    href: "/cooperativas/taquilla/boletos",
-    icon: Ticket,
+    title: "Pagos por verificar",
+    href: "/cooperativas/pagos",
+    icon: Receipt,
+    roles: ["admin_cooperativa", "taquillero"],
+  },
+  {
+    title: "Reembolsos",
+    href: "/cooperativas/reembolsos",
+    icon: ArrowCounterClockwise,
     roles: ["admin_cooperativa", "taquillero"],
   },
   {
@@ -30,25 +53,31 @@ export const NAV_ITEMS = [
     roles: ["admin_cooperativa", "taquillero"],
   },
   {
-    title: "Recepción Destino",
+    title: "Recepción en destino",
     href: "/cooperativas/recepcion-destino",
     icon: DownloadSimple,
     roles: ["admin_cooperativa", "taquillero"],
   },
   {
-    title: "Rutas y Horarios",
+    title: "Entrega",
+    href: "/cooperativas/entrega",
+    icon: Handshake,
+    roles: ["admin_cooperativa", "taquillero"],
+  },
+  {
+    title: "Rutas",
     href: "/cooperativas/rutas",
     icon: MapPin,
     roles: ["admin_cooperativa"],
   },
   {
-    title: "Viajes Programados",
+    title: "Viajes",
     href: "/cooperativas/viajes",
     icon: CalendarBlank,
     roles: ["admin_cooperativa", "taquillero"],
   },
   {
-    title: "Gestión Empleados",
+    title: "Empleados",
     href: "/cooperativas/empleados",
     icon: Users,
     roles: ["admin_cooperativa"],
@@ -60,3 +89,9 @@ export const NAV_ITEMS = [
     roles: ["admin_cooperativa"],
   },
 ];
+
+/** true si `pathname` está dentro de la sección `href` (la sección y sus subrutas). */
+export function esRutaActiva(pathname: string, href: string): boolean {
+  const base = href.split("?")[0];
+  return pathname === base || pathname.startsWith(`${base}/`);
+}

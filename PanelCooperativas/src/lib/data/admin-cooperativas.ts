@@ -1,4 +1,5 @@
 import { createClient, createAdminClient } from "@/lib/supabase/server";
+import { humanizeError } from "@/lib/errores";
 import type { 
   Cooperativa, 
   CooperativaDetalle, 
@@ -17,15 +18,17 @@ export async function fetchCooperativas(filters?: { estado?: string; search?: st
     query = query.eq("estado", filters.estado);
   }
 
-  if (filters?.search) {
-    query = query.or(`nombre.ilike.%${filters.search}%,rif.ilike.%${filters.search}%`);
+  // Sin comas, paréntesis ni comodines: romperían el filtro `or` de PostgREST (?search=a,b → error).
+  const termino = (filters?.search ?? "").replace(/[,()*%\\]/g, " ").trim();
+  if (termino) {
+    query = query.or(`nombre.ilike.%${termino}%,rif.ilike.%${termino}%`);
   }
 
   const { data, error } = await query.order("nombre", { ascending: true });
 
   if (error) {
     console.error("Error fetching cooperativas:", error);
-    throw new Error(error.message);
+    throw new Error(humanizeError(error, "cargar las cooperativas"));
   }
 
   return data as Cooperativa[];
@@ -40,12 +43,15 @@ export async function fetchCooperativaById(id: string): Promise<CooperativaDetal
     .from("cooperativas")
     .select("*")
     .eq("id", id)
-    .single();
+    .maybeSingle();
 
-  if (coopError || !cooperativa) {
+  if (coopError) {
+    // Un id mal formado (22P02) es "no existe"; cualquier otro error va a error.tsx con "Reintentar".
     console.error("Error fetching cooperativa:", coopError);
-    return null;
+    if (coopError.code === "22P02") return null;
+    throw new Error(humanizeError(coopError, "cargar la cooperativa"));
   }
+  if (!cooperativa) return null;
 
   // 2. Fetch related data in parallel
   const [
@@ -55,6 +61,7 @@ export async function fetchCooperativaById(id: string): Promise<CooperativaDetal
     profilesResult,
     calificacionesResult,
     comisionesResult,
+    encomiendasResult,
   ] = await Promise.all([
     supabase.from("sucursales").select("*").eq("cooperativa_id", id).order("nombre", { ascending: true }),
     // Use adminSupabase to bypass RLS activo=true filter — super admin needs to see ALL methods
@@ -63,6 +70,11 @@ export async function fetchCooperativaById(id: string): Promise<CooperativaDetal
     supabase.from("profiles").select("id, nombre_completo, role, cooperativa_id, telefono, cedula_rif, created_at").eq("cooperativa_id", id).order("created_at", { ascending: false }),
     supabase.from("calificaciones").select("*, profiles:usuario_id(nombre_completo)").eq("cooperativa_id", id).order("created_at", { ascending: false }),
     supabase.from("comisiones_ciclo").select("monto_comision").eq("cooperativa_id", id).eq("pagado", false),
+    supabase
+      .from("encomiendas")
+      .select("id", { count: "exact", head: true })
+      .eq("cooperativa_id", id)
+      .not("estado", "in", "(ENTREGADA,CANCELADA,DEVUELTA)"),
   ]);
 
   if (sucursalesResult.error) console.error("Error sucursales:", sucursalesResult.error);
@@ -71,6 +83,7 @@ export async function fetchCooperativaById(id: string): Promise<CooperativaDetal
   if (profilesResult.error) console.error("Error profiles:", profilesResult.error);
   if (calificacionesResult.error) console.error("Error calificaciones:", calificacionesResult.error);
   if (comisionesResult.error) console.error("Error comisiones:", comisionesResult.error);
+  if (encomiendasResult.error) console.error("Error encomiendas:", encomiendasResult.error);
 
   const sucursales = (sucursalesResult.data || []) as Sucursal[];
   const metodos_pago = (metodosResult.data || []) as MetodoPago[];
@@ -138,6 +151,8 @@ export async function fetchCooperativaById(id: string): Promise<CooperativaDetal
     rutas,
     empleados,
     calificaciones,
-    comisiones_pendientes
+    comisiones_pendientes,
+    ciclos_sin_pagar: (comisionesResult.data || []).length,
+    encomiendas_en_curso: encomiendasResult.count ?? 0,
   } as CooperativaDetalle;
 }

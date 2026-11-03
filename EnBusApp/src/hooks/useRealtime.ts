@@ -18,6 +18,13 @@ interface UseRealtimeOptions {
   limit?: number;
 }
 
+/** Resuelve las promesas de `refetch` que esperaban la recarga. */
+function resolverPendientes(ref: { current: (() => void)[] }) {
+  const pendientes = ref.current;
+  ref.current = [];
+  pendientes.forEach((resolve) => resolve());
+}
+
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
 /**
@@ -45,14 +52,20 @@ export function useRealtime<T extends WithId>(
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const [refreshCount, setRefreshCount] = useState(0);
+  /** Momento (ms) de la última lectura correcta de la red, para "Actualizado hace X". */
+  const [actualizadoAt, setActualizadoAt] = useState<number | null>(null);
 
-  // REF-03: Typed as () => Promise<void> so callers can correctly await it.
-  // Previously typed as () => void which caused TypeScript to warn when awaited.
-  const refetch = (): Promise<void> => new Promise((resolve) => {
-    setRefreshCount(prev => prev + 1);
-    // Resolve on next tick to allow the state update to propagate
-    setTimeout(resolve, 0);
-  });
+  // `refetch` se resuelve cuando termina la recarga (bien o con error), así un
+  // "Reintentar" o un pull-to-refresh muestran la carga el tiempo real.
+  const pendientesRef = useRef<(() => void)[]>([]);
+
+  const refetch = (): Promise<void> => {
+    if (!enabled) return Promise.resolve();
+    return new Promise((resolve) => {
+      pendientesRef.current.push(resolve);
+      setRefreshCount((prev) => prev + 1);
+    });
+  };
 
   // Keep a stable ref so the WebSocket callback never closes over a stale setter.
   const setDataRef = useRef(setData);
@@ -71,6 +84,7 @@ export function useRealtime<T extends WithId>(
   useEffect(() => {
     if (!enabled) {
       setLoading(false);
+      resolverPendientes(pendientesRef);
       return;
     }
 
@@ -108,6 +122,7 @@ export function useRealtime<T extends WithId>(
           const fresh = (result as unknown as T[]) ?? [];
           setData(fresh);
           setError(null);
+          setActualizadoAt(Date.now());
 
           // Persistir datos frescos en caché (solo si el array no está vacío)
           if (fresh.length > 0) {
@@ -122,10 +137,26 @@ export function useRealtime<T extends WithId>(
         if (isMounted) setError(e instanceof Error ? e : new Error(String(e)));
       } finally {
         if (isMounted) setLoading(false);
+        // Si el efecto se reinició (otra recarga), la nueva ejecución resuelve.
+        if (isMounted) resolverPendientes(pendientesRef);
       }
     };
 
     initialize();
+
+    // Realtime entrega solo las columnas de la tabla, sin los embeds del select
+    // (p. ej. `viajes(...)`, `pago:pagos!...(...)`). Si el select tiene embeds,
+    // un UPDATE se mezcla sobre la fila existente (conserva los embeds) y, tras
+    // una ráfaga de cambios, se vuelve a leer la lista completa una sola vez.
+    const tieneEmbeds = selectQuery.includes('(');
+    let recargaTimer: ReturnType<typeof setTimeout> | null = null;
+    const programarRecarga = () => {
+      if (recargaTimer) clearTimeout(recargaTimer);
+      recargaTimer = setTimeout(() => {
+        recargaTimer = null;
+        if (isMounted) setRefreshCount((prev) => prev + 1);
+      }, 400);
+    };
 
     // ── Realtime WebSocket ────────────────────────────────────────────────────
     const uniqueId = Math.random().toString(36).substring(2, 9);
@@ -150,6 +181,12 @@ export function useRealtime<T extends WithId>(
         (payload) => {
           if (!isMounted) return;
 
+          if (tieneEmbeds && payload.eventType === 'INSERT') {
+            // Una fila nueva sin embeds rompería la UI: se espera a la recarga.
+            programarRecarga();
+            return;
+          }
+
           setDataRef.current((prev) => {
             let updatedList = prev;
 
@@ -157,7 +194,11 @@ export function useRealtime<T extends WithId>(
               updatedList = [payload.new as T, ...prev];
             } else if (payload.eventType === 'UPDATE') {
               updatedList = prev.map((item) =>
-                item.id === (payload.new as T).id ? (payload.new as T) : item
+                item.id === (payload.new as T).id
+                  ? tieneEmbeds
+                    ? ({ ...item, ...(payload.new as Partial<T>) } as T)
+                    : (payload.new as T)
+                  : item
               );
             } else if (payload.eventType === 'DELETE') {
               updatedList = prev.filter(
@@ -172,6 +213,9 @@ export function useRealtime<T extends WithId>(
 
             return updatedList;
           });
+
+          // Los embeds (viaje, pago…) pueden haber cambiado con la fila.
+          if (tieneEmbeds && payload.eventType === 'UPDATE') programarRecarga();
         }
       )
       .subscribe();
@@ -179,9 +223,13 @@ export function useRealtime<T extends WithId>(
     // ── Cleanup ───────────────────────────────────────────────────────────────
     return () => {
       isMounted = false;
+      if (recargaTimer) clearTimeout(recargaTimer);
       supabase.removeChannel(channel);
     };
   }, [enabled, tableName, filterColumn, filterValue, selectQuery, limit, cacheKey, refreshCount]);
 
-  return { data, loading, error, setData, refetch };
+  // Al desmontar, nadie queda esperando una recarga que no llegará.
+  useEffect(() => () => resolverPendientes(pendientesRef), []);
+
+  return { data, loading, error, setData, refetch, actualizadoAt };
 }

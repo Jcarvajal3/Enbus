@@ -3,7 +3,9 @@
 import { createClient, createAdminClient } from "@/lib/supabase/server";
 import { requireSuperAdmin } from "@/lib/supabase/auth-guards";
 import { revalidatePath } from "next/cache";
-import type { EstadoCooperativa } from "@/lib/types/admin-cooperativas";
+import { ESTADOS_CON_MOTIVO, type EstadoCooperativa } from "@/lib/types/admin-cooperativas";
+import { normalizeRif, RIF_ERROR } from "@/lib/rif";
+import { humanizeError } from "@/lib/errores";
 
 export async function createCooperativa(formData: FormData) {
   try {
@@ -12,24 +14,38 @@ export async function createCooperativa(formData: FormData) {
     const adminSupabase = createAdminClient();
 
     const nombre = formData.get("nombre") as string;
-    const rif = formData.get("rif") as string;
+    const rifInput = formData.get("rif") as string;
     const comisionStr = formData.get("comision_porcentaje") as string;
-    const emailAdmin = formData.get("email_admin") as string;
+    const emailAdmin = ((formData.get("email_admin") as string) || "").trim().toLowerCase();
     const logoFile = formData.get("logo") as File | null;
 
-    if (!nombre || !rif || !comisionStr) {
-      return { success: false, error: "Nombre, RIF y Comisión son requeridos." };
+    if (!nombre || !rifInput || !comisionStr) {
+      return { success: false, error: "Completa el nombre, el RIF y la comisión." };
     }
 
-    // RIF validation (e.g. J-12345678-9 or J-XXXXXXXX)
-    const rifRegex = /^J-\d{8,9}$/;
-    if (!rifRegex.test(rif)) {
-      return { success: false, error: "El RIF debe tener el formato J-XXXXXXXX (letra J seguida de guión y 8 o 9 dígitos)." };
+    // Acepta el RIF con o sin guiones (J, G, V, E, P o C) y lo guarda normalizado ("J-12345678-9")
+    const rif = normalizeRif(rifInput);
+    if (!rif) {
+      return { success: false, error: RIF_ERROR, campo: "rif" as const };
     }
 
     const comision = parseFloat(comisionStr);
     if (isNaN(comision) || comision < 0 || comision > 100) {
       return { success: false, error: "La comisión debe ser un número entre 0 y 100." };
+    }
+
+    // Validar el logo antes de crear la cooperativa, para no dejarla creada si el logo se rechaza.
+    // Mismo límite que muestra el diálogo (2 MB).
+    let aviso: string | undefined;
+    if (logoFile && logoFile.size > 0) {
+      // Whitelist MIME types — reject anything that isn't a raster image
+      const allowedMimeTypes = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+      if (!allowedMimeTypes.includes(logoFile.type)) {
+        return { success: false, error: "El logo debe ser una imagen (JPEG, PNG, WebP o GIF)." };
+      }
+      if (logoFile.size > 2 * 1024 * 1024) {
+        return { success: false, error: "El logo no puede superar los 2 MB." };
+      }
     }
 
     // Insert cooperativa
@@ -46,20 +62,15 @@ export async function createCooperativa(formData: FormData) {
 
     if (insertError || !cooperativa) {
       console.error("Error inserting cooperativa:", insertError);
-      return { success: false, error: insertError?.message || "Error al crear la cooperativa." };
+      return {
+        success: false,
+        error: humanizeError(insertError, "crear la cooperativa"),
+        campo: insertError?.code === "23505" ? ("rif" as const) : undefined,
+      };
     }
 
     let logo_url = null;
     if (logoFile && logoFile.size > 0) {
-      // Whitelist MIME types — reject anything that isn't a raster image
-      const allowedMimeTypes = ["image/jpeg", "image/png", "image/webp", "image/gif"];
-      if (!allowedMimeTypes.includes(logoFile.type)) {
-        return { success: false, error: "El logo debe ser una imagen (JPEG, PNG, WebP o GIF)." };
-      }
-      if (logoFile.size > 5 * 1024 * 1024) {
-        return { success: false, error: "El logo no puede superar los 5 MB." };
-      }
-
       const ext = logoFile.name.split(".").pop() ?? "png";
       const path = `${cooperativa.id}/logo.${ext}`;
 
@@ -69,14 +80,19 @@ export async function createCooperativa(formData: FormData) {
 
       if (uploadError) {
         console.error("Error uploading logo:", uploadError);
+        aviso = "Creamos la cooperativa, pero no pudimos subir el logo. Súbelo de nuevo desde Editar datos.";
       } else {
         const { data: publicUrlData } = adminSupabase.storage.from("logos-cooperativas").getPublicUrl(path);
         logo_url = `${publicUrlData.publicUrl}?t=${Date.now()}`;
-        
-        await supabase
+
+        const { error: logoError } = await supabase
           .from("cooperativas")
           .update({ logo_url })
           .eq("id", cooperativa.id);
+        if (logoError) {
+          console.error("Error saving logo_url:", logoError);
+          aviso = "Creamos la cooperativa, pero no pudimos guardar el logo. Súbelo de nuevo desde Editar datos.";
+        }
       }
     }
 
@@ -97,17 +113,19 @@ export async function createCooperativa(formData: FormData) {
 
       if (inviteError) {
         console.error("Error creating invitation:", inviteError);
+        aviso = [aviso, "No pudimos crear la invitación del administrador. Créala desde el detalle de la cooperativa."]
+          .filter(Boolean)
+          .join(" ");
       } else if (invitacion) {
         invite_link = `/cooperativas/invite/${invitacion.token}`;
       }
     }
 
     revalidatePath("/admin/cooperativas");
-    return { success: true, cooperativa_id: cooperativa.id, invite_link };
+    return { success: true, cooperativa_id: cooperativa.id, invite_link, aviso };
   } catch (error) {
     console.error("Error in createCooperativa server action:", error);
-    const message = error instanceof Error ? error.message : "Error interno del servidor.";
-    return { success: false, error: message };
+    return { success: false, error: humanizeError(error, "crear la cooperativa") };
   }
 }
 
@@ -116,8 +134,9 @@ export async function inviteCooperativaAdmin(cooperativaId: string, email: strin
     const superAdmin = await requireSuperAdmin();
     const adminSupabase = createAdminClient();
 
+    email = (email ?? "").trim().toLowerCase();
     if (!email) {
-      return { success: false, error: "El correo electrónico es requerido." };
+      return { success: false, error: "Escribe el correo del administrador." };
     }
 
     // Check if there is an active invitation
@@ -129,7 +148,7 @@ export async function inviteCooperativaAdmin(cooperativaId: string, email: strin
       .gt("expira_at", new Date().toISOString());
 
     if (activa && activa.length > 0) {
-      return { success: false, error: "Ya hay una invitación activa para este correo electrónico." };
+      return { success: false, error: "Ese correo ya tiene una invitación vigente. Espera a que la use o a que venza (48 horas)." };
     }
 
     const { data: invitacion, error: inviteError } = await adminSupabase
@@ -146,7 +165,7 @@ export async function inviteCooperativaAdmin(cooperativaId: string, email: strin
 
     if (inviteError) {
       console.error("Error creating invitation:", inviteError);
-      return { success: false, error: "Error al crear la invitación." };
+      return { success: false, error: humanizeError(inviteError, "crear la invitación") };
     }
 
     const invite_link = `/cooperativas/invite/${invitacion.token}`;
@@ -155,8 +174,7 @@ export async function inviteCooperativaAdmin(cooperativaId: string, email: strin
     return { success: true, invite_link };
   } catch (error) {
     console.error("Error in inviteCooperativaAdmin:", error);
-    const message = error instanceof Error ? error.message : "Error interno.";
-    return { success: false, error: message };
+    return { success: false, error: humanizeError(error, "crear la invitación") };
   }
 }
 
@@ -167,17 +185,28 @@ export async function updateCooperativa(id: string, formData: FormData) {
     const adminSupabase = createAdminClient();
 
     const nombre = formData.get("nombre") as string;
-    const rif = formData.get("rif") as string;
+    const rifInput = ((formData.get("rif") as string) || "").trim();
     const comisionStr = formData.get("comision_porcentaje") as string;
     const logoFile = formData.get("logo") as File | null;
 
-    if (!nombre || !rif || !comisionStr) {
-      return { success: false, error: "Nombre, RIF y Comisión son requeridos." };
+    if (!nombre || !rifInput || !comisionStr) {
+      return { success: false, error: "Completa el nombre, el RIF y la comisión." };
     }
 
-    const rifRegex = /^J-\d{8,9}$/;
-    if (!rifRegex.test(rif)) {
-      return { success: false, error: "El RIF debe tener el formato J-XXXXXXXX." };
+    // Normaliza el RIF ("J-12345678-9"). Si no se puede normalizar pero es el mismo RIF que ya
+    // estaba guardado (registros antiguos sin dígito verificador), se conserva para no bloquear la edición.
+    let rif = normalizeRif(rifInput);
+    if (!rif) {
+      const { data: actual } = await supabase
+        .from("cooperativas")
+        .select("rif")
+        .eq("id", id)
+        .maybeSingle();
+      if (actual?.rif && actual.rif === rifInput) {
+        rif = rifInput;
+      } else {
+        return { success: false, error: RIF_ERROR };
+      }
     }
 
     const comision = parseFloat(comisionStr);
@@ -198,14 +227,15 @@ export async function updateCooperativa(id: string, formData: FormData) {
       updated_at: new Date().toISOString()
     };
 
+    let aviso: string | undefined;
     if (logoFile && logoFile.size > 0) {
       // Whitelist MIME types — reject anything that isn't a raster image
       const allowedMimeTypes = ["image/jpeg", "image/png", "image/webp", "image/gif"];
       if (!allowedMimeTypes.includes(logoFile.type)) {
         return { success: false, error: "El logo debe ser una imagen (JPEG, PNG, WebP o GIF)." };
       }
-      if (logoFile.size > 5 * 1024 * 1024) {
-        return { success: false, error: "El logo no puede superar los 5 MB." };
+      if (logoFile.size > 2 * 1024 * 1024) {
+        return { success: false, error: "El logo no puede superar los 2 MB. Usa una imagen más liviana." };
       }
 
       const ext = logoFile.name.split(".").pop() ?? "png";
@@ -217,6 +247,7 @@ export async function updateCooperativa(id: string, formData: FormData) {
 
       if (uploadError) {
         console.error("Error uploading logo:", uploadError);
+        aviso = "Guardamos los datos, pero no pudimos subir el logo. Intenta de nuevo con otra imagen.";
       } else {
         const { data: publicUrlData } = adminSupabase.storage.from("logos-cooperativas").getPublicUrl(path);
         updates.logo_url = `${publicUrlData.publicUrl}?t=${Date.now()}`;
@@ -230,75 +261,50 @@ export async function updateCooperativa(id: string, formData: FormData) {
 
     if (updateError) {
       console.error("Error updating cooperativa:", updateError);
-      return { success: false, error: updateError.message };
+      return { success: false, error: humanizeError(updateError, "guardar los cambios de la cooperativa") };
     }
 
     revalidatePath("/admin/cooperativas");
     revalidatePath(`/admin/cooperativas/${id}`);
-    return { success: true };
+    return { success: true, aviso };
   } catch (error) {
     console.error("Error in updateCooperativa:", error);
-    const message = error instanceof Error ? error.message : "Error interno.";
-    return { success: false, error: message };
+    return { success: false, error: humanizeError(error, "guardar los cambios de la cooperativa") };
   }
 }
 
-export async function changeCooperativaEstado(id: string, nuevoEstado: EstadoCooperativa) {
+/**
+ * Suspender, reactivar o desactivar con fn_cambiar_estado_cooperativa: valida la
+ * transición en el servidor, exige motivo para SUSPENDIDA/DESACTIVADA (la
+ * cooperativa lo ve en su panel) y registra quién y cuándo.
+ */
+export async function changeCooperativaEstado(id: string, nuevoEstado: EstadoCooperativa, motivo?: string) {
   try {
     await requireSuperAdmin();
+    const motivoLimpio = (motivo ?? "").trim();
+    if (ESTADOS_CON_MOTIVO.includes(nuevoEstado) && motivoLimpio.length < 5) {
+      return { success: false, error: "Escribe el motivo (mínimo 5 caracteres): la cooperativa lo verá en su panel." };
+    }
+
     const supabase = await createClient();
+    const { error } = await supabase.rpc("fn_cambiar_estado_cooperativa", {
+      p_cooperativa_id: id,
+      p_estado: nuevoEstado,
+      p_motivo: motivoLimpio || null,
+    });
 
-    // Check current state
-    const { data: currentCoop, error: getError } = await supabase
-      .from("cooperativas")
-      .select("estado")
-      .eq("id", id)
-      .single();
-
-    if (getError || !currentCoop) {
-      return { success: false, error: "Cooperativa no encontrada." };
-    }
-
-    const estadoActual = currentCoop.estado;
-
-    if (estadoActual === nuevoEstado) {
-      return { success: true };
-    }
-
-    // Explicit allowlist of valid state transitions
-    const transicionesPermitidas: Record<string, EstadoCooperativa[]> = {
-      PENDIENTE: ["ACTIVA", "DESACTIVADA"],
-      ACTIVA: ["SUSPENDIDA", "DESACTIVADA"],
-      SUSPENDIDA: ["ACTIVA", "DESACTIVADA"],
-      DESACTIVADA: [], // terminal state — no transitions allowed
-    };
-    const permitidas = transicionesPermitidas[estadoActual] ?? [];
-    if (!permitidas.includes(nuevoEstado)) {
-      return {
-        success: false,
-        error: `Transición de estado ${estadoActual} → ${nuevoEstado} no está permitida.`,
-      };
-    }
-
-    const { error: updateError } = await supabase
-      .from("cooperativas")
-      .update({
-        estado: nuevoEstado,
-        updated_at: new Date().toISOString()
-      })
-      .eq("id", id);
-
-    if (updateError) {
-      console.error("Error changing cooperativa state:", updateError);
-      return { success: false, error: updateError.message };
+    if (error) {
+      console.error("Error changing cooperativa state:", error);
+      return { success: false, error: humanizeError(error, "cambiar el estado de la cooperativa") };
     }
 
     revalidatePath("/admin/cooperativas");
     revalidatePath(`/admin/cooperativas/${id}`);
+    revalidatePath("/admin/solicitudes");
+    revalidatePath("/admin/dashboard");
     return { success: true };
   } catch (error) {
     console.error("Error in changeCooperativaEstado:", error);
-    const message = error instanceof Error ? error.message : "Error interno.";
-    return { success: false, error: message };
+    return { success: false, error: humanizeError(error, "cambiar el estado de la cooperativa") };
   }
 }

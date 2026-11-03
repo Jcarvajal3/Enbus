@@ -5,6 +5,11 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: false,
   },
   experimental: {
+    // Los logos (hasta 2 MB) se suben con Server Actions, cuyo límite por
+    // defecto es 1 MB. 3 MB deja margen para el resto del FormData.
+    serverActions: {
+      bodySizeLimit: "3mb",
+    },
     // Tree-shake barrel exports — eliminates unused icons/components from bundle
     optimizePackageImports: [
       "@phosphor-icons/react",

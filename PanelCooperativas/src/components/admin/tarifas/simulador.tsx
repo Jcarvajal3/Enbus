@@ -6,15 +6,19 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { Tarifa, RouteOption } from "@/lib/types/admin-tarifas";
-import { formatCurrency } from "@/lib/utils";
+import { formatNumeroVE, formatUsd } from "@/lib/dinero";
+import type { TasaBCV } from "@/lib/types/pagos";
+import { Monto } from "@/components/monto";
 import { Calculator, ArrowRight, Info, Warning } from "@phosphor-icons/react";
 
 interface SimuladorProps {
   tarifa: Tarifa | null;
   rutas: RouteOption[];
+  /** Tasa BCV vigente para mostrar el equivalente en Bs (null: solo USD). */
+  tasa?: TasaBCV | null;
 }
 
-export function Simulador({ tarifa, rutas }: SimuladorProps) {
+export function Simulador({ tarifa, rutas, tasa = null }: SimuladorProps) {
   const [selectedRutaId, setSelectedRutaId] = useState<string>("");
   const [peso, setPeso] = useState<number>(5); // default 5kg
 
@@ -41,7 +45,7 @@ export function Simulador({ tarifa, rutas }: SimuladorProps) {
     const costo_distancia = costo_base * (factor_distancia_por_min * duracion_estimada_min);
     const costo_total = costo_base + costo_distancia;
 
-    const formula = `${peso.toFixed(2)} kg × $${tarifa_por_kg.toFixed(2)} × (1 + ${factor_distancia_por_min.toFixed(4)} × ${duracion_estimada_min} min)`;
+    const formula = `${formatNumeroVE(peso)} kg × USD ${formatNumeroVE(tarifa_por_kg)} × (1 + ${formatNumeroVE(factor_distancia_por_min, 4)} × ${duracion_estimada_min} min)`;
 
     return {
       costo_base,
@@ -70,7 +74,7 @@ export function Simulador({ tarifa, rutas }: SimuladorProps) {
     <Card className="transition-all duration-200 hover:shadow-lg border-primary/15 bg-gradient-to-br from-card to-secondary/5">
       <CardHeader className="pb-3">
         <div className="flex items-center gap-2">
-          <div className="flex size-7 items-center justify-center rounded bg-primary/10 text-primary">
+          <div className="flex size-7 items-center justify-center rounded bg-primary/15 text-primary-text">
             <Calculator className="size-4" />
           </div>
           <div>
@@ -82,20 +86,27 @@ export function Simulador({ tarifa, rutas }: SimuladorProps) {
       
       <CardContent className="space-y-4">
         {!tarifa ? (
-          <div className="flex gap-2.5 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs">
-            <Info className="size-4 shrink-0 text-amber-500" />
+          <div className="flex gap-2.5 p-3 rounded-lg bg-amber-50 border border-amber-600/30 text-amber-950 text-xs dark:bg-amber-400/10 dark:text-amber-100">
+            <Info className="size-4 shrink-0 text-warning-text" aria-hidden />
             <div>
-              Debe registrar y activar una tarifa vigente para habilitar el simulador.
+              Crea una tarifa con «Nueva tarifa» para usar el simulador.
             </div>
           </div>
         ) : (
           <>
             {/* Route Selector */}
             <div className="space-y-1.5">
-              <Label htmlFor="sim-ruta" className="text-xs font-semibold text-muted-foreground">Ruta de Envío</Label>
-              <Select value={selectedRutaId} onValueChange={(val) => setSelectedRutaId(val ?? "")}>
+              <Label htmlFor="sim-ruta" className="text-xs font-semibold text-muted-foreground">Ruta de envío</Label>
+              <Select
+                value={selectedRutaId}
+                onValueChange={(val) => setSelectedRutaId(val ?? "")}
+                // Etiqueta de la ruta elegida: sin `items`, el Select mostraría su id.
+                items={Object.fromEntries(
+                  rutas.map((r) => [r.id, `${r.ciudad_origen} → ${r.ciudad_destino} (${r.cooperativa_nombre})`])
+                )}
+              >
                 <SelectTrigger id="sim-ruta" className="bg-background border-input text-foreground text-xs h-9">
-                  <SelectValue placeholder="Seleccione una ruta activa" />
+                  <SelectValue placeholder="Elige una ruta activa" />
                 </SelectTrigger>
                 <SelectContent className="bg-popover border text-popover-foreground max-h-[220px]">
                   {rutas.map((ruta) => (
@@ -104,7 +115,7 @@ export function Simulador({ tarifa, rutas }: SimuladorProps) {
                         <span className="font-semibold">{ruta.ciudad_origen}</span>
                         <ArrowRight className="size-2.5 text-muted-foreground" />
                         <span className="font-semibold">{ruta.ciudad_destino}</span>
-                        <span className="text-[10px] text-muted-foreground">({ruta.cooperativa_nombre})</span>
+                        <span className="text-xs text-muted-foreground">({ruta.cooperativa_nombre})</span>
                       </div>
                     </SelectItem>
                   ))}
@@ -140,7 +151,7 @@ export function Simulador({ tarifa, rutas }: SimuladorProps) {
                   onChange={handleSliderChange}
                   className="w-full h-1.5 rounded-lg appearance-none cursor-pointer bg-muted accent-orange-600"
                 />
-                <div className="flex justify-between text-[10px] text-muted-foreground font-medium px-1">
+                <div className="flex justify-between text-xs text-muted-foreground font-medium px-1">
                   <span>0.5 kg</span>
                   <span>Máx: {maxPeso} kg</span>
                 </div>
@@ -151,7 +162,7 @@ export function Simulador({ tarifa, rutas }: SimuladorProps) {
             {calculation ? (
               <div className="rounded-xl border bg-muted/40 p-4 space-y-4">
                 {calculation.exceedsLimit ? (
-                  <div className="flex gap-2 p-2.5 rounded-lg bg-destructive/10 border border-destructive/30 text-destructive text-xs">
+                  <div className="flex gap-2 p-2.5 rounded-lg bg-destructive/10 border border-destructive/30 text-destructive-text text-xs">
                     <Warning className="size-4 shrink-0" />
                     <div>
                       El peso supera el límite máximo de {tarifa.peso_max_kg} kg configurado para esta tarifa.
@@ -161,28 +172,38 @@ export function Simulador({ tarifa, rutas }: SimuladorProps) {
                   <>
                     <div className="grid grid-cols-2 gap-3 text-xs border-b border-border/40 pb-3">
                       <div className="flex flex-col gap-0.5">
-                        <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Costo Base</span>
-                        <span className="font-semibold text-foreground">{formatCurrency(calculation.costo_base)}</span>
+                        <span className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Costo base</span>
+                        <span className="font-semibold text-foreground">{formatUsd(calculation.costo_base)}</span>
                       </div>
                       <div className="flex flex-col gap-0.5">
-                        <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Recargo Distancia ({selectedRoute?.duracion_estimada_min} min)</span>
-                        <span className="font-semibold text-foreground">{formatCurrency(calculation.costo_distancia)}</span>
+                        <span className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Recargo por distancia ({selectedRoute?.duracion_estimada_min} min)</span>
+                        <span className="font-semibold text-foreground">{formatUsd(calculation.costo_distancia)}</span>
                       </div>
                     </div>
 
-                    <div className="flex items-baseline justify-between">
+                    <div className="flex items-baseline justify-between gap-3">
                       <div className="flex flex-col">
-                        <span className="text-[10px] text-primary uppercase font-bold tracking-wider">Costo Total Simulado</span>
+                        <span className="text-xs text-primary-text uppercase font-bold tracking-wider">Costo total simulado</span>
                         <span className="text-xs text-muted-foreground font-mono mt-0.5 font-medium">{calculation.formula}</span>
                       </div>
-                      <span className="text-2xl font-black text-primary tracking-tight">{formatCurrency(calculation.costo_total)}</span>
+                      <Monto
+                        usd={calculation.costo_total}
+                        tasa={tasa}
+                        moneda="USD"
+                        size="lg"
+                        align="right"
+                        className="text-primary-text font-black"
+                      />
                     </div>
+                    <p className="text-xs text-muted-foreground">
+                      Precio de referencia en USD. El cliente paga en bolívares a la tasa BCV del día.
+                    </p>
                   </>
                 )}
               </div>
             ) : (
               <div className="flex h-20 items-center justify-center rounded-xl border border-dashed border-border/50 text-xs text-muted-foreground text-center p-3">
-                Seleccione una ruta para ver el cálculo dinámico del envío.
+                Elige una ruta para ver el cálculo del envío.
               </div>
             )}
           </>

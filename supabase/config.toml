@@ -478,3 +478,10 @@ entrypoint = "./functions/procesar-notificaciones-pendientes/index.ts"
 # Specifies static files to be bundled with the function. Supports glob patterns.
 # For example, if you want to serve static HTML pages in your function:
 # static_files = [ "./functions/procesar-notificaciones-pendientes/*.html" ]
+
+[functions.actualizar-tasa-bcv]
+enabled = true
+# La invoca pg_cron con la service role key; la función compara el header Authorization a mano.
+verify_jwt = false
+import_map = "./functions/actualizar-tasa-bcv/deno.json"
+entrypoint = "./functions/actualizar-tasa-bcv/index.ts"

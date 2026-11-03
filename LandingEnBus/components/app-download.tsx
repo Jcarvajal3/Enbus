@@ -1,93 +1,66 @@
-import {
-  CheckCircle,
-  AppleLogo,
-  GooglePlayLogo,
-} from "@phosphor-icons/react/dist/ssr"
+import { CheckCircle, AppleLogo, GooglePlayLogo, WhatsappLogo } from "@phosphor-icons/react/dist/ssr"
 
-import { Badge } from "@/components/ui/badge"
+import { soporteWhatsApp } from "@/lib/urls"
 
 const features = [
-  "Cotiza y reserva envios al instante",
-  "Seguimiento en tiempo real de tus paquetes",
-  "Notificaciones de estado y PIN de retiro",
+  "Compra tu boleto y elige tu asiento",
+  "Envía encomiendas y sigue cada etapa",
+  "Recibe tu pase de abordaje y el PIN de retiro",
+]
+
+const tiendas = [
+  { nombre: "App Store", icon: AppleLogo },
+  { nombre: "Google Play", icon: GooglePlayLogo },
 ]
 
 export function AppDownload() {
+  const avisame = soporteWhatsApp("Hola, quiero que me avisen cuando la app de EnBus esté disponible.")
+
   return (
     <section className="bg-background py-24 lg:py-32">
-      <div className="mx-auto grid max-w-6xl grid-cols-1 items-center gap-12 px-6 lg:grid-cols-2">
-        {/* Left column */}
-        <div className="flex flex-col gap-6">
-          <h2 className="font-serif text-3xl font-bold tracking-tight lg:text-4xl">
-            Lleva EnBus en tu bolsillo
-          </h2>
+      <div className="mx-auto flex max-w-3xl flex-col gap-6 px-6">
+        <h2 className="font-serif text-3xl font-bold tracking-tight lg:text-4xl">Lleva EnBus en tu teléfono</h2>
 
-          <p className="text-lg leading-relaxed text-muted-foreground">
-            Envia, rastrea y gestiona tus paquetes desde la comodidad de tu
-            telefono. Disponible proximamente en todas las tiendas.
-          </p>
+        <p className="text-lg leading-relaxed text-muted-foreground">
+          Muy pronto podrás comprar boletos, enviar encomiendas y seguirlas desde la app de EnBus.
+        </p>
 
-          <ul className="flex flex-col gap-3">
-            {features.map((feature) => (
-              <li key={feature} className="flex items-center gap-3">
-                <CheckCircle
-                  className="size-5 shrink-0 text-primary"
-                  weight="fill"
-                />
-                <span className="text-foreground">{feature}</span>
-              </li>
-            ))}
-          </ul>
+        <ul className="flex flex-col gap-3">
+          {features.map((feature) => (
+            <li key={feature} className="flex items-center gap-3">
+              <CheckCircle className="size-5 shrink-0 text-foreground" weight="fill" aria-hidden />
+              <span className="text-foreground">{feature}</span>
+            </li>
+          ))}
+        </ul>
 
-          {/* Store buttons */}
-          <div className="mt-2 flex flex-wrap gap-4">
-            {/* Apple App Store */}
-            <div className="relative">
-              <div className="flex cursor-not-allowed items-center gap-3 rounded-sm border bg-foreground px-5 py-3 opacity-50">
-                <AppleLogo className="size-7 text-background" weight="fill" />
-                <div className="flex flex-col">
-                  <span className="text-xs leading-tight text-background/70">
-                    Descarga en
-                  </span>
-                  <span className="text-sm font-semibold leading-tight text-background">
-                    App Store
-                  </span>
-                </div>
+        {/* Tiendas: todavía no publicadas (no son enlaces) */}
+        <ul className="mt-2 flex flex-wrap gap-4" aria-label="Tiendas de aplicaciones">
+          {tiendas.map((tienda) => (
+            <li
+              key={tienda.nombre}
+              className="flex items-center gap-3 rounded-sm border border-input-border bg-background px-5 py-3"
+            >
+              <tienda.icon className="size-7 text-foreground" weight="fill" aria-hidden />
+              <div className="flex flex-col">
+                <span className="text-sm leading-tight font-semibold text-foreground">{tienda.nombre}</span>
+                <span className="text-xs leading-tight text-muted-foreground">Próximamente</span>
               </div>
-              <Badge className="absolute -top-2 -right-2" variant="secondary">
-                Proximamente
-              </Badge>
-            </div>
+            </li>
+          ))}
+        </ul>
 
-            {/* Google Play */}
-            <div className="relative">
-              <div className="flex cursor-not-allowed items-center gap-3 rounded-sm border bg-foreground px-5 py-3 opacity-50">
-                <GooglePlayLogo
-                  className="size-7 text-background"
-                  weight="fill"
-                />
-                <div className="flex flex-col">
-                  <span className="text-xs leading-tight text-background/70">
-                    Descarga en
-                  </span>
-                  <span className="text-sm font-semibold leading-tight text-background">
-                    Google Play
-                  </span>
-                </div>
-              </div>
-              <Badge className="absolute -top-2 -right-2" variant="secondary">
-                Proximamente
-              </Badge>
-            </div>
-          </div>
-        </div>
-
-        {/* Right column — phone mockup placeholder */}
-        <div className="flex justify-center">
-          <div className="flex aspect-[9/16] w-full max-w-xs items-center justify-center rounded-sm bg-muted/50">
-            <span className="text-sm text-muted-foreground">App Mockup</span>
-          </div>
-        </div>
+        {avisame && (
+          <a
+            href={avisame}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex min-h-11 w-fit items-center gap-2 rounded-sm bg-foreground px-5 text-sm font-semibold text-background transition-colors outline-none hover:bg-foreground/90 focus-visible:ring-2 focus-visible:ring-foreground focus-visible:ring-offset-2"
+          >
+            <WhatsappLogo className="size-5" aria-hidden />
+            Avísame por WhatsApp
+          </a>
+        )}
       </div>
     </section>
   )

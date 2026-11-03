@@ -19,6 +19,7 @@ import {
   SelectValue 
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { ROLES, etiquetaRol } from "@/lib/estados";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { MagnifyingGlass, Funnel, ShieldCheck } from "@phosphor-icons/react";
 import type { Usuario } from "@/lib/types/admin-usuarios";
@@ -47,27 +48,28 @@ export function UsuariosTable({ initialUsuarios, cooperativas }: UsuariosTablePr
     return matchesSearch && matchesRole && matchesCoop;
   });
 
-  const getRoleBadge = (role: Usuario["role"]) => {
-    switch (role) {
-      case "super_admin":
-        return <Badge className="bg-amber-500/10 text-amber-500 hover:bg-amber-500/20 border-amber-500/20 gap-1"><ShieldCheck className="h-3 w-3" /> Super Admin</Badge>;
-      case "admin_cooperativa":
-        return <Badge className="bg-indigo-500/10 text-indigo-500 hover:bg-indigo-500/20 border-indigo-500/20">Admin Coop</Badge>;
-      case "taquillero":
-        return <Badge className="bg-sky-500/10 text-sky-500 hover:bg-sky-500/20 border-sky-500/20">Taquillero</Badge>;
-      case "user":
-        return <Badge className="bg-slate-500/10 text-muted-foreground hover:bg-slate-500/20 border-slate-500/20">Cliente</Badge>;
-      default:
-        return <Badge variant="outline">{role}</Badge>;
-    }
+  // Etiquetas del valor elegido: sin `items`, el Select muestra el valor crudo ("ALL", el id).
+  const itemsRol: Record<string, string> = { ALL: "Todos", ...ROLES };
+  const itemsCooperativa: Record<string, string> = {
+    ALL: "Todas las cooperativas",
+    ...Object.fromEntries(cooperativas.map((c) => [c.id, c.nombre])),
   };
 
-  const getStatusBadge = (isBanned: boolean) => {
-    if (isBanned) {
-      return <Badge className="bg-destructive/10 text-destructive hover:bg-destructive/20 border-destructive/20">Suspendido</Badge>;
-    }
-    return <Badge className="bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 border-emerald-500/20">Activo</Badge>;
-  };
+  const getRoleBadge = (role: Usuario["role"]) => (
+    <Badge variant="secondary" className="gap-1">
+      {role === "super_admin" && <ShieldCheck className="h-3 w-3" aria-hidden />}
+      {etiquetaRol(role)}
+    </Badge>
+  );
+
+  const getStatusBadge = (isBanned: boolean) =>
+    isBanned ? (
+      <Badge variant="outline" className="border-destructive/40 text-destructive-text">
+        Suspendida
+      </Badge>
+    ) : (
+      <Badge variant="outline">Activa</Badge>
+    );
 
   return (
     <div className="space-y-4">
@@ -76,10 +78,11 @@ export function UsuariosTable({ initialUsuarios, cooperativas }: UsuariosTablePr
         <div className="relative flex-1 max-w-md">
           <MagnifyingGlass className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Buscar por nombre, correo, cédula o teléfono..."
+            aria-label="Buscar usuario"
+            placeholder="Buscar por nombre, correo, cédula o teléfono"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="pl-9 bg-background border-input text-foreground placeholder:text-muted-foreground focus-visible:ring-emerald-500 focus-visible:border-emerald-500"
+            className="pl-9 bg-background border-input text-foreground placeholder:text-muted-foreground"
           />
         </div>
         
@@ -87,24 +90,24 @@ export function UsuariosTable({ initialUsuarios, cooperativas }: UsuariosTablePr
           <div className="flex items-center gap-2">
             <Funnel className="h-4 w-4 text-muted-foreground" />
             <span className="text-xs text-muted-foreground">Rol:</span>
-            <Select value={roleFilter} onValueChange={(val) => setRoleFilter(val ?? "ALL")}>
-              <SelectTrigger className="w-[140px] bg-background border-input text-foreground">
+            <Select value={roleFilter} onValueChange={(val) => setRoleFilter(val ?? "ALL")} items={itemsRol}>
+              <SelectTrigger aria-label="Filtrar por rol" className="w-[220px] bg-background border-input text-foreground">
                 <SelectValue placeholder="Rol" />
               </SelectTrigger>
               <SelectContent className="bg-popover border text-popover-foreground">
                 <SelectItem value="ALL">Todos</SelectItem>
-                <SelectItem value="super_admin">Super Admin</SelectItem>
-                <SelectItem value="admin_cooperativa">Admin Coop</SelectItem>
-                <SelectItem value="taquillero">Taquillero</SelectItem>
-                <SelectItem value="user">Cliente</SelectItem>
+                <SelectItem value="super_admin">{ROLES.super_admin}</SelectItem>
+                <SelectItem value="admin_cooperativa">{ROLES.admin_cooperativa}</SelectItem>
+                <SelectItem value="taquillero">{ROLES.taquillero}</SelectItem>
+                <SelectItem value="user">{ROLES.user}</SelectItem>
               </SelectContent>
             </Select>
           </div>
 
           <div className="flex items-center gap-2">
             <span className="text-xs text-muted-foreground">Cooperativa:</span>
-            <Select value={coopFilter} onValueChange={(val) => setCoopFilter(val ?? "ALL")}>
-              <SelectTrigger className="w-[200px] bg-background border-input text-foreground">
+            <Select value={coopFilter} onValueChange={(val) => setCoopFilter(val ?? "ALL")} items={itemsCooperativa}>
+              <SelectTrigger aria-label="Filtrar por cooperativa" className="w-[200px] bg-background border-input text-foreground">
                 <SelectValue placeholder="Cooperativa" />
               </SelectTrigger>
               <SelectContent className="bg-popover border text-popover-foreground">

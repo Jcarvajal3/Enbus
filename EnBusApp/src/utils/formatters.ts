@@ -47,22 +47,6 @@ export const timeOnly = new Intl.DateTimeFormat(LOCALE, {
   hour12: false,
 });
 
-// ─── Number formatters ────────────────────────────────────────────────────────
-
-/** "1.234,56 Bs.S" */
-export const currencyBs = new Intl.NumberFormat(LOCALE, {
-  style: 'currency',
-  currency: 'VES',
-  minimumFractionDigits: 2,
-});
-
-/** "1.234,56 $" */
-export const currencyUSD = new Intl.NumberFormat(LOCALE, {
-  style: 'currency',
-  currency: 'USD',
-  minimumFractionDigits: 2,
-});
-
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 /** Safe wrapper — returns fallback if dateString is invalid */
@@ -76,6 +60,24 @@ export function formatDate(
   } catch {
     return dateString;
   }
+}
+
+/**
+ * Formats a bare calendar day ('YYYY-MM-DD') as "02/10/2026" without going
+ * through `Date`, so the day never shifts with the device time zone.
+ */
+export function formatDateKey(key: string | null | undefined): string {
+  if (!key) return '—';
+  const match = key.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return match ? `${match[3]}/${match[2]}/${match[1]}` : key;
+}
+
+/** Local calendar day as 'YYYY-MM-DD' (the format of Postgres `date` columns). */
+export function toDateKey(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
 }
 
 // PERF-06: Replace 45+ if/else chain with a O(1) Map lookup.

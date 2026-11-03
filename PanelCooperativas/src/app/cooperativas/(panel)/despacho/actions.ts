@@ -1,50 +1,67 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
-import { revalidatePath } from "next/cache";
+// ─── Despacho de encomiendas a un viaje ─────────────────────────────────────
+// fn_despachar_encomiendas valida todo en el servidor (todo o nada): mismo
+// destino y origen que el viaje, recibida, pagada o con cobro en destino.
+// Despachar NO cambia el estado del viaje: la salida del bus se marca aparte
+// (viajes/actions.ts → marcarSalidaViaje).
 
-export async function despacharEncomiendas(viajeId: string, encomiendaIds: string[]) {
+import { revalidatePath } from "next/cache";
+import { createClient } from "@/lib/supabase/server";
+import { codigoEB, humanizeError, parseDetalleEB } from "@/lib/errores";
+import type { DespachoRealizado, EncomiendaRechazadaDespacho } from "@/lib/types/pagos";
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export async function despacharEncomiendas(
+  viajeId: string,
+  encomiendaIds: string[]
+): Promise<
+  | { success: true; data: DespachoRealizado; error?: undefined; codigo?: undefined; rechazadas?: undefined }
+  | {
+      success: false;
+      data?: undefined;
+      error: string;
+      codigo?: string;
+      /** Encomiendas que no pueden ir en este viaje (EB_DESPACHO_INVALIDO). */
+      rechazadas?: EncomiendaRechazadaDespacho[];
+    }
+> {
+  if (!UUID_RE.test(viajeId ?? "")) {
+    return { success: false, error: "Primero elige el viaje en el que vas a cargar las encomiendas." };
+  }
+  const ids = Array.from(new Set((encomiendaIds ?? []).filter((id) => UUID_RE.test(id))));
+  if (ids.length === 0) {
+    return { success: false, error: "Escanea al menos una encomienda antes de confirmar el despacho." };
+  }
+
   try {
     const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return { success: false, error: "No autorizado" };
+    const { data, error } = await supabase.rpc("fn_despachar_encomiendas", {
+      p_viaje_id: viajeId,
+      p_encomienda_ids: ids,
+    });
 
-    if (!encomiendaIds.length) {
-      return { success: false, error: "No hay encomiendas seleccionadas" };
+    if (error) {
+      console.error("Error al despachar las encomiendas:", error);
+      const detalle = parseDetalleEB(error);
+      return {
+        success: false,
+        error: humanizeError(error, "despachar las encomiendas"),
+        codigo: codigoEB(error) ?? undefined,
+        rechazadas: Array.isArray(detalle.rechazadas)
+          ? (detalle.rechazadas as EncomiendaRechazadaDespacho[])
+          : undefined,
+      };
     }
 
-    // 1. Actualizar las encomiendas seleccionadas de PAGADA a EN_TRANSITO
-    const { error: encomiendasError } = await supabase.from("encomiendas")
-      .update({ 
-        viaje_asignado_id: viajeId,
-        estado: "EN_TRANSITO" 
-      })
-      .in("id", encomiendaIds)
-      .eq("estado", "PAGADA");
-
-    if (encomiendasError) {
-      console.error("Error al actualizar encomiendas en despacho:", encomiendasError);
-      return { success: false, error: encomiendasError.message };
-    }
-
-    // 2. Actualizar el estado del viaje a EN_CURSO (Spec: Al despachar, el viaje asociado cambia a estado EN_CURSO)
-    const { error: viajeError } = await supabase.from("viajes")
-      .update({ estado: "EN_CURSO" })
-      .eq("id", viajeId);
-
-    if (viajeError) {
-      console.error("Error al actualizar el estado del viaje a EN_CURSO:", viajeError);
-      return { success: false, error: viajeError.message };
-    }
-
-    // Revalidar las rutas afectadas
     revalidatePath("/cooperativas/taquilla/encomiendas");
     revalidatePath("/cooperativas/despacho");
+    revalidatePath("/cooperativas/recepcion-destino");
     revalidatePath("/cooperativas/viajes");
-    
-    return { success: true };
+    return { success: true, data: data as DespachoRealizado };
   } catch (error) {
-    console.error("Error inesperado en despacharEncomiendas Server Action:", error);
-    return { success: false, error: "Error interno en el servidor" };
+    console.error("Error inesperado en despacharEncomiendas:", error);
+    return { success: false, error: humanizeError(error, "despachar las encomiendas") };
   }
 }

@@ -1,163 +1,288 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
+// ─── Taquilla de boletos: venta, cobro de reservas y embarque ───────────────
+// Todo pasa por RPC SECURITY DEFINER (fase 2). El servidor decide el precio,
+// la tasa BCV, el código del boleto (BOL-XXXXXXXX) y el QR (PASS-<código>);
+// la venta y el pago se guardan en una sola transacción e idempotente
+// (`idemKey`): reintentar con la misma clave no duplica la venta.
+
 import { revalidatePath } from "next/cache";
+import { createClient } from "@/lib/supabase/server";
+import { codigoEB, humanizeError, parseDetalleEB, type DetalleEB } from "@/lib/errores";
+import type {
+  BoletoImpresion,
+  CobroTaquilla,
+  MonedaPago,
+  ResultadoEmbarque,
+  ResumenCompra,
+  TipoMetodoPago,
+  VentaTaquilla,
+} from "@/lib/types/pagos";
 
-function generarCodigoBoleto() {
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-  const str = Array.from({ length: 5 }, () => chars.charAt(Math.floor(Math.random() * chars.length))).join("");
-  const dateStr = new Date().toISOString().slice(2, 10).replace(/-/g, ""); // YYMMDD
-  return `BL-${dateStr}-${str}`;
-}
+type SupabaseServer = Awaited<ReturnType<typeof createClient>>;
 
-export async function venderBoleto(data: {
-  viajeId: string;
+export type ResultadoTaquilla<T> =
+  | { success: true; data: T; error?: undefined; codigo?: undefined; detalle?: undefined }
+  | {
+      success: false;
+      data?: undefined;
+      error: string;
+      /** Código EB_* si lo hubo. */
+      codigo?: string;
+      /** `details` del error EB_* (asientos ocupados, monto esperado, campo…). */
+      detalle?: DetalleEB;
+    };
+
+/** Datos del cobro en taquilla (venta nueva o reserva de la app). */
+export type DatosPagoTaquilla = {
+  metodoTipo: TipoMetodoPago;
+  /** Cuenta de la cooperativa que recibió el pago (Pago Móvil, transferencia, Zelle). */
+  metodoPagoId?: string | null;
+  /** Solo efectivo: moneda en que pagó el pasajero. */
+  moneda?: MonedaPago | null;
+  /** Solo efectivo: lo que entregó el pasajero (para el vuelto). */
+  montoRecibido?: number | null;
+  referencia?: string | null;
+  /** 'YYYY-MM-DD' */
+  fecha?: string | null;
+  banco?: string | null;
+};
+
+export type PasajeroVenta = {
   asiento: string;
-  pasajeroNombre: string;
-  pasajeroCedula: string;
-  pasajeroTelefono?: string;
-  tipoPago: "EFECTIVO" | "DIGITAL";
-  referenciaData?: { numero: string; fecha: string; banco: string };
-}) {
+  nombre: string;
+  cedula: string;
+  telefono?: string | null;
+};
+
+/** Venta o cobro listo para imprimir: siempre trae `impresion`, `salida` y `cobro`. */
+export type OperacionTaquilla = VentaTaquilla;
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const FECHA_RE = /^\d{4}-\d{2}-\d{2}$/;
+const MSG_CLAVE = "Falta la clave de la operación. Cierra el formulario y vuelve a abrirlo.";
+
+function fallo(error: unknown, accion: string): { success: false; error: string; codigo?: string; detalle?: DetalleEB } {
+  const codigo = codigoEB(error) ?? undefined;
+  return {
+    success: false,
+    error: humanizeError(error, accion),
+    codigo,
+    detalle: codigo ? parseDetalleEB(error) : undefined,
+  };
+}
+
+function texto(v: string | null | undefined): string | null {
+  const t = (v ?? "").trim();
+  return t === "" ? null : t;
+}
+
+/** Parámetros de pago comunes a `fn_vender_boletos_taquilla` y `fn_cobrar_reserva_taquilla`. */
+function parametrosPago(p: DatosPagoTaquilla) {
+  const efectivo = p.metodoTipo === "EFECTIVO";
+  const fecha = texto(p.fecha);
+  return {
+    p_metodo_tipo: p.metodoTipo,
+    p_metodo_pago_id: !efectivo && p.metodoPagoId && UUID_RE.test(p.metodoPagoId) ? p.metodoPagoId : null,
+    p_moneda: efectivo ? (p.moneda === "USD" ? "USD" : "VES") : null,
+    p_monto_recibido:
+      efectivo && typeof p.montoRecibido === "number" && Number.isFinite(p.montoRecibido) ? p.montoRecibido : null,
+    p_numero_referencia: efectivo ? null : texto(p.referencia),
+    p_fecha_transaccion: efectivo ? null : fecha && FECHA_RE.test(fecha) ? fecha : null,
+    p_banco_emisor: efectivo || p.metodoTipo === "ZELLE" ? null : texto(p.banco),
+  };
+}
+
+function aNumero(v: unknown): number | null {
+  if (v === null || v === undefined || v === "") return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * Completa la respuesta para imprimir. La venta nueva ya trae `impresion`, `salida`
+ * y `cobro`; una respuesta repetida (misma `idemKey`) y el cobro de una reserva
+ * no traen todo, así que se leen los boletos de la compra (RLS del personal).
+ */
+async function completarParaImprimir(
+  supabase: SupabaseServer,
+  resumen: ResumenCompra & Partial<Pick<VentaTaquilla, "impresion" | "salida" | "cobro">>
+): Promise<OperacionTaquilla> {
+  let impresion: BoletoImpresion[] | undefined = resumen.impresion;
+  let salida: string | undefined = resumen.salida;
+
+  if (!impresion || !salida) {
+    const { data } = await supabase
+      .from("boletos")
+      .select("codigo_boleto, qr_embarque_data, asiento, pasajero_nombre, pasajero_cedula, viaje:viajes!viaje_id(fecha_hora_salida)")
+      .eq("compra_id", resumen.compra_id)
+      .in("estado", ["PAGADO", "USADO"]);
+    const filas = (data ?? []) as unknown as {
+      codigo_boleto: string;
+      qr_embarque_data: string | null;
+      asiento: string;
+      pasajero_nombre: string | null;
+      pasajero_cedula: string | null;
+      viaje: { fecha_hora_salida: string } | { fecha_hora_salida: string }[] | null;
+    }[];
+    filas.sort((a, b) => Number(a.asiento) - Number(b.asiento));
+    impresion ??= filas.map((f) => ({
+      codigo_boleto: f.codigo_boleto,
+      qr: f.qr_embarque_data,
+      asiento: f.asiento,
+      pasajero: f.pasajero_nombre,
+      cedula: f.pasajero_cedula,
+    }));
+    const viaje = filas[0]?.viaje;
+    salida ??= (Array.isArray(viaje) ? viaje[0]?.fecha_hora_salida : viaje?.fecha_hora_salida) ?? "";
+  }
+
+  // `cobro` completo (totales y tasa) a partir del pago guardado si la RPC no los trajo.
+  const pago = resumen.pago;
+  const base = resumen.cobro;
+  const moneda: MonedaPago = base?.moneda ?? pago?.moneda ?? "VES";
+  const totalUsd = aNumero(base?.total_usd) ?? aNumero(pago?.monto_usd) ?? aNumero(resumen.total_usd) ?? 0;
+  const totalBs = aNumero(base?.total_bs) ?? aNumero(pago?.monto_bs);
+  const esperado = aNumero(base?.esperado) ?? (moneda === "USD" ? totalUsd : totalBs ?? 0);
+  const recibido = aNumero(base?.recibido) ?? aNumero(pago?.monto_declarado) ?? esperado;
+  const cobro: CobroTaquilla = {
+    moneda,
+    esperado,
+    recibido,
+    vuelto: aNumero(base?.vuelto) ?? Math.max(Math.round((recibido - esperado) * 100) / 100, 0),
+    total_usd: totalUsd,
+    total_bs: totalBs ?? undefined,
+    tasa: aNumero(base?.tasa) ?? aNumero(pago?.tasa_bcv) ?? undefined,
+    tasa_fecha: base?.tasa_fecha ?? pago?.tasa_bcv_fecha ?? undefined,
+  };
+
+  return { ...resumen, impresion: impresion ?? [], salida: salida ?? "", cobro };
+}
+
+/** Vende 1..10 asientos de un viaje con su pago (APROBADO) en una sola operación. */
+export async function venderBoletos(
+  data: {
+    viajeId: string;
+    pasajeros: PasajeroVenta[];
+    idemKey: string;
+  } & DatosPagoTaquilla
+): Promise<ResultadoTaquilla<OperacionTaquilla>> {
+  if (!UUID_RE.test(data.viajeId ?? "")) {
+    return { success: false, error: "Elige el viaje de nuevo: no lo encontramos." };
+  }
+  if ((data.idemKey ?? "").length < 8) return { success: false, error: MSG_CLAVE };
+  if (!Array.isArray(data.pasajeros) || data.pasajeros.length < 1 || data.pasajeros.length > 10) {
+    return { success: false, error: "Agrega entre 1 y 10 pasajeros." };
+  }
   try {
     const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return { success: false, error: "No autorizado" };
-
-    const { data: profile } = await supabase.from("profiles").select("cooperativa_id").eq("id", user.id).single();
-    const cooperativa_id = profile?.cooperativa_id;
-
-    if (!cooperativa_id) return { success: false, error: "Usuario sin cooperativa" };
-
-    const codigo = generarCodigoBoleto();
-    const qrData = crypto.randomUUID();
-
-    const { data: viaje, error: viajeError } = await supabase
-      .from("viajes")
-      .select("ruta:rutas(precio_pasaje)")
-      .eq("id", data.viajeId)
-      .single();
-
-    if (viajeError || !viaje) return { success: false, error: "Viaje no encontrado" };
-    // @ts-expect-error - PostgREST response typing sometimes hides nested array/object
-    const precio = (Array.isArray(viaje.ruta) ? viaje.ruta[0].precio_pasaje : viaje.ruta?.precio_pasaje) || 0;
-
-    const { data: boleto, error: boletoError } = await supabase.from("boletos").insert({
-      codigo_boleto: codigo,
-      comprador_id: null,
-      viaje_id: data.viajeId,
-      cooperativa_id,
-      asiento: data.asiento,
-      precio,
-      estado: "PAGADO",
-      qr_embarque_data: qrData,
-      pasajero_nombre: data.pasajeroNombre,
-      pasajero_cedula: data.pasajeroCedula,
-      pasajero_telefono: data.pasajeroTelefono,
-    }).select().single();
-
-    if (boletoError) return { success: false, error: boletoError.message };
-
-    const { error: pagoError } = await supabase.from("pagos").insert({
-      boleto_id: boleto.id,
-      pagador_id: user.id, // el taquillero
-      cooperativa_id,
-      monto: precio,
-      tipo_pago: data.tipoPago,
-      numero_referencia: data.referenciaData?.numero,
-      fecha_transaccion: data.referenciaData?.fecha || new Date().toISOString(),
-      banco_emisor: data.referenciaData?.banco,
-      verificado: true,
-      verificado_por: user.id,
-      verificado_at: new Date().toISOString(),
+    const pasajeros = data.pasajeros.map((p) => ({
+      asiento: String(p.asiento).trim(),
+      nombre: p.nombre.trim(),
+      cedula: p.cedula.trim(),
+      telefono: texto(p.telefono),
+    }));
+    const { data: res, error } = await supabase.rpc("fn_vender_boletos_taquilla", {
+      p_viaje_id: data.viajeId,
+      p_pasajeros: pasajeros,
+      ...parametrosPago(data),
+      p_idempotency_key: data.idemKey,
     });
-
-    if (pagoError) return { success: false, error: pagoError.message };
-
-    revalidatePath("/cooperativas/taquilla/boletos");
-    
-    return { success: true, boleto, qrData };
-  } catch (error) {
-    console.error(error);
-    return { success: false, error: "Error interno en el servidor" };
-  }
-}
-
-export async function confirmarEmbarque(boletoId: string) {
-  try {
-    const supabase = await createClient();
-    const { error } = await supabase.from("boletos")
-      .update({ estado: "USADO" })
-      .eq("id", boletoId);
-
-    if (error) return { success: false, error: error.message };
-
-    revalidatePath("/cooperativas/taquilla/boletos");
-    return { success: true };
-  } catch (error) {
-    console.error(error);
-    return { success: false, error: "Error interno en el servidor" };
-  }
-}
-
-export async function verificarPagoBoleto(boletoId: string, pagoId?: string) {
-  try {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return { success: false, error: "No autorizado" };
-
-    // Update pago if pagoId is provided
-    if (pagoId) {
-      const { error: pagoError } = await supabase.from("pagos")
-        .update({
-          verificado: true,
-          verificado_por: user.id,
-          verificado_at: new Date().toISOString()
-        })
-        .eq("id", pagoId);
-
-      if (pagoError) return { success: false, error: pagoError.message };
+    if (error) {
+      console.error("Error vendiendo boletos en taquilla:", error);
+      return fallo(error, "vender los boletos");
     }
+    const venta = await completarParaImprimir(supabase, res as VentaTaquilla);
+    revalidatePath("/cooperativas/taquilla/boletos");
+    return { success: true, data: venta };
+  } catch (err) {
+    console.error(err);
+    return fallo(err, "vender los boletos");
+  }
+}
 
-    // Get the boleto to know the comprador and viaje
-    const { data: boleto } = await supabase.from("boletos")
-      .select("codigo_boleto, comprador_id, viaje_id")
-      .eq("id", boletoId)
-      .single();
-    
-    if (boleto?.comprador_id && boleto?.viaje_id) {
-      // Find all boletos bought by this user for this trip in RESERVADO state
-      const { data: boletosToUpdate } = await supabase
-        .from("boletos")
-        .select("id, codigo_boleto")
-        .eq("viaje_id", boleto.viaje_id)
-        .eq("comprador_id", boleto.comprador_id)
-        .eq("estado", "RESERVADO");
+/** Cobra en taquilla una reserva de la app (sin pagar o con el pago rechazado). Activa toda la compra. */
+export async function cobrarReserva(
+  data: { boletoId: string; idemKey: string } & DatosPagoTaquilla
+): Promise<ResultadoTaquilla<OperacionTaquilla>> {
+  if (!UUID_RE.test(data.boletoId ?? "")) {
+    return { success: false, error: "No encontramos ese boleto. Actualiza la lista." };
+  }
+  if ((data.idemKey ?? "").length < 8) return { success: false, error: MSG_CLAVE };
+  try {
+    const supabase = await createClient();
+    const { data: res, error } = await supabase.rpc("fn_cobrar_reserva_taquilla", {
+      p_boleto_id: data.boletoId,
+      ...parametrosPago(data),
+      p_idempotency_key: data.idemKey,
+    });
+    if (error) {
+      console.error("Error cobrando reserva en taquilla:", error);
+      return fallo(error, "cobrar la reserva");
+    }
+    const cobro = await completarParaImprimir(supabase, res as ResumenCompra & { cobro?: CobroTaquilla });
+    revalidatePath("/cooperativas/taquilla/boletos");
+    return { success: true, data: cobro };
+  } catch (err) {
+    console.error(err);
+    return fallo(err, "cobrar la reserva");
+  }
+}
 
-      if (boletosToUpdate && boletosToUpdate.length > 0) {
-        for (const b of boletosToUpdate) {
-          await supabase.from("boletos")
-            .update({ 
-              estado: "PAGADO", 
-              qr_embarque_data: `PASS-${b.codigo_boleto || b.id}`
-            })
-            .eq("id", b.id);
-        }
+/** Resultado del escaneo: VALIDO, OTRO_DIA, PAGO_EN_VERIFICACION, etc. (no modifica nada). */
+export async function validarEmbarque(
+  codigo: string,
+  viajeId?: string | null
+): Promise<ResultadoTaquilla<ResultadoEmbarque>> {
+  const limpio = (codigo ?? "").trim().toUpperCase();
+  if (!limpio) return { success: false, error: "Escanea el código del boleto o escríbelo completo." };
+  try {
+    const supabase = await createClient();
+    const { data, error } = await supabase.rpc("fn_validar_embarque", {
+      p_codigo: limpio,
+      p_viaje_id: viajeId && UUID_RE.test(viajeId) ? viajeId : null,
+    });
+    if (error) {
+      console.error("Error validando embarque:", error);
+      return fallo(error, "revisar el boleto");
+    }
+    return { success: true, data: data as ResultadoEmbarque };
+  } catch (err) {
+    console.error(err);
+    return fallo(err, "revisar el boleto");
+  }
+}
+
+/**
+ * Embarca al pasajero (PAGADO → USADO). El servidor vuelve a validar: si el boleto
+ * dejó de ser válido devuelve `EB_EMBARQUE_NO_VALIDO` con el resultado actualizado
+ * en `resultado`, para mostrar la causa.
+ */
+export async function confirmarEmbarque(
+  boletoId: string,
+  viajeId?: string | null
+): Promise<ResultadoTaquilla<ResultadoEmbarque> & { resultado?: ResultadoEmbarque }> {
+  if (!UUID_RE.test(boletoId ?? "")) {
+    return { success: false, error: "No encontramos ese boleto. Escanéalo de nuevo." };
+  }
+  try {
+    const supabase = await createClient();
+    const { data, error } = await supabase.rpc("fn_confirmar_embarque", {
+      p_boleto_id: boletoId,
+      p_viaje_id: viajeId && UUID_RE.test(viajeId) ? viajeId : null,
+    });
+    if (error) {
+      console.error("Error confirmando embarque:", error);
+      const res = fallo(error, "confirmar el embarque");
+      if (res.codigo === "EB_EMBARQUE_NO_VALIDO" && res.detalle && typeof res.detalle.resultado === "string") {
+        return { ...res, resultado: res.detalle as unknown as ResultadoEmbarque };
       }
-    } else {
-      // Fallback if no comprador_id (shouldn't happen for app purchases, but just in case)
-      await supabase.from("boletos")
-        .update({ 
-          estado: "PAGADO", 
-          qr_embarque_data: `PASS-${boleto?.codigo_boleto || boletoId}`
-        })
-        .eq("id", boletoId);
+      return res;
     }
-
     revalidatePath("/cooperativas/taquilla/boletos");
-    return { success: true };
-  } catch (error) {
-    console.error(error);
-    return { success: false, error: "Error interno en el servidor" };
+    return { success: true, data: data as ResultadoEmbarque };
+  } catch (err) {
+    console.error(err);
+    return fallo(err, "confirmar el embarque");
   }
 }

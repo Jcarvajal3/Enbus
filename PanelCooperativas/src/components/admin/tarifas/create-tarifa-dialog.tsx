@@ -15,7 +15,9 @@ import { Label } from "@/components/ui/label";
 import { Plus, Warning, CurrencyDollar, Scales, Ruler, Calendar } from "@phosphor-icons/react";
 import { createTarifa } from "@/app/admin/(panel)/tarifas/actions";
 import { toast } from "sonner";
+import { humanizeError } from "@/lib/errores";
 import { useRouter } from "next/navigation";
+import { ZONA_VE } from "@/lib/fechas";
 
 export function CreateTarifaDialog() {
   const router = useRouter();
@@ -23,15 +25,24 @@ export function CreateTarifaDialog() {
   const [loading, setLoading] = useState(false);
 
   // Helper to get current datetime formatted for input (YYYY-MM-DDTHH:MM)
+  // en hora de Venezuela (el servidor la interpreta igual), sin importar la zona del navegador.
   const getCurrentDateTimeString = () => {
-    const now = new Date();
-    const offset = now.getTimezoneOffset();
-    const localNow = new Date(now.getTime() - offset * 60 * 1000);
-    return localNow.toISOString().slice(0, 16);
+    const partes = new Intl.DateTimeFormat("en-CA", {
+      timeZone: ZONA_VE,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    }).formatToParts(new Date());
+    const get = (tipo: string) => partes.find((p) => p.type === tipo)?.value ?? "";
+    return `${get("year")}-${get("month")}-${get("day")}T${get("hour")}:${get("minute")}`;
   };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (loading) return;
     setLoading(true);
 
     const formData = new FormData(e.currentTarget);
@@ -40,17 +51,16 @@ export function CreateTarifaDialog() {
       const res = await createTarifa(formData);
       
       if (!res.success) {
-        toast.error(res.error || "Ocurrió un error al crear la tarifa");
+        toast.error(res.error || "No pudimos crear la tarifa. Intenta de nuevo.");
         setLoading(false);
         return;
       }
 
-      toast.success("Nueva tarifa creada e instalada como vigente");
+      toast.success("Tarifa creada. Ya es la vigente.");
       router.refresh();
       setOpen(false);
     } catch (err) {
-      console.error(err);
-      toast.error("Error de red o del servidor");
+      toast.error(humanizeError(err, "crear la tarifa"));
     } finally {
       setLoading(false);
     }
@@ -61,32 +71,32 @@ export function CreateTarifaDialog() {
       if (!loading) setOpen(v);
     }}>
       <DialogTrigger asChild>
-        <Button className="bg-orange-600 hover:bg-orange-500 text-white font-medium shadow-lg shadow-orange-950/20">
-          <Plus className="mr-2 h-4 w-4 font-bold" /> Nueva Tarifa
+        <Button>
+          <Plus className="mr-2 h-4 w-4" aria-hidden /> Nueva tarifa
         </Button>
       </DialogTrigger>
       
-      <DialogContent className="bg-slate-950 border-slate-800 text-slate-100 max-w-md">
+      <DialogContent className="max-w-md">
         <form onSubmit={handleSubmit} className="space-y-4">
           <DialogHeader>
-            <DialogTitle className="text-slate-100 text-lg font-bold">Configurar Nueva Tarifa</DialogTitle>
-            <DialogDescription className="text-slate-400 text-xs">
+            <DialogTitle className="text-lg font-bold">Nueva tarifa</DialogTitle>
+            <DialogDescription className="text-muted-foreground text-xs">
               Establece los nuevos parámetros globales de facturación para encomiendas.
             </DialogDescription>
           </DialogHeader>
 
           {/* Warning Banner */}
-          <div className="flex gap-2.5 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs">
-            <Warning weight="fill" className="size-5 shrink-0 text-amber-500" />
+          <div className="flex gap-2.5 p-3 rounded-lg bg-amber-50 border border-amber-600/30 text-amber-950 text-sm dark:bg-amber-400/10 dark:text-amber-100">
+            <Warning weight="fill" className="size-5 shrink-0 text-warning-text" aria-hidden />
             <div className="leading-relaxed">
-              <span className="font-bold">Advertencia:</span> Al activar esta nueva tarifa, la tarifa vigente actual pasará al historial de forma automática e irreversible.
+              Al crearla, esta tarifa reemplaza a la vigente y la actual pasa al historial. No se puede deshacer.
             </div>
           </div>
 
           <div className="space-y-3">
             <div className="space-y-1">
-              <Label htmlFor="tarifa_por_kg" className="text-slate-300 text-xs flex items-center gap-1.5">
-                <CurrencyDollar className="size-4 text-orange-500" /> Tarifa base por Kilogramo (USD)
+              <Label htmlFor="tarifa_por_kg" className="text-xs flex items-center gap-1.5">
+                <CurrencyDollar className="size-4 text-muted-foreground" aria-hidden /> Tarifa por kilogramo (USD)
               </Label>
               <Input 
                 id="tarifa_por_kg" 
@@ -96,13 +106,13 @@ export function CreateTarifaDialog() {
                 min="0.01"
                 placeholder="Ej: 2.50" 
                 required
-                className="bg-slate-900 border-slate-800 text-slate-100 focus-visible:ring-orange-500 text-sm"
+                className="bg-background text-sm"
               />
             </div>
 
             <div className="space-y-1">
-              <Label htmlFor="factor_distancia_por_min" className="text-slate-300 text-xs flex items-center gap-1.5">
-                <CurrencyDollar className="size-4 text-orange-500" /> Factor de distancia por minuto
+              <Label htmlFor="factor_distancia_por_min" className="text-xs flex items-center gap-1.5">
+                <CurrencyDollar className="size-4 text-muted-foreground" aria-hidden /> Factor de distancia por minuto
               </Label>
               <Input 
                 id="factor_distancia_por_min" 
@@ -112,17 +122,17 @@ export function CreateTarifaDialog() {
                 min="0"
                 placeholder="Ej: 0.0050" 
                 required
-                className="bg-slate-900 border-slate-800 text-slate-100 focus-visible:ring-orange-500 text-sm"
+                className="bg-background text-sm"
               />
-              <p className="text-[10px] text-muted-foreground leading-snug">
+              <p className="text-xs text-muted-foreground leading-snug">
                 Representa el recargo porcentual por cada minuto de viaje (0.0050 = +0.50% / min).
               </p>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <Label htmlFor="peso_max_kg" className="text-slate-300 text-xs flex items-center gap-1.5">
-                  <Scales className="size-4 text-orange-500" /> Peso Máximo (kg)
+                <Label htmlFor="peso_max_kg" className="text-xs flex items-center gap-1.5">
+                  <Scales className="size-4 text-muted-foreground" aria-hidden /> Peso máximo (kg)
                 </Label>
                 <Input 
                   id="peso_max_kg" 
@@ -132,13 +142,13 @@ export function CreateTarifaDialog() {
                   min="0.1"
                   placeholder="Ej: 25.0" 
                   required
-                  className="bg-slate-900 border-slate-800 text-slate-100 focus-visible:ring-orange-500 text-sm"
+                  className="bg-background text-sm"
                 />
               </div>
 
               <div className="space-y-1">
-                <Label htmlFor="dimensiones_max_cm" className="text-slate-300 text-xs flex items-center gap-1.5">
-                  <Ruler className="size-4 text-orange-500" /> Dimensión Máx (cm)
+                <Label htmlFor="dimensiones_max_cm" className="text-xs flex items-center gap-1.5">
+                  <Ruler className="size-4 text-muted-foreground" aria-hidden /> Dimensión máxima (cm)
                 </Label>
                 <Input 
                   id="dimensiones_max_cm" 
@@ -148,14 +158,14 @@ export function CreateTarifaDialog() {
                   min="1"
                   placeholder="Ej: 50" 
                   required
-                  className="bg-slate-900 border-slate-800 text-slate-100 focus-visible:ring-orange-500 text-sm"
+                  className="bg-background text-sm"
                 />
               </div>
             </div>
 
             <div className="space-y-1">
-              <Label htmlFor="vigente_desde" className="text-slate-300 text-xs flex items-center gap-1.5">
-                <Calendar className="size-4 text-orange-500" /> Fecha de Vigencia
+              <Label htmlFor="vigente_desde" className="text-xs flex items-center gap-1.5">
+                <Calendar className="size-4 text-muted-foreground" aria-hidden /> Vigente desde
               </Label>
               <Input 
                 id="vigente_desde" 
@@ -163,27 +173,27 @@ export function CreateTarifaDialog() {
                 type="datetime-local" 
                 defaultValue={getCurrentDateTimeString()}
                 required
-                className="bg-slate-900 border-slate-800 text-slate-100 focus-visible:ring-orange-500 text-sm"
+                className="bg-background text-sm"
               />
             </div>
           </div>
 
-          <div className="flex justify-end gap-2 pt-4 border-t border-slate-900">
+          <div className="flex justify-end gap-2 pt-4 border-t border-border">
             <Button 
               type="button" 
               variant="outline" 
               onClick={() => setOpen(false)}
               disabled={loading}
-              className="border-slate-800 text-slate-400 hover:bg-slate-900 hover:text-slate-300 text-xs py-1.5"
+              
             >
               Cancelar
             </Button>
             <Button 
               type="submit" 
               disabled={loading}
-              className="bg-orange-600 hover:bg-orange-500 text-white text-xs py-1.5"
+              aria-busy={loading || undefined}
             >
-              {loading ? "Registrando..." : "Crear e Instalar"}
+              {loading ? "Creando…" : "Crear tarifa"}
             </Button>
           </div>
         </form>

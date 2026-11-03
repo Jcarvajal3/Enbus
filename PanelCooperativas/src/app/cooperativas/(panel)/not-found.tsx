@@ -4,17 +4,18 @@ import { MagnifyingGlass } from "@phosphor-icons/react/dist/ssr";
 
 export default function PanelNotFound() {
   return (
-    <div className="flex flex-col items-center justify-center gap-4 py-20 h-full">
-      <div className="bg-muted p-4 rounded-full">
-        <MagnifyingGlass size={48} className="text-muted-foreground" weight="duotone" />
+    <div className="flex h-full flex-col items-center justify-center gap-4 py-20 text-center">
+      <div className="rounded-full bg-muted p-4">
+        <MagnifyingGlass size={48} className="text-muted-foreground" weight="duotone" aria-hidden />
       </div>
-      <h2 className="text-2xl font-bold">Página no encontrada</h2>
-      <p className="text-muted-foreground text-center max-w-md">
-        Lo sentimos, no pudimos encontrar la página que estás buscando. Es posible que haya sido eliminada o que la dirección sea incorrecta.
+      <h2 className="text-2xl font-bold">No encontramos esta página</h2>
+      <p className="max-w-md text-muted-foreground">
+        Puede que la dirección esté mal escrita o que la sección ya no exista. Usa el menú de la izquierda o vuelve al
+        resumen.
       </p>
       <div className="mt-4">
         <Link href="/cooperativas/dashboard" className={buttonVariants({ variant: "default" })}>
-          Volver al Inicio
+          Volver al resumen
         </Link>
       </div>
     </div>

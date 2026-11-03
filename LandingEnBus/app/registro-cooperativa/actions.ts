@@ -1,53 +1,114 @@
 "use server";
 
-import { supabaseAdmin } from "@/lib/supabase";
-import { sendInvitationEmail } from "@/lib/email";
+// El registro de cooperativas se hace en el panel (`{cooperativasUrl}/cooperativas/registro`).
+// La landing ya no crea cooperativas: solo conserva el reenvío de la invitación para
+// las solicitudes antiguas que se hicieron desde aquí (límite: una por RIF cada 5 minutos).
 
-interface ActionState {
-  error?: string | null;
-  success?: boolean;
+import { obtenerSupabaseAdmin } from "@/lib/supabase";
+import { sendInvitationEmail } from "@/lib/email";
+import { normalizeRif, RIF_ERROR } from "@/lib/rif";
+import { cooperativasUrl } from "@/lib/urls";
+
+export type CampoReenvio = "rif" | "email";
+
+export interface ReenvioState {
+  success: boolean;
+  emailEnviado?: boolean;
+  error?: string;
+  /** Errores por campo, para mostrarlos junto a cada input. */
+  fieldErrors?: Partial<Record<CampoReenvio, string>>;
+  /** true si la invitación ya se usó: la cuenta existe y basta con iniciar sesión. */
+  cuentaCreada?: boolean;
 }
 
-export async function registrarCooperativa(
-  prevState: ActionState,
-  formData: FormData
-): Promise<ActionState> {
-  const nombre = formData.get("nombre") as string;
-  const rif = formData.get("rif") as string;
-  const email = formData.get("email") as string;
-  const telefono = formData.get("telefono") as string;
-  const representante = formData.get("representante") as string;
-  const mensaje = formData.get("mensaje") as string;
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const INVITACION_DIAS = 7;
+const ESPERA_MINUTOS = 5;
 
-  if (!nombre || !rif || !email || !telefono || !representante) {
-    return { error: "Todos los campos obligatorios son requeridos." };
+const NO_DISPONIBLE = "El reenvío no está disponible en este momento. Escríbenos por WhatsApp.";
+
+/**
+ * Reenvía la invitación de una solicitud pendiente hecha desde la landing. Exige el mismo
+ * RIF y correo con que se registró y crea una invitación nueva (así `created_at` marca el
+ * último envío y el límite de 5 minutos por RIF se cumple).
+ */
+export async function reenviarInvitacion(rifInput: string, emailInput: string): Promise<ReenvioState> {
+  const rif = normalizeRif(rifInput);
+  const email = (emailInput ?? "").trim();
+
+  const fieldErrors: Partial<Record<CampoReenvio, string>> = {};
+  if (!(rifInput ?? "").trim()) fieldErrors.rif = "Escribe el RIF de la cooperativa.";
+  else if (!rif) fieldErrors.rif = RIF_ERROR;
+  if (!email) fieldErrors.email = "Escribe el correo con el que hiciste la solicitud.";
+  else if (!EMAIL_RE.test(email)) fieldErrors.email = "El correo no es válido. Revisa que esté bien escrito (por ejemplo, nombre@correo.com).";
+  if (Object.keys(fieldErrors).length > 0 || !rif) {
+    return { success: false, error: "Revisa los campos marcados.", fieldErrors };
   }
 
-  // Validate RIF format (J-XXXXXXXX)
-  const rifRegex = /^J-\d{8,9}$/;
-  if (!rifRegex.test(rif)) {
-    return { error: "El RIF debe tener el formato J-XXXXXXXX (letra J seguida de guión y 8 o 9 dígitos)." };
+  const supabase = obtenerSupabaseAdmin();
+  const panel = cooperativasUrl();
+  if (!supabase || !panel) {
+    return { success: false, error: NO_DISPONIBLE };
   }
 
   try {
-    // 1. Check if cooperativa with same RIF already exists
-    const { data: existingCoop, error: checkError } = await supabaseAdmin
+    const { data: cooperativa, error: fetchError } = await supabase
       .from("cooperativas")
-      .select("id")
+      .select("id, nombre, estado, email")
       .eq("rif", rif)
       .maybeSingle();
 
-    if (checkError) {
-      console.error("Error checking existing cooperativa:", checkError);
-      return { error: "Error al verificar el registro." };
+    if (fetchError) {
+      console.error("Error fetching cooperativa for resend:", fetchError);
+      return { success: false, error: "No pudimos reenviar la invitación. Intenta de nuevo en unos minutos." };
     }
 
-    if (existingCoop) {
-      return { error: "Ya existe una cooperativa registrada con este RIF." };
+    if (
+      !cooperativa ||
+      cooperativa.estado !== "PENDIENTE" ||
+      (cooperativa.email ?? "").toLowerCase() !== email.toLowerCase()
+    ) {
+      return {
+        success: false,
+        error: "No encontramos una solicitud pendiente con ese RIF y correo. Revisa los datos o escríbenos.",
+      };
     }
 
-    // 2. Query a super_admin from profiles to set as creado_por (since it is NOT NULL in schema)
-    const { data: superAdmin, error: superAdminError } = await supabaseAdmin
+    // Últimas invitaciones de esta cooperativa: límite por tiempo y cuenta ya creada.
+    const { data: invitaciones, error: invitacionesError } = await supabase
+      .from("invitaciones")
+      .select("created_at, usado, email, role")
+      .eq("cooperativa_id", cooperativa.id)
+      .order("created_at", { ascending: false })
+      .limit(20);
+
+    if (invitacionesError) {
+      console.error("Error reading invitaciones for resend:", invitacionesError);
+      return { success: false, error: "No pudimos reenviar la invitación. Intenta de nuevo en unos minutos." };
+    }
+
+    const yaUsada = (invitaciones ?? []).some(
+      (i) => i.usado && i.role === "admin_cooperativa" && String(i.email ?? "").toLowerCase() === email.toLowerCase()
+    );
+    if (yaUsada) {
+      return {
+        success: false,
+        cuentaCreada: true,
+        error: "Ya creaste la cuenta de administrador con esta invitación. Inicia sesión en el panel.",
+      };
+    }
+
+    const ultima = invitaciones?.[0]?.created_at ? new Date(invitaciones[0].created_at).getTime() : 0;
+    const restanteMs = ultima + ESPERA_MINUTOS * 60_000 - Date.now();
+    if (restanteMs > 0) {
+      const minutos = Math.max(1, Math.ceil(restanteMs / 60_000));
+      return {
+        success: false,
+        error: `Ya te enviamos una invitación hace poco. Revisa tu correo (también la carpeta de spam) y, si no llegó, pide otra en ${minutos} ${minutos === 1 ? "minuto" : "minutos"}.`,
+      };
+    }
+
+    const { data: superAdmin, error: superAdminError } = await supabase
       .from("profiles")
       .select("id")
       .eq("role", "super_admin")
@@ -56,66 +117,45 @@ export async function registrarCooperativa(
 
     if (superAdminError || !superAdmin) {
       console.error("Error finding super admin for invitation:", superAdminError);
-      return { error: "Error al procesar la solicitud (no se encontró administrador en el sistema)." };
+      return { success: false, error: "No pudimos reenviar la invitación. Intenta de nuevo más tarde." };
     }
 
-    // 3. Create the cooperativa in PENDIENTE state and comision_porcentaje = 0
-    const { data: cooperativa, error: insertError } = await supabaseAdmin
-      .from("cooperativas")
-      .insert({
-        nombre,
-        rif,
-        estado: "PENDIENTE",
-        comision_porcentaje: 0.00,
-        telefono,
-        email,
-        descripcion: mensaje ? `Representante: ${representante}. Mensaje: ${mensaje}` : `Representante: ${representante}`
-      })
-      .select()
-      .single();
-
-    if (insertError || !cooperativa) {
-      console.error("Error inserting cooperativa:", insertError);
-      return { error: "Error al registrar la cooperativa." };
-    }
-
-    // 4. Create the invitation in invitaciones table
-    const { data: invitacion, error: inviteError } = await supabaseAdmin
+    const destino = cooperativa.email ?? email;
+    const { data: invitacion, error: inviteError } = await supabase
       .from("invitaciones")
       .insert({
-        email,
+        email: destino,
         role: "admin_cooperativa",
         cooperativa_id: cooperativa.id,
         creado_por: superAdmin.id,
-        expira_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // 7 days expiration
+        expira_at: new Date(Date.now() + INVITACION_DIAS * 24 * 60 * 60 * 1000).toISOString(),
       })
       .select("token")
       .single();
 
-    if (inviteError || !invitacion) {
+    if (inviteError || !invitacion?.token) {
       console.error("Error creating invitation:", inviteError);
-      // Clean up the created cooperativa since invitation failed
-      await supabaseAdmin.from("cooperativas").delete().eq("id", cooperativa.id);
-      return { error: "Error al crear la invitación para el panel." };
+      return { success: false, error: "No pudimos generar la invitación. Intenta de nuevo en unos minutos." };
     }
 
-    // 5. Send invitation email
-    const cooperativasUrl = process.env.NEXT_PUBLIC_COOPERATIVAS_URL || "http://localhost:3001";
-    const inviteLink = `${cooperativasUrl}/cooperativas/invite/${invitacion.token}`;
-    
-    const emailResult = await sendInvitationEmail({
-      email,
-      cooperativaNombre: nombre,
-      inviteLink,
+    const resultado = await sendInvitationEmail({
+      email: destino,
+      cooperativaNombre: cooperativa.nombre,
+      inviteLink: `${panel}/cooperativas/invite/${invitacion.token}`,
     });
 
-    if (!emailResult.success) {
-      console.warn("Email was not sent successfully but record was created:", emailResult.error);
+    if (!resultado.success) {
+      console.warn("Invitation email was not sent:", resultado.error);
+      return {
+        success: false,
+        emailEnviado: false,
+        error: `No pudimos enviar el correo esta vez. Intenta de nuevo en ${ESPERA_MINUTOS} minutos o escríbenos por WhatsApp.`,
+      };
     }
 
-    return { success: true };
+    return { success: true, emailEnviado: true };
   } catch (error) {
-    console.error("Exception in registrarCooperativa server action:", error);
-    return { error: "Ocurrió un error inesperado al procesar el registro." };
+    console.error("Exception in reenviarInvitacion server action:", error);
+    return { success: false, error: "Ocurrió un error inesperado al reenviar la invitación. Intenta de nuevo." };
   }
 }

@@ -40,8 +40,10 @@ export function Badge({ children, tone = 'neutral', icon: Icon, size = 'sm', bor
         style,
       ]}
     >
-      {Icon && <Icon size={Sizes.icon.xs} color={colors.fg} weight="fill" />}
-      <Text variant="overline" size="micro" color={colors.fg} uppercase compact>
+      {Icon && <Icon size={Sizes.icon.xs} color={colors.text} weight="fill" />}
+      {/* 11pt bold sentence case on the dark tone foreground — the badge is the
+          main state signal, so it must pass WCAG AA (≥ 4.5:1) on its tint. */}
+      <Text variant="caption" size="xs" weight="bold" color={colors.text} compact>
         {children}
       </Text>
     </View>
@@ -100,12 +102,15 @@ export function Chip({
   onPress,
   icon: Icon,
   fullWidth,
+  accessibilityLabel,
 }: {
   label: string;
   selected?: boolean;
   onPress?: () => void;
   icon?: React.ComponentType<IconProps>;
   fullWidth?: boolean;
+  /** Cuando `label` solo no basta, p. ej. "Asiento 14, Soy yo" o "Categoría: Pago" */
+  accessibilityLabel?: string;
 }) {
   return (
     <PressableScale
@@ -115,7 +120,7 @@ export function Chip({
       scaleValue={Motion.press.chip}
       accessibilityRole="radio"
       accessibilityState={{ selected: !!selected }}
-      accessibilityLabel={label}
+      accessibilityLabel={accessibilityLabel ?? label}
       style={[s.chip, selected ? s.chipSelected : s.chipIdle, fullWidth ? s.chipFull : null]}
     >
       {Icon && (

@@ -26,10 +26,14 @@ export interface Sucursal {
   id: string;
   cooperativa_id: string;
   nombre: string;
-  estado: string;
+  /** Clave de lib/data/venezuela.ts ("carabobo"). La columna real es `estado_geografico`. */
+  estado_geografico: string | null;
+  /** Columna antigua; solo se lee como respaldo (`estado_geografico ?? estado`). */
+  estado?: string | null;
   ciudad: string;
   direccion: string | null;
   telefono: string | null;
+  horario?: string | null;
   activa: boolean;
   created_at: string;
 }
@@ -40,4 +44,6 @@ export interface CooperativaData {
   rif: string | null;
   logo_url: string | null;
   comision_porcentaje: number | null;
+  /** PENDIENTE | RECHAZADA | ACTIVA | SUSPENDIDA | INACTIVA */
+  estado?: string | null;
 }

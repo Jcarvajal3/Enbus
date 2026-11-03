@@ -2,6 +2,7 @@
 
 import { useUser } from "@/hooks/use-user";
 import { ADMIN_NAV_ITEMS } from "@/lib/admin-navigation";
+import { etiquetaRol } from "@/lib/estados";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Shield, SignOut, Sun, Moon, Monitor } from "@phosphor-icons/react";
@@ -91,12 +92,12 @@ export function AdminSidebar() {
     <Sidebar>
       <SidebarHeader className="p-4">
         <div className="flex items-center gap-2">
-          <div className="flex size-8 items-center justify-center rounded-lg bg-orange-600">
-            <Shield weight="fill" className="size-5 text-white" />
+          <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+            <Shield weight="fill" className="size-5" aria-hidden />
           </div>
           <div className="flex flex-col">
             <span className="font-bold tracking-tight">EnBus</span>
-            <span className="text-xs text-orange-500 font-medium">
+            <span className="text-xs text-muted-foreground font-medium">
               Administración
             </span>
           </div>
@@ -119,8 +120,9 @@ export function AdminSidebar() {
                       <item.icon />
                       <span>{item.title}</span>
                       {isSolicitudes && pendingCount > 0 && (
-                        <span className="ml-auto flex h-5 w-5 items-center justify-center rounded-full bg-blue-500 text-[10px] font-bold text-white animate-pulse">
+                        <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 text-xs font-bold text-primary-foreground">
                           {pendingCount}
+                          <span className="sr-only"> en revisión</span>
                         </span>
                       )}
                     </SidebarMenuButton>
@@ -142,13 +144,13 @@ export function AdminSidebar() {
                   className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
                 >
                   <Avatar className="size-8 rounded-lg">
-                    <AvatarFallback className="rounded-lg bg-orange-600 text-white font-semibold">
+                    <AvatarFallback className="rounded-lg bg-primary text-primary-foreground font-semibold">
                       {user.nombre_completo?.charAt(0).toUpperCase() || "A"}
                     </AvatarFallback>
                   </Avatar>
                   <div className="grid flex-1 text-left text-sm leading-tight">
                     <span className="truncate font-semibold">{user.nombre_completo}</span>
-                    <span className="truncate text-xs capitalize text-muted-foreground">{user.role.replace("_", " ")}</span>
+                    <span className="truncate text-xs text-muted-foreground">{etiquetaRol(user.role)}</span>
                   </div>
                 </SidebarMenuButton>
               }
@@ -157,13 +159,13 @@ export function AdminSidebar() {
               <div className="p-0 font-normal">
                 <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
                   <Avatar className="size-8 rounded-lg">
-                    <AvatarFallback className="rounded-lg bg-orange-600 text-white">
+                    <AvatarFallback className="rounded-lg bg-primary text-primary-foreground">
                       {user.nombre_completo?.charAt(0).toUpperCase() || "A"}
                     </AvatarFallback>
                   </Avatar>
                   <div className="grid flex-1 leading-tight">
                     <span className="truncate font-semibold">{user.nombre_completo}</span>
-                    <span className="truncate text-xs capitalize text-muted-foreground">{user.role.replace("_", " ")}</span>
+                    <span className="truncate text-xs text-muted-foreground">{etiquetaRol(user.role)}</span>
                   </div>
                 </div>
               </div>
@@ -173,23 +175,23 @@ export function AdminSidebar() {
               <DropdownMenuItem onClick={() => setTheme("light")} className="cursor-pointer">
                 <Sun className="size-4 mr-2" />
                 <span>Claro</span>
-                {mounted && theme === "light" && <span className="ml-auto text-xs text-primary">✓</span>}
+                {mounted && theme === "light" && <span className="ml-auto text-xs text-primary-text"><span aria-hidden>✓</span><span className="sr-only">(seleccionado)</span></span>}
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setTheme("dark")} className="cursor-pointer">
                 <Moon className="size-4 mr-2" />
                 <span>Oscuro</span>
-                {mounted && theme === "dark" && <span className="ml-auto text-xs text-primary">✓</span>}
+                {mounted && theme === "dark" && <span className="ml-auto text-xs text-primary-text"><span aria-hidden>✓</span><span className="sr-only">(seleccionado)</span></span>}
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setTheme("system")} className="cursor-pointer">
                 <Monitor className="size-4 mr-2" />
                 <span>Sistema</span>
-                {mounted && theme === "system" && <span className="ml-auto text-xs text-primary">✓</span>}
+                {mounted && theme === "system" && <span className="ml-auto text-xs text-primary-text"><span aria-hidden>✓</span><span className="sr-only">(seleccionado)</span></span>}
               </DropdownMenuItem>
               </DropdownMenuGroup>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={handleSignOut} className="cursor-pointer text-destructive focus:text-destructive">
+              <DropdownMenuItem onClick={handleSignOut} className="cursor-pointer text-destructive-text focus:text-destructive-text">
                 <SignOut />
-                <span>Cerrar Sesión</span>
+                <span>Cerrar sesión</span>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { 
@@ -18,10 +19,48 @@ import {
   SelectTrigger, 
   SelectValue 
 } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/status-badge";
+import { etiquetaEstado } from "@/lib/estados";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Star, MagnifyingGlass, Funnel } from "@phosphor-icons/react";
-import type { Cooperativa, EstadoCooperativa } from "@/lib/types/admin-cooperativas";
+import type { Cooperativa } from "@/lib/types/admin-cooperativas";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { isValidRif } from "@/lib/rif";
+import { formatFechaVE } from "@/lib/fechas";
+import { cn } from "@/lib/utils";
+
+const AYUDA_RIF_INCOMPLETO = "Falta el dígito verificador. Edita la cooperativa para completarlo.";
+
+/**
+ * Insignia "RIF incompleto" (RIF sin los 9 dígitos, p. ej. guardado antes de validar el formato).
+ * No muestra nada si el RIF es válido.
+ */
+export function RifIncompletoBadge({ rif, className }: { rif: string | null | undefined; className?: string }) {
+  if (isValidRif(rif)) return null;
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        type="button"
+        aria-label={`RIF incompleto. ${AYUDA_RIF_INCOMPLETO}`}
+        onClick={(e) => e.stopPropagation()}
+        className={cn(
+          "inline-flex h-5 shrink-0 items-center rounded-4xl border border-transparent bg-amber-100 px-2 text-xs font-medium whitespace-nowrap text-amber-900 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:bg-amber-400/15 dark:text-amber-200",
+          className
+        )}
+      >
+        RIF incompleto
+      </TooltipTrigger>
+      <TooltipContent>{AYUDA_RIF_INCOMPLETO}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+const ESTADOS_FILTRO = ["PENDIENTE", "RECHAZADA", "ACTIVA", "SUSPENDIDA", "DESACTIVADA"] as const;
+// Etiqueta del valor elegido: sin `items`, el Select muestra el valor crudo ("ALL", "PENDIENTE").
+const ITEMS_ESTADO: Record<string, string> = {
+  ALL: "Todos los estados",
+  ...Object.fromEntries(ESTADOS_FILTRO.map((e) => [e, etiquetaEstado("cooperativa", e)])),
+};
 
 interface CooperativasTableProps {
   initialCooperativas: Cooperativa[];
@@ -43,21 +82,6 @@ export function CooperativasTable({ initialCooperativas }: CooperativasTableProp
     return matchesSearch && matchesEstado;
   });
 
-  const getEstadoBadge = (estado: EstadoCooperativa) => {
-    switch (estado) {
-      case "PENDIENTE":
-        return <Badge className="bg-blue-500/10 text-blue-500 hover:bg-blue-500/20 border-blue-500/20">Pendiente</Badge>;
-      case "ACTIVA":
-        return <Badge className="bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 border-emerald-500/20">Activa</Badge>;
-      case "SUSPENDIDA":
-        return <Badge className="bg-amber-500/10 text-amber-500 hover:bg-amber-500/20 border-amber-500/20">Suspendida</Badge>;
-      case "DESACTIVADA":
-        return <Badge className="bg-destructive/10 text-destructive hover:bg-destructive/20 border-destructive/20">Desactivada</Badge>;
-      default:
-        return <Badge variant="outline">{estado}</Badge>;
-    }
-  };
-
   return (
     <div className="space-y-4">
       {/* Filtros */}
@@ -65,24 +89,26 @@ export function CooperativasTable({ initialCooperativas }: CooperativasTableProp
         <div className="relative flex-1 max-w-md">
           <MagnifyingGlass className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Buscar por nombre o RIF..."
+            aria-label="Buscar cooperativa"
+            placeholder="Buscar por nombre o RIF"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="pl-9 bg-background border-input text-foreground placeholder:text-muted-foreground focus-visible:ring-emerald-500 focus-visible:border-emerald-500"
+            className="pl-9 bg-background border-input text-foreground placeholder:text-muted-foreground"
           />
         </div>
         <div className="flex items-center gap-2">
           <Funnel className="h-4 w-4 text-muted-foreground" />
-          <Select value={estadoFilter} onValueChange={(val) => setEstadoFilter(val ?? "ALL")}>
-            <SelectTrigger className="w-[180px] bg-background border-input text-foreground">
+          <Select value={estadoFilter} onValueChange={(val) => setEstadoFilter(val ?? "ALL")} items={ITEMS_ESTADO}>
+            <SelectTrigger aria-label="Filtrar por estado" className="w-[180px] bg-background border-input text-foreground">
               <SelectValue placeholder="Filtrar por estado" />
             </SelectTrigger>
             <SelectContent className="bg-popover border text-popover-foreground">
               <SelectItem value="ALL">Todos los estados</SelectItem>
-              <SelectItem value="PENDIENTE">Pendiente</SelectItem>
-              <SelectItem value="ACTIVA">Activa</SelectItem>
-              <SelectItem value="SUSPENDIDA">Suspendida</SelectItem>
-              <SelectItem value="DESACTIVADA">Desactivada</SelectItem>
+              {ESTADOS_FILTRO.map((e) => (
+                <SelectItem key={e} value={e}>
+                  {etiquetaEstado("cooperativa", e)}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
@@ -97,7 +123,7 @@ export function CooperativasTable({ initialCooperativas }: CooperativasTableProp
               <TableHead className="text-muted-foreground">Nombre</TableHead>
               <TableHead className="text-muted-foreground">RIF</TableHead>
               <TableHead className="text-muted-foreground">Estado</TableHead>
-              <TableHead className="text-muted-foreground text-right">Comisión %</TableHead>
+              <TableHead className="text-muted-foreground text-right">Comisión</TableHead>
               <TableHead className="text-muted-foreground text-center">Calificación</TableHead>
               <TableHead className="text-muted-foreground text-right">Registro</TableHead>
             </TableRow>
@@ -125,16 +151,25 @@ export function CooperativasTable({ initialCooperativas }: CooperativasTableProp
                     </Avatar>
                   </TableCell>
                   <TableCell className="font-medium text-foreground py-3">
-                    {coop.nombre}
+                    <Link
+                      href={`/admin/cooperativas/${coop.id}`}
+                      onClick={(e) => e.stopPropagation()}
+                      className="text-foreground underline decoration-primary underline-offset-4"
+                    >
+                      {coop.nombre}
+                    </Link>
                   </TableCell>
                   <TableCell className="text-muted-foreground py-3">
-                    {coop.rif}
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="font-mono text-sm">{coop.rif}</span>
+                      <RifIncompletoBadge rif={coop.rif} />
+                    </div>
                   </TableCell>
                   <TableCell className="py-3">
-                    {getEstadoBadge(coop.estado)}
+                    <StatusBadge status={coop.estado} dominio="cooperativa" />
                   </TableCell>
                   <TableCell className="text-right text-foreground py-3 font-semibold">
-                    {coop.comision_porcentaje}%
+                    {coop.comision_porcentaje} %
                   </TableCell>
                   <TableCell className="py-3">
                     <div className="flex items-center justify-center gap-1">
@@ -148,7 +183,7 @@ export function CooperativasTable({ initialCooperativas }: CooperativasTableProp
                     </div>
                   </TableCell>
                   <TableCell className="text-right text-muted-foreground py-3 text-sm">
-                    {new Date(coop.created_at).toLocaleDateString("es-VE")}
+                    {formatFechaVE(coop.created_at)}
                   </TableCell>
                 </TableRow>
               ))

@@ -5,10 +5,10 @@ import { notFound } from "next/navigation";
 import { CooperativaDetailTabs } from "@/components/admin/cooperativas/cooperativa-detail-tabs";
 import { CooperativaActions } from "@/components/admin/cooperativas/cooperativa-actions";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/status-badge";
 import { ArrowLeft, Buildings } from "@phosphor-icons/react/dist/ssr"; // Use SSR-safe icons
 import Link from "next/link";
-import type { EstadoCooperativa } from "@/lib/types/admin-cooperativas";
+import { formatFechaVE } from "@/lib/fechas";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -22,21 +22,6 @@ export default async function CooperativaDetailPage({ params }: PageProps) {
     notFound();
   }
 
-  const getEstadoBadge = (estado: EstadoCooperativa) => {
-    switch (estado) {
-      case "PENDIENTE":
-        return <Badge className="bg-blue-500/10 text-blue-500 border-blue-500/20">Pendiente</Badge>;
-      case "ACTIVA":
-        return <Badge className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20">Activa</Badge>;
-      case "SUSPENDIDA":
-        return <Badge className="bg-amber-500/10 text-amber-500 border-amber-500/20">Suspendida</Badge>;
-      case "DESACTIVADA":
-        return <Badge className="bg-rose-500/10 text-rose-500 border-rose-500/20">Desactivada</Badge>;
-      default:
-        return <Badge variant="outline">{estado}</Badge>;
-    }
-  };
-
   return (
     <div className="space-y-6">
       {/* Back Button / Breadcrumb */}
@@ -45,7 +30,7 @@ export default async function CooperativaDetailPage({ params }: PageProps) {
           href="/admin/cooperativas"
           className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
         >
-          <ArrowLeft className="h-4 w-4" /> Volver a cooperativas
+          <ArrowLeft className="h-4 w-4" aria-hidden /> Volver a cooperativas
         </Link>
       </div>
 
@@ -61,9 +46,18 @@ export default async function CooperativaDetailPage({ params }: PageProps) {
           <div className="space-y-1">
             <div className="flex flex-wrap items-center gap-3">
               <h1 className="text-2xl font-bold tracking-tight">{cooperativa.nombre}</h1>
-              {getEstadoBadge(cooperativa.estado)}
+              <StatusBadge status={cooperativa.estado} dominio="cooperativa" />
             </div>
             <p className="text-sm text-muted-foreground font-mono">RIF: {cooperativa.rif}</p>
+            {cooperativa.motivo_estado && cooperativa.estado !== "ACTIVA" && cooperativa.estado !== "PENDIENTE" && (
+              <p className="max-w-xl text-sm text-foreground">
+                <span className="text-muted-foreground">Motivo: </span>
+                {cooperativa.motivo_estado}
+                {cooperativa.estado_cambiado_at && (
+                  <span className="text-muted-foreground"> · desde el {formatFechaVE(cooperativa.estado_cambiado_at)}</span>
+                )}
+              </p>
+            )}
           </div>
         </div>
         

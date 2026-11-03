@@ -6,14 +6,24 @@ import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/s
 import { Breadcrumb, BreadcrumbItem, BreadcrumbList, BreadcrumbPage } from "@/components/ui/breadcrumb";
 import { UserProvider, type UserProfile } from "@/hooks/use-user";
 import { usePathname } from "next/navigation";
-import { NAV_ITEMS } from "@/lib/navigation";
+import { NAV_ITEMS, esRutaActiva } from "@/lib/navigation";
 import { ServiceWorkerRegistrar } from "@/components/service-worker-registrar";
 import { ConnectivityBanner } from "@/components/connectivity-banner";
-import { PendingApprovalBanner } from "@/components/pending-approval-banner";
+import { EstadoCooperativaBanner } from "@/components/estado-cooperativa-banner";
 
-export function PanelShell({ user, children }: { user: UserProfile; children: React.ReactNode }) {
+export function PanelShell({
+  user,
+  headerExtra,
+  children,
+}: {
+  user: UserProfile;
+  /** Contenido a la derecha del encabezado (p. ej. la tasa BCV del día). */
+  headerExtra?: React.ReactNode;
+  children: React.ReactNode;
+}) {
   const pathname = usePathname();
-  const currentItem = NAV_ITEMS.find((item) => pathname.startsWith(item.href));
+  // Mismo nombre en el menú, el breadcrumb y el H1 de cada pantalla.
+  const currentItem = NAV_ITEMS.find((item) => esRutaActiva(pathname, item.href));
   const pageTitle = currentItem ? currentItem.title : "Panel";
 
   return (
@@ -22,10 +32,10 @@ export function PanelShell({ user, children }: { user: UserProfile; children: Re
       <SidebarProvider>
         <AppSidebar />
         <SidebarInset>
-          {/* Connectivity banner — always pinned at the very top, above header */}
+          {/* Conectividad: siempre arriba, sobre el encabezado */}
           <ConnectivityBanner />
-          {/* Pending approval banner — shown when cooperativa is in PENDIENTE state */}
-          <PendingApprovalBanner />
+          {/* Estado de la cooperativa (en revisión, rechazada, suspendida o desactivada): no se puede cerrar */}
+          <EstadoCooperativaBanner />
           <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
             <SidebarTrigger className="-ml-1" />
             <Separator orientation="vertical" className="mr-2 h-4" />
@@ -36,6 +46,7 @@ export function PanelShell({ user, children }: { user: UserProfile; children: Re
                 </BreadcrumbItem>
               </BreadcrumbList>
             </Breadcrumb>
+            {headerExtra && <div className="ml-auto flex items-center">{headerExtra}</div>}
           </header>
           <main className="flex-1 p-6">
             {children}

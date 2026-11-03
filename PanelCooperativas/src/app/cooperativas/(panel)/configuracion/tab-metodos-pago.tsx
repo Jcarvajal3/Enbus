@@ -1,46 +1,57 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useId, useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
 import {
   Card, CardContent, CardDescription, CardHeader, CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
-  CreditCard, Plus, Pencil, Trash, Check, X,
+  CreditCard, Plus, PencilSimple, Trash, Check, X, WarningCircle, Eye,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import {
   crearMetodoPago,
   actualizarMetodoPago,
+  cambiarActivoMetodoPago,
   eliminarMetodoPago,
+  type MetodoPagoInput,
 } from "@/app/cooperativas/(panel)/configuracion/actions";
 import type { MetodoPagoCooperativa, TipoMetodoPago } from "@/lib/types/configuracion";
 import { requireOnline } from "@/components/connectivity-banner";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { ErrorState } from "@/components/error-state";
+import { humanizeError } from "@/lib/errores";
+import { METODO_PAGO } from "@/lib/estados";
+import { buscarBanco, mostrarBanco, OPCIONES_BANCO, OTRO_BANCO } from "@/lib/bancos";
+import { cedulaValida, formatCedula, formatTelefono, telefonoValido, TELEFONO_PLACEHOLDER } from "@/lib/ve";
+import { normalizeRif } from "@/lib/rif";
+import { cn } from "@/lib/utils";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Constants
+// Tipos y formulario
 // ─────────────────────────────────────────────────────────────────────────────
 
-const TIPOS_METODO_PAGO: { value: TipoMetodoPago; label: string }[] = [
-  { value: "TRANSFERENCIA_BANCARIA", label: "Transferencia Bancaria" },
-  { value: "PAGO_MOVIL", label: "Pago Móvil" },
-  { value: "ZELLE", label: "Zelle" },
-  { value: "EFECTIVO", label: "Efectivo" },
-];
+const TIPOS: TipoMetodoPago[] = ["PAGO_MOVIL", "TRANSFERENCIA_BANCARIA", "ZELLE", "EFECTIVO"];
 
-const TIPO_LABELS: Record<TipoMetodoPago, string> = Object.fromEntries(
-  TIPOS_METODO_PAGO.map((t) => [t.value, t.label])
-) as Record<TipoMetodoPago, string>;
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Form state
-// ─────────────────────────────────────────────────────────────────────────────
+const AYUDA_TIPO: Record<TipoMetodoPago, string> = {
+  PAGO_MOVIL: "El pasajero paga desde su banco con tu teléfono, banco y cédula.",
+  TRANSFERENCIA_BANCARIA: "El pasajero transfiere a tu cuenta de 20 dígitos.",
+  ZELLE: "El pasajero paga en dólares a tu correo de Zelle.",
+  EFECTIVO: "El pasajero paga en la taquilla. No necesita datos de cuenta.",
+};
 
 interface FormState {
   tipo: TipoMetodoPago;
-  banco: string;
+  /** Etiqueta "0134 · Banesco" o OTRO_BANCO. */
+  bancoOpcion: string;
+  /** Nombre escrito cuando se elige "Otro banco". */
+  bancoOtro: string;
   titular: string;
   numero_cuenta: string;
   cedula_rif: string;
@@ -49,8 +60,9 @@ interface FormState {
 }
 
 const EMPTY_FORM: FormState = {
-  tipo: "TRANSFERENCIA_BANCARIA",
-  banco: "",
+  tipo: "PAGO_MOVIL",
+  bancoOpcion: "",
+  bancoOtro: "",
   titular: "",
   numero_cuenta: "",
   cedula_rif: "",
@@ -58,10 +70,45 @@ const EMPTY_FORM: FormState = {
   instrucciones: "",
 };
 
-function formToInput(form: FormState) {
+type Errores = Partial<Record<"tipo" | "banco" | "titular" | "numero_cuenta" | "cedula_rif" | "email_zelle", string>>;
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function bancoDelForm(form: FormState): string | null {
+  if (form.bancoOpcion === OTRO_BANCO) return form.bancoOtro.trim() || null;
+  return form.bancoOpcion || null;
+}
+
+function documentoValido(v: string) {
+  return Boolean(normalizeRif(v)) || cedulaValida(v);
+}
+
+/** Mismas reglas que el servidor (configuracion/actions.ts): errores por campo. */
+function validar(form: FormState): Errores {
+  const e: Errores = {};
+  const titular = form.titular.trim();
+  if (form.tipo === "PAGO_MOVIL" || form.tipo === "TRANSFERENCIA_BANCARIA") {
+    if (!bancoDelForm(form)) e.banco = form.bancoOpcion === OTRO_BANCO ? "Escribe el nombre del banco." : "Elige el banco.";
+    if (!documentoValido(form.cedula_rif)) e.cedula_rif = "Escribe la cédula o el RIF del titular, por ejemplo V-12345678.";
+    if (titular.length < 3) e.titular = "Escribe el nombre del titular.";
+  }
+  if (form.tipo === "PAGO_MOVIL" && !telefonoValido(form.numero_cuenta)) {
+    e.numero_cuenta = "Escribe el teléfono del Pago Móvil, por ejemplo 0414-1234567.";
+  }
+  if (form.tipo === "TRANSFERENCIA_BANCARIA" && form.numero_cuenta.replace(/\D/g, "").length !== 20) {
+    e.numero_cuenta = "El número de cuenta debe tener 20 dígitos.";
+  }
+  if (form.tipo === "ZELLE") {
+    if (!EMAIL_RE.test(form.email_zelle.trim())) e.email_zelle = "Escribe el correo de Zelle, por ejemplo pagos@tucooperativa.com.";
+    if (titular.length < 3) e.titular = "Escribe el nombre del titular de la cuenta Zelle.";
+  }
+  return e;
+}
+
+function formToInput(form: FormState): MetodoPagoInput {
   return {
     tipo: form.tipo,
-    banco: form.banco || null,
+    banco: bancoDelForm(form),
     titular: form.titular,
     numero_cuenta: form.numero_cuenta || null,
     cedula_rif: form.cedula_rif || null,
@@ -70,41 +117,115 @@ function formToInput(form: FormState) {
   };
 }
 
+/** "Pago Móvil Banesco", "Zelle pagos@…", "Efectivo". */
+function nombreMetodo(m: Pick<MetodoPagoCooperativa, "tipo" | "banco" | "email_zelle">) {
+  const tipo = METODO_PAGO[m.tipo] ?? m.tipo;
+  if (m.tipo === "ZELLE") return m.email_zelle ? `${tipo} ${m.email_zelle}` : tipo;
+  if (m.tipo === "EFECTIVO") return tipo;
+  const banco = buscarBanco(m.banco)?.nombre ?? m.banco;
+  return banco ? `${tipo} ${banco}` : tipo;
+}
+
+/** "0102-1234-…-7890" para que se lea bien la cuenta de 20 dígitos. */
+function formatCuenta(v: string | null | undefined) {
+  const d = (v ?? "").replace(/\D/g, "");
+  return d.length === 20 ? `${d.slice(0, 4)}-${d.slice(4, 8)}-${d.slice(8, 10)}-${d.slice(10)}` : v ?? "";
+}
+
+function formatDocumento(v: string | null | undefined) {
+  if (!v) return "";
+  return normalizeRif(v) ?? (formatCedula(v) !== "—" ? formatCedula(v) : v);
+}
+
+/** Filas tal como las ve el pasajero al pagar (mismo orden que PaymentFlow de la app). */
+function filasPasajero(m: {
+  tipo: TipoMetodoPago;
+  banco: string | null;
+  titular: string;
+  numero_cuenta: string | null;
+  cedula_rif: string | null;
+  email_zelle: string | null;
+}) {
+  const filas: { etiqueta: string; valor: string }[] = [];
+  if (m.tipo === "EFECTIVO") return filas;
+  if (m.banco) filas.push({ etiqueta: "Banco", valor: mostrarBanco(m.banco) });
+  if (m.titular) filas.push({ etiqueta: "Titular", valor: m.titular });
+  if (m.tipo === "PAGO_MOVIL" && m.numero_cuenta) {
+    filas.push({ etiqueta: "Teléfono", valor: telefonoValido(m.numero_cuenta) ? formatTelefono(m.numero_cuenta) : m.numero_cuenta });
+  }
+  if (m.tipo === "TRANSFERENCIA_BANCARIA" && m.numero_cuenta) {
+    filas.push({ etiqueta: "Nro. de cuenta", valor: formatCuenta(m.numero_cuenta) });
+  }
+  if (m.tipo === "ZELLE" && m.email_zelle) filas.push({ etiqueta: "Correo Zelle", valor: m.email_zelle });
+  if (m.cedula_rif) filas.push({ etiqueta: "C.I. / RIF", valor: formatDocumento(m.cedula_rif) });
+  return filas;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
-// Tab Component
+// Tab
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface MetodosPagoTabProps {
   metodos: MetodoPagoCooperativa[];
+  errorCarga?: string | null;
 }
 
-export function MetodosPagoTab({ metodos: initialMetodos }: MetodosPagoTabProps) {
+export function MetodosPagoTab({ metodos: initialMetodos, errorCarga = null }: MetodosPagoTabProps) {
+  const router = useRouter();
+  const uid = useId();
+  const id = (s: string) => `${uid}-${s}`;
   const [metodos, setMetodos] = useState(initialMetodos);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
-  const [isPending, startTransition] = useTransition();
+  const [errores, setErrores] = useState<Errores>({});
+  const [errorGeneral, setErrorGeneral] = useState<string | null>(null);
+  const [guardando, setGuardando] = useState(false);
+  const [cambiandoId, setCambiandoId] = useState<string | null>(null);
 
-  const setField = (key: keyof FormState, value: string) =>
+  // Eliminar (con confirmación). Se conserva el método al cerrar para la animación.
+  const [aEliminar, setAEliminar] = useState<MetodoPagoCooperativa | null>(null);
+  const [eliminarOpen, setEliminarOpen] = useState(false);
+  const [conPagos, setConPagos] = useState(false);
+
+  const setField = (key: keyof FormState, value: string) => {
     setForm((prev) => ({ ...prev, [key]: value }));
+    setErrores((prev) => {
+      const campo = key === "bancoOpcion" || key === "bancoOtro" ? "banco" : key;
+      if (!(campo in prev)) return prev;
+      const siguiente = { ...prev };
+      delete siguiente[campo as keyof Errores];
+      return siguiente;
+    });
+  };
 
   function openCreate() {
     setEditingId(null);
     setForm(EMPTY_FORM);
+    setErrores({});
+    setErrorGeneral(null);
     setShowForm(true);
   }
 
   function openEdit(m: MetodoPagoCooperativa) {
+    const etiqueta = m.banco ? mostrarBanco(m.banco) : "";
+    const enLista = OPCIONES_BANCO.includes(etiqueta);
     setEditingId(m.id);
     setForm({
       tipo: m.tipo,
-      banco: m.banco ?? "",
+      bancoOpcion: m.banco ? (enLista ? etiqueta : OTRO_BANCO) : "",
+      bancoOtro: m.banco && !enLista ? m.banco : "",
       titular: m.titular,
-      numero_cuenta: m.numero_cuenta ?? "",
+      numero_cuenta:
+        m.tipo === "PAGO_MOVIL" && telefonoValido(m.numero_cuenta ?? "")
+          ? formatTelefono(m.numero_cuenta).replace(/\./g, "")
+          : m.numero_cuenta ?? "",
       cedula_rif: m.cedula_rif ?? "",
       email_zelle: m.email_zelle ?? "",
       instrucciones: m.instrucciones ?? "",
     });
+    setErrores({});
+    setErrorGeneral(null);
     setShowForm(true);
   }
 
@@ -113,57 +234,93 @@ export function MetodosPagoTab({ metodos: initialMetodos }: MetodosPagoTabProps)
     setEditingId(null);
   }
 
-  function handleSubmit() {
-    if (!form.titular.trim()) {
-      toast.error("El titular es obligatorio");
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    if (guardando) return;
+    setErrorGeneral(null);
+    const encontrados = validar(form);
+    setErrores(encontrados);
+    if (Object.keys(encontrados).length > 0) {
+      const primero = Object.keys(encontrados)[0];
+      document.getElementById(id(primero))?.focus();
       return;
     }
-    startTransition(async () => {
-      try {
-        if (editingId) {
-          await requireOnline(() => actualizarMetodoPago(editingId, formToInput(form)))();
-          setMetodos((prev) =>
-            prev.map((m) =>
-              m.id === editingId ? { ...m, ...formToInput(form) } : m
-            )
-          );
-          toast.success("Método de pago actualizado");
-        } else {
-          const nuevo = await requireOnline(() => crearMetodoPago(formToInput(form)))();
-          setMetodos((prev) => [...prev, nuevo]);
-          toast.success("Método de pago agregado");
+    setGuardando(true);
+    try {
+      const input = formToInput(form);
+      if (editingId) {
+        const res = await requireOnline(() => actualizarMetodoPago(editingId, input))();
+        if (!res.ok) {
+          if (res.campo) setErrores({ [res.campo]: res.error } as Errores);
+          else setErrorGeneral(res.error);
+          return;
         }
-        closeForm();
-      } catch (err: unknown) {
-        toast.error(err instanceof Error ? err.message : "Error al guardar");
+        setMetodos((prev) => prev.map((m) => (m.id === editingId ? { ...m, ...res.data } : m)));
+        toast.success("Método de pago actualizado.");
+      } else {
+        const res = await requireOnline(() => crearMetodoPago(input))();
+        if (!res.ok) {
+          if (res.campo) setErrores({ [res.campo]: res.error } as Errores);
+          else setErrorGeneral(res.error);
+          return;
+        }
+        setMetodos((prev) => [...prev, res.data]);
+        toast.success("Método de pago agregado. Los pasajeros ya lo ven al pagar.");
       }
-    });
+      closeForm();
+      router.refresh();
+    } catch (err: unknown) {
+      setErrorGeneral(humanizeError(err, "guardar el método de pago"));
+    } finally {
+      setGuardando(false);
+    }
   }
 
-  function handleToggle(m: MetodoPagoCooperativa) {
-    startTransition(async () => {
-      try {
-        await requireOnline(() => actualizarMetodoPago(m.id, { activo: !m.activo }))();
-        setMetodos((prev) =>
-          prev.map((x) => (x.id === m.id ? { ...x, activo: !x.activo } : x))
-        );
-      } catch (err: unknown) {
-        toast.error(err instanceof Error ? err.message : "Error");
+  async function cambiarActivo(m: MetodoPagoCooperativa, activo: boolean) {
+    setCambiandoId(m.id);
+    try {
+      const res = await requireOnline(() => cambiarActivoMetodoPago(m.id, activo))();
+      if (!res.ok) {
+        toast.error(res.error);
+        return false;
       }
-    });
+      setMetodos((prev) => prev.map((x) => (x.id === m.id ? { ...x, activo } : x)));
+      toast.success(activo ? `${nombreMetodo(m)} activado.` : `${nombreMetodo(m)} desactivado. Los pasajeros ya no lo ven.`);
+      return true;
+    } catch (err: unknown) {
+      toast.error(humanizeError(err, activo ? "activar el método de pago" : "desactivar el método de pago"));
+      return false;
+    } finally {
+      setCambiandoId(null);
+    }
   }
 
-  function handleDelete(id: string) {
-    startTransition(async () => {
-      try {
-        await requireOnline(() => eliminarMetodoPago(id))();
-        setMetodos((prev) => prev.filter((m) => m.id !== id));
-        toast.success("Método de pago eliminado");
-      } catch (err: unknown) {
-        toast.error(err instanceof Error ? err.message : "Error");
-      }
-    });
+  function pedirEliminar(m: MetodoPagoCooperativa) {
+    setConPagos(false);
+    setAEliminar(m);
+    setEliminarOpen(true);
   }
+
+  async function confirmarEliminar() {
+    if (!aEliminar) return { ok: false, error: "No encontramos ese método. Actualiza la página." };
+    try {
+      const res = await requireOnline(() => eliminarMetodoPago(aEliminar.id))();
+      if (!res.ok) {
+        if (res.codigo === "TIENE_PAGOS") setConPagos(true);
+        return { ok: false, error: res.error };
+      }
+    } catch (err) {
+      return { ok: false, error: humanizeError(err, "eliminar el método de pago") };
+    }
+    setMetodos((prev) => prev.filter((m) => m.id !== aEliminar.id));
+    toast.success(`${nombreMetodo(aEliminar)} eliminado.`);
+    if (editingId === aEliminar.id) closeForm();
+    return { ok: true };
+  }
+
+  const pideBanco = form.tipo === "PAGO_MOVIL" || form.tipo === "TRANSFERENCIA_BANCARIA";
+  const vistaPrevia = formToInput(form);
+  const filasPrevia = filasPasajero({ ...vistaPrevia, titular: vistaPrevia.titular.trim() });
 
   return (
     <Card>
@@ -171,128 +328,388 @@ export function MetodosPagoTab({ metodos: initialMetodos }: MetodosPagoTabProps)
         <div className="flex items-center justify-between gap-4 flex-wrap">
           <div>
             <CardTitle className="flex items-center gap-2">
-              <CreditCard size={20} weight="duotone" />
-              Métodos de Pago
+              <CreditCard size={20} weight="duotone" aria-hidden />
+              Métodos de pago
             </CardTitle>
             <CardDescription>
-              Configure los métodos de pago disponibles para sus clientes.
+              Las cuentas donde los pasajeros te pagan desde la app. Solo ven las activas.
             </CardDescription>
           </div>
-          <Button onClick={openCreate} size="sm">
-            <Plus size={16} className="mr-2" />
-            Agregar Método
-          </Button>
+          {!showForm && (
+            <Button onClick={openCreate} size="sm">
+              <Plus size={16} className="mr-2" aria-hidden />
+              Agregar método
+            </Button>
+          )}
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Inline form */}
+        {errorCarga && (
+          <ErrorState
+            compacto
+            titulo="No pudimos cargar tus métodos de pago"
+            descripcion={errorCarga}
+            onReintentar={() => router.refresh()}
+          />
+        )}
+
+        {/* Formulario */}
         {showForm && (
-          <div className="border rounded-lg p-4 space-y-4 bg-muted/30">
+          <form onSubmit={handleSubmit} noValidate className="border rounded-lg p-4 space-y-4 bg-muted/30">
             <p className="font-medium text-sm">
               {editingId ? "Editar método de pago" : "Nuevo método de pago"}
             </p>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium">Tipo *</label>
-                <select
-                  value={form.tipo}
-                  onChange={(e) => setField("tipo", e.target.value)}
-                  className="w-full h-9 rounded-md border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                >
-                  {TIPOS_METODO_PAGO.map((t) => (
-                    <option key={t.value} value={t.value}>{t.label}</option>
-                  ))}
-                </select>
-              </div>
-              <FormField label="Titular *" value={form.titular} onChange={(v) => setField("titular", v)} />
-              <FormField label="Banco" value={form.banco} onChange={(v) => setField("banco", v)} />
-              <FormField label="Número de Cuenta" value={form.numero_cuenta} onChange={(v) => setField("numero_cuenta", v)} />
-              <FormField label="Cédula / RIF" value={form.cedula_rif} onChange={(v) => setField("cedula_rif", v)} />
-              <FormField label="Email Zelle" value={form.email_zelle} onChange={(v) => setField("email_zelle", v)} type="email" />
-              <div className="sm:col-span-2 space-y-1.5">
-                <label className="text-xs font-medium">Instrucciones</label>
-                <textarea
-                  value={form.instrucciones}
-                  onChange={(e) => setField("instrucciones", e.target.value)}
-                  rows={2}
-                  className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring resize-none"
-                  placeholder="Instrucciones adicionales para el cliente..."
-                />
-              </div>
-            </div>
-            <div className="flex gap-2 justify-end">
-              <Button variant="outline" size="sm" onClick={closeForm} disabled={isPending}>
-                <X size={14} className="mr-1" /> Cancelar
-              </Button>
-              <Button size="sm" onClick={handleSubmit} disabled={isPending}>
-                <Check size={14} className="mr-1" />
-                {isPending ? "Guardando..." : "Guardar"}
-              </Button>
-            </div>
-          </div>
-        )}
 
-        {/* List */}
-        {metodos.length === 0 && !showForm && (
-          <p className="text-sm text-muted-foreground text-center py-8">
-            No hay métodos de pago configurados. Agregue el primero.
-          </p>
-        )}
-        <div className="space-y-2">
-          {metodos.map((m) => (
-            <div
-              key={m.id}
-              className="flex items-center justify-between gap-3 p-3 rounded-lg border bg-card"
-            >
-              <div className="flex items-center gap-3 min-w-0">
-                <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${m.activo ? "bg-emerald-500" : "bg-muted-foreground"}`} />
-                <div className="min-w-0">
-                  <p className="font-medium text-sm truncate">{TIPO_LABELS[m.tipo]}</p>
-                  <p className="text-xs text-muted-foreground truncate">
-                    {m.titular}{m.banco ? ` · ${m.banco}` : ""}{m.numero_cuenta ? ` · ${m.numero_cuenta}` : ""}
-                  </p>
+            <div className="grid gap-4 lg:grid-cols-[1fr_18rem]">
+              <div className="grid gap-3 sm:grid-cols-2 content-start">
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label htmlFor={id("tipo")}>Tipo</Label>
+                  <Select
+                    value={form.tipo}
+                    onValueChange={(v) => v && setField("tipo", v as TipoMetodoPago)}
+                    items={TIPOS.map((t) => ({ value: t, label: METODO_PAGO[t] }))}
+                    disabled={guardando}
+                  >
+                    <SelectTrigger id={id("tipo")} className="w-full sm:w-72">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {TIPOS.map((t) => (
+                        <SelectItem key={t} value={t}>{METODO_PAGO[t]}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">{AYUDA_TIPO[form.tipo]}</p>
+                </div>
+
+                {pideBanco && (
+                  <div className="space-y-1.5 sm:col-span-2">
+                    <Label htmlFor={id("banco")}>Banco</Label>
+                    <Select
+                      value={form.bancoOpcion}
+                      onValueChange={(v) => setField("bancoOpcion", v ?? "")}
+                      disabled={guardando}
+                    >
+                      <SelectTrigger
+                        id={id("banco")}
+                        className="w-full"
+                        aria-invalid={errores.banco && form.bancoOpcion !== OTRO_BANCO ? true : undefined}
+                      >
+                        <SelectValue placeholder="Elige el banco" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {OPCIONES_BANCO.map((b) => (
+                          <SelectItem key={b} value={b}>{b}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {form.bancoOpcion === OTRO_BANCO && (
+                      <Input
+                        id={id("banco-otro")}
+                        aria-label="Nombre del banco"
+                        placeholder="Nombre del banco"
+                        value={form.bancoOtro}
+                        disabled={guardando}
+                        aria-invalid={errores.banco ? true : undefined}
+                        onChange={(e) => setField("bancoOtro", e.target.value)}
+                      />
+                    )}
+                    <ErrorCampo id={id("banco-error")} texto={errores.banco} />
+                  </div>
+                )}
+
+                {form.tipo === "PAGO_MOVIL" && (
+                  <Campo
+                    id={id("numero_cuenta")}
+                    label="Teléfono de Pago Móvil"
+                    value={form.numero_cuenta}
+                    onChange={(v) => setField("numero_cuenta", v)}
+                    type="tel"
+                    inputMode="tel"
+                    placeholder={TELEFONO_PLACEHOLDER}
+                    error={errores.numero_cuenta}
+                    disabled={guardando}
+                  />
+                )}
+
+                {form.tipo === "TRANSFERENCIA_BANCARIA" && (
+                  <Campo
+                    id={id("numero_cuenta")}
+                    label="Número de cuenta (20 dígitos)"
+                    value={form.numero_cuenta}
+                    onChange={(v) => setField("numero_cuenta", v)}
+                    inputMode="numeric"
+                    placeholder="01340000000000000000"
+                    ayuda={
+                      form.numero_cuenta.replace(/\D/g, "").length > 0
+                        ? `${form.numero_cuenta.replace(/\D/g, "").length} de 20 dígitos`
+                        : undefined
+                    }
+                    error={errores.numero_cuenta}
+                    disabled={guardando}
+                    className="sm:col-span-2"
+                  />
+                )}
+
+                {form.tipo === "ZELLE" && (
+                  <Campo
+                    id={id("email_zelle")}
+                    label="Correo de Zelle"
+                    value={form.email_zelle}
+                    onChange={(v) => setField("email_zelle", v)}
+                    type="email"
+                    inputMode="email"
+                    placeholder="pagos@tucooperativa.com"
+                    error={errores.email_zelle}
+                    disabled={guardando}
+                  />
+                )}
+
+                {pideBanco && (
+                  <Campo
+                    id={id("cedula_rif")}
+                    label="Cédula o RIF del titular"
+                    value={form.cedula_rif}
+                    onChange={(v) => setField("cedula_rif", v)}
+                    placeholder="V-12345678 o J-12345678-9"
+                    error={errores.cedula_rif}
+                    disabled={guardando}
+                  />
+                )}
+
+                {form.tipo !== "EFECTIVO" && (
+                  <Campo
+                    id={id("titular")}
+                    label="Titular"
+                    value={form.titular}
+                    onChange={(v) => setField("titular", v)}
+                    placeholder="Nombre como aparece en el banco"
+                    error={errores.titular}
+                    disabled={guardando}
+                    className={form.tipo === "ZELLE" ? "" : "sm:col-span-2"}
+                  />
+                )}
+
+                <div className="sm:col-span-2 space-y-1.5">
+                  <Label htmlFor={id("instrucciones")}>
+                    {form.tipo === "EFECTIVO" ? "Instrucciones (opcional)" : "Instrucciones para el pasajero (opcional)"}
+                  </Label>
+                  <Textarea
+                    id={id("instrucciones")}
+                    value={form.instrucciones}
+                    onChange={(e) => setField("instrucciones", e.target.value)}
+                    rows={2}
+                    maxLength={300}
+                    disabled={guardando}
+                    placeholder={
+                      form.tipo === "EFECTIVO"
+                        ? "Ej.: Paga en la taquilla antes de abordar."
+                        : "Ej.: En el concepto escribe tu número de boleto."
+                    }
+                  />
                 </div>
               </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <Badge
-                  variant={m.activo ? "default" : "secondary"}
-                  className="text-xs cursor-pointer"
-                  onClick={() => handleToggle(m)}
-                >
-                  {m.activo ? "Activo" : "Inactivo"}
-                </Badge>
-                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(m)}>
-                  <Pencil size={14} />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 text-destructive hover:text-destructive"
-                  onClick={() => handleDelete(m.id)}
-                  disabled={isPending}
-                >
-                  <Trash size={14} />
-                </Button>
-              </div>
+
+              {/* Vista previa */}
+              <section aria-label="Así lo verá el pasajero" className="rounded-xl border bg-card p-4 text-sm self-start">
+                <p className="mb-3 flex items-center gap-2 font-medium">
+                  <Eye size={16} aria-hidden />
+                  Así lo verá el pasajero
+                </p>
+                <p className="text-xs text-muted-foreground mb-2">{METODO_PAGO[form.tipo]}</p>
+                {form.tipo === "EFECTIVO" ? (
+                  <p className="text-muted-foreground">Paga en efectivo en la taquilla.</p>
+                ) : filasPrevia.length === 0 ? (
+                  <p className="text-muted-foreground">Completa los datos para ver la vista previa.</p>
+                ) : (
+                  <dl className="space-y-2">
+                    {filasPrevia.map((f) => (
+                      <div key={f.etiqueta} className="flex justify-between gap-3">
+                        <dt className="text-muted-foreground">{f.etiqueta}</dt>
+                        <dd className="text-right font-medium break-all">{f.valor}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                )}
+                {form.instrucciones.trim() && (
+                  <p className="mt-3 text-xs text-muted-foreground">{form.instrucciones.trim()}</p>
+                )}
+              </section>
             </div>
-          ))}
-        </div>
+
+            {errorGeneral && (
+              <div
+                role="alert"
+                className="flex items-start gap-2 rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive-text"
+              >
+                <WarningCircle className="mt-0.5 size-4 shrink-0" weight="fill" aria-hidden />
+                <p>{errorGeneral}</p>
+              </div>
+            )}
+
+            <div className="flex gap-2 justify-end">
+              <Button type="button" variant="outline" size="sm" onClick={closeForm} disabled={guardando}>
+                <X size={14} className="mr-1" aria-hidden /> Cancelar
+              </Button>
+              <Button type="submit" size="sm" disabled={guardando}>
+                <Check size={14} className="mr-1" aria-hidden />
+                {guardando ? "Guardando…" : editingId ? "Guardar cambios" : "Agregar método"}
+              </Button>
+            </div>
+          </form>
+        )}
+
+        {/* Lista */}
+        {metodos.length === 0 && !showForm && !errorCarga && (
+          <div className="text-center py-8 space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Aún no tienes métodos de pago. Agrega al menos uno digital (Pago Móvil, transferencia o Zelle) para vender en la app.
+            </p>
+            <Button size="sm" onClick={openCreate}>
+              <Plus size={16} className="mr-2" aria-hidden />
+              Agregar método
+            </Button>
+          </div>
+        )}
+        <ul className="space-y-2">
+          {metodos.map((m) => {
+            const nombre = nombreMetodo(m);
+            const detalle = filasPasajero(m)
+              .filter((f) => f.etiqueta !== "Banco")
+              .map((f) => f.valor)
+              .join(" · ");
+            const switchId = `${uid}-activo-${m.id}`;
+            return (
+              <li
+                key={m.id}
+                className="flex flex-col gap-3 p-3 rounded-lg border bg-card sm:flex-row sm:items-center sm:justify-between"
+              >
+                <div className="min-w-0">
+                  <p className={cn("font-medium text-sm truncate", !m.activo && "text-muted-foreground")}>{nombre}</p>
+                  <p className="text-xs text-muted-foreground truncate">
+                    {m.tipo === "EFECTIVO" ? m.instrucciones || "Pago en la taquilla" : detalle}
+                  </p>
+                </div>
+                <div className="flex items-center gap-3 shrink-0">
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      id={switchId}
+                      checked={m.activo}
+                      disabled={cambiandoId === m.id}
+                      onCheckedChange={(v) => void cambiarActivo(m, v)}
+                    />
+                    <Label htmlFor={switchId} className="text-sm font-normal">
+                      {m.activo ? "Activo" : "Inactivo"}
+                    </Label>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={`Editar ${nombre}`}
+                    onClick={() => openEdit(m)}
+                  >
+                    <PencilSimple size={16} aria-hidden />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    className="text-destructive-text hover:text-destructive-text"
+                    aria-label={`Eliminar ${nombre}`}
+                    onClick={() => pedirEliminar(m)}
+                  >
+                    <Trash size={16} aria-hidden />
+                  </Button>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
       </CardContent>
+
+      <ConfirmDialog
+        open={eliminarOpen && aEliminar !== null}
+        onOpenChange={setEliminarOpen}
+        tono="destructive"
+        titulo={aEliminar ? `¿Eliminar ${nombreMetodo(aEliminar)}?` : "¿Eliminar el método de pago?"}
+        descripcion={
+          conPagos && aEliminar ? (
+            <div className="space-y-3">
+              <p>Si lo desactivas, los pasajeros dejarán de verlo y conservarás sus pagos.</p>
+              {aEliminar.activo ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={cambiandoId === aEliminar.id}
+                  onClick={async () => {
+                    const ok = await cambiarActivo(aEliminar, false);
+                    if (ok) setEliminarOpen(false);
+                  }}
+                >
+                  {cambiandoId === aEliminar.id ? "Desactivando…" : "Desactivar"}
+                </Button>
+              ) : (
+                <p className="font-medium text-foreground">Ya está desactivado: los pasajeros no lo ven.</p>
+              )}
+            </div>
+          ) : (
+            "Los pasajeros dejarán de verlo al pagar. Esta acción no se puede deshacer."
+          )
+        }
+        verbo="Eliminar"
+        verboCargando="Eliminando…"
+        onConfirm={confirmarEliminar}
+      />
     </Card>
   );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-function FormField({
-  label, value, onChange, type = "text",
-}: {
-  label: string; value: string; onChange: (v: string) => void; type?: string;
-}) {
+function ErrorCampo({ id, texto }: { id: string; texto?: string }) {
+  if (!texto) return null;
   return (
-    <div className="space-y-1.5">
-      <label className="text-xs font-medium">{label}</label>
-      <Input type={type} value={value} onChange={(e) => onChange(e.target.value)} />
+    <p id={id} className="text-xs text-destructive-text">
+      {texto}
+    </p>
+  );
+}
+
+function Campo({
+  id, label, value, onChange, type = "text", inputMode, placeholder, error, ayuda, disabled, className,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  type?: string;
+  inputMode?: React.HTMLAttributes<HTMLInputElement>["inputMode"];
+  placeholder?: string;
+  error?: string;
+  ayuda?: string;
+  disabled?: boolean;
+  className?: string;
+}) {
+  const descrito = error ? `${id}-error` : ayuda ? `${id}-ayuda` : undefined;
+  return (
+    <div className={cn("space-y-1.5", className)}>
+      <Label htmlFor={id}>{label}</Label>
+      <Input
+        id={id}
+        type={type}
+        inputMode={inputMode}
+        value={value}
+        placeholder={placeholder}
+        disabled={disabled}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={descrito}
+        onChange={(e) => onChange(e.target.value)}
+      />
+      {error ? (
+        <ErrorCampo id={`${id}-error`} texto={error} />
+      ) : ayuda ? (
+        <p id={`${id}-ayuda`} className="text-xs text-muted-foreground">{ayuda}</p>
+      ) : null}
     </div>
   );
 }

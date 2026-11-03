@@ -19,14 +19,17 @@ import { StaggerItem } from '@/src/components/StaggerItem';
 import { PageTransition } from '@/src/components/PageTransition';
 import {
   EmptyState,
+  ErrorState,
   IconButton,
   LoadingState,
   Screen,
   ScreenHeader,
+  StaleBanner,
   Text,
   scrollContent,
 } from '@/src/components/ui';
 import { formatDate } from '@/src/utils/formatters';
+import { humanizeError } from '@/src/utils/errores';
 import type { Notificacion } from '@/src/types';
 import { Colors, Motion, Radius, Shadows, Sizes, Spacing } from '@/src/theme';
 
@@ -38,7 +41,7 @@ export default function NotificacionesScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [markingAll, setMarkingAll] = useState(false);
 
-  const { data: notificaciones, loading, setData, refetch } = useRealtime<Notificacion>(
+  const { data: notificaciones, loading, error, setData, refetch, actualizadoAt } = useRealtime<Notificacion>(
     'notificaciones_usuario',
     'usuario_id',
     user?.id,
@@ -54,6 +57,13 @@ export default function NotificacionesScreen() {
       setRefreshing(false);
     }
   }, [refetch]);
+
+  /** "Reintentar" de `ErrorState`: `refetch` se resuelve cuando termina la recarga. */
+  const reintentar = useCallback(() => refetch(), [refetch]);
+
+  /** Mensaje para el usuario del último fallo de carga (APP-37). */
+  const errorCarga = error ? humanizeError(error, 'carga') : null;
+  const sinDatos = (notificaciones ?? []).length === 0;
 
   const unreadCount = useMemo(
     () => (notificaciones ?? []).filter((n) => !n.leida).length,
@@ -103,8 +113,9 @@ export default function NotificacionesScreen() {
           .update({ leida: true })
           .eq('id', notif.id);
         if (error) {
+          // No bloquea: se abre el detalle igual y la notificación queda sin leer.
           setData((prev) => prev.map((n) => (n.id === notif.id ? { ...n, leida: false } : n)));
-          if (__DEV__) console.error('[notificaciones] No se pudo marcar como leída:', error.message);
+          if (__DEV__) console.warn('[notificaciones] No se pudo marcar como leída:', error.message);
         }
       }
       navigateToResource(notif);
@@ -126,9 +137,12 @@ export default function NotificacionesScreen() {
       setData((prev) => prev.map((n) => ({ ...n, leida: true })));
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       toast.show('success', 'Todas las notificaciones marcadas como leídas');
-    } catch {
+    } catch (err) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      toast.show('error', 'No se pudieron actualizar las notificaciones.');
+      toast.show(
+        'error',
+        `No pudimos marcar las notificaciones como leídas. ${humanizeError(err, 'carga')}`
+      );
     } finally {
       setMarkingAll(false);
     }
@@ -209,18 +223,27 @@ export default function NotificacionesScreen() {
           }
         />
 
-        {loading ? (
+        {errorCarga && sinDatos && !loading ? (
+          <ErrorState
+            title="No pudimos cargar tus notificaciones"
+            description={errorCarga}
+            onRetry={reintentar}
+          />
+        ) : loading && sinDatos ? (
           <LoadingState label="Cargando notificaciones…" />
         ) : (
           <FlatList
             data={notificaciones ?? []}
             renderItem={renderItem}
             keyExtractor={(item) => item.id}
+            ListHeaderComponent={
+              errorCarga ? <StaleBanner actualizadoAt={actualizadoAt} onRetry={() => refetch()} /> : null
+            }
             ListEmptyComponent={
               <EmptyState
                 icon={Bell}
                 title="Sin notificaciones"
-                description="Aquí aparecerán los cambios de estado de tus paquetes y viajes."
+                description="Aquí aparecerán los cambios de tus boletos y encomiendas."
               />
             }
             contentContainerStyle={scrollContent()}

@@ -1,53 +1,35 @@
 import Link from "next/link";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { dateFormatterShort } from "@/lib/utils";
+import { StatusBadge } from "@/components/status-badge";
+import { etiquetaTipoIncidencia } from "@/lib/estados";
+import { formatFechaVE } from "@/lib/fechas";
 import { IncidenciaReciente } from "@/lib/types/admin-dashboard";
 
 interface IncidenciasRecientesTableProps {
   data: IncidenciaReciente[];
 }
 
+/** Mismo código que ve el usuario al reportar ("INC-1A2B3C"). */
+function codigoIncidencia(id: string): string {
+  return `INC-${id.replace(/-/g, "").slice(0, 6).toUpperCase()}`;
+}
+
 export function IncidenciasRecientesTable({ data }: IncidenciasRecientesTableProps) {
-  const getEstadoBadge = (estado: string) => {
-    switch (estado) {
-      case "ABIERTA":
-        return <Badge variant="destructive" className="font-semibold">Abierta</Badge>;
-      case "EN_PROCESO":
-        return <Badge variant="secondary" className="bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20 font-semibold">En Proceso</Badge>;
-      case "RESUELTA":
-        return <Badge variant="default" className="bg-emerald-500 hover:bg-emerald-600 text-white font-semibold">Resuelta</Badge>;
-      default:
-        return <Badge variant="outline">{estado}</Badge>;
-    }
-  };
-
-  const getTipoBadge = (tipo: string) => {
-    switch (tipo) {
-      case "ALERTA_AMARILLA":
-        return <Badge variant="outline" className="border-amber-500 text-amber-600 dark:text-amber-400 font-medium">Alerta Amarilla</Badge>;
-      case "PERDIDA":
-        return <Badge variant="outline" className="border-rose-500 text-rose-600 dark:text-rose-400 font-medium">Pérdida</Badge>;
-      default:
-        return <Badge variant="outline">{tipo.replace(/_/g, " ")}</Badge>;
-    }
-  };
-
   return (
     <Card className="col-span-1">
       <CardHeader>
-        <CardTitle>Incidencias Recientes</CardTitle>
-        <CardDescription>Últimas 10 incidencias abiertas o en proceso</CardDescription>
+        <CardTitle>Incidencias recientes</CardTitle>
+        <CardDescription>Las últimas 10 abiertas o en proceso.</CardDescription>
       </CardHeader>
       <CardContent>
-        <div className="rounded-md border overflow-hidden">
+        <div className="overflow-hidden rounded-md border">
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Incidencia</TableHead>
                 <TableHead>Tipo</TableHead>
-                <TableHead>Tracking ID</TableHead>
+                <TableHead>Encomienda</TableHead>
                 <TableHead>Estado</TableHead>
                 <TableHead className="text-right">Fecha</TableHead>
               </TableRow>
@@ -61,23 +43,28 @@ export function IncidenciasRecientesTable({ data }: IncidenciasRecientesTablePro
                 </TableRow>
               ) : (
                 data.map((item) => (
-                  <TableRow key={item.id} className="hover:bg-muted/50 transition-colors">
-                    <TableCell className="font-medium">
-                      <Link href={`/admin/incidencias/${item.id}`} className="hover:underline text-primary">
-                        Ver #{item.id.slice(0, 8)}
+                  <TableRow key={item.id} className="transition-colors hover:bg-muted/50">
+                    <TableCell className="font-mono text-xs font-medium">
+                      <Link
+                        href={`/admin/incidencias/${item.id}`}
+                        className="text-foreground underline decoration-primary underline-offset-4"
+                      >
+                        {codigoIncidencia(item.id)}
                       </Link>
                     </TableCell>
-                    <TableCell>{getTipoBadge(item.tipo)}</TableCell>
+                    <TableCell className="text-sm">{etiquetaTipoIncidencia(item.tipo)}</TableCell>
                     <TableCell>
                       {item.encomienda_tracking_id ? (
                         <span className="font-mono text-xs">{item.encomienda_tracking_id}</span>
                       ) : (
-                        <span className="text-muted-foreground text-xs">—</span>
+                        <span className="text-xs text-muted-foreground">—</span>
                       )}
                     </TableCell>
-                    <TableCell>{getEstadoBadge(item.estado)}</TableCell>
+                    <TableCell>
+                      <StatusBadge status={item.estado} dominio="incidencia" />
+                    </TableCell>
                     <TableCell className="text-right text-xs text-muted-foreground">
-                      {dateFormatterShort.format(new Date(item.created_at))}
+                      {formatFechaVE(item.created_at)}
                     </TableCell>
                   </TableRow>
                 ))

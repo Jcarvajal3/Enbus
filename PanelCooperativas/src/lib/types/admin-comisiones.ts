@@ -9,6 +9,8 @@ export interface ComisionCiclo {
   monto_comision: number;
   pagado: boolean;
   pagado_at: string | null;
+  /** Referencia del pago de la cooperativa (columna pendiente de migración: puede no venir). */
+  pago_referencia?: string | null;
   created_at: string;
 
   // Joined properties

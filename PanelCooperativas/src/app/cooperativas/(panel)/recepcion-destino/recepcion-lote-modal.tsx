@@ -12,31 +12,83 @@ import { toast } from "sonner";
 import { Truck, Package, ArrowLeft } from "@phosphor-icons/react";
 import { recibirLote } from "./actions";
 import { requireOnline } from "@/components/connectivity-banner";
+import { humanizeError } from "@/lib/errores";
+import { ErrorState } from "@/components/error-state";
+import { formatFechaVE } from "@/lib/fechas";
+import { vaASucursal, type SucursalRecepcion } from "./sucursal";
+import { formatCiudad } from "@/lib/ciudades";
 
 interface RecepcionLoteModalProps {
   isOpen: boolean;
   onClose: () => void;
   cooperativaId: string;
+  /** Sucursal donde recibe el usuario; null = toda la cooperativa. */
+  sucursal: SucursalRecepcion | null;
   onSuccess: () => void;
 }
 
-type ViajeData = {
+type EncomiendaLote = {
   id: string;
-  fecha_hora_salida: string;
-  numero_unidad: string | null;
-  ruta: { ciudad_origen: string; ciudad_destino: string } | null;
-  encomiendas: {
+  tracking_id: string;
+  estado: string;
+  receiver_nombre: string;
+  ciudad_destino: string;
+  sucursal_destino_id: string | null;
+  viaje: {
     id: string;
-    tracking_id: string;
+    fecha_hora_salida: string;
+    numero_unidad: string | null;
     estado: string;
-    receiver_nombre: string;
-  }[];
+    ruta: { ciudad_origen: string; ciudad_destino: string } | null;
+  } | null;
 };
 
-export function RecepcionLoteModal({ isOpen, onClose, cooperativaId, onSuccess }: RecepcionLoteModalProps) {
+/** Encomiendas en camino agrupadas por el viaje en que se despacharon. */
+type ViajeData = {
+  /** id del viaje, o "sin-viaje" para las despachadas sin viaje (datos viejos). */
+  id: string;
+  fecha_hora_salida: string | null;
+  numero_unidad: string | null;
+  /** Estado del viaje: puede seguir PROGRAMADO si nadie marcó la salida. */
+  estado: string | null;
+  ruta: { ciudad_origen: string; ciudad_destino: string } | null;
+  encomiendas: Omit<EncomiendaLote, "viaje">[];
+};
+
+const SIN_VIAJE = "sin-viaje";
+
+/** Agrupa por viaje, del más reciente al más antiguo (las sin viaje al final). */
+function agruparPorViaje(lista: EncomiendaLote[]): ViajeData[] {
+  const grupos = new Map<string, ViajeData>();
+  for (const { viaje, ...encomienda } of lista) {
+    const clave = viaje?.id ?? SIN_VIAJE;
+    let grupo = grupos.get(clave);
+    if (!grupo) {
+      grupo = {
+        id: clave,
+        fecha_hora_salida: viaje?.fecha_hora_salida ?? null,
+        numero_unidad: viaje?.numero_unidad ?? null,
+        estado: viaje?.estado ?? null,
+        ruta: viaje?.ruta ?? null,
+        encomiendas: [],
+      };
+      grupos.set(clave, grupo);
+    }
+    grupo.encomiendas.push(encomienda);
+  }
+  return Array.from(grupos.values()).sort((a, b) => {
+    if (!a.fecha_hora_salida) return 1;
+    if (!b.fecha_hora_salida) return -1;
+    return b.fecha_hora_salida.localeCompare(a.fecha_hora_salida);
+  });
+}
+
+export function RecepcionLoteModal({ isOpen, onClose, cooperativaId, sucursal, onSuccess }: RecepcionLoteModalProps) {
   const supabase = useMemo(() => createClient(), []);
   
   const [loading, setLoading] = useState(true);
+  const [errorCarga, setErrorCarga] = useState<string | null>(null);
+  const [recarga, setRecarga] = useState(0);
   const [viajes, setViajes] = useState<ViajeData[]>([]);
   const [selectedViaje, setSelectedViaje] = useState<ViajeData | null>(null);
   const [selectedEncomiendaIds, setSelectedEncomiendaIds] = useState<Set<string>>(new Set());
@@ -45,33 +97,33 @@ export function RecepcionLoteModal({ isOpen, onClose, cooperativaId, onSuccess }
   useEffect(() => {
     let isMounted = true;
 
+    // Todas las encomiendas en camino de la cooperativa, sea cual sea el estado del
+    // viaje (el despacho ya no cambia el viaje a EN_CURSO; la salida se marca aparte).
     const fetchViajes = async () => {
       setLoading(true);
+      setErrorCarga(null);
       try {
         const { data, error } = await supabase
-          .from("viajes")
+          .from("encomiendas")
           .select(`
-            id, fecha_hora_salida, numero_unidad,
-            ruta:rutas(ciudad_origen, ciudad_destino),
-            encomiendas:encomiendas!viaje_id(id, tracking_id, estado, receiver_nombre)
+            id, tracking_id, estado, receiver_nombre, ciudad_destino, sucursal_destino_id,
+            viaje:viajes!viaje_id(id, fecha_hora_salida, numero_unidad, estado, ruta:rutas!ruta_id(ciudad_origen, ciudad_destino))
           `)
           .eq("cooperativa_id", cooperativaId)
-          .eq("estado", "EN_CURSO")
-          .order("fecha_hora_salida", { ascending: false });
+          .eq("estado", "EN_TRANSITO")
+          .order("created_at", { ascending: true });
 
         if (!isMounted) return;
         if (error) throw error;
 
-        // Filtrar solo los viajes que tienen al menos una encomienda EN_TRANSITO
-        const viajesValidos = (data as unknown as ViajeData[]).filter(v => 
-          v.encomiendas?.some(e => e.estado === "EN_TRANSITO")
+        // Solo las que vienen a la sucursal del usuario
+        const enCamino = ((data as unknown as EncomiendaLote[]) ?? []).filter(
+          (e) => !sucursal || vaASucursal(e, sucursal)
         );
-
-        setViajes(viajesValidos);
+        setViajes(agruparPorViaje(enCamino));
       } catch (err) {
         if (!isMounted) return;
-        console.error(err);
-        toast.error("Error al cargar los viajes en curso");
+        setErrorCarga(humanizeError(err, "cargar las encomiendas en camino"));
       } finally {
         if (isMounted) setLoading(false);
       }
@@ -89,15 +141,14 @@ export function RecepcionLoteModal({ isOpen, onClose, cooperativaId, onSuccess }
     return () => {
       isMounted = false;
     };
-  }, [isOpen, supabase, cooperativaId]);
+  }, [isOpen, supabase, cooperativaId, sucursal, recarga]);
 
   const encomiendasPendientes = selectedViaje?.encomiendas.filter(e => e.estado === "EN_TRANSITO") || [];
 
   const handleViajeSelect = (viaje: ViajeData) => {
     setSelectedViaje(viaje);
-    // Seleccionar todas por defecto
-    const encomiendasTransito = viaje.encomiendas.filter(e => e.estado === "EN_TRANSITO");
-    setSelectedEncomiendaIds(new Set(encomiendasTransito.map(e => e.id)));
+    // Nada marcado de antemano (PC-36): se marca lo que de verdad llegó.
+    setSelectedEncomiendaIds(new Set());
   };
 
   const handleToggleEncomienda = (id: string, checked: boolean) => {
@@ -126,29 +177,33 @@ export function RecepcionLoteModal({ isOpen, onClose, cooperativaId, onSuccess }
       const ids = Array.from(selectedEncomiendaIds);
       const result = await requireOnline(() => recibirLote(ids))();
       
-      if (result.success) {
-        toast.success(`✅ ${result.count} encomiendas recibidas exitosamente`);
+      if (result.success && result.count === 0) {
+        // Ninguna seguía en camino (otro usuario ya las recibió)
+        toast.error("No se recibió ninguna encomienda: ya habían sido recibidas. Actualiza la lista.");
+        onSuccess();
+        onClose();
+      } else if (result.success) {
+        if (result.count < ids.length) {
+          toast.warning(`Se recibieron ${result.count} de ${ids.length} encomiendas. Las demás ya habían sido recibidas. Ya puedes entregarlas desde «Entrega».`);
+        } else {
+          toast.success(
+            `${result.count === 1 ? "1 encomienda recibida. Ya puedes entregarla" : `${result.count} encomiendas recibidas. Ya puedes entregarlas`} desde «Entrega».`
+          );
+        }
         onSuccess();
         onClose();
       } else {
-        toast.error(result.error || "Error al procesar el lote");
+        toast.error(result.error || humanizeError(null, "recibir el lote"));
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Ocurrió un error inesperado";
-      toast.error(message);
+      toast.error(humanizeError(err, "recibir el lote"));
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const formatDate = (dateString: string) => {
-    return new Intl.DateTimeFormat("es-VE", {
-      day: "2-digit",
-      month: "short",
-      hour: "numeric",
-      minute: "numeric",
-    }).format(new Date(dateString));
-  };
+  const formatDate = (dateString: string) =>
+    formatFechaVE(dateString, { day: "2-digit", month: "short", hour: "numeric", minute: "numeric" });
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
@@ -159,19 +214,20 @@ export function RecepcionLoteModal({ isOpen, onClose, cooperativaId, onSuccess }
               <Button 
                 variant="ghost" 
                 size="icon" 
-                className="h-8 w-8 -ml-2 rounded-full" 
+                className="h-8 w-8 -ml-2 rounded-full"
                 onClick={() => setSelectedViaje(null)}
+                aria-label="Volver a la lista de viajes"
               >
                 <ArrowLeft size={18} />
               </Button>
             )}
-            <Truck size={24} className="text-primary" weight="duotone" />
-            {selectedViaje ? "Confirmar Lote" : "Seleccionar Viaje en Curso"}
+            <Truck size={24} className="text-primary-text" weight="duotone" />
+            {selectedViaje ? "Confirmar lote" : "Elegir viaje"}
           </DialogTitle>
           <DialogDescription>
             {selectedViaje 
-              ? "Selecciona las encomiendas que llegaron en este viaje para marcarlas como recibidas."
-              : "Selecciona el viaje del cual quieres recibir todas las encomiendas pendientes."}
+              ? "Marca una por una las encomiendas que llegaron en este viaje. Las que no marques siguen «En tránsito»."
+              : "Elige el viaje en que llegaron las encomiendas. Aparecen todos los viajes con encomiendas en camino, aunque no se haya marcado su salida."}
           </DialogDescription>
         </DialogHeader>
 
@@ -179,16 +235,24 @@ export function RecepcionLoteModal({ isOpen, onClose, cooperativaId, onSuccess }
           {loading ? (
             <div className="flex flex-col items-center justify-center h-[300px]">
               <Spinner size="md" />
-              <span className="text-muted-foreground mt-4">Buscando viajes en curso...</span>
+              <span className="text-muted-foreground mt-4">Buscando encomiendas en camino…</span>
             </div>
+          ) : errorCarga ? (
+            <ErrorState
+              titulo="No pudimos cargar las encomiendas en camino"
+              descripcion={errorCarga}
+              onReintentar={() => setRecarga((n) => n + 1)}
+            />
           ) : !selectedViaje ? (
             /* PASO 1: SELECCIONAR VIAJE */
             viajes.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-[300px] text-center px-4">
                 <Truck size={48} className="text-muted/50 mb-4" />
-                <h3 className="font-medium text-lg">No hay viajes con encomiendas</h3>
+                <h3 className="font-medium text-lg">No hay encomiendas en camino</h3>
                 <p className="text-muted-foreground mt-2">
-                  Actualmente no hay viajes en curso con encomiendas dirigidas hacia esta cooperativa que estén pendientes de recepción.
+                  {sucursal
+                    ? `Ahora no hay encomiendas en camino hacia tu sucursal ${sucursal.nombre}.`
+                    : "Ahora no hay encomiendas en camino hacia tu cooperativa."}
                 </p>
               </div>
             ) : (
@@ -199,15 +263,24 @@ export function RecepcionLoteModal({ isOpen, onClose, cooperativaId, onSuccess }
                     return (
                       <Card 
                         key={viaje.id} 
-                        className="p-4 cursor-pointer hover:border-primary/50 transition-colors flex justify-between items-center group"
+                        role="button"
+                        tabIndex={0}
+                        aria-label={`${viaje.ruta ? `Viaje ${formatCiudad(viaje.ruta.ciudad_origen)} a ${formatCiudad(viaje.ruta.ciudad_destino)}` : "Sin viaje asignado"}: ${pendientes} pendientes`}
+                        className="p-4 cursor-pointer hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors flex justify-between items-center group"
                         onClick={() => handleViajeSelect(viaje)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            handleViajeSelect(viaje);
+                          }
+                        }}
                       >
                         <div>
-                          <div className="font-semibold text-base mb-1 group-hover:text-primary transition-colors">
-                            {viaje.ruta?.ciudad_origen} → {viaje.ruta?.ciudad_destino}
+                          <div className="font-semibold text-base mb-1 group-hover:text-primary-text transition-colors">
+                            {viaje.ruta ? `${formatCiudad(viaje.ruta.ciudad_origen)} → ${formatCiudad(viaje.ruta.ciudad_destino)}` : "Sin viaje asignado"}
                           </div>
                           <div className="text-sm text-muted-foreground flex gap-3">
-                            <span>{formatDate(viaje.fecha_hora_salida)}</span>
+                            {viaje.fecha_hora_salida && <span>{formatDate(viaje.fecha_hora_salida)}</span>}
                             {viaje.numero_unidad && (
                               <>
                                 <span>•</span>
@@ -215,9 +288,14 @@ export function RecepcionLoteModal({ isOpen, onClose, cooperativaId, onSuccess }
                               </>
                             )}
                           </div>
+                          {viaje.estado === "PROGRAMADO" && (
+                            <div className="mt-1 text-xs text-amber-700 dark:text-amber-400">
+                              En origen no se marcó la salida de este bus.
+                            </div>
+                          )}
                         </div>
                         <div className="flex flex-col items-end">
-                          <span className="text-2xl font-bold text-primary">{pendientes}</span>
+                          <span className="text-2xl font-bold text-primary-text">{pendientes}</span>
                           <span className="text-xs text-muted-foreground uppercase font-medium">Pendientes</span>
                         </div>
                       </Card>
@@ -237,11 +315,11 @@ export function RecepcionLoteModal({ isOpen, onClose, cooperativaId, onSuccess }
                     onCheckedChange={(c) => handleToggleAll(c === true)}
                   />
                   <label htmlFor="select-all" className="text-sm font-medium cursor-pointer">
-                    Seleccionar Todas ({encomiendasPendientes.length})
+                    Llegaron todas ({encomiendasPendientes.length})
                   </label>
                 </div>
                 <div className="text-sm text-muted-foreground">
-                  Viaje de {selectedViaje.ruta?.ciudad_origen}
+                  {selectedViaje.ruta ? `Viaje desde ${formatCiudad(selectedViaje.ruta.ciudad_origen)}` : "Sin viaje asignado"}
                 </div>
               </div>
 
@@ -272,8 +350,10 @@ export function RecepcionLoteModal({ isOpen, onClose, cooperativaId, onSuccess }
                   disabled={selectedEncomiendaIds.size === 0 || isSubmitting}
                   className="gap-2"
                 >
-                  {isSubmitting ? <Spinner className="h-4 w-4 text-white" /> : <Package weight="bold" size={18} />}
-                  Recibir {selectedEncomiendaIds.size} Encomiendas
+                  {isSubmitting ? <Spinner className="h-4 w-4" /> : <Package weight="bold" size={18} aria-hidden />}
+                  {selectedEncomiendaIds.size === 0
+                    ? "Marca las que llegaron"
+                    : `Recibir ${selectedEncomiendaIds.size === 1 ? "1 encomienda" : `${selectedEncomiendaIds.size} encomiendas`} de ${encomiendasPendientes.length}`}
                 </Button>
               </div>
             </div>

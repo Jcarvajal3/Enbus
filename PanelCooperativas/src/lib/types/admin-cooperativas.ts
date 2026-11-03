@@ -1,4 +1,17 @@
-export type EstadoCooperativa = "PENDIENTE" | "ACTIVA" | "SUSPENDIDA" | "DESACTIVADA";
+/** RECHAZADA es reversible (vuelve a PENDIENTE); DESACTIVADA es terminal. */
+export type EstadoCooperativa = "PENDIENTE" | "RECHAZADA" | "ACTIVA" | "SUSPENDIDA" | "DESACTIVADA";
+
+/** Transiciones que acepta fn_cambiar_estado_cooperativa (mismo orden que el SQL). */
+export const TRANSICIONES_COOPERATIVA: Record<EstadoCooperativa, EstadoCooperativa[]> = {
+  PENDIENTE: ["ACTIVA", "RECHAZADA", "DESACTIVADA"],
+  RECHAZADA: ["PENDIENTE", "DESACTIVADA"],
+  ACTIVA: ["SUSPENDIDA", "DESACTIVADA"],
+  SUSPENDIDA: ["ACTIVA", "DESACTIVADA"],
+  DESACTIVADA: [],
+};
+
+/** Estados que exigen motivo (la cooperativa lo ve en su panel). */
+export const ESTADOS_CON_MOTIVO: EstadoCooperativa[] = ["RECHAZADA", "SUSPENDIDA", "DESACTIVADA"];
 
 export interface Cooperativa {
   id: string;
@@ -13,6 +26,13 @@ export interface Cooperativa {
   telefono?: string | null;
   direccion?: string | null;
   descripcion?: string | null;
+  /** Representante legal (registro; antes iba dentro de `descripcion`). */
+  representante?: string | null;
+  /** Mensaje o rutas de interés que dejó la cooperativa al registrarse. */
+  mensaje_registro?: string | null;
+  /** Motivo del último rechazo, suspensión o desactivación (lo ve la cooperativa). */
+  motivo_estado?: string | null;
+  estado_cambiado_at?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -86,6 +106,10 @@ export interface CooperativaDetalle extends Cooperativa {
   empleados: Empleado[];
   calificaciones: Calificacion[];
   comisiones_pendientes: number;
+  /** Ciclos de comisiones sin pagar (impacto al desactivar). */
+  ciclos_sin_pagar: number;
+  /** Encomiendas que no han terminado (ni entregadas, ni canceladas, ni devueltas). */
+  encomiendas_en_curso: number;
 }
 
 export interface CreateCooperativaInput {

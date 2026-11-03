@@ -2,7 +2,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import type { Tarifa } from "@/lib/types/admin-tarifas";
-import { formatCurrency, dateFormatterShort } from "@/lib/utils";
+import { dateFormatterShort } from "@/lib/utils";
+import { formatUsd } from "@/lib/dinero";
 import { CheckCircle, Clock } from "@phosphor-icons/react/dist/ssr";
 
 interface HistorialTarifasTableProps {
@@ -28,7 +29,7 @@ export function HistorialTarifasTable({ tarifas }: HistorialTarifasTableProps) {
             <Table>
               <TableHeader className="bg-muted/50">
                 <TableRow>
-                  <TableHead className="text-xs font-bold uppercase text-muted-foreground">Tarifa / Kg</TableHead>
+                  <TableHead className="text-xs font-bold uppercase text-muted-foreground">Tarifa por kg</TableHead>
                   <TableHead className="text-xs font-bold uppercase text-muted-foreground">Factor Dist.</TableHead>
                   <TableHead className="text-xs font-bold uppercase text-muted-foreground">Límites (Peso/Dim)</TableHead>
                   <TableHead className="text-xs font-bold uppercase text-muted-foreground">Vigente Desde</TableHead>
@@ -42,7 +43,7 @@ export function HistorialTarifasTable({ tarifas }: HistorialTarifasTableProps) {
                   return (
                     <TableRow key={tarifa.id}>
                       <TableCell className="font-semibold text-foreground py-3">
-                        {formatCurrency(tarifa.tarifa_por_kg)}
+                        {formatUsd(tarifa.tarifa_por_kg)}
                       </TableCell>
                       <TableCell className="font-medium text-muted-foreground">
                         {tarifa.factor_distancia_por_min.toFixed(4)}
@@ -58,7 +59,7 @@ export function HistorialTarifasTable({ tarifas }: HistorialTarifasTableProps) {
                       </TableCell>
                       <TableCell className="py-3 flex items-center justify-center">
                         {tarifa.activa ? (
-                          <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center gap-1 font-semibold">
+                          <Badge variant="outline" className="border-transparent bg-emerald-100 text-emerald-900 dark:bg-emerald-400/15 dark:text-emerald-200 flex items-center gap-1 font-semibold">
                             <CheckCircle weight="fill" className="size-3" />
                             Vigente
                           </Badge>

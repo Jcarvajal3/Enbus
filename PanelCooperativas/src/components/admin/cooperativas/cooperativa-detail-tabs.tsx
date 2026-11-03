@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -18,6 +19,13 @@ import {
   Circle
 } from "@phosphor-icons/react";
 import type { CooperativaDetalle } from "@/lib/types/admin-cooperativas";
+import { Monto } from "@/components/monto";
+import { formatFechaHoraVE, formatFechaVE } from "@/lib/fechas";
+import { formatTelefono } from "@/lib/ve";
+import { estadoInfo, etiquetaMetodoPago, etiquetaRol } from "@/lib/estados";
+import { StatusBadge } from "@/components/status-badge";
+import { useTasaBCVAdmin } from "@/components/admin/dashboard/use-tasa-bcv-admin";
+import { RifIncompletoBadge } from "./cooperativas-table";
 
 interface CooperativaDetailTabsProps {
   cooperativa: CooperativaDetalle;
@@ -25,31 +33,11 @@ interface CooperativaDetailTabsProps {
 
 export function CooperativaDetailTabs({ cooperativa }: CooperativaDetailTabsProps) {
   
-  // Format Currency
-  const formatUSD = (val: number | null) => {
-    if (val === null || val === undefined) return "-";
-    return new Intl.NumberFormat("es-VE", {
-      style: "currency",
-      currency: "USD",
-    }).format(val);
-  };
+  // Montos en USD de referencia, con el equivalente en Bs a la tasa BCV de hoy.
+  const tasa = useTasaBCVAdmin();
 
-  const getTipoPagoLabel = (tipo: string) => {
-    switch (tipo) {
-      case "TRANSFERENCIA_BANCARIA":
-        return "Transferencia Bancaria";
-      case "PAGO_MOVIL":
-        return "Pago Móvil";
-      case "ZELLE":
-        return "Zelle";
-      case "EFECTIVO":
-        return "Efectivo";
-      default:
-        return tipo;
-    }
-  };
-
-  return (    <Tabs defaultValue="general" className="w-full">
+  return (
+    <Tabs defaultValue="general" className="w-full">
       <TabsList className="bg-muted border border-border p-1 flex flex-wrap h-auto gap-1 rounded-xl text-muted-foreground">
         <TabsTrigger value="general" className="data-[state=active]:bg-background data-[state=active]:text-foreground flex items-center gap-2 py-2 px-3 rounded-lg text-sm">
           <Info className="h-4 w-4" /> General
@@ -89,25 +77,45 @@ export function CooperativaDetailTabs({ cooperativa }: CooperativaDetailTabsProp
               </div>
               <div>
                 <span className="text-sm text-muted-foreground block mb-1">RIF</span>
-                <span className="text-foreground font-mono text-base">{cooperativa.rif}</span>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-foreground font-mono text-base">{cooperativa.rif}</span>
+                  <RifIncompletoBadge rif={cooperativa.rif} />
+                </div>
               </div>
               <div>
-                <span className="text-sm text-muted-foreground block mb-1">Porcentaje de Comisión</span>
-                <span className="text-foreground text-base font-semibold text-emerald-400">{cooperativa.comision_porcentaje}%</span>
+                <span className="text-sm text-muted-foreground block mb-1">Comisión de EnBus</span>
+                <span className="text-base font-semibold text-foreground">{cooperativa.comision_porcentaje} %</span>
+              </div>
+              <div>
+                <span className="text-sm text-muted-foreground block mb-1">Representante legal</span>
+                <span className="text-foreground text-sm">{cooperativa.representante || "Sin dato"}</span>
+              </div>
+              <div>
+                <span className="text-sm text-muted-foreground block mb-1">Contacto</span>
+                <span className="text-foreground text-sm block">{cooperativa.email || "Sin correo"}</span>
+                {cooperativa.telefono && (
+                  <span className="text-muted-foreground text-sm block">
+                    {formatTelefono(cooperativa.telefono) === "—" ? cooperativa.telefono : formatTelefono(cooperativa.telefono)}
+                  </span>
+                )}
               </div>
             </div>
             <div className="space-y-4">
               <div>
-                <span className="text-sm text-muted-foreground block mb-1">Estado de Operatividad</span>
-                <div className="mt-1">
-                  {cooperativa.estado === "ACTIVA" && (
-                    <Badge className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20">Operando Normalmente (Activa)</Badge>
+                <span className="text-sm text-muted-foreground block mb-1">Estado</span>
+                <div className="mt-1 space-y-1">
+                  <StatusBadge status={cooperativa.estado} dominio="cooperativa" />
+                  <p className="text-xs text-muted-foreground">{estadoInfo("cooperativa", cooperativa.estado).ayuda}</p>
+                  {cooperativa.motivo_estado && (
+                    <p className="text-sm text-foreground">
+                      <span className="text-muted-foreground">Motivo: </span>
+                      {cooperativa.motivo_estado}
+                    </p>
                   )}
-                  {cooperativa.estado === "SUSPENDIDA" && (
-                    <Badge className="bg-amber-500/10 text-amber-500 border-amber-500/20">Suspendida temporalmente</Badge>
-                  )}
-                  {cooperativa.estado === "DESACTIVADA" && (
-                    <Badge className="bg-rose-500/10 text-rose-500 border-rose-500/20">Desactivada (Baja permanente)</Badge>
+                  {cooperativa.estado_cambiado_at && (
+                    <p className="text-xs text-muted-foreground">
+                      Desde el {formatFechaHoraVE(cooperativa.estado_cambiado_at)}
+                    </p>
                   )}
                 </div>
               </div>
@@ -122,10 +130,18 @@ export function CooperativaDetailTabs({ cooperativa }: CooperativaDetailTabsProp
               <div>
                 <span className="text-sm text-muted-foreground block mb-1">Fecha de Registro</span>
                 <span className="text-foreground text-sm">
-                  {new Date(cooperativa.created_at).toLocaleDateString("es-VE", { dateStyle: "long" })}
+                  {formatFechaVE(cooperativa.created_at, { dateStyle: "long" })}
                 </span>
               </div>
             </div>
+            {cooperativa.mensaje_registro && (
+              <div className="md:col-span-2">
+                <span className="text-sm text-muted-foreground block mb-1">Mensaje al registrarse</span>
+                <p className="whitespace-pre-line rounded-lg border bg-muted/30 p-3 text-sm text-foreground">
+                  {cooperativa.mensaje_registro}
+                </p>
+              </div>
+            )}
           </CardContent>
         </Card>
       </TabsContent>
@@ -161,7 +177,7 @@ export function CooperativaDetailTabs({ cooperativa }: CooperativaDetailTabsProp
                         <TableCell className="text-muted-foreground">{suc.telefono || "-"}</TableCell>
                         <TableCell className="text-right">
                           {suc.activa ? (
-                            <Badge className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20">Activa</Badge>
+                            <Badge className="border-transparent bg-emerald-100 text-emerald-900 dark:bg-emerald-400/15 dark:text-emerald-200">Activa</Badge>
                           ) : (
                             <Badge variant="secondary" className="bg-muted text-muted-foreground border-border">Inactiva</Badge>
                           )}
@@ -193,9 +209,9 @@ export function CooperativaDetailTabs({ cooperativa }: CooperativaDetailTabsProp
                     <CardHeader className="pb-2">
                       <div className="flex items-center justify-between">
                         <Badge className="bg-muted border-border text-muted-foreground font-medium">
-                          {getTipoPagoLabel(metodo.tipo)}
+                          {etiquetaMetodoPago(metodo.tipo)}
                         </Badge>
-                        <Circle className={`h-2 w-2 fill-current ${metodo.activo ? "text-emerald-500" : "text-muted-foreground"}`} />
+                        <Circle className={`h-2 w-2 fill-current ${metodo.activo ? "text-success-text" : "text-muted-foreground"}`} />
                       </div>
                     </CardHeader>
                     <CardContent className="space-y-2 text-sm text-muted-foreground pb-4">
@@ -260,7 +276,7 @@ export function CooperativaDetailTabs({ cooperativa }: CooperativaDetailTabsProp
                       <TableHead className="text-muted-foreground">Origen</TableHead>
                       <TableHead className="text-muted-foreground">Destino</TableHead>
                       <TableHead className="text-muted-foreground text-right">Duración Estimada</TableHead>
-                      <TableHead className="text-muted-foreground text-right">Precio Pasaje</TableHead>
+                      <TableHead className="text-muted-foreground text-right">Precio Pasaje (USD)</TableHead>
                       <TableHead className="text-muted-foreground text-right">Estado</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -279,12 +295,12 @@ export function CooperativaDetailTabs({ cooperativa }: CooperativaDetailTabsProp
                             : `${ruta.duracion_estimada_min} min`
                           }
                         </TableCell>
-                        <TableCell className="text-right font-semibold text-emerald-400">
-                          {formatUSD(ruta.precio_pasaje)}
+                        <TableCell className="text-right font-semibold text-success-text">
+                          {ruta.precio_pasaje === null || ruta.precio_pasaje === undefined ? "—" : <Monto usd={Number(ruta.precio_pasaje)} tasa={tasa} moneda="USD" size="sm" align="right" />}
                         </TableCell>
                         <TableCell className="text-right">
                           {ruta.activa ? (
-                            <Badge className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20">Activa</Badge>
+                            <Badge className="border-transparent bg-emerald-100 text-emerald-900 dark:bg-emerald-400/15 dark:text-emerald-200">Activa</Badge>
                           ) : (
                             <Badge variant="secondary" className="bg-muted text-muted-foreground border-border">Inactiva</Badge>
                           )}
@@ -331,16 +347,16 @@ export function CooperativaDetailTabs({ cooperativa }: CooperativaDetailTabsProp
                         <TableCell className="text-muted-foreground">{emp.telefono}</TableCell>
                         <TableCell className="py-2">
                           {emp.role === "admin_cooperativa" ? (
-                            <Badge className="bg-purple-500/10 text-purple-400 border-purple-500/20 font-medium">Administrador</Badge>
+                            <Badge className="border-transparent bg-violet-100 text-violet-900 dark:bg-violet-400/15 dark:text-violet-200 font-medium">{etiquetaRol(emp.role)}</Badge>
                           ) : (
-                            <Badge className="bg-blue-500/10 text-blue-400 border-blue-500/20 font-medium">Taquillero</Badge>
+                            <Badge className="border-transparent bg-blue-100 text-blue-900 dark:bg-blue-400/15 dark:text-blue-200 font-medium">{etiquetaRol(emp.role)}</Badge>
                           )}
                         </TableCell>
                         <TableCell className="text-right">
                           {emp.isBanned ? (
-                            <Badge className="bg-rose-500/10 text-rose-500 border-rose-500/20">Suspendido</Badge>
+                            <Badge className="border-transparent bg-red-100 text-red-900 dark:bg-red-400/15 dark:text-red-200">Bloqueado</Badge>
                           ) : (
-                            <Badge className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20">Activo</Badge>
+                            <Badge className="border-transparent bg-emerald-100 text-emerald-900 dark:bg-emerald-400/15 dark:text-emerald-200">Activo</Badge>
                           )}
                         </TableCell>
                       </TableRow>
@@ -387,15 +403,15 @@ export function CooperativaDetailTabs({ cooperativa }: CooperativaDetailTabsProp
               {/* Graphical distribution mockup or indicator */}
               <div className="text-sm text-muted-foreground bg-background px-4 py-2 rounded-lg border border-border text-center sm:text-right">
                 {cooperativa.calificacion_promedio >= 4.0 ? (
-                  <div className="flex items-center gap-2 text-emerald-500 font-medium">
+                  <div className="flex items-center gap-2 text-success-text font-medium">
                     <ShieldCheck className="h-5 w-5" /> Reputación Excelente
                   </div>
                 ) : cooperativa.calificacion_promedio >= 3.0 ? (
-                  <div className="flex items-center gap-2 text-amber-500 font-medium">
+                  <div className="flex items-center gap-2 text-warning-text font-medium">
                     <Warning className="h-5 w-5" /> Reputación Regular
                   </div>
                 ) : (
-                  <div className="flex items-center gap-2 text-rose-500 font-medium">
+                  <div className="flex items-center gap-2 text-destructive-text font-medium">
                     <Warning className="h-5 w-5" /> Requiere Revisión
                   </div>
                 )}
@@ -420,7 +436,7 @@ export function CooperativaDetailTabs({ cooperativa }: CooperativaDetailTabsProp
                         <div>
                           <span className="text-sm font-semibold text-foreground block leading-tight">{cal.usuario_nombre}</span>
                           <span className="text-xs text-muted-foreground">
-                            {new Date(cal.created_at).toLocaleDateString("es-VE")}
+                            {formatFechaVE(cal.created_at)}
                           </span>
                         </div>
                       </div>
@@ -460,14 +476,18 @@ export function CooperativaDetailTabs({ cooperativa }: CooperativaDetailTabsProp
               <Card className="bg-muted/30 border-border text-foreground">
                 <CardContent className="pt-6">
                   <span className="text-sm text-muted-foreground block font-medium">Comisiones Pendientes del Ciclo</span>
-                  <div className="mt-2 flex items-baseline gap-2">
-                    <span className={`text-4xl font-extrabold tracking-tight ${cooperativa.comisiones_pendientes > 0 ? "text-rose-500" : "text-emerald-500"}`}>
-                      {formatUSD(cooperativa.comisiones_pendientes)}
-                    </span>
-                    <span className="text-xs text-muted-foreground">USD</span>
+                  <div className="mt-2">
+                    <Monto
+                      usd={Number(cooperativa.comisiones_pendientes ?? 0)}
+                      tasa={tasa}
+                      moneda="USD"
+                      size="lg"
+                      className={cooperativa.comisiones_pendientes > 0 ? "text-destructive-text" : "text-success-text"}
+                    />
                   </div>
                   <p className="mt-2 text-xs text-muted-foreground">
-                    Suma total de todas las comisiones calculadas y no pagadas hasta la fecha.
+                    Suma de las comisiones calculadas y no pagadas hasta la fecha, en USD de referencia. La cooperativa
+                    las paga en bolívares a la tasa BCV del día del pago.
                   </p>
                 </CardContent>
               </Card>
@@ -475,21 +495,21 @@ export function CooperativaDetailTabs({ cooperativa }: CooperativaDetailTabsProp
               {/* Card 2: Estatus solvencia */}
               <Card className="bg-muted/30 border-border text-foreground flex flex-col justify-center">
                 <CardContent className="pt-6 space-y-2">
-                  <span className="text-sm text-muted-foreground block font-medium">Estado de Solvencia</span>
+                  <span className="text-sm text-muted-foreground block font-medium">Estado de pago</span>
                   <div className="mt-1">
                     {cooperativa.comisiones_pendientes > 0 ? (
                       <div className="space-y-1">
-                        <Badge className="bg-amber-500/10 text-amber-500 border-amber-500/20 text-sm font-medium">
-                          Cuentas Pendientes
+                        <Badge className="border-transparent bg-amber-100 text-amber-900 dark:bg-amber-400/15 dark:text-amber-200 text-sm font-medium">
+                          Con comisiones pendientes
                         </Badge>
-                        <p className="text-xs text-muted-foreground">La cooperativa posee ciclos de comisiones pendientes por cobrar.</p>
+                        <p className="text-xs text-muted-foreground">Tiene ciclos de comisiones sin pagar. Regístralos en Comisiones cuando pague.</p>
                       </div>
                     ) : (
                       <div className="space-y-1">
-                        <Badge className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20 text-sm font-medium">
-                          Al Día (Solvente)
+                        <Badge className="border-transparent bg-emerald-100 text-emerald-900 dark:bg-emerald-400/15 dark:text-emerald-200 text-sm font-medium">
+                          Al día
                         </Badge>
-                        <p className="text-xs text-muted-foreground">Todos los ciclos de comisiones facturados se encuentran liquidados.</p>
+                        <p className="text-xs text-muted-foreground">Todos sus ciclos de comisiones están pagados.</p>
                       </div>
                     )}
                   </div>
@@ -497,8 +517,8 @@ export function CooperativaDetailTabs({ cooperativa }: CooperativaDetailTabsProp
               </Card>
             </div>
             
-            <p className="text-xs text-muted-foreground italic">
-              * Nota: Para conciliar saldos o registrar cobros específicos, dirígete a la sección de **Comisiones** en la barra lateral de navegación.
+            <p className="text-xs text-muted-foreground">
+              Para registrar el pago de un ciclo, ve a <Link href="/admin/comisiones" className="text-foreground underline decoration-primary underline-offset-4">Comisiones</Link>.
             </p>
           </CardContent>
         </Card>

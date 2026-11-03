@@ -1,42 +1,75 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, Image, ScrollView, StyleSheet, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Alert, Image, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Clock, Package, WarningCircle } from 'phosphor-react-native';
+import {
+  CheckCircle,
+  Clock,
+  Info,
+  Package,
+  Storefront,
+  UserCircle,
+  WhatsappLogo,
+  XCircle,
+} from 'phosphor-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { QRCodeViewer } from '@/src/components/QRCodeViewer';
-import { StatusTimeline, type EstadoItem } from '@/src/components/StatusTimeline';
+import { StatusTimeline, buildEncomiendaTimeline } from '@/src/components/StatusTimeline';
 import { PaymentFlow } from '@/src/components/PaymentFlow';
 import { PageTransition } from '@/src/components/PageTransition';
+import { PressableScale } from '@/src/components/PressableScale';
 import {
+  BottomSheet,
   Button,
   Card,
   Divider,
-  EmptyState,
+  ErrorState,
   InfoRow,
   LoadingState,
+  Monto,
   Screen,
   ScreenHeader,
+  StaleBanner,
   StatusBadge,
   Text,
   scrollContent,
 } from '@/src/components/ui';
 import { supabase } from '@/src/utils/supabase';
+import { useAuth } from '@/src/contexts/AuthContext';
 import { useToast } from '@/src/components/Toast';
-import { getSignedPhotoUrl } from '@/src/utils/storage';
-import { getEstadoVisual } from '@/src/utils/estados';
+import { urlFotoEncomienda } from '@/src/utils/fotos';
+import { qrEncomienda } from '@/src/utils/codigos';
+import { abrirWhatsApp } from '@/src/utils/soporte';
+import { telefonoValido } from '@/src/utils/validation';
+import { formatCity } from '@/src/utils/formatters';
+import {
+  MODALIDAD_PAGO,
+  getCobroEncomienda,
+  getEstadoVisual,
+  puedePagarEncomienda,
+} from '@/src/utils/estados';
+import { humanizeError } from '@/src/utils/errores';
+import { formatMoney, tasaRefDe } from '@/src/utils/dinero';
+import { useTasaBCV } from '@/src/hooks/useTasaBCV';
+import {
+  cargarPagosEncomienda,
+  describirPunto,
+  textoTasaCambio,
+  usePagoEncomienda,
+  useSucursalesEncomienda,
+  type PagoEncomienda,
+} from '@/src/hooks/useEncomiendas';
 import type { Encomienda } from '@/src/types';
-import { Colors, Radius, Sizes, Spacing } from '@/src/theme';
+import { Colors, Radius, Sizes, Spacing, StatusPalette, type StatusTone } from '@/src/theme';
 
-/** Flujo completo de una encomienda, de creación a entrega. */
-const STATUS_FLOW = [
-  { id: 'PENDIENTE_DE_ESCANEO', label: 'Orden creada' },
-  { id: 'EN_RECEPCION', label: 'Recibida en taquilla' },
-  { id: 'EN_TRANSITO', label: 'En tránsito' },
-  { id: 'EN_OFICINA_DESTINO', label: 'Lista para retirar' },
-  { id: 'ENTREGADA', label: 'Entregada al destinatario' },
-] as const;
-
-const CANCELABLE = ['PENDIENTE_DE_ESCANEO', 'EN_RECEPCION', 'POR_PAGAR'];
+/**
+ * El cliente solo puede cancelar antes de entregar el paquete en taquilla
+ * (`aa_proteger_encomiendas_cliente`). Después lo cancela la cooperativa.
+ */
+const CANCELABLE = ['PENDIENTE_DE_ESCANEO'];
+/** Ya en manos de la cooperativa: la app no puede cancelarlo. */
+const EN_TAQUILLA = ['EN_RECEPCION', 'POR_PAGAR', 'PAGADA'];
+/** Envío cerrado: ya no tiene sentido avisar a quien recibe. */
+const CERRADA = ['ENTREGADA', 'CANCELADA', 'DEVUELTA'];
 
 interface HistorialRow {
   id: string;
@@ -44,22 +77,27 @@ interface HistorialRow {
   created_at: string;
 }
 
-interface PagoRow {
-  id: string;
-  verificado: boolean;
-  tipo_pago: string;
-}
+type EncomiendaDetalle = Encomienda & { cooperativas?: { nombre: string } | null };
 
 export default function DetalleEnvioScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, recien } = useLocalSearchParams<{ id: string; recien?: string }>();
   const router = useRouter();
   const toast = useToast();
+  const { user } = useAuth();
+  const { tasaRef } = useTasaBCV();
 
-  const [encomienda, setEncomienda] = useState<Encomienda | null>(null);
+  const [encomienda, setEncomienda] = useState<EncomiendaDetalle | null>(null);
   const [historial, setHistorial] = useState<HistorialRow[]>([]);
-  const [pago, setPago] = useState<PagoRow | null>(null);
-  const [fotoUrl, setFotoUrl] = useState<string | null>(null);
+  const [pagos, setPagos] = useState<PagoEncomienda[]>([]);
+  const [fotoCliente, setFotoCliente] = useState<string | null>(null);
+  const [fotoTaquilla, setFotoTaquilla] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [errorCarga, setErrorCarga] = useState<string | null>(null);
+  const [actualizadoAt, setActualizadoAt] = useState<number | null>(null);
+  /** M-47: con "Paga quien recibe" el pago del remitente es opcional y va plegado. */
+  const [pagarYo, setPagarYo] = useState(false);
+  const [cancelando, setCancelando] = useState(false);
 
   const isMountedRef = useRef(true);
   useEffect(() => {
@@ -70,42 +108,49 @@ export default function DetalleEnvioScreen() {
   }, []);
 
   const fetchData = useCallback(
-    async (retries = 3) => {
+    async (retries = 3): Promise<void> => {
       if (!id) return;
       const cacheKey = `cache:encomienda_envio:${id}`;
+      let reintentando = false;
 
       try {
-        const cached = await AsyncStorage.getItem(cacheKey);
-        if (cached && isMountedRef.current) {
-          const parsed = JSON.parse(cached);
-          setEncomienda(parsed.encomienda);
-          setHistorial(parsed.historial ?? []);
-          setPago(parsed.pago ?? null);
-          setLoading(false);
-        } else if (isMountedRef.current) {
-          setLoading(true);
+        try {
+          const cached = await AsyncStorage.getItem(cacheKey);
+          if (cached && isMountedRef.current) {
+            const parsed = JSON.parse(cached);
+            setEncomienda((prev) => prev ?? parsed.encomienda ?? null);
+            setHistorial((prev) => (prev.length ? prev : (parsed.historial ?? [])));
+            setPagos((prev) => (prev.length ? prev : (parsed.pagos ?? [])));
+            setActualizadoAt((prev) => prev ?? parsed.at ?? null);
+            setLoading(false);
+          }
+        } catch {
+          // Caché ilegible: manda la carga de red.
         }
 
         const [encResult, histResult, pagosResult] = await Promise.all([
-          supabase.from('encomiendas').select('*').eq('id', id).single(),
+          supabase.from('encomiendas').select('*, cooperativas ( nombre )').eq('id', id).single(),
           supabase
             .from('encomienda_estado_historial')
             .select('id, estado_nuevo, created_at')
             .eq('encomienda_id', id)
             .order('created_at', { ascending: true })
             .limit(20),
-          supabase
-            .from('pagos')
-            .select('id, verificado, tipo_pago')
-            .eq('encomienda_id', id)
-            .order('created_at', { ascending: false })
-            .limit(1),
+          cargarPagosEncomienda(id).then(
+            (data) => ({ data, error: null as unknown }),
+            (error: unknown) => ({ data: null, error })
+          ),
         ]);
 
         if (encResult.error || !encResult.data) {
           // La fila puede no estar visible inmediatamente tras el insert.
           if (retries > 0) {
-            setTimeout(() => fetchData(retries - 1), 700);
+            // Sin `setLoading(false)` hasta el último intento: no mostrar
+            // "no encontrada" justo después de crearla.
+            reintentando = true;
+            setTimeout(() => {
+              if (isMountedRef.current) fetchData(retries - 1);
+            }, 700);
             return;
           }
           throw encResult.error ?? new Error('Encomienda no encontrada');
@@ -113,30 +158,40 @@ export default function DetalleEnvioScreen() {
 
         if (!isMountedRef.current) return;
 
-        const freshPago = pagosResult.data?.[0] ?? null;
-        setEncomienda(encResult.data as Encomienda);
+        const freshPagos = pagosResult.data;
+        const ahora = Date.now();
+        const enc = encResult.data as EncomiendaDetalle;
+        setEncomienda(enc);
         setHistorial(histResult.data ?? []);
-        setPago(freshPago);
+        // Sin pagos (fallo puntual) se conservan los anteriores; el cobro se deduce del estado.
+        if (freshPagos) setPagos(freshPagos);
+        setErrorCarga(null);
+        setActualizadoAt(ahora);
 
         AsyncStorage.setItem(
           cacheKey,
           JSON.stringify({
-            encomienda: encResult.data,
+            at: ahora,
+            encomienda: enc,
             historial: histResult.data ?? [],
-            pago: freshPago,
+            pagos: freshPagos ?? [],
           })
         ).catch(() => {});
 
-        if (encResult.data.foto_evidencia_url) {
-          const url = await getSignedPhotoUrl(encResult.data.foto_evidencia_url);
-          if (isMountedRef.current) setFotoUrl(url);
-        } else if (isMountedRef.current) {
-          setFotoUrl(null);
+        // Fotos del bucket privado: URL firmada; si falla, simplemente no se muestran.
+        const [cliente, taquilla] = await Promise.all([
+          urlFotoEncomienda(enc.foto_cliente_path),
+          urlFotoEncomienda(enc.foto_evidencia_url),
+        ]);
+        if (isMountedRef.current) {
+          setFotoCliente(cliente);
+          setFotoTaquilla(taquilla);
         }
       } catch (err) {
-        if (__DEV__) console.error('[enviar] Error cargando encomienda:', err);
+        if (__DEV__) console.warn('[enviar] Error cargando encomienda:', err);
+        if (isMountedRef.current) setErrorCarga(humanizeError(err, 'carga'));
       } finally {
-        if (isMountedRef.current) setLoading(false);
+        if (isMountedRef.current && !reintentando) setLoading(false);
       }
     },
     [id]
@@ -146,52 +201,73 @@ export default function DetalleEnvioScreen() {
     fetchData();
   }, [fetchData]);
 
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await fetchData();
+    } finally {
+      if (isMountedRef.current) setRefreshing(false);
+    }
+  }, [fetchData]);
+
+  const pago = usePagoEncomienda(encomienda, {
+    onRegistrado: () => {
+      toast.show('success', 'Registramos tu pago. La cooperativa lo revisará y te avisaremos.');
+      setPagarYo(false);
+      fetchData();
+    },
+    onDesactualizada: () => {
+      fetchData();
+    },
+  });
+
+  const cobro = useMemo(() => getCobroEncomienda(encomienda, pagos), [encomienda, pagos]);
+  const puntos = useSucursalesEncomienda(encomienda);
+
   const handleCancel = () => {
-    Alert.alert('Cancelar envío', '¿Seguro que deseas cancelar esta encomienda?', [
-      { text: 'No, mantener', style: 'cancel' },
-      {
-        text: 'Sí, cancelar',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            const { error } = await supabase
-              .from('encomiendas')
-              .update({ estado: 'CANCELADA' })
-              .eq('id', id);
-            if (error) throw error;
-            router.back();
-          } catch (err) {
-            const message = err instanceof Error ? err.message : 'Error desconocido';
-            if (__DEV__) console.error('[enviar] Error cancelando:', message);
-            toast.show('error', 'No se pudo cancelar la encomienda. Intenta de nuevo.');
-          }
+    Alert.alert(
+      '¿Cancelar este envío?',
+      'El código QR dejará de servir y no podrás entregar el paquete en taquilla con él.',
+      [
+        { text: 'No, mantener', style: 'cancel' },
+        {
+          text: 'Sí, cancelar',
+          style: 'destructive',
+          onPress: async () => {
+            if (cancelando) return;
+            setCancelando(true);
+            try {
+              const { data, error } = await supabase
+                .from('encomiendas')
+                .update({ estado: 'CANCELADA' })
+                .eq('id', id)
+                .eq('estado', 'PENDIENTE_DE_ESCANEO')
+                .select('id');
+              if (error) throw error;
+              if (!data?.length) {
+                // Ninguna fila: la taquilla lo recibió mientras decidías.
+                toast.show(
+                  'error',
+                  'No pudimos cancelar: el paquete ya está en la taquilla. Si necesitas cancelarlo, habla con la cooperativa.'
+                );
+                fetchData();
+                return;
+              }
+              toast.show('success', 'Cancelamos tu envío.');
+              router.back();
+            } catch (err) {
+              toast.show(
+                'error',
+                `No pudimos cancelar la encomienda. ${humanizeError(err, 'encomienda')}`
+              );
+              fetchData();
+            } finally {
+              if (isMountedRef.current) setCancelando(false);
+            }
+          },
         },
-      },
-    ]);
-  };
-
-  const buildTimeline = (enc: Encomienda): EstadoItem[] => {
-    let reachedCurrent = false;
-
-    return STATUS_FLOW.map((stage) => {
-      const match = historial.find((h) => h.estado_nuevo === stage.id);
-      const isCurrent = stage.id === enc.estado;
-      if (isCurrent) reachedCurrent = true;
-
-      const completado = isCurrent ? false : !reachedCurrent;
-      const timestamp =
-        match?.created_at ??
-        (stage.id === 'PENDIENTE_DE_ESCANEO' ? enc.created_at : null);
-
-      return {
-        estado: stage.id,
-        label: stage.label,
-        timestamp: timestamp ? new Date(timestamp).toLocaleString('es-VE') : null,
-        completado,
-        activo: isCurrent,
-        descripcion: isCurrent ? enc.descripcion_contenido : undefined,
-      };
-    });
+      ]
+    );
   };
 
   if (loading) {
@@ -206,19 +282,63 @@ export default function DetalleEnvioScreen() {
   if (!encomienda) {
     return (
       <Screen background={Colors.surface}>
-        <ScreenHeader variant="compact" title="Envío" onBack={() => router.back()} />
-        <EmptyState
-          icon={WarningCircle}
-          title="Encomienda no encontrada"
-          description="No pudimos cargar este envío. Puede que haya sido eliminado."
-          action={{ children: 'Volver', onPress: () => router.back() }}
+        <ScreenHeader variant="compact" title="Tu envío" onBack={() => router.back()} />
+        <ErrorState
+          title="No pudimos cargar tu envío"
+          description={
+            errorCarga ??
+            'No encontramos esta encomienda en tu cuenta. Revisa tu conexión e inténtalo de nuevo.'
+          }
+          onRetry={() => fetchData(0)}
         />
       </Screen>
     );
   }
 
   const estadoVisual = getEstadoVisual('encomienda', encomienda.estado);
-  const esperandoVerificacion = pago && !pago.verificado;
+  const costo = Number(encomienda.costo_calculado);
+  const pagaDestino = encomienda.modalidad_pago === 'DESTINO';
+  const destinatario = encomienda.receiver_nombre?.trim() || 'Quien recibe';
+  const nombreCoop = encomienda.cooperativas?.nombre ?? null;
+  const tracking = encomienda.tracking_id ?? null;
+  const puedePagar = !pago.pagoDeOtro && puedePagarEncomienda(encomienda, cobro, 'remitente');
+  /** ORIGEN: el remitente debe pagar. DESTINO: solo si decide pagarlo él (M-47). */
+  const mostrarFormulario = puedePagar && (!pagaDestino || pagarYo);
+  const pagoVisible = cobro.pago;
+  /** Con la política de la fase 3 vemos también el pago de quien recibe. */
+  const pagoEsMio = !pagoVisible?.pagador_id || pagoVisible.pagador_id === user?.id;
+  const costoTexto = costo > 0 ? formatMoney({ usd: costo, tasa: tasaRef }).principal : null;
+
+  const puntoEntrega = describirPunto(puntos.origen, {
+    preferidaId: encomienda.sucursal_origen_id,
+    cooperativa: nombreCoop,
+    ciudad: formatCity(encomienda.ciudad_origen),
+  });
+  const puntoRetiro = describirPunto(puntos.destino, {
+    preferidaId: encomienda.sucursal_destino_id,
+    cooperativa: nombreCoop,
+    ciudad: formatCity(encomienda.ciudad_destino),
+  });
+
+  const puedeAvisar =
+    !CERRADA.includes(encomienda.estado) && telefonoValido(encomienda.receiver_telefono ?? '');
+
+  const avisarDestinatario = async () => {
+    const nombre = encomienda.receiver_nombre?.trim().split(/\s+/)[0] || '';
+    const mensaje = `Hola${nombre ? ` ${nombre}` : ''}, te envié una encomienda por ${
+      nombreCoop ?? 'EnBus'
+    }${tracking ? ` (${tracking})` : ''}. Cuando llegue a ${
+      formatCity(encomienda.ciudad_destino) || 'tu ciudad'
+    }, retírala en ${puntoRetiro.completo} con tu cédula y tu PIN. Puedes seguirla en la app EnBus.`;
+    const ok = await abrirWhatsApp(encomienda.receiver_telefono ?? '', mensaje);
+    if (!ok) toast.show('error', 'No pudimos abrir WhatsApp. Revisa que esté instalado.');
+  };
+
+  const reportar = () =>
+    router.push({
+      pathname: '/ayuda',
+      params: { tipo: 'encomienda', id: encomienda.id, codigo: tracking ?? '' },
+    });
 
   return (
     <Screen background={Colors.surface}>
@@ -226,7 +346,7 @@ export default function DetalleEnvioScreen() {
         <ScreenHeader
           variant="compact"
           eyebrow="Tu envío"
-          title={encomienda.tracking_id ?? '—'}
+          title={tracking ?? 'Encomienda'}
           onBack={() => router.back()}
           right={<StatusBadge dominio="encomienda" estado={encomienda.estado} size="md" bordered />}
         />
@@ -234,63 +354,199 @@ export default function DetalleEnvioScreen() {
         <ScrollView
           contentContainerStyle={scrollContent({ top: Spacing.lg })}
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={[Colors.accent]}
+              tintColor={Colors.accent}
+            />
+          }
         >
-          {estadoVisual.hint ? (
+          {errorCarga ? <StaleBanner actualizadoAt={actualizadoAt} onRetry={() => fetchData(0)} /> : null}
+
+          {/* ── Recién creada (#31): qué hacer ahora ───────────────────── */}
+          {recien === '1' && encomienda.estado === 'PENDIENTE_DE_ESCANEO' ? (
+            <AvisoCobro tone="success" icon={CheckCircle} titulo="¡Encomienda registrada!">
+              {`Lleva tu paquete a ${puntoEntrega.completo} y muestra este código.`}
+            </AvisoCobro>
+          ) : estadoVisual.hint ? (
             <Text variant="secondary" color="muted" style={s.hint}>
               {estadoVisual.hint}
             </Text>
           ) : null}
 
-          {/* ── QR de entrega ───────────────────────────────────────────── */}
+          {/* ── QR de entrega: codifica el código de seguimiento (DS-09) ─ */}
           {encomienda.estado === 'PENDIENTE_DE_ESCANEO' && (
             <Card padding="md" style={s.card}>
               <Text variant="subheading" align="center" style={s.cardTitle}>
-                Muestra este código en taquilla
+                Muestra este código en la taquilla
               </Text>
               <View style={s.qr}>
-                <QRCodeViewer data={encomienda.id} size={220} autoMaxBrightness />
+                <QRCodeViewer
+                  data={qrEncomienda(encomienda)}
+                  codigoLegible={tracking ?? undefined}
+                  ampliable
+                  size={220}
+                />
+              </View>
+              <Divider spacing={Spacing.md} />
+              <View style={s.puntoRow}>
+                <Storefront size={Sizes.icon.md} color={Colors.foreground} weight="bold" />
+                <View style={s.flex}>
+                  <Text variant="overline" color="muted" uppercase>
+                    Dónde entregarlo
+                  </Text>
+                  <Text variant="bodyStrong">{puntoEntrega.completo}</Text>
+                  {puntoEntrega.detalle ? (
+                    <Text variant="caption" color="muted">
+                      {puntoEntrega.detalle}
+                    </Text>
+                  ) : null}
+                </View>
               </View>
             </Card>
           )}
 
-          {/* ── Pago o seguimiento ──────────────────────────────────────── */}
-          {encomienda.estado === 'POR_PAGAR' ? (
-            esperandoVerificacion ? (
-              <Card padding="md" style={[s.card, s.centered]}>
-                <View style={s.pendingIcon}>
-                  <Clock weight="fill" color={Colors.warning} size={Sizes.icon['2xl']} />
-                </View>
-                <Text variant="subheading" align="center">
-                  {pago?.tipo_pago === 'EFECTIVO'
-                    ? 'Pago pendiente en taquilla'
-                    : 'Pago en verificación'}
-                </Text>
-                <Text variant="secondary" color="muted" align="center" style={s.cardText}>
-                  {pago?.tipo_pago === 'EFECTIVO'
-                    ? 'Realiza el pago en efectivo al entregar tu paquete en la taquilla de la cooperativa.'
-                    : 'Registramos tu comprobante. La cooperativa lo verificará a la brevedad y el envío continuará.'}
-                </Text>
-              </Card>
-            ) : (
-              <View style={s.card}>
-                <Text variant="subheading" style={s.cardTitle}>
-                  Pago requerido
-                </Text>
+          {/* ── Avisar a quien recibe (APP-46) ─────────────────────────── */}
+          {puedeAvisar ? (
+            <Button
+              variant="secondary"
+              icon={WhatsappLogo}
+              fullWidth
+              onPress={avisarDestinatario}
+              style={s.card}
+            >
+              {`Avisar a ${destinatario.split(/\s+/)[0]} por WhatsApp`}
+            </Button>
+          ) : null}
+
+          {/* ── Cobro ───────────────────────────────────────────────────── */}
+          {cobro.estado === 'PAGADO' ? (
+            <AvisoCobro tone="success" icon={CheckCircle} titulo="Pago confirmado">
+              {pagaDestino
+                ? pagoVisible && !pagoEsMio
+                  ? `${destinatario} ya pagó el envío. Solo necesita su PIN y su cédula para retirarlo.`
+                  : 'El envío está pagado. Quien recibe solo necesita su PIN y su cédula para retirarlo.'
+                : 'El envío está pagado.'}
+            </AvisoCobro>
+          ) : cobro.estado === 'EN_VERIFICACION' ? (
+            <AvisoCobro
+              tone="pending"
+              icon={Clock}
+              titulo="Pago en verificación"
+              extra={
+                pagoVisible ? (
+                  <Monto
+                    usd={pagoVisible.monto ?? costo}
+                    bs={pagoVisible.monto_bs ?? null}
+                    tasa={tasaRefDe(pagoVisible.tasa_bcv, pagoVisible.tasa_bcv_fecha)}
+                    moneda={pagoVisible.moneda}
+                    size="sm"
+                  />
+                ) : null
+              }
+            >
+              {!pagoEsMio
+                ? `${destinatario} ya registró el pago; está en verificación. No tienes que pagar nada.`
+                : pagoVisible?.numero_referencia
+                  ? `Registraste tu pago con la referencia ${pagoVisible.numero_referencia}. La cooperativa lo está revisando y te avisaremos cuando lo confirme.`
+                  : 'La cooperativa está revisando tu pago y te avisaremos cuando lo confirme.'}
+            </AvisoCobro>
+          ) : pago.pagoDeOtro ? (
+            <AvisoCobro tone="progress" icon={Info} titulo="Ya hay un pago registrado">
+              {pagaDestino
+                ? `${destinatario} ya registró un pago para este envío. Si la cooperativa lo rechaza, podrás pagarlo tú desde aquí.`
+                : 'Ya hay un pago registrado para este envío. Desliza hacia abajo para actualizar.'}
+            </AvisoCobro>
+          ) : cobro.estado === 'NO_APLICA' ? null : pagaDestino ? (
+            <AvisoCobro
+              tone="neutral"
+              icon={UserCircle}
+              titulo={MODALIDAD_PAGO.DESTINO.corto}
+              extra={
+                puedePagar && !pagarYo ? (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onPress={() => setPagarYo(true)}
+                    style={s.avisoAction}
+                  >
+                    Prefiero pagarlo yo
+                  </Button>
+                ) : null
+              }
+            >
+              {costoTexto
+                ? `${destinatario} pagará ${costoTexto} al retirar el paquete en la oficina de destino. No tienes que pagar nada.`
+                : `${destinatario} pagará el envío al retirarlo. El costo se calcula cuando la taquilla pese el paquete.`}
+            </AvisoCobro>
+          ) : cobro.estado === 'COSTO_PENDIENTE' ? (
+            <AvisoCobro tone="neutral" icon={Storefront} titulo="Pagas tú el envío">
+              El costo se calcula cuando la taquilla pese el paquete. Puedes pagarlo ahí mismo en
+              efectivo o desde la app.
+            </AvisoCobro>
+          ) : null}
+
+          {cobro.estado === 'RECHAZADO' && !pago.pagoDeOtro ? (
+            <AvisoCobro tone="danger" icon={XCircle} titulo="Pago rechazado">
+              {!pagoEsMio
+                ? `La cooperativa rechazó el pago que registró ${destinatario} (${
+                    cobro.motivoRechazo || 'no indicó el motivo'
+                  }). Puede pagarlo de nuevo o al retirarlo; si prefieres, págalo tú con «Prefiero pagarlo yo».`
+                : `Motivo: ${cobro.motivoRechazo || 'la cooperativa no indicó el motivo.'} ${
+                    pagaDestino
+                      ? `Puedes registrarlo de nuevo con «Prefiero pagarlo yo» o dejar que ${destinatario} lo pague al retirarlo.`
+                      : 'Revisa los datos y registra el pago de nuevo.'
+                  }`}
+            </AvisoCobro>
+          ) : null}
+
+          {mostrarFormulario && encomienda.cooperativa_id ? (
+            <View style={s.card}>
+              <Text variant="subheading">Paga el envío</Text>
+              <Text variant="secondary" color="muted" style={s.sectionText}>
+                {pagaDestino
+                  ? `Si lo pagas tú, ${destinatario} no tendrá que pagar al retirarlo.`
+                  : 'Paga desde la app o en efectivo en la taquilla de la cooperativa.'}
+              </Text>
+              {pago.cargandoTasa || !pago.cotizacion ? (
+                <Card padding="lg">
+                  <LoadingState label="Calculando el monto en bolívares…" compact />
+                </Card>
+              ) : (
                 <PaymentFlow
-                  monto={encomienda.costo_calculado ?? 0}
-                  encomienda_id={encomienda.id}
-                  cooperativa_id={encomienda.cooperativa_id}
-                  concepto={`Paquete ${encomienda.tracking_id ?? encomienda.id}`}
-                  onPaymentSuccess={() => fetchData()}
+                  cooperativaId={encomienda.cooperativa_id}
+                  concepto={`Encomienda ${tracking ?? ''}`.trim()}
+                  tipoRecurso="encomienda"
+                  cotizacion={pago.cotizacion}
+                  onRegistrar={pago.registrar}
+                  bloqueado={pago.reintentando}
                 />
-              </View>
-            )
-          ) : (
-            <Card padding="md" style={s.card}>
-              <Text variant="subheading">Logística</Text>
-              <StatusTimeline estados={buildTimeline(encomienda)} />
-            </Card>
-          )}
+              )}
+              {pagaDestino ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  fullWidth
+                  onPress={() => setPagarYo(false)}
+                  style={s.avisoAction}
+                >
+                  Mejor que pague quien recibe
+                </Button>
+              ) : null}
+            </View>
+          ) : null}
+
+          {/* ── Seguimiento ─────────────────────────────────────────────── */}
+          <Card padding="md" style={s.card}>
+            <Text variant="subheading">Seguimiento</Text>
+            <StatusTimeline
+              estados={buildEncomiendaTimeline(encomienda.estado, historial, {
+                creadaAt: encomienda.created_at,
+              })}
+            />
+          </Card>
 
           {/* ── Detalles ────────────────────────────────────────────────── */}
           <Card padding="md" style={s.card}>
@@ -301,18 +557,24 @@ export default function DetalleEnvioScreen() {
             <InfoRow label="Contenido" value={encomienda.descripcion_contenido || 'Sin descripción'} />
             <Divider spacing={Spacing.sm} />
 
-            <View style={s.row}>
-              <InfoRow label="Tracking" value={encomienda.tracking_id ?? '—'} />
-              <InfoRow
-                label="Costo"
-                value={
-                  encomienda.costo_calculado
-                    ? `${encomienda.costo_calculado} Bs`
-                    : 'Por calcular'
-                }
-                align="right"
-                valueColor={Colors.accent}
-              />
+            <View style={s.costRow}>
+              <View style={s.costLabel}>
+                <Text variant="overline" color="muted" uppercase>
+                  Costo del envío
+                </Text>
+                <Text variant="caption" color="muted">
+                  {encomienda.modalidad_pago
+                    ? MODALIDAD_PAGO[encomienda.modalidad_pago].largo
+                    : 'Por definir'}
+                </Text>
+              </View>
+              {costo > 0 ? (
+                <Monto usd={costo} size="sm" align="right" />
+              ) : (
+                <Text variant="bodyStrong" align="right">
+                  Por calcular
+                </Text>
+              )}
             </View>
 
             <Divider spacing={Spacing.sm} />
@@ -320,91 +582,245 @@ export default function DetalleEnvioScreen() {
             <View style={s.row}>
               <InfoRow
                 label="Origen"
-                value={`${encomienda.ciudad_origen ?? '—'}, ${encomienda.estado_origen ?? ''}`}
+                value={
+                  [formatCity(encomienda.ciudad_origen), encomienda.estado_origen]
+                    .filter(Boolean)
+                    .join(', ') || '—'
+                }
               />
               <InfoRow
                 label="Destino"
-                value={`${encomienda.ciudad_destino ?? '—'}, ${encomienda.estado_destino ?? ''}`}
+                value={
+                  [formatCity(encomienda.ciudad_destino), encomienda.estado_destino]
+                    .filter(Boolean)
+                    .join(', ') || '—'
+                }
                 align="right"
               />
             </View>
 
             <Divider spacing={Spacing.sm} />
 
-            <InfoRow label="Destinatario" value={encomienda.receiver_nombre || 'N/A'} />
+            <InfoRow label="Quien recibe" value={encomienda.receiver_nombre || 'Sin nombre'} />
+            <Divider spacing={Spacing.sm} />
+            <InfoRow label="Punto de retiro" value={puntoRetiro.completo} />
+            {puntoRetiro.detalle ? (
+              <Text variant="caption" color="muted">
+                {puntoRetiro.detalle}
+              </Text>
+            ) : null}
           </Card>
 
-          {/* ── Evidencia ───────────────────────────────────────────────── */}
-          {fotoUrl && (
+          {/* ── Fotos ───────────────────────────────────────────────────── */}
+          {fotoCliente || fotoTaquilla ? (
             <Card padding="md" style={s.card}>
               <Text variant="subheading" style={s.cardTitle}>
-                Evidencia fotográfica
+                Foto del paquete
               </Text>
-              <Image source={{ uri: fotoUrl }} style={s.photo} resizeMode="cover" />
-              <Text variant="caption" color="muted" style={s.photoCaption}>
-                Fotografía de registro del paquete con la etiqueta de envío visible.
-              </Text>
+              {fotoCliente ? (
+                <>
+                  <Image
+                    source={{ uri: fotoCliente }}
+                    style={s.photo}
+                    resizeMode="cover"
+                    accessibilityLabel="Foto que subiste del paquete"
+                  />
+                  <Text variant="caption" color="muted" style={s.photoCaption}>
+                    La foto que subiste al registrar el envío.
+                  </Text>
+                </>
+              ) : null}
+              {fotoTaquilla ? (
+                <>
+                  <Image
+                    source={{ uri: fotoTaquilla }}
+                    style={[s.photo, fotoCliente ? s.photoSecond : null]}
+                    resizeMode="cover"
+                    accessibilityLabel="Foto que tomó la taquilla"
+                  />
+                  <Text variant="caption" color="muted" style={s.photoCaption}>
+                    La foto que tomó la taquilla al recibir el paquete.
+                  </Text>
+                </>
+              ) : null}
             </Card>
-          )}
+          ) : null}
 
           {/* ── Acciones ────────────────────────────────────────────────── */}
           {CANCELABLE.includes(encomienda.estado) && (
-            <Button variant="dangerSoft" fullWidth onPress={handleCancel}>
+            <Button variant="dangerSoft" fullWidth loading={cancelando} onPress={handleCancel}>
               Cancelar envío
             </Button>
           )}
 
+          {EN_TAQUILLA.includes(encomienda.estado) && (
+            <Text variant="caption" color="muted" align="center">
+              El paquete ya está en la taquilla. Si necesitas cancelar el envío, habla con la
+              cooperativa.
+            </Text>
+          )}
+
           {['CANCELADA', 'DEVUELTA'].includes(encomienda.estado) && (
             <View style={s.closedBanner}>
-              <Package weight="fill" color={Colors.destructive} size={Sizes.icon.lg} />
-              <Text variant="bodyStrong" color="danger">
+              <Package weight="fill" color={Colors.dangerText} size={Sizes.icon.lg} />
+              <Text variant="bodyStrong" color="dangerText">
                 {`Encomienda ${estadoVisual.label.toLowerCase()}`}
               </Text>
             </View>
           )}
+
+          <PressableScale
+            onPress={reportar}
+            haptic
+            hapticType="selection"
+            style={s.reportar}
+            accessibilityRole="button"
+            accessibilityLabel="¿Problemas con este envío? Reportar un problema"
+          >
+            <Text variant="caption" color="muted" align="center">
+              ¿Problemas con este envío?{' '}
+              <Text variant="caption" weight="bold" color="foreground" style={s.link}>
+                Reportar un problema
+              </Text>
+            </Text>
+          </PressableScale>
         </ScrollView>
       </PageTransition>
+
+      {/* ── EB_TASA_CAMBIO ──────────────────────────────────────────────── */}
+      <BottomSheet
+        visible={pago.tasaCambio !== null}
+        onClose={pago.descartarTasaCambio}
+        title="Cambió el total"
+        footer={
+          <View style={s.sheetFooter}>
+            <Button
+              variant="accent"
+              fullWidth
+              loading={pago.reintentando}
+              onPress={pago.confirmarNuevaTasa}
+            >
+              Registrar con el nuevo total
+            </Button>
+            <Button
+              variant="ghost"
+              fullWidth
+              disabled={pago.reintentando}
+              onPress={pago.descartarTasaCambio}
+            >
+              Revisar
+            </Button>
+          </View>
+        }
+      >
+        <Text variant="body" style={s.sheetText}>
+          {pago.tasaCambio ? textoTasaCambio(pago.tasaCambio) : ''}
+        </Text>
+      </BottomSheet>
     </Screen>
   );
 }
 
+// ─── Sub-components ──────────────────────────────────────────────────────────
+
+function AvisoCobro({
+  tone,
+  icon: Icon,
+  titulo,
+  children,
+  extra,
+}: {
+  tone: StatusTone;
+  icon: React.ComponentType<{ size?: number; color?: string; weight?: 'fill' }>;
+  titulo: string;
+  children: string;
+  extra?: React.ReactNode;
+}) {
+  const palette = StatusPalette[tone];
+  return (
+    <Card padding="md" style={s.card} accessibilityRole="summary">
+      <View style={s.avisoHead}>
+        <View style={[s.avisoIcon, { backgroundColor: palette.bg }]}>
+          <Icon color={palette.fg} weight="fill" size={Sizes.icon.lg} />
+        </View>
+        <View style={s.avisoBody}>
+          <Text variant="bodyStrong">{titulo}</Text>
+          <Text variant="secondary" color="muted">
+            {children}
+          </Text>
+          {extra}
+        </View>
+      </View>
+    </Card>
+  );
+}
+
 const s = StyleSheet.create({
+  flex: {
+    flex: 1,
+  },
   hint: {
     marginBottom: Spacing.lg,
   },
   card: {
     marginBottom: Spacing.lg,
   },
-  centered: {
-    alignItems: 'center',
-  },
   cardTitle: {
     marginBottom: Spacing.md,
   },
-  cardText: {
-    marginTop: Spacing.sm,
+  sectionText: {
+    marginTop: Spacing.xs,
+    marginBottom: Spacing.md,
   },
   qr: {
     alignItems: 'center',
   },
-  pendingIcon: {
-    width: Sizes.iconBox.xl,
-    height: Sizes.iconBox.xl,
-    borderRadius: Radius.full,
-    backgroundColor: Colors.warningLight,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: Spacing.lg,
+  puntoRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: Spacing.md,
   },
   row: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     gap: Spacing.lg,
   },
+  costRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.md,
+  },
+  costLabel: {
+    flex: 1,
+    gap: Spacing.xs / 2,
+  },
+  avisoHead: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: Spacing.md,
+  },
+  avisoIcon: {
+    width: Sizes.iconBox.lg,
+    height: Sizes.iconBox.lg,
+    borderRadius: Radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avisoBody: {
+    flex: 1,
+    gap: Spacing.xs,
+  },
+  avisoAction: {
+    marginTop: Spacing.sm,
+  },
   photo: {
     width: '100%',
     height: 200,
     borderRadius: Radius.md,
+  },
+  photoSecond: {
+    marginTop: Spacing.lg,
   },
   photoCaption: {
     marginTop: Spacing.md,
@@ -417,5 +833,18 @@ const s = StyleSheet.create({
     backgroundColor: Colors.destructiveLight,
     borderRadius: Radius.lg,
     padding: Spacing.lg,
+  },
+  reportar: {
+    marginTop: Spacing.xl,
+    paddingVertical: Spacing.sm,
+  },
+  link: {
+    textDecorationLine: 'underline',
+  },
+  sheetFooter: {
+    gap: Spacing.sm,
+  },
+  sheetText: {
+    marginBottom: Spacing.md,
   },
 });

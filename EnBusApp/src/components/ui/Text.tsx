@@ -21,26 +21,35 @@ import {
 
 type TrackingToken = keyof typeof Typography.tracking;
 
+/**
+ * Text colours only. The vivid surface colours (`primary`, `success`,
+ * `warning`) fail WCAG contrast as text on white (1.6–2.3:1), so they are not
+ * tokens here: use the `*Text` variants (all ≥ 4.5:1 on white/surface).
+ */
 export type TextColorToken =
   | 'foreground'
   | 'muted'
-  | 'primary'
+  | 'primaryText'
   | 'secondary'
   | 'accent'
-  | 'success'
-  | 'warning'
+  | 'successText'
+  | 'warningText'
+  | 'infoText'
   | 'danger'
+  | 'dangerText'
   | 'inverse';
 
 const COLOR_MAP: Record<TextColorToken, string> = {
   foreground: Colors.foreground,
   muted: Colors.mutedForeground,
-  primary: Colors.primary,
+  primaryText: Colors.primaryText,
   secondary: Colors.secondary,
   accent: Colors.accent,
-  success: Colors.success,
-  warning: Colors.warning,
+  successText: Colors.successText,
+  warningText: Colors.warningText,
+  infoText: Colors.infoText,
   danger: Colors.destructive,
+  dangerText: Colors.dangerText,
   inverse: Colors.white,
 };
 

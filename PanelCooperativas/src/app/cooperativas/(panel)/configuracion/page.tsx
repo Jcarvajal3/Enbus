@@ -3,19 +3,20 @@ import { getUserProfile } from "@/lib/supabase/cached";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { PageHeader } from "@/components/page-header";
+import { humanizeError } from "@/lib/errores";
 import { DatosCooperativaTab } from "./tab-datos";
 import { MetodosPagoTab } from "./tab-metodos-pago";
 import { SucursalesTab } from "./tab-sucursales";
-import type {
-  CooperativaData,
-  MetodoPagoCooperativa,
-  Sucursal,
-} from "@/lib/types/configuracion";
+import type { CooperativaData, MetodoPagoCooperativa } from "@/lib/types/configuracion";
+import type { SucursalGuardada } from "./actions";
 
 export const metadata = {
   title: "Configuración | EnBus Panel",
-  description: "Configuración de datos, métodos de pago, sucursales y hardware",
+  description: "Datos de la cooperativa, métodos de pago, sucursales e impresora",
 };
+
+const PESTANAS = ["datos", "metodos-pago", "sucursales"] as const;
 
 export default async function ConfiguracionPage({
   searchParams,
@@ -23,17 +24,17 @@ export default async function ConfiguracionPage({
   searchParams: Promise<{ tab?: string }>;
 }) {
   const { tab } = await searchParams;
-  const defaultTab = tab || "datos";
+  const defaultTab = (PESTANAS as readonly string[]).includes(tab ?? "") ? (tab as string) : "datos";
 
   const user = await getUserProfile();
   if (!user) redirect("/cooperativas/login");
 
-  // Solo admins pueden acceder a configuración
+  // Solo el administrador configura la cooperativa
   if (user.role !== "admin_cooperativa") {
     return (
       <div className="flex flex-col items-center justify-center gap-3 py-20 text-center">
         <p className="text-muted-foreground text-sm">
-          No tienes permisos para acceder a esta sección.
+          Solo el administrador de la cooperativa puede ver la configuración.
         </p>
       </div>
     );
@@ -41,11 +42,10 @@ export default async function ConfiguracionPage({
 
   const supabase = await createClient();
 
-  // Fetch en paralelo — cooperativa + métodos de pago + sucursales
   const [cooperativaResult, metodosResult, sucursalesResult] = await Promise.all([
     supabase
       .from("cooperativas")
-      .select("id, nombre, rif, logo_url, comision_porcentaje")
+      .select("id, nombre, rif, logo_url, comision_porcentaje, estado")
       .eq("id", user.cooperativa_id)
       .single(),
     supabase
@@ -60,52 +60,55 @@ export default async function ConfiguracionPage({
       .order("nombre", { ascending: true }),
   ]);
 
-  const cooperativa = cooperativaResult.data as CooperativaData | null;
+  const cooperativa = cooperativaResult.data as (CooperativaData & { estado?: string | null }) | null;
   const metodos = (metodosResult.data ?? []) as MetodoPagoCooperativa[];
-  const sucursales = (sucursalesResult.data ?? []) as Sucursal[];
+  const sucursales = (sucursalesResult.data ?? []) as SucursalGuardada[];
+
+  if (cooperativaResult.error) console.error("[ConfiguracionPage] cooperativa:", cooperativaResult.error);
+  if (metodosResult.error) console.error("[ConfiguracionPage] métodos de pago:", metodosResult.error);
+  if (sucursalesResult.error) console.error("[ConfiguracionPage] sucursales:", sucursalesResult.error);
 
   if (!cooperativa) {
-    return (
-      <div className="flex flex-col items-center justify-center gap-3 py-20 text-center">
-        <p className="text-muted-foreground text-sm">
-          No se encontraron los datos de la cooperativa.
-        </p>
-      </div>
-    );
+    // Se lanza para que error.tsx muestre "Reintentar" (sin texto técnico).
+    throw new Error(humanizeError(cooperativaResult.error, "cargar los datos de la cooperativa"));
   }
 
   return (
     <div className="flex flex-col gap-6 max-w-4xl mx-auto w-full">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Configuración</h1>
-        <p className="text-muted-foreground mt-1">
-          Administre los datos, métodos de pago, sucursales y hardware de su cooperativa.
-        </p>
-      </div>
+      <PageHeader
+        title="Configuración"
+        description="Datos de tu cooperativa, métodos de pago, sucursales e impresora."
+      />
 
       <Tabs key={defaultTab} defaultValue={defaultTab} className="w-full">
         <TabsList className="mb-6 w-full sm:w-auto">
           <TabsTrigger value="datos">Datos</TabsTrigger>
-          <TabsTrigger value="metodos-pago">Métodos de Pago</TabsTrigger>
+          <TabsTrigger value="metodos-pago">Métodos de pago</TabsTrigger>
           <TabsTrigger value="sucursales">Sucursales</TabsTrigger>
           <Link
             href="/cooperativas/configuracion/hardware"
-            className="relative inline-flex h-[calc(100%-1px)] flex-1 items-center justify-center gap-1.5 rounded-xl border border-transparent px-2 py-1 text-sm font-medium whitespace-nowrap text-foreground/60 transition-all hover:text-foreground"
+            className="relative inline-flex h-[calc(100%-1px)] flex-1 items-center justify-center gap-1.5 rounded-xl border border-transparent px-2 py-1 text-sm font-medium whitespace-nowrap text-foreground/70 transition-all hover:text-foreground"
           >
-            Hardware ↗
+            Impresora y lector
           </Link>
         </TabsList>
 
         <TabsContent value="datos">
-          <DatosCooperativaTab cooperativa={cooperativa} />
+          <DatosCooperativaTab cooperativa={cooperativa} estado={cooperativa.estado ?? user.cooperativa_estado ?? null} />
         </TabsContent>
 
         <TabsContent value="metodos-pago">
-          <MetodosPagoTab metodos={metodos} />
+          <MetodosPagoTab
+            metodos={metodos}
+            errorCarga={metodosResult.error ? humanizeError(metodosResult.error, "cargar los métodos de pago") : null}
+          />
         </TabsContent>
 
         <TabsContent value="sucursales">
-          <SucursalesTab sucursales={sucursales} />
+          <SucursalesTab
+            sucursales={sucursales}
+            errorCarga={sucursalesResult.error ? humanizeError(sucursalesResult.error, "cargar las sucursales") : null}
+          />
         </TabsContent>
       </Tabs>
     </div>

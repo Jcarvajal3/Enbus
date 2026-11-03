@@ -10,6 +10,7 @@ import { FieldGroup, Field, FieldLabel } from "@/components/ui/field";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Spinner } from "@/components/ui/spinner";
 import { Bus, WarningCircle, CheckCircle } from "@phosphor-icons/react";
+import { humanizeError } from "@/lib/errores";
 
 export default function RestablecerPage() {
   const router = useRouter();
@@ -26,7 +27,7 @@ export default function RestablecerPage() {
     async function verifySession() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
-        setError("Enlace de restablecimiento inválido o expirado. Por favor, solicita uno nuevo.");
+        setError("Pide un enlace nuevo para crear tu contraseña (los enlaces vencen y solo se pueden usar una vez).");
         setAuthorized(false);
       } else {
         setAuthorized(true);
@@ -59,7 +60,7 @@ export default function RestablecerPage() {
     });
 
     if (updateError) {
-      setError(updateError.message || "Error al actualizar la contraseña.");
+      setError(humanizeError(updateError, "actualizar la contraseña"));
       setLoading(false);
       return;
     }
@@ -114,14 +115,14 @@ export default function RestablecerPage() {
         <div className="flex flex-col gap-4">
           <h1 className="text-5xl font-bold leading-tight">
             Nueva <br />
-            <span className="text-primary">Contraseña</span>
+            <span className="text-amber-300">contraseña</span>
           </h1>
           <p className="text-xl text-slate-400">
             Define tu nueva contraseña y accede al sistema de forma inmediata.
           </p>
         </div>
         
-        <p className="text-sm text-slate-500">
+        <p className="text-sm text-slate-400">
           &copy; {new Date().getFullYear()} EnBus. Todos los derechos reservados.
         </p>
       </div>
@@ -145,19 +146,19 @@ export default function RestablecerPage() {
               <div className="flex flex-col gap-6">
                 <Alert variant="destructive">
                   <WarningCircle className="size-4" data-icon="inline-start" />
-                  <AlertTitle>Sesión Inválida</AlertTitle>
+                  <AlertTitle>El enlace venció o ya se usó</AlertTitle>
                   <AlertDescription>{error}</AlertDescription>
                 </Alert>
-                <Button onClick={() => router.push("/cooperativas/login")} className="w-full">
-                  Ir al Login
+                <Button onClick={() => router.push("/cooperativas/recuperar")} className="w-full">
+                  Pedir otro enlace
                 </Button>
               </div>
             ) : success ? (
-              <Alert variant="default" className="border-emerald-500/20 bg-emerald-500/10 text-emerald-500">
-                <CheckCircle className="size-4 text-emerald-500" data-icon="inline-start" />
-                <AlertTitle>Contraseña Actualizada</AlertTitle>
+              <Alert variant="default" className="border-emerald-600/30 bg-emerald-50 text-success-text dark:bg-emerald-400/10">
+                <CheckCircle className="size-4 text-success-text" data-icon="inline-start" />
+                <AlertTitle>Contraseña actualizada</AlertTitle>
                 <AlertDescription>
-                  Tu contraseña ha sido restablecida. Redirigiéndote al panel...
+                  Listo. Te estamos llevando al panel…
                 </AlertDescription>
               </Alert>
             ) : (
@@ -172,7 +173,7 @@ export default function RestablecerPage() {
                 
                 <FieldGroup>
                   <Field>
-                    <FieldLabel htmlFor="password">Nueva Contraseña</FieldLabel>
+                    <FieldLabel htmlFor="password">Contraseña nueva</FieldLabel>
                     <Input 
                       id="password" 
                       type="password" 
@@ -184,7 +185,7 @@ export default function RestablecerPage() {
                     />
                   </Field>
                   <Field>
-                    <FieldLabel htmlFor="confirmPassword">Confirmar Nueva Contraseña</FieldLabel>
+                    <FieldLabel htmlFor="confirmPassword">Repite la contraseña</FieldLabel>
                     <Input 
                       id="confirmPassword" 
                       type="password" 
@@ -199,7 +200,7 @@ export default function RestablecerPage() {
                 
                 <Button type="submit" className="w-full" disabled={loading}>
                   {loading ? <Spinner data-icon="inline-start" /> : null}
-                  Restablecer Contraseña
+                  Guardar contraseña
                 </Button>
               </form>
             )}

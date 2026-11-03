@@ -1,9 +1,11 @@
 "use client"
 
 import * as React from "react"
+import Link from "next/link"
 import { List } from "@phosphor-icons/react"
 
 import { cn } from "@/lib/utils"
+import { cooperativasUrl } from "@/lib/urls"
 import { Button } from "@/components/ui/button"
 import {
   Sheet,
@@ -14,16 +16,26 @@ import {
   SheetClose,
 } from "@/components/ui/sheet"
 
-const navLinks = [
-  { label: "Inicio", href: "#inicio" },
-  { label: "Como Funciona", href: "#como-funciona" },
-  { label: "Rutas", href: "#rutas" },
-  { label: "Rastrear", href: "#rastrear" },
-] as const
+const FOCO =
+  "outline-none focus-visible:ring-2 focus-visible:ring-foreground focus-visible:ring-offset-2 focus-visible:ring-offset-background"
 
-export function Navbar() {
+interface NavbarProps {
+  /** Secciones de la portada que se están mostrando (las que no hay se ocultan del menú). */
+  secciones?: { rutas?: boolean; calcular?: boolean }
+}
+
+export function Navbar({ secciones = {} }: NavbarProps) {
   const [scrolled, setScrolled] = React.useState(false)
   const [open, setOpen] = React.useState(false)
+  const portal = cooperativasUrl()
+
+  const navLinks = [
+    { label: "Inicio", href: "/#inicio" },
+    { label: "Cómo funciona", href: "/#como-funciona" },
+    ...(secciones.rutas ? [{ label: "Rutas", href: "/#rutas" }] : []),
+    ...(secciones.calcular ? [{ label: "Calcular envío", href: "/#calcular" }] : []),
+    { label: "Rastrear", href: "/rastrear" },
+  ]
 
   React.useEffect(() => {
     function handleScroll() {
@@ -44,11 +56,11 @@ export function Navbar() {
           : "bg-transparent"
       )}
     >
-      <nav className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 lg:px-8">
+      <nav aria-label="Principal" className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 lg:px-8">
         {/* Logo */}
-        <a href="#inicio" className="text-xl font-bold tracking-tight text-foreground">
+        <Link href="/" className={cn("rounded-sm text-xl font-bold tracking-tight text-foreground", FOCO)}>
           EnBus
-        </a>
+        </Link>
 
         {/* Desktop navigation */}
         <ul className="hidden items-center gap-1 lg:flex">
@@ -56,7 +68,10 @@ export function Navbar() {
             <li key={link.href}>
               <a
                 href={link.href}
-                className="rounded-md px-3 py-2 text-sm font-medium text-foreground/70 transition-colors hover:text-foreground"
+                className={cn(
+                  "rounded-md px-3 py-2 text-sm font-medium text-foreground/80 transition-colors hover:text-foreground",
+                  FOCO
+                )}
               >
                 {link.label}
               </a>
@@ -64,23 +79,25 @@ export function Navbar() {
           ))}
         </ul>
 
-        {/* Desktop actions */}
-        <div className="hidden items-center gap-3 lg:flex">
+        {/* Desktop actions: cooperativas */}
+        <div className="hidden items-center gap-4 lg:flex">
           <a
             href="/registro-cooperativa"
-            className="text-sm font-medium text-foreground/60 transition-colors hover:text-foreground"
+            className={cn("rounded-sm text-sm font-medium text-foreground/80 transition-colors hover:text-foreground", FOCO)}
           >
-            Registrar Cooperativa
+            Registrar cooperativa
           </a>
-          <a
-            href={process.env.NEXT_PUBLIC_COOPERATIVAS_URL || "http://localhost:3001"}
-            className="text-sm font-medium text-foreground/60 transition-colors hover:text-foreground"
-          >
-            Portal Cooperativas
-          </a>
-          <Button size="sm" className="bg-foreground text-background hover:bg-foreground/90">
-            Calcular Envio
-          </Button>
+          {portal && (
+            <a
+              href={`${portal}/cooperativas/login`}
+              className={cn(
+                "inline-flex h-8 items-center rounded-sm bg-foreground px-3 text-sm font-medium text-background transition-colors hover:bg-foreground/90",
+                FOCO
+              )}
+            >
+              Entrar al panel
+            </a>
+          )}
         </div>
 
         {/* Mobile hamburger */}
@@ -90,8 +107,8 @@ export function Navbar() {
               <Button
                 variant="ghost"
                 size="icon"
-                className="lg:hidden"
-                aria-label="Abrir menu"
+                className={cn("lg:hidden", FOCO)}
+                aria-label="Abrir menú"
               />
             }
           >
@@ -105,7 +122,7 @@ export function Navbar() {
 
             <div className="flex flex-col gap-1 px-6 py-4">
               {navLinks.map((link) => (
-                <SheetClose key={link.href} render={<a href={link.href} />}>
+                <SheetClose key={link.href} render={<a href={link.href} className={cn("rounded-md", FOCO)} />}>
                   <span className="inline-flex w-full rounded-md px-3 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted">
                     {link.label}
                   </span>
@@ -114,26 +131,29 @@ export function Navbar() {
             </div>
 
             <div className="mt-auto flex flex-col gap-3 border-t border-border px-6 py-6">
-              <Button
-                className="w-full bg-foreground text-background hover:bg-foreground/90"
-                onClick={() => setOpen(false)}
-              >
-                Calcular Envio
-              </Button>
+              <p className="text-sm font-medium text-foreground">¿Eres una cooperativa?</p>
               <a
                 href="/registro-cooperativa"
-                className="text-center text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+                className={cn(
+                  "inline-flex min-h-11 items-center justify-center rounded-sm border border-input-border px-4 text-sm font-medium text-foreground transition-colors hover:bg-muted",
+                  FOCO
+                )}
                 onClick={() => setOpen(false)}
               >
-                Registrar Cooperativa
+                Registrar cooperativa
               </a>
-              <a
-                href={process.env.NEXT_PUBLIC_COOPERATIVAS_URL || "http://localhost:3001"}
-                className="text-center text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
-                onClick={() => setOpen(false)}
-              >
-                Portal Cooperativas
-              </a>
+              {portal && (
+                <a
+                  href={`${portal}/cooperativas/login`}
+                  className={cn(
+                    "inline-flex min-h-11 items-center justify-center rounded-sm bg-foreground px-4 text-sm font-medium text-background transition-colors hover:bg-foreground/90",
+                    FOCO
+                  )}
+                  onClick={() => setOpen(false)}
+                >
+                  Entrar al panel
+                </a>
+              )}
             </div>
           </SheetContent>
         </Sheet>

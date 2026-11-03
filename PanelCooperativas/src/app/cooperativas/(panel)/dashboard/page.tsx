@@ -1,15 +1,20 @@
 import { createClient } from "@/lib/supabase/server";
 import { getUserProfile } from "@/lib/supabase/cached";
-import { formatCurrency, dateFormatterDayMonth, dateFormatterShort } from "@/lib/utils";
+import { obtenerTasaBCV } from "@/lib/tasa-bcv";
+import { formatFechaHoraVE, formatFechaVE, hoyVE, rangoDiaVE, sumarDiasVE } from "@/lib/fechas";
+import { formatIngresos, resumirIngresos } from "@/lib/types/admin-dashboard";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Package, TruckTrailer, Ticket, CurrencyDollar } from "@phosphor-icons/react/dist/ssr";
+import { Package, TruckTrailer, Ticket, CurrencyDollar, CheckCircle } from "@phosphor-icons/react/dist/ssr";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { StatusBadge } from "@/components/status-badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Monto } from "@/components/monto";
+import { ChecklistPuestaEnMarcha, type ChecklistCooperativa } from "@/components/checklist-puesta-en-marcha";
 import dynamic from "next/dynamic";
+import { formatCiudad } from "@/lib/ciudades";
 
-// Lazy-load recharts-based chart — ~280KB saved from initial bundle
+// Gráfico con recharts cargado aparte (~280 KB menos en la carga inicial)
 const ActivityChart = dynamic(
   () => import("@/components/activity-chart").then((m) => ({ default: m.ActivityChart })),
   {
@@ -26,40 +31,66 @@ const ActivityChart = dynamic(
   }
 );
 
-function getVenezuelaDayRange(date: Date) {
-  const tzOffset = -4 * 60; // Venezuela is UTC-4
+const SELECT_RECIENTES =
+  "tracking_id, receiver_nombre, estado, created_at, estado_origen, ciudad_origen, estado_destino, ciudad_destino, origen_registro, remitente_nombre, sender:profiles!sender_id(nombre_completo)";
+// Respaldo mientras la base no tenga las columnas de la fase 3 (migración 20260720000002).
+const SELECT_RECIENTES_BASICO =
+  "tracking_id, receiver_nombre, estado, created_at, estado_origen, ciudad_origen, estado_destino, ciudad_destino, sender:profiles!sender_id(nombre_completo)";
 
-  // Convert current time to Venezuela time
-  const veTime = new Date(date.getTime() + (date.getTimezoneOffset() + tzOffset) * 60000);
+type EncomiendaReciente = {
+  tracking_id: string;
+  receiver_nombre: string | null;
+  estado: string;
+  created_at: string;
+  ciudad_origen: string | null;
+  ciudad_destino: string | null;
+  origen_registro?: string | null;
+  remitente_nombre?: string | null;
+  sender: unknown;
+};
 
-  // Set to start of day (00:00:00)
-  const startOfDay = new Date(veTime);
-  startOfDay.setHours(0, 0, 0, 0);
+/** Columna DATE 'YYYY-MM-DD' → "dd/mm/aaaa", sin convertir de zona horaria (no se desplaza un día). */
+function formatDia(fecha: string | null | undefined) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(fecha ?? "");
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : "";
+}
 
-  // Set to end of day (23:59:59.999)
-  const endOfDay = new Date(veTime);
-  endOfDay.setHours(23, 59, 59, 999);
-
-  // Convert back to UTC for database queries
-  const startUTC = new Date(startOfDay.getTime() - (date.getTimezoneOffset() + tzOffset) * 60000);
-  const endUTC = new Date(endOfDay.getTime() - (date.getTimezoneOffset() + tzOffset) * 60000);
-
-  return { start: startUTC.toISOString(), end: endUTC.toISOString() };
+/** Quién envía: en el alta presencial `sender_id` es el empleado; el remitente real está en `remitente_nombre`. */
+function nombreRemitente(enc: EncomiendaReciente) {
+  if (enc.origen_registro === "TAQUILLA" && enc.remitente_nombre) return enc.remitente_nombre;
+  const embed = enc.sender;
+  const sender = (Array.isArray(embed) ? embed[0] : embed) as { nombre_completo?: string | null } | null;
+  return enc.remitente_nombre || sender?.nombre_completo || "Sin nombre";
 }
 
 export default async function DashboardPage() {
-  // getUserProfile() is cached via React cache() — the layout already fetched it,
-  // so this resolves instantly (0ms, no network call)
-  const user = await getUserProfile();
+  // getUserProfile() y obtenerTasaBCV() usan React cache(): el layout ya los
+  // pidió, así que aquí se resuelven sin otra consulta.
+  const [user, tasa] = await Promise.all([getUserProfile(), obtenerTasaBCV()]);
   if (!user) return null;
 
   const supabase = await createClient();
   const cooperativaId = user.cooperativa_id;
   const userRole = user.role;
-  const now = new Date();
-  const { start: hoyInicio, end: hoyFin } = getVenezuelaDayRange(now);
+  const esAdmin = userRole === "admin_cooperativa";
+  // Día de hoy en Venezuela (UTC-4), sin depender de la zona horaria del servidor.
+  const hoy = hoyVE();
+  const { desde: hoyInicio, hasta: hoyFin } = rangoDiaVE(hoy);
 
-  // ── Todas las queries en paralelo ──────────────────────────────────────
+  const cargarRecientes = async () => {
+    const consulta = (select: string) =>
+      supabase
+        .from("encomiendas")
+        .select(select)
+        .eq("cooperativa_id", cooperativaId)
+        .order("created_at", { ascending: false })
+        .limit(20);
+    const res = await consulta(SELECT_RECIENTES);
+    // 42703 = columna inexistente: la migración de la fase 3 aún no se aplicó.
+    return res.error?.code === "42703" ? consulta(SELECT_RECIENTES_BASICO) : res;
+  };
+
+  // ── Todas las consultas en paralelo ────────────────────────────────────
   const [
     kpiRecibidas,
     kpiDespachadas,
@@ -67,6 +98,7 @@ export default async function DashboardPage() {
     kpiPagos,
     recentData,
     adminData,
+    checklistRes,
   ] = await Promise.all([
     // KPI 1 — Encomiendas recibidas hoy
     supabase
@@ -95,37 +127,29 @@ export default async function DashboardPage() {
       .gte("created_at", hoyInicio)
       .lte("created_at", hoyFin),
 
-    // KPI 4 — Ingresos del día
+    // KPI 4 — Ingresos del día: pagos verificados HOY (por verificado_at, no por la fecha
+    // en que el cliente los registró), en USD de referencia y Bs a la tasa de cada pago.
     supabase
       .from("pagos")
-      .select("monto")
+      .select("monto, monto_bs")
       .eq("cooperativa_id", cooperativaId)
       .eq("verificado", true)
-      .gte("created_at", hoyInicio)
-      .lte("created_at", hoyFin),
+      .gte("verificado_at", hoyInicio)
+      .lte("verificado_at", hoyFin),
 
-    // Encomiendas Recientes
-    supabase
-      .from("encomiendas")
-      .select("tracking_id, receiver_nombre, estado, created_at, estado_origen, ciudad_origen, estado_destino, ciudad_destino, sender:profiles!sender_id(nombre_completo)")
-      .eq("cooperativa_id", cooperativaId)
-      .order("created_at", { ascending: false })
-      .limit(20),
+    // Encomiendas recientes
+    cargarRecientes(),
 
-    // Admin-only data: chart + comisiones (en paralelo entre sí)
-    userRole === "admin_cooperativa"
+    // Solo administrador: gráfico + comisiones (en paralelo entre sí)
+    esAdmin
       ? (async () => {
-        const last7Days = Array.from({ length: 7 }).map((_, i) => {
-          const d = new Date(now);
-          d.setDate(d.getDate() - (6 - i));
-          return d;
-        });
+        // Últimos 7 días de Venezuela, de más antiguo a hoy
+        const last7Days = Array.from({ length: 7 }).map((_, i) => sumarDiasVE(hoy, -(6 - i)));
 
         const [chartResults, comisionesResult] = await Promise.all([
-          // 7 days of chart data — all 14 queries fire in parallel
           Promise.all(
-            last7Days.map(async (date) => {
-              const { start, end } = getVenezuelaDayRange(date);
+            last7Days.map(async (dia) => {
+              const { desde: start, hasta: end } = rangoDiaVE(dia);
               const [encRes, bolRes] = await Promise.all([
                 supabase
                   .from("encomiendas")
@@ -142,108 +166,147 @@ export default async function DashboardPage() {
                   .lte("created_at", end),
               ]);
               return {
-                date: dateFormatterDayMonth.format(date),
+                date: formatFechaVE(dia, { day: "2-digit", month: "2-digit" }),
                 encomiendas: encRes.count || 0,
                 boletos: bolRes.count || 0,
               };
             })
           ),
-          // Comisiones pendientes
+          // Comisiones pendientes: todos los ciclos sin pagar (el admin de EnBus ve la misma suma)
           supabase
             .from("comisiones_ciclo")
             .select("monto_comision, periodo_inicio, periodo_fin, pagado")
             .eq("cooperativa_id", cooperativaId)
             .eq("pagado", false)
-            .order("periodo_inicio", { ascending: false })
-            .limit(1),
+            .order("periodo_inicio", { ascending: true }),
         ]);
 
-        return { chartData: chartResults, comisiones: comisionesResult.data };
+        return { chartData: chartResults, comisiones: comisionesResult.data, comisionesError: comisionesResult.error };
       })()
       : Promise.resolve(null),
+
+    // Puesta en marcha (solo administrador)
+    esAdmin ? supabase.rpc("fn_checklist_cooperativa") : Promise.resolve(null),
   ]);
 
-  const encomiendasRecibidas = kpiRecibidas.count;
-  const encomiendasDespachadas = kpiDespachadas.count;
-  const boletosVendidos = kpiBoletos.count;
-  const ingresos = kpiPagos.data?.reduce((sum, p) => sum + Number(p.monto), 0) || 0;
-  const encomiendasRecientes = recentData.data;
+  if (kpiPagos.error) console.error("[DashboardPage] pagos:", kpiPagos.error);
+  if (recentData.error) console.error("[DashboardPage] encomiendas recientes:", recentData.error);
+  if (adminData?.comisionesError) console.error("[DashboardPage] comisiones:", adminData.comisionesError);
+  // Sin la migración de la fase 3 la RPC no existe: la tarjeta simplemente no se muestra.
+  if (checklistRes?.error) console.error("[DashboardPage] checklist:", checklistRes.error);
+  const checklist = (checklistRes && !checklistRes.error ? checklistRes.data : null) as ChecklistCooperativa | null;
+
+  const kpi = (r: { count: number | null; error: unknown }) => (r.error ? "—" : String(r.count ?? 0));
+  // Σ coalesce(monto_bs, monto × tasa de hoy) en Bs; los pagos sin monto_bs son anteriores a la fase 2.
+  // Si la consulta falla, se muestra "—" y un aviso en vez de un 0 engañoso.
+  const ingresos = formatIngresos({
+    ...resumirIngresos(kpiPagos.data, tasa?.tasa ?? null),
+    error: Boolean(kpiPagos.error),
+  });
+  const encomiendasRecientes = (recentData.data ?? []) as unknown as EncomiendaReciente[];
   const chartData = adminData?.chartData ?? [];
-  /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
-  const comisionPendiente: any = adminData?.comisiones?.[0] ?? null;
+  const ciclosPendientes = (adminData?.comisiones ?? []) as {
+    monto_comision: number | string;
+    periodo_inicio: string;
+    periodo_fin: string;
+  }[];
+  const comisionPendiente =
+    ciclosPendientes.length > 0
+      ? {
+          total: ciclosPendientes.reduce((suma, c) => suma + Number(c.monto_comision ?? 0), 0),
+          ciclos: ciclosPendientes.length,
+          desde: ciclosPendientes[0].periodo_inicio,
+          hasta: ciclosPendientes[ciclosPendientes.length - 1].periodo_fin,
+        }
+      : null;
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader title="Dashboard" description="Resumen de actividad de hoy" />
+      <PageHeader title="Resumen" description="Lo que pasó hoy en tu cooperativa." />
+
+      {checklist && <ChecklistPuestaEnMarcha checklist={checklist} />}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Encomiendas Recibidas</CardTitle>
-            <Package className="h-4 w-4 text-muted-foreground" weight="regular" />
+            <CardTitle className="text-sm font-medium">Encomiendas recibidas</CardTitle>
+            <Package className="h-4 w-4 text-muted-foreground" weight="regular" aria-hidden />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{encomiendasRecibidas || 0}</div>
-            <p className="text-xs text-muted-foreground">Hoy</p>
+            <div className="text-2xl font-bold">{kpi(kpiRecibidas)}</div>
+            <p className="text-xs text-muted-foreground">{kpiRecibidas.error ? "No pudimos cargar el dato. Recarga la página." : "Hoy"}</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Encomiendas Despachadas</CardTitle>
-            <TruckTrailer className="h-4 w-4 text-muted-foreground" weight="regular" />
+            <CardTitle className="text-sm font-medium">Encomiendas despachadas</CardTitle>
+            <TruckTrailer className="h-4 w-4 text-muted-foreground" weight="regular" aria-hidden />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{encomiendasDespachadas || 0}</div>
-            <p className="text-xs text-muted-foreground">Hoy</p>
+            <div className="text-2xl font-bold">{kpi(kpiDespachadas)}</div>
+            <p className="text-xs text-muted-foreground">{kpiDespachadas.error ? "No pudimos cargar el dato. Recarga la página." : "Hoy"}</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Boletos Vendidos</CardTitle>
-            <Ticket className="h-4 w-4 text-muted-foreground" weight="regular" />
+            <CardTitle className="text-sm font-medium">Boletos vendidos</CardTitle>
+            <Ticket className="h-4 w-4 text-muted-foreground" weight="regular" aria-hidden />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{boletosVendidos || 0}</div>
-            <p className="text-xs text-muted-foreground">Hoy</p>
+            <div className="text-2xl font-bold">{kpi(kpiBoletos)}</div>
+            <p className="text-xs text-muted-foreground">{kpiBoletos.error ? "No pudimos cargar el dato. Recarga la página." : "Hoy"}</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Ingresos del Día</CardTitle>
-            <CurrencyDollar className="h-4 w-4 text-muted-foreground" weight="regular" />
+            <CardTitle className="text-sm font-medium">Ingresos del día</CardTitle>
+            <CurrencyDollar className="h-4 w-4 text-muted-foreground" weight="regular" aria-hidden />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(ingresos)}</div>
-            <p className="text-xs text-muted-foreground">Hoy</p>
+            <div className="text-2xl font-bold tabular-nums">{ingresos.principal}</div>
+            <p className="text-xs text-muted-foreground tabular-nums">{ingresos.secundario}</p>
+            <p className="text-xs text-muted-foreground mt-1">Pagos verificados hoy</p>
           </CardContent>
         </Card>
       </div>
 
-      {userRole === "admin_cooperativa" && (
+      {esAdmin && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <ActivityChart data={chartData} />
 
           <Card className="col-span-1 flex flex-col justify-center">
             <CardHeader>
-              <CardTitle>Comisiones Pendientes</CardTitle>
+              <CardTitle>Comisiones pendientes</CardTitle>
             </CardHeader>
             <CardContent>
-              {comisionPendiente ? (
+              {adminData?.comisionesError ? (
+                <p className="text-sm text-muted-foreground">
+                  No pudimos cargar tus comisiones. Recarga la página.
+                </p>
+              ) : comisionPendiente ? (
                 <>
-                  <div className="text-3xl font-bold text-destructive">
-                    {formatCurrency(Number(comisionPendiente.monto_comision))}
-                  </div>
+                  <Monto
+                    usd={comisionPendiente.total}
+                    tasa={tasa}
+                    size="lg"
+                    className="text-destructive-text"
+                  />
                   <p className="text-sm text-muted-foreground mt-2">
-                    Periodo: {dateFormatterShort.format(new Date(comisionPendiente.periodo_inicio))} — {dateFormatterShort.format(new Date(comisionPendiente.periodo_fin))}
+                    {comisionPendiente.ciclos === 1 ? "Período" : `${comisionPendiente.ciclos} ciclos sin pagar`}:{" "}
+                    {formatDia(comisionPendiente.desde)} — {formatDia(comisionPendiente.hasta)}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Se paga a EnBus en bolívares a la tasa BCV del día del pago.
                   </p>
                 </>
               ) : (
-                <div className="flex items-center text-emerald-500 font-medium gap-2">
-                  <span>Sin comisiones pendientes ✓</span>
-                </div>
+                <p className="flex items-center gap-2 font-medium text-success-text">
+                  <CheckCircle className="size-5" weight="fill" aria-hidden />
+                  Sin comisiones pendientes
+                </p>
               )}
             </CardContent>
           </Card>
@@ -252,14 +315,14 @@ export default async function DashboardPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Encomiendas Recientes</CardTitle>
+          <CardTitle>Encomiendas recientes</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="rounded-md border">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Tracking ID</TableHead>
+                  <TableHead>Código de seguimiento</TableHead>
                   <TableHead>Remitente</TableHead>
                   <TableHead>Destinatario</TableHead>
                   <TableHead>Ruta</TableHead>
@@ -268,28 +331,33 @@ export default async function DashboardPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {encomiendasRecientes && encomiendasRecientes.length > 0 ? (
+                {recentData.error ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+                      No pudimos cargar las encomiendas recientes. Recarga la página.
+                    </TableCell>
+                  </TableRow>
+                ) : encomiendasRecientes.length > 0 ? (
                   encomiendasRecientes.map((enc) => (
                     <TableRow key={enc.tracking_id}>
-                      <TableCell className="font-medium">{enc.tracking_id}</TableCell>
-                      {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                      <TableCell>{(enc.sender as any)?.nombre_completo || "N/A"}</TableCell>
+                      <TableCell className="font-mono text-xs font-medium">{enc.tracking_id}</TableCell>
+                      <TableCell>{nombreRemitente(enc)}</TableCell>
                       <TableCell>{enc.receiver_nombre}</TableCell>
                       <TableCell>
-                        <span className="capitalize">{enc.ciudad_origen?.toLowerCase()}</span> → <span className="capitalize">{enc.ciudad_destino?.toLowerCase()}</span>
+                        {formatCiudad(enc.ciudad_origen)} → {formatCiudad(enc.ciudad_destino)}
                       </TableCell>
                       <TableCell>
-                        <StatusBadge status={enc.estado} />
+                        <StatusBadge status={enc.estado} dominio="encomienda" />
                       </TableCell>
                       <TableCell>
-                        {dateFormatterShort.format(new Date(enc.created_at))}
+                        {formatFechaHoraVE(enc.created_at)}
                       </TableCell>
                     </TableRow>
                   ))
                 ) : (
                   <TableRow>
                     <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
-                      No hay encomiendas recientes.
+                      Todavía no hay encomiendas. Cuando recibas la primera en taquilla, aparecerá aquí.
                     </TableCell>
                   </TableRow>
                 )}

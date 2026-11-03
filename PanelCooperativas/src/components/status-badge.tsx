@@ -1,28 +1,62 @@
 import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
+import { dominioDeEstado, estadoInfo, tonoEstado, type Dominio, type Tono } from "@/lib/estados";
+import type { EstadoEncomienda } from "@/lib/types/encomiendas";
+import type { EstadoBoleto } from "@/lib/types/boletos";
+import type { EstadoUiBoleto } from "@/lib/types/pagos";
 
-export type EncomiendaEstado = 
-  | "PENDIENTE_DE_ESCANEO"
-  | "POR_PAGAR"
-  | "PAGADA"
-  | "EN_TRANSITO"
-  | "ENTREGADA"
-  | "CANCELADA";
+/** @deprecated usar EstadoEncomienda de lib/types/encomiendas. */
+export type EncomiendaEstado = EstadoEncomienda;
 
-export function StatusBadge({ status }: { status: EncomiendaEstado | string }) {
-  switch (status) {
-    case "PENDIENTE_DE_ESCANEO":
-      return <Badge variant="outline">Pendiente</Badge>;
-    case "POR_PAGAR":
-      return <Badge variant="secondary" className="bg-amber-500/20 text-amber-700 hover:bg-amber-500/30 dark:bg-amber-500/10 dark:text-amber-400">Por Pagar</Badge>;
-    case "PAGADA":
-      return <Badge variant="default" className="bg-emerald-500 hover:bg-emerald-600 text-white">Pagada</Badge>;
-    case "EN_TRANSITO":
-      return <Badge variant="default" className="bg-blue-500 hover:bg-blue-600 text-white">En Tránsito</Badge>;
-    case "ENTREGADA":
-      return <Badge variant="secondary" className="bg-slate-200 text-slate-700 hover:bg-slate-300 dark:bg-slate-800 dark:text-slate-300">Entregada</Badge>;
-    case "CANCELADA":
-      return <Badge variant="destructive">Cancelada</Badge>;
-    default:
-      return <Badge variant="outline">{status}</Badge>;
-  }
+// Colores accesibles (≥ 4,5:1 en claro y en oscuro): fondo suave y texto oscuro
+// del mismo matiz. Nunca texto blanco sobre verde o azul (2,5–3,7:1).
+const CLASES: Record<Tono, { variant: "outline" | "secondary"; className?: string }> = {
+  neutro: { variant: "outline" },
+  pendiente: {
+    variant: "secondary",
+    className: "bg-amber-100 text-amber-900 dark:bg-amber-400/15 dark:text-amber-200",
+  },
+  exito: {
+    variant: "secondary",
+    className: "bg-emerald-100 text-emerald-900 dark:bg-emerald-400/15 dark:text-emerald-200",
+  },
+  info: {
+    variant: "secondary",
+    className: "bg-blue-100 text-blue-900 dark:bg-blue-400/15 dark:text-blue-200",
+  },
+  terminado: {
+    variant: "secondary",
+    className: "bg-slate-200 text-slate-800 dark:bg-slate-400/15 dark:text-slate-200",
+  },
+  peligro: {
+    variant: "secondary",
+    className: "bg-red-100 text-red-900 dark:bg-red-400/15 dark:text-red-200",
+  },
+};
+
+/**
+ * Insignia de estado con el vocabulario único de lib/estados.
+ * `dominio` evita ambigüedades (PENDIENTE de un pago ≠ PENDIENTE de una
+ * cooperativa); si falta, se deduce del estado. Un estado desconocido se
+ * muestra legible y en tono neutro.
+ */
+export function StatusBadge({
+  status,
+  dominio,
+  audiencia = "operador",
+  className,
+}: {
+  status: EstadoEncomienda | EstadoBoleto | EstadoUiBoleto | string | null | undefined;
+  dominio?: Dominio;
+  audiencia?: "operador" | "pasajero";
+  className?: string;
+}) {
+  const d = dominio ?? dominioDeEstado(status) ?? "encomienda";
+  const info = estadoInfo(d, status);
+  const { variant, className: claseTono } = CLASES[tonoEstado(d, status, audiencia)];
+  return (
+    <Badge variant={variant} className={cn(claseTono, className)} title={info.ayuda}>
+      {audiencia === "pasajero" ? info.pasajero : info.operador}
+    </Badge>
+  );
 }

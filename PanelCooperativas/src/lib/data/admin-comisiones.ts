@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { ComisionCiclo } from "../types/admin-comisiones";
+import { humanizeError } from "@/lib/errores";
 
 export interface FetchCiclosFilters {
   cooperativaId?: string;
@@ -9,10 +10,10 @@ export interface FetchCiclosFilters {
 }
 
 /**
- * Obtiene los ciclos de comisiones filtrados y ordenados.
+ * Obtiene los ciclos de comisiones filtrados y ordenados. Lanza un error legible si
+ * la consulta falla (una lista vacía por error parecería "no hay ciclos").
  */
 export async function fetchCiclosComisiones(filters: FetchCiclosFilters = {}): Promise<ComisionCiclo[]> {
-  try {
     const supabase = await createClient();
     
     let query = supabase
@@ -46,21 +47,17 @@ export async function fetchCiclosComisiones(filters: FetchCiclosFilters = {}): P
 
     if (error) {
       console.error("Error fetching ciclos de comisiones:", error);
-      return [];
+      throw new Error(humanizeError(error, "cargar los ciclos de comisiones"));
     }
 
-    return (data || []).map((ciclo: any) => ({
+    return (data || []).map((ciclo) => ({
       ...ciclo,
       total_encomiendas: Number(ciclo.total_encomiendas),
       total_boletos: Number(ciclo.total_boletos),
       comision_porcentaje: Number(ciclo.comision_porcentaje),
       monto_comision: Number(ciclo.monto_comision),
-      cooperativa_nombre: ciclo.cooperativas?.nombre || "Cooperativa Desconocida",
+      cooperativa_nombre: ciclo.cooperativas?.nombre || "Cooperativa sin nombre",
     }));
-  } catch (error) {
-    console.error("Unexpected error inside fetchCiclosComisiones:", error);
-    return [];
-  }
 }
 
 /**
@@ -80,7 +77,7 @@ export async function fetchCooperativasList() {
       return [];
     }
 
-    return (data || []).map((coop: any) => ({
+    return (data || []).map((coop) => ({
       id: coop.id,
       nombre: coop.nombre,
       comision_porcentaje: Number(coop.comision_porcentaje),

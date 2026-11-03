@@ -1,10 +1,29 @@
-import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRef, useState } from 'react';
+import {
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  TextInput,
+  View,
+} from 'react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { GoogleLogo } from 'phosphor-react-native';
 import * as Haptics from 'expo-haptics';
-import * as Linking from 'expo-linking';
+import * as WebBrowser from 'expo-web-browser';
 import { supabase } from '@/src/utils/supabase';
+import { codigoEB, humanizeError, isNetworkError } from '@/src/utils/errores';
+import { completarSesionDesdeUrl, redirectAuth } from '@/src/utils/authLinks';
+import {
+  MENSAJE_CEDULA,
+  MENSAJE_TELEFONO,
+  cedulaParaGuardar,
+  cedulaValida,
+  nombreValido,
+  sanitizeText,
+  telefonoParaGuardar,
+  telefonoValido,
+} from '@/src/utils/validation';
 import { useToast } from '@/src/components/Toast';
 import { PressableScale } from '@/src/components/PressableScale';
 import { StaggerItem } from '@/src/components/StaggerItem';
@@ -18,6 +37,9 @@ import {
 } from '@/src/components/ui';
 import { Colors, Layout, Radius, Sizes, Spacing } from '@/src/theme';
 
+// Cierra la ventana del navegador si la app se abrió desde la redirección (web).
+WebBrowser.maybeCompleteAuthSession();
+
 type Mode = 'login' | 'register';
 
 const EMPTY_FORM = {
@@ -29,14 +51,29 @@ const EMPTY_FORM = {
   cedula_rif: '',
 };
 
+const ERROR_GOOGLE = 'No pudimos entrar con Google. Intenta de nuevo o usa tu correo y contraseña.';
+
+const CORREO_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 export default function LoginScreen() {
   const router = useRouter();
   const toast = useToast();
+  // "Usar otro correo" desde "Revisa tu correo" vuelve directo a "Crear cuenta".
+  const params = useLocalSearchParams<{ modo?: string }>();
 
-  const [mode, setMode] = useState<Mode>('login');
+  const [mode, setMode] = useState<Mode>(params.modo === 'registro' ? 'register' : 'login');
   const [form, setForm] = useState(EMPTY_FORM);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
+
+  const cedulaRef = useRef<TextInput>(null);
+  const telefonoRef = useRef<TextInput>(null);
+  const emailRef = useRef<TextInput>(null);
+  const passwordRef = useRef<TextInput>(null);
+  const confirmRef = useRef<TextInput>(null);
+
+  const busy = loading || googleLoading;
 
   const update = (key: keyof typeof EMPTY_FORM, value: string) => {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -46,15 +83,17 @@ export default function LoginScreen() {
   /** Inline validation so the user sees which field is wrong, not just a toast. */
   const validate = (): boolean => {
     const next: Record<string, string> = {};
+    const email = form.email.trim();
 
-    if (!form.email.trim()) next.email = 'Ingresa tu correo.';
-    if (!form.password) next.password = 'Ingresa tu contraseña.';
+    if (!email) next.email = 'Escribe tu correo.';
+    else if (!CORREO_RE.test(email)) next.email = 'Ese correo no parece válido. Revísalo.';
+    if (!form.password) next.password = 'Escribe tu contraseña.';
 
     if (mode === 'register') {
-      if (!form.nombre_completo.trim()) next.nombre_completo = 'Ingresa tu nombre completo.';
-      if (!form.telefono.trim()) next.telefono = 'Ingresa tu teléfono.';
-      if (!form.cedula_rif.trim()) next.cedula_rif = 'Ingresa tu cédula o RIF.';
-      if (form.password.length < 6) next.password = 'Usa al menos 6 caracteres.';
+      if (!nombreValido(form.nombre_completo)) next.nombre_completo = 'Escribe tu nombre y apellido.';
+      if (!cedulaValida(form.cedula_rif)) next.cedula_rif = MENSAJE_CEDULA;
+      if (!telefonoValido(form.telefono)) next.telefono = MENSAJE_TELEFONO;
+      if (form.password && form.password.length < 6) next.password = 'Usa al menos 6 caracteres.';
       if (form.password !== form.confirmPassword) {
         next.confirmPassword = 'Las contraseñas no coinciden.';
       }
@@ -65,68 +104,98 @@ export default function LoginScreen() {
   };
 
   async function handleSubmit() {
+    if (busy) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     if (!validate()) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
       return;
     }
 
+    const email = form.email.trim();
     setLoading(true);
     try {
       if (mode === 'login') {
         const { error } = await supabase.auth.signInWithPassword({
-          email: form.email.trim(),
+          email,
           password: form.password,
         });
         if (error) throw error;
-        toast.show('success', 'Sesión iniciada con éxito');
+        // Sin toast: el cambio de sesión lleva a Inicio, y eso ya lo dice todo.
       } else {
         const { data, error } = await supabase.auth.signUp({
-          email: form.email.trim(),
+          email,
           password: form.password,
           options: {
+            emailRedirectTo: redirectAuth('registro'),
             data: {
-              nombre_completo: form.nombre_completo.trim(),
-              telefono: form.telefono.trim(),
-              cedula_rif: form.cedula_rif.trim(),
+              nombre_completo: sanitizeText(form.nombre_completo),
+              telefono: telefonoParaGuardar(form.telefono),
+              cedula_rif: cedulaParaGuardar(form.cedula_rif),
             },
           },
         });
         if (error) throw error;
 
-        toast.show(
-          'success',
-          data.session
-            ? 'Cuenta creada e iniciada automáticamente'
-            : 'Te enviamos un enlace de confirmación a tu correo'
-        );
+        // Con "Confirmar correo" activo no hay sesión: hay que abrir el enlace.
+        if (!data.session) {
+          router.replace({ pathname: '/revisa-correo', params: { email, tipo: 'registro' } });
+        }
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'No se pudo completar la operación.';
-      toast.show('error', message);
+      if (__DEV__) console.error(`[login] ${mode}:`, err);
+      const code = (err as { code?: string } | null)?.code;
+      if (mode === 'login' && code === 'email_not_confirmed') {
+        // Sin confirmar: llevarlo a la pantalla que permite reenviar el enlace.
+        // `enviado: '0'`: el correo se mandó al registrarse; puede reenviarlo ya.
+        router.push({
+          pathname: '/revisa-correo',
+          params: { email, tipo: 'registro', enviado: '0' },
+        });
+        return;
+      }
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      toast.show('error', humanizeError(err, mode === 'login' ? 'login' : 'registro'));
     } finally {
       setLoading(false);
     }
   }
 
   async function handleGoogleSignIn() {
+    if (busy) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setGoogleLoading(true);
     try {
-      setLoading(true);
-      const { error } = await supabase.auth.signInWithOAuth({
+      const redirectTo = redirectAuth('google');
+      const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: Linking.createURL('/(tabs)'),
-          queryParams: { access_type: 'offline', prompt: 'select_account' },
+          redirectTo,
+          skipBrowserRedirect: true,
+          queryParams: { prompt: 'select_account' },
         },
       });
       if (error) throw error;
+      if (!data?.url) throw new Error('Sin URL de Google');
+
+      const res = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+      // Cerró la ventana o volvió atrás: no es un error, no decimos nada.
+      if (res.type !== 'success') return;
+
+      const resultado = await completarSesionDesdeUrl(res.url);
+      if (!resultado.ok && !resultado.cancelado) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        toast.show('error', resultado.error);
+      }
+      // Con sesión, el guard de `app/_layout.tsx` lleva a Inicio.
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Error desconocido';
-      if (__DEV__) console.error('[login] Google Sign-In:', message);
-      toast.show('error', `No se pudo conectar con Google: ${message}`);
+      if (__DEV__) console.error('[login] Google:', err);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      toast.show(
+        'error',
+        isNetworkError(err) || codigoEB(err) ? humanizeError(err, 'login') : ERROR_GOOGLE
+      );
     } finally {
-      setLoading(false);
+      setGoogleLoading(false);
     }
   }
 
@@ -145,18 +214,18 @@ export default function LoginScreen() {
         >
           <StaggerItem index={0} style={s.brand}>
             <View style={s.logo}>
-              <Text variant="heading" size="2xl" weight="heavy" color="primary" compact>
+              <Text variant="heading" size="2xl" weight="heavy" color="foreground" compact>
                 EB
               </Text>
             </View>
           </StaggerItem>
 
           <StaggerItem index={1} style={s.titles}>
-            <Text variant="title" align="center">
-              EnBus App
+            <Text variant="title" align="center" accessibilityRole="header">
+              EnBus
             </Text>
             <Text variant="body" color="muted" align="center" style={s.tagline}>
-              Rastreo y compra de boletos
+              Boletos de autobús y encomiendas entre ciudades, desde tu teléfono
             </Text>
           </StaggerItem>
 
@@ -170,8 +239,8 @@ export default function LoginScreen() {
                 }}
                 tone="raised"
                 options={[
-                  { value: 'login', label: 'Iniciar Sesión' },
-                  { value: 'register', label: 'Registrarse' },
+                  { value: 'login', label: 'Iniciar sesión' },
+                  { value: 'register', label: 'Crear cuenta' },
                 ]}
                 style={s.modeToggle}
               />
@@ -179,64 +248,106 @@ export default function LoginScreen() {
               {isRegister && (
                 <>
                   <Field
-                    label="Nombre completo"
-                    placeholder="Juan Pérez"
+                    label="Nombre y apellido"
+                    placeholder="Ana Pérez"
                     value={form.nombre_completo}
                     onChangeText={(v) => update('nombre_completo', v)}
                     error={errors.nombre_completo}
+                    autoComplete="name"
                     textContentType="name"
+                    autoCapitalize="words"
+                    returnKeyType="next"
+                    submitBehavior="submit"
+                    onSubmitEditing={() => cedulaRef.current?.focus()}
+                    editable={!busy}
                   />
                   <Field
-                    label="Teléfono"
-                    placeholder="04141234567"
-                    keyboardType="phone-pad"
-                    value={form.telefono}
-                    onChangeText={(v) => update('telefono', v)}
-                    error={errors.telefono}
-                    textContentType="telephoneNumber"
-                  />
-                  <Field
-                    label="Cédula o RIF"
+                    ref={cedulaRef}
+                    label="Cédula"
                     placeholder="V-12345678"
                     value={form.cedula_rif}
                     onChangeText={(v) => update('cedula_rif', v)}
                     error={errors.cedula_rif}
+                    autoCapitalize="characters"
+                    autoCorrect={false}
+                    returnKeyType="next"
+                    submitBehavior="submit"
+                    onSubmitEditing={() => telefonoRef.current?.focus()}
+                    editable={!busy}
+                  />
+                  <Field
+                    ref={telefonoRef}
+                    label="Teléfono"
+                    placeholder="0414-1234567"
+                    keyboardType="phone-pad"
+                    value={form.telefono}
+                    onChangeText={(v) => update('telefono', v)}
+                    error={errors.telefono}
+                    autoComplete="tel"
+                    textContentType="telephoneNumber"
+                    returnKeyType="next"
+                    submitBehavior="submit"
+                    onSubmitEditing={() => emailRef.current?.focus()}
+                    editable={!busy}
                   />
                 </>
               )}
 
               <Field
+                ref={emailRef}
                 label="Correo electrónico"
                 placeholder="tu@correo.com"
                 keyboardType="email-address"
                 autoCapitalize="none"
+                autoCorrect={false}
                 autoComplete="email"
                 textContentType="emailAddress"
                 value={form.email}
                 onChangeText={(v) => update('email', v)}
                 error={errors.email}
+                returnKeyType="next"
+                submitBehavior="submit"
+                onSubmitEditing={() => passwordRef.current?.focus()}
+                editable={!busy}
               />
 
               <Field
+                ref={passwordRef}
                 label="Contraseña"
                 placeholder="••••••••"
                 secureTextEntry
                 autoCapitalize="none"
+                autoCorrect={false}
+                autoComplete={isRegister ? 'new-password' : 'current-password'}
+                textContentType={isRegister ? 'newPassword' : 'password'}
                 value={form.password}
                 onChangeText={(v) => update('password', v)}
                 error={errors.password}
                 helper={isRegister && !errors.password ? 'Mínimo 6 caracteres.' : undefined}
+                returnKeyType={isRegister ? 'next' : 'go'}
+                submitBehavior={isRegister ? 'submit' : 'blurAndSubmit'}
+                onSubmitEditing={() =>
+                  isRegister ? confirmRef.current?.focus() : handleSubmit()
+                }
+                editable={!busy}
               />
 
               {isRegister && (
                 <Field
-                  label="Confirmar contraseña"
+                  ref={confirmRef}
+                  label="Repite la contraseña"
                   placeholder="••••••••"
                   secureTextEntry
                   autoCapitalize="none"
+                  autoCorrect={false}
+                  autoComplete="new-password"
+                  textContentType="newPassword"
                   value={form.confirmPassword}
                   onChangeText={(v) => update('confirmPassword', v)}
                   error={errors.confirmPassword}
+                  returnKeyType="go"
+                  onSubmitEditing={handleSubmit}
+                  editable={!busy}
                 />
               )}
 
@@ -244,11 +355,16 @@ export default function LoginScreen() {
                 <PressableScale
                   onPress={() => {
                     Haptics.selectionAsync();
-                    router.push('/(auth)/recuperar');
+                    const email = form.email.trim();
+                    router.push(
+                      email
+                        ? { pathname: '/recuperar', params: { email } }
+                        : '/recuperar'
+                    );
                   }}
                   style={s.forgot}
                   accessibilityRole="button"
-                  accessibilityLabel="Recuperar contraseña"
+                  accessibilityLabel="¿Olvidaste tu contraseña?"
                 >
                   <Text variant="label" color="accent">
                     ¿Olvidaste tu contraseña?
@@ -256,14 +372,20 @@ export default function LoginScreen() {
                 </PressableScale>
               )}
 
-              <Button variant="accent" fullWidth loading={loading} onPress={handleSubmit}>
-                {isRegister ? 'Crear Cuenta' : 'Entrar'}
+              <Button
+                variant="accent"
+                fullWidth
+                loading={loading}
+                disabled={googleLoading}
+                onPress={handleSubmit}
+              >
+                {isRegister ? 'Crear cuenta' : 'Entrar'}
               </Button>
 
               <View style={s.divider}>
                 <View style={s.dividerLine} />
-                <Text variant="overline" color="muted" uppercase>
-                  O continuar con
+                <Text variant="caption" color="muted">
+                  o
                 </Text>
                 <View style={s.dividerLine} />
               </View>
@@ -272,10 +394,11 @@ export default function LoginScreen() {
                 variant="outline"
                 icon={GoogleLogo}
                 fullWidth
+                loading={googleLoading}
                 disabled={loading}
                 onPress={handleGoogleSignIn}
               >
-                Google
+                Continuar con Google
               </Button>
             </Card>
           </StaggerItem>

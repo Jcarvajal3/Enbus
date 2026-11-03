@@ -13,6 +13,10 @@
  *   Text      #202020  (soft black)
  *   White     #FFFFFF
  *
+ * Accessibility rule: the vivid brand/semantic colours are for surfaces,
+ * borders and icons only. Text always uses `foreground`, `mutedForeground` or
+ * one of the `*Text` tokens — all ≥ 4.5:1 on white, `surface` and `surfaceDark`.
+ *
  * Token groups:
  *   Colors      — palette + semantic roles
  *   Typography  — family, sizes, weights, line heights, tracking, presets
@@ -61,10 +65,14 @@ const palette = {
   yellow: '#FFC757',
   coral: '#FF7648',
   blue: '#4A7FF8',
+  /** Darker blue for white text on blue (5.7:1) */
+  blueDark: '#2F5FD0',
   beige: '#F0EFEB',
   beigeDark: '#E8E6E1',
   ink: '#202020',
   grey: '#8A8A8A',
+  /** Text grey: 5.7:1 on white, 5.0:1 on surface, 4.6:1 on surfaceDark */
+  greyText: '#666666',
   white: '#FFFFFF',
   green: '#22c55e',
   greenSoft: '#dcfce7',
@@ -74,6 +82,20 @@ const palette = {
   skySoft: '#dbeafe',
   red: '#dc2626',
   redSoft: '#fee2e2',
+
+  // Text-safe darks — ≥ 4.5:1 on white, surface and surfaceDark
+  amberText: '#8A5A00',
+  greenText: '#147638',
+  orangeText: '#A34B08',
+  blueText: '#1D4ED8',
+  redText: '#B91C1C',
+
+  // Badge foregrounds — ≥ 6:1 on their matching *Soft background
+  amberDeep: '#92400E',
+  greenDeep: '#166534',
+  blueDeep: '#1E40AF',
+  redDeep: '#991B1B',
+  coralDeep: '#9A3412',
 } as const;
 
 // ─── Colors ──────────────────────────────────────────────────────────────────
@@ -84,6 +106,8 @@ export const Colors = {
   primaryLight: alpha(palette.yellow, 0.15),
   primaryBorder: alpha(palette.yellow, 0.25),
   primaryForeground: palette.ink,
+  /** Brand amber legible as text. `primary` is never a text colour. */
+  primaryText: palette.amberText,
 
   secondary: palette.coral,
   secondaryLight: alpha(palette.coral, 0.12),
@@ -105,19 +129,23 @@ export const Colors = {
 
   // Text
   foreground: palette.ink,
-  mutedForeground: palette.grey,
+  mutedForeground: palette.greyText,
   /** Neutral tint for inert chips/badges */
   neutralLight: alpha(palette.grey, 0.12),
 
   // Semantic
   success: palette.green,
   successLight: palette.greenSoft,
+  successText: palette.greenText,
   warning: palette.amber,
   warningLight: palette.amberSoft,
+  warningText: palette.orangeText,
   info: palette.sky,
   infoLight: palette.skySoft,
+  infoText: palette.blueText,
   destructive: palette.red,
   destructiveLight: palette.redSoft,
+  dangerText: palette.redText,
   /** Tinted background + border for soft destructive buttons */
   destructiveSoft: alpha(palette.red, 0.07),
   destructiveBorder: alpha(palette.red, 0.22),
@@ -136,8 +164,10 @@ export const Colors = {
   transparent: 'transparent',
 
   // Tab bar specific
-  tabActive: palette.blue,
-  tabInactive: palette.grey,
+  /** Active pill behind the white label/icon (5.7:1) */
+  tabActive: palette.blueDark,
+  /** Inactive label/icon on the beige bar (5.0:1) */
+  tabInactive: palette.greyText,
   tabBackground: palette.white,
 } as const;
 
@@ -467,6 +497,8 @@ export const Layout = {
     sideInset: Spacing.xl,
     /** Inner padding around the sliding indicator */
     innerPadding: 6,
+    /** Tab label size — 12pt, one step above `xs` so labels read outdoors */
+    labelSize: 12,
   },
 
   /** Bottom padding for lists/scrollviews on tabbed screens (clears the bar) */
@@ -504,35 +536,48 @@ export type StatusTone = 'neutral' | 'pending' | 'progress' | 'success' | 'dange
 
 export const StatusPalette: Record<
   StatusTone,
-  { fg: string; bg: string; border: string }
+  {
+    /** Vivid tone colour — icons, dots, accents. Not for text. */
+    fg: string;
+    /** Dark foreground for labels on `bg` (≥ 6:1, neutral 4.7:1) */
+    text: string;
+    bg: string;
+    border: string;
+  }
 > = {
   neutral: {
     fg: Colors.mutedForeground,
+    text: Colors.mutedForeground,
     bg: Colors.neutralLight,
     border: alpha(palette.grey, 0.2),
   },
   pending: {
     fg: Colors.warning,
+    text: palette.amberDeep,
     bg: Colors.warningLight,
     border: alpha(palette.amber, 0.25),
   },
   progress: {
     fg: Colors.info,
+    text: palette.blueDeep,
     bg: Colors.infoLight,
     border: alpha(palette.sky, 0.25),
   },
   success: {
     fg: Colors.success,
+    text: palette.greenDeep,
     bg: Colors.successLight,
     border: alpha(palette.green, 0.25),
   },
   danger: {
     fg: Colors.destructive,
+    text: palette.redDeep,
     bg: Colors.destructiveLight,
     border: alpha(palette.red, 0.25),
   },
   brand: {
     fg: Colors.secondary,
+    text: palette.coralDeep,
     bg: Colors.secondaryLight,
     border: Colors.secondaryBorder,
   },

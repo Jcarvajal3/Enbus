@@ -25,6 +25,7 @@
   --color-chart-1: var(--chart-1);
   --color-ring: var(--ring);
   --color-input: var(--input);
+  --color-input-border: var(--input-border);
   --color-border: var(--border);
   --color-destructive: var(--destructive);
   --color-accent-foreground: var(--accent-foreground);
@@ -35,6 +36,7 @@
   --color-secondary: var(--secondary);
   --color-primary-foreground: var(--primary-foreground);
   --color-primary: var(--primary);
+  --color-primary-text: var(--primary-text);
   --color-popover-foreground: var(--popover-foreground);
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
@@ -135,6 +137,8 @@
 :root {
   --primary: #FFC757;
   --primary-foreground: #202020;
+  /* Marca como texto (≥4.5:1 sobre blanco): el amarillo es superficie, nunca texto */
+  --primary-text: #8A5A00;
 
   --background: #FFFFFF;
   --foreground: #202020;
@@ -151,12 +155,15 @@
   --accent-foreground: #FFFFFF;
 
   --muted: #F0EFEB;
-  --muted-foreground: #8A8A8A;
+  --muted-foreground: #666666;
 
   --destructive: #dc2626;
   --border: #E8E6E1;
   --input: #E8E6E1;
-  --ring: #FFC757;
+  /* Borde de campos de formulario: ≥ 3:1 sobre blanco (LP-07) */
+  --input-border: #8C8C8C;
+  /* Foco visible en todo el sitio, también sobre el amarillo de marca (LP-07) */
+  --ring: #202020;
 
   --chart-1: #FFC757;
   --chart-2: #FF7648;
@@ -189,18 +196,77 @@
   --sidebar-accent: #E8E6E1;
   --sidebar-accent-foreground: #202020;
   --sidebar-border: #E8E6E1;
-  --sidebar-ring: #FFC757;
+  --sidebar-ring: #202020;
 }
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    @apply border-border outline-ring;
+  }
+  /* Enlaces y resúmenes sin clase de foco propia: contorno oscuro con separación */
+  a:focus-visible,
+  summary:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+    border-radius: 2px;
   }
   body {
     @apply bg-background text-foreground font-sans;
   }
   html {
     @apply scroll-smooth font-sans;
+  }
+}
+
+/* ─── Formularios (LP-07) ───────────────────────────────────────────────── */
+/* Etiqueta 14 px en foreground, ayuda ≥ 12 px en #666, borde #8C8C8C y foco */
+/* oscuro con separación (también sobre secciones bg-primary).              */
+@layer components {
+  .campo-etiqueta {
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+    font-weight: 500;
+    color: var(--foreground);
+  }
+  .campo-ayuda {
+    font-size: 0.75rem;
+    line-height: 1.125rem;
+    color: var(--muted-foreground);
+  }
+  .campo-error {
+    font-size: 0.8125rem;
+    line-height: 1.25rem;
+    color: #b91c1c;
+  }
+  .campo-control {
+    width: 100%;
+    min-height: 2.75rem;
+    border: 1px solid var(--input-border);
+    border-radius: var(--radius-sm);
+    background-color: var(--background);
+    color: var(--foreground);
+    padding: 0.625rem 0.875rem;
+    font-size: 1rem;
+    line-height: 1.5rem;
+    transition: border-color 150ms;
+  }
+  .campo-control::placeholder {
+    color: var(--muted-foreground);
+  }
+  .campo-control:hover {
+    border-color: var(--foreground);
+  }
+  .campo-control:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+    border-color: var(--foreground);
+  }
+  .campo-control[aria-invalid="true"] {
+    border-color: #b91c1c;
+  }
+  .campo-control:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
   }
 }
 

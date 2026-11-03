@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import type { Tarifa, RouteOption } from "@/lib/types/admin-tarifas";
+import { humanizeError } from "@/lib/errores";
 
 export async function fetchTarifaVigente(): Promise<Tarifa | null> {
   try {
@@ -14,7 +15,7 @@ export async function fetchTarifaVigente(): Promise<Tarifa | null> {
 
     if (error) {
       console.error("Error fetching active tariff:", error);
-      throw new Error(error.message);
+      throw new Error(humanizeError(error, "cargar las tarifas"));
     }
 
     if (!data) return null;
@@ -29,11 +30,12 @@ export async function fetchTarifaVigente(): Promise<Tarifa | null> {
       activa: data.activa,
       creada_por: data.creada_por,
       created_at: data.created_at,
-      creador_nombre: (data.profiles as any)?.nombre_completo || null,
+      creador_nombre: (data.profiles as { nombre_completo?: string | null } | null)?.nombre_completo || null,
     };
   } catch (error) {
+    // Un error no es "sin tarifa vigente": se propaga a error.tsx con "Reintentar".
     console.error("Error inside fetchTarifaVigente:", error);
-    return null;
+    throw error instanceof Error ? error : new Error(humanizeError(error, "cargar las tarifas"));
   }
 }
 
@@ -49,7 +51,7 @@ export async function fetchHistorialTarifas(): Promise<Tarifa[]> {
 
     if (error) {
       console.error("Error fetching tariff history:", error);
-      throw new Error(error.message);
+      throw new Error(humanizeError(error, "cargar las tarifas"));
     }
 
     return (data || []).map((row): Tarifa => ({
@@ -62,11 +64,11 @@ export async function fetchHistorialTarifas(): Promise<Tarifa[]> {
       activa: row.activa,
       creada_por: row.creada_por,
       created_at: row.created_at,
-      creador_nombre: (row.profiles as any)?.nombre_completo || null,
+      creador_nombre: (row.profiles as { nombre_completo?: string | null } | null)?.nombre_completo || null,
     }));
   } catch (error) {
     console.error("Error inside fetchHistorialTarifas:", error);
-    return [];
+    throw error instanceof Error ? error : new Error(humanizeError(error, "cargar las tarifas"));
   }
 }
 
@@ -82,7 +84,7 @@ export async function fetchRutasParaSimulador(): Promise<RouteOption[]> {
 
     if (error) {
       console.error("Error fetching routes for simulator:", error);
-      throw new Error(error.message);
+      throw new Error(humanizeError(error, "cargar las tarifas"));
     }
 
     return (data || []).map((row): RouteOption => ({
@@ -92,10 +94,10 @@ export async function fetchRutasParaSimulador(): Promise<RouteOption[]> {
       estado_destino: row.estado_destino,
       ciudad_destino: row.ciudad_destino,
       duracion_estimada_min: row.duracion_estimada_min,
-      cooperativa_nombre: (row.cooperativas as any)?.nombre || "Cooperativa Desconocida",
+      cooperativa_nombre: (row.cooperativas as { nombre?: string | null } | null)?.nombre || "Cooperativa sin nombre",
     }));
   } catch (error) {
     console.error("Error inside fetchRutasParaSimulador:", error);
-    return [];
+    throw error instanceof Error ? error : new Error(humanizeError(error, "cargar las rutas"));
   }
 }

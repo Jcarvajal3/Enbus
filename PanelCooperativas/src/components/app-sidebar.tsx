@@ -1,8 +1,11 @@
 "use client";
 
 import { useUser } from "@/hooks/use-user";
-import { NAV_ITEMS } from "@/lib/navigation";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { NAV_ITEMS, esRutaActiva, type RolPanel } from "@/lib/navigation";
+import { etiquetaRol } from "@/lib/estados";
+import { humanizeError } from "@/lib/errores";
+import { toast } from "sonner";
+import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Bus, SignOut, Sun, Moon, Monitor } from "@phosphor-icons/react";
 import { useTheme } from "next-themes";
@@ -34,8 +37,6 @@ export function AppSidebar() {
   const { user } = useUser();
   const pathname = usePathname();
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const currentTab = searchParams.get("tab");
   const supabase = createClient();
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
@@ -48,12 +49,17 @@ export function AppSidebar() {
   }, []);
 
   const handleSignOut = async () => {
-    await supabase.auth.signOut();
+    // Sin red, signOut falla y la sesión sigue abierta: decirlo en vez de ir al login.
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      toast.error(humanizeError(error, "cerrar la sesión"));
+      return;
+    }
     router.push("/cooperativas/login");
   };
 
   const filteredNavItems = NAV_ITEMS.filter(
-    (item) => user && item.roles.includes(user.role)
+    (item) => user && item.roles.includes(user.role as RolPanel)
   );
 
   return (
@@ -76,22 +82,24 @@ export function AppSidebar() {
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
-              {filteredNavItems.map((item) => (
-                <SidebarMenuItem key={item.href}>
-                  <SidebarMenuButton 
-                    render={<Link href={item.href} prefetch={true} />}
-                    isActive={
-                      item.href.includes("?tab=")
-                        ? pathname === item.href.split("?")[0] && currentTab === new URLSearchParams(item.href.split("?")[1]).get("tab")
-                        : pathname === item.href && !currentTab
-                    }
-                    tooltip={item.title}
-                  >
-                    <item.icon />
-                    <span>{item.title}</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
+              {filteredNavItems.map((item) => {
+                // Activo en la sección y en sus subrutas o pestañas (?tab=…).
+                const activo = esRutaActiva(pathname, item.href);
+                return (
+                  <SidebarMenuItem key={item.href}>
+                    <SidebarMenuButton
+                      render={
+                        <Link href={item.href} prefetch={true} aria-current={activo ? "page" : undefined} />
+                      }
+                      isActive={activo}
+                      tooltip={item.title}
+                    >
+                      <item.icon />
+                      <span>{item.title}</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                );
+              })}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
@@ -113,7 +121,7 @@ export function AppSidebar() {
                   </Avatar>
                   <div className="grid flex-1 text-left text-sm leading-tight">
                     <span className="truncate font-semibold">{user.nombre_completo}</span>
-                    <span className="truncate text-xs capitalize text-muted-foreground">{user.role.replace("_", " ")}</span>
+                    <span className="truncate text-xs text-muted-foreground">{etiquetaRol(user.role)}</span>
                   </div>
                 </SidebarMenuButton>
               }
@@ -128,7 +136,7 @@ export function AppSidebar() {
                   </Avatar>
                   <div className="grid flex-1 leading-tight">
                     <span className="truncate font-semibold">{user.nombre_completo}</span>
-                    <span className="truncate text-xs capitalize text-muted-foreground">{user.role.replace("_", " ")}</span>
+                    <span className="truncate text-xs text-muted-foreground">{etiquetaRol(user.role)}</span>
                   </div>
                 </div>
               </div>
@@ -138,23 +146,23 @@ export function AppSidebar() {
               <DropdownMenuItem onClick={() => setTheme("light")} className="cursor-pointer">
                 <Sun className="size-4 mr-2" />
                 <span>Claro</span>
-                {mounted && theme === "light" && <span className="ml-auto text-xs text-primary">✓</span>}
+                {mounted && theme === "light" && <span className="ml-auto text-xs text-primary-text"><span aria-hidden="true">✓</span><span className="sr-only">(seleccionado)</span></span>}
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setTheme("dark")} className="cursor-pointer">
                 <Moon className="size-4 mr-2" />
                 <span>Oscuro</span>
-                {mounted && theme === "dark" && <span className="ml-auto text-xs text-primary">✓</span>}
+                {mounted && theme === "dark" && <span className="ml-auto text-xs text-primary-text"><span aria-hidden="true">✓</span><span className="sr-only">(seleccionado)</span></span>}
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setTheme("system")} className="cursor-pointer">
                 <Monitor className="size-4 mr-2" />
                 <span>Sistema</span>
-                {mounted && theme === "system" && <span className="ml-auto text-xs text-primary">✓</span>}
+                {mounted && theme === "system" && <span className="ml-auto text-xs text-primary-text"><span aria-hidden="true">✓</span><span className="sr-only">(seleccionado)</span></span>}
               </DropdownMenuItem>
               </DropdownMenuGroup>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={handleSignOut} className="cursor-pointer text-destructive focus:text-destructive">
+              <DropdownMenuItem onClick={handleSignOut} className="cursor-pointer text-destructive-text focus:text-destructive-text">
                 <SignOut />
-                <span>Cerrar Sesión</span>
+                <span>Cerrar sesión</span>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

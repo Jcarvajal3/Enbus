@@ -11,6 +11,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Bus, WarningCircle, CheckCircle, ArrowLeft } from "@phosphor-icons/react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+import { humanizeError } from "@/lib/errores";
 
 export default function RecuperarPage() {
   const supabase = createClient();
@@ -33,7 +34,7 @@ export default function RecuperarPage() {
     });
 
     if (resetError) {
-      setError(resetError.message || "Error al enviar el enlace. Verifica el email.");
+      setError(humanizeError(resetError, { accion: "enviar el enlace de recuperación", email }));
       setLoading(false);
       return;
     }
@@ -56,14 +57,14 @@ export default function RecuperarPage() {
         <div className="flex flex-col gap-4">
           <h1 className="text-5xl font-bold leading-tight">
             Restablecer <br />
-            <span className="text-primary">Contraseña</span>
+            <span className="text-amber-300">contraseña</span>
           </h1>
           <p className="text-xl text-slate-400">
             Recupera el acceso a tu panel operativo de forma segura.
           </p>
         </div>
         
-        <p className="text-sm text-slate-500">
+        <p className="text-sm text-slate-400">
           &copy; {new Date().getFullYear()} EnBus. Todos los derechos reservados.
         </p>
       </div>
@@ -85,8 +86,8 @@ export default function RecuperarPage() {
           <CardContent>
             {success ? (
               <div className="flex flex-col gap-6">
-                <Alert variant="default" className="border-emerald-500/20 bg-emerald-500/10 text-emerald-500">
-                  <CheckCircle className="size-4 text-emerald-500" data-icon="inline-start" />
+                <Alert variant="default" className="border-emerald-600/30 bg-emerald-50 text-success-text dark:bg-emerald-400/10">
+                  <CheckCircle className="size-4 text-success-text" data-icon="inline-start" />
                   <AlertTitle>Enlace enviado</AlertTitle>
                   <AlertDescription>
                     Hemos enviado un correo con instrucciones para restablecer tu contraseña. Revisa tu bandeja de entrada.
@@ -94,7 +95,7 @@ export default function RecuperarPage() {
                 </Alert>
                 <Link href="/cooperativas/login" className={cn(buttonVariants({ variant: "outline" }), "w-full flex items-center justify-center gap-2")}>
                   <ArrowLeft className="size-4" />
-                  Volver a Iniciar Sesión
+                  Volver a iniciar sesión
                 </Link>
               </div>
             ) : (

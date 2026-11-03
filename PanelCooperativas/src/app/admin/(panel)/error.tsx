@@ -1,38 +1,60 @@
 "use client";
 
-import { useEffect } from "react";
-import { Button } from "@/components/ui/button";
-import { WarningCircle } from "@phosphor-icons/react";
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { SpinnerIcon, WarningCircle } from "@phosphor-icons/react";
+import { Button, buttonVariants } from "@/components/ui/button";
 
+// Nunca muestra el texto técnico del error: solo el `digest` para cruzarlo con los registros.
 export default function AdminPanelError({
   error,
+  unstable_retry,
   reset,
 }: {
   error: Error & { digest?: string };
+  /** Next.js 16.2: vuelve a pedir los datos del servidor y a renderizar la sección. */
+  unstable_retry?: () => void;
   reset: () => void;
 }) {
+  const [reintentando, setReintentando] = useState(false);
+
   useEffect(() => {
-    console.error(error);
+    console.error("[AdminPanelError]", error);
   }, [error]);
 
+  const reintentar = () => {
+    setReintentando(true);
+    // `reset` solo vuelve a renderizar sin pedir los datos: un fallo de la consulta se repetiría.
+    (unstable_retry ?? reset)();
+    // Si vuelve a fallar, esta pantalla se monta de nuevo; si no, desaparece.
+    window.setTimeout(() => setReintentando(false), 4000);
+  };
+
   return (
-    <div className="flex flex-col items-center justify-center gap-4 py-20 h-full text-white">
-      <div className="bg-destructive/10 p-4 rounded-full">
-        <WarningCircle size={48} className="text-red-500" weight="duotone" />
+    <div role="alert" className="flex h-full flex-col items-center justify-center gap-4 py-20 text-center text-foreground">
+      <div className="rounded-full bg-destructive/10 p-4">
+        <WarningCircle size={48} className="text-destructive-text" weight="duotone" aria-hidden />
       </div>
-      <h2 className="text-2xl font-bold">Algo salió mal</h2>
-      <p className="text-slate-400 text-center max-w-md">
-        {process.env.NODE_ENV === "development"
-          ? (error.message || "Ha ocurrido un error inesperado.")
-          : "Ha ocurrido un error inesperado al cargar esta página. Por favor, inténtelo de nuevo o contacte al soporte técnico."}
+      <h2 className="text-2xl font-bold">No pudimos cargar esta sección</h2>
+      <p className="max-w-md text-muted-foreground">
+        Reintenta; si sigue pasando, avísanos
+        {error.digest ? (
+          <>
+            {" "}
+            con este código: <span className="font-mono text-foreground">{error.digest}</span>
+          </>
+        ) : (
+          "."
+        )}
       </p>
-      <div className="flex gap-4 mt-4">
-        <Button onClick={reset} className="bg-orange-600 hover:bg-orange-700 text-white">
-          Reintentar
+      <div className="mt-4 flex flex-wrap justify-center gap-3">
+        <Button onClick={reintentar} disabled={reintentando} aria-busy={reintentando || undefined}>
+          {reintentando && <SpinnerIcon className="animate-spin" aria-hidden />}
+          {reintentando ? "Reintentando…" : "Reintentar"}
         </Button>
-        <Button onClick={() => window.location.reload()} variant="outline" className="border-slate-800 text-white hover:bg-slate-800">
-          Recargar Página
-        </Button>
+        <Link href="/admin/dashboard" className={buttonVariants({ variant: "outline" })}>
+          Volver al resumen
+        </Link>
       </div>
     </div>
   );

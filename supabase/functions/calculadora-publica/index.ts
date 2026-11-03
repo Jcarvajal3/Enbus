@@ -96,12 +96,26 @@ Deno.serve(async (req) => {
     // costo = peso_kg * tarifa_por_kg * (1 + factor_distancia_por_min * duracion_estimada_min)
     const costo = (peso_kg * tarifaData.tarifa_por_kg * (1 + tarifaData.factor_distancia_por_min * rutaData.duracion_estimada_min)).toFixed(2);
 
-    const data = {
-      costo_estimado: parseFloat(costo),
+    // Las tarifas son USD de referencia; se cobra en Bs a la tasa BCV del día.
+    const costoUsd = parseFloat(costo);
+    const data: Record<string, unknown> = {
+      costo_estimado: costoUsd,
+      costo_estimado_usd: costoUsd,
+      moneda: 'USD',
       peso_max_kg: tarifaData.peso_max_kg,
       dimensiones_max_referencia: `${tarifaData.dimensiones_max_cm}x${tarifaData.dimensiones_max_cm}x${tarifaData.dimensiones_max_cm}cm`,
       disclaimer: "Precio aproximado, sujeto a finalización y pesaje físico en taquilla"
     };
+
+    // 4. Equivalente en Bs con la tasa BCV vigente (si la hay; sin tasa se devuelve solo USD).
+    const { data: tasaData, error: tasaError } = await supabase.rpc('fn_tasa_bcv_vigente').maybeSingle();
+    const tasaRow = tasaData as { tasa: number | string; fecha: string } | null;
+    if (!tasaError && tasaRow && Number(tasaRow.tasa) > 0) {
+      const tasa = Number(tasaRow.tasa);
+      data.tasa_bcv = tasa;
+      data.tasa_bcv_fecha = tasaRow.fecha;
+      data.costo_estimado_bs = Math.round((costoUsd * tasa + Number.EPSILON) * 100) / 100;
+    }
 
     return new Response(JSON.stringify(data), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (error: any) {

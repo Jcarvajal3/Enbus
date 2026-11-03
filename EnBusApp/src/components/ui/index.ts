@@ -8,6 +8,10 @@
  *   import { Screen, ScreenHeader, Card, Text, Button } from '@/src/components/ui';
  */
 
+import type { ReactElement, Ref } from 'react';
+import type { TextInput } from 'react-native';
+import { Field as FieldBase, type FieldProps } from './Field';
+
 export { Text, fontStyle, textStyles } from './Text';
 export type { TextProps, TextColorToken } from './Text';
 
@@ -29,7 +33,16 @@ export type { SegmentOption, SegmentedControlProps } from './SegmentedControl';
 export { ScreenHeader, StepIndicator } from './ScreenHeader';
 export type { ScreenHeaderProps, ScreenHeaderVariant } from './ScreenHeader';
 
-export { Screen, Gutter, FloatingBar, EmptyState, LoadingState, scrollContent } from './Screen';
+export {
+  Screen,
+  Gutter,
+  FloatingBar,
+  EmptyState,
+  ErrorState,
+  StaleBanner,
+  LoadingState,
+  scrollContent,
+} from './Screen';
 
 export { EntityCard } from './EntityCard';
 export type { EntityCardProps, PillTone } from './EntityCard';
@@ -40,5 +53,17 @@ export type { RouteSummaryProps } from './RouteSummary';
 export { BottomSheet } from './BottomSheet';
 export type { BottomSheetProps } from './BottomSheet';
 
-export { Field, SelectField } from './Field';
+export { SelectField } from './Field';
 export type { FieldProps, FieldTone } from './Field';
+
+/**
+ * `Field` acepta `ref` al `TextInput` (para encadenar "Siguiente" con
+ * `returnKeyType` y `onSubmitEditing`). React 19 pasa `ref` como una prop más
+ * y `Field` la reenvía al `TextInput` con `...rest`; aquí solo se tipa.
+ */
+export const Field = FieldBase as unknown as (
+  props: FieldProps & { ref?: Ref<TextInput> }
+) => ReactElement;
+
+export { Monto } from './Monto';
+export type { MontoProps, MontoSize } from './Monto';

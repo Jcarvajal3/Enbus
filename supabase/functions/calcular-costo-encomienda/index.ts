@@ -107,7 +107,8 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({
         costo: costo,
         costo_calculado: costo,
-        estado: enc.estado
+        estado: enc.estado,
+        moneda: "USD"
       }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
@@ -138,7 +139,8 @@ Deno.serve(async (req) => {
 
     const responseData = {
       ...updateRes,
-      costo: updateRes.costo_calculado
+      costo: updateRes.costo_calculado,
+      moneda: "USD" // tarifas en USD de referencia; se cobra en Bs a la tasa BCV del día
     };
 
     return new Response(JSON.stringify(responseData), { headers: { ...corsHeaders, "Content-Type": "application/json" } });

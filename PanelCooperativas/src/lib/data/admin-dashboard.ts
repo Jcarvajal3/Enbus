@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { fechaVE, hoyVE, rangoDiaVE, sumarDiasVE } from "@/lib/fechas";
 import {
   DashboardKPIs,
   DailyActivity,
@@ -6,38 +7,26 @@ import {
   RutaPopular,
   IncidenciaReciente,
   CooperativaBalance,
+  resumirIngresos,
 } from "../types/admin-dashboard";
 
-// Helper to get day range in Venezuela timezone (UTC-4)
-function getVenezuelaDayRange(date: Date) {
-  const tzOffset = -4 * 60; // Venezuela is UTC-4
-
-  // Convert current time to Venezuela time
-  const veTime = new Date(date.getTime() + (date.getTimezoneOffset() + tzOffset) * 60000);
-
-  const startOfDay = new Date(veTime);
-  startOfDay.setHours(0, 0, 0, 0);
-
-  const endOfDay = new Date(veTime);
-  endOfDay.setHours(23, 59, 59, 999);
-
-  // Convert back to UTC for database queries
-  const startUTC = new Date(startOfDay.getTime() - (date.getTimezoneOffset() + tzOffset) * 60000);
-  const endUTC = new Date(endOfDay.getTime() - (date.getTimezoneOffset() + tzOffset) * 60000);
-
-  return { start: startUTC.toISOString(), end: endUTC.toISOString() };
+/** Inicio (ISO) del día de hace `dias` días en Venezuela. */
+function inicioHaceDiasVE(dias: number): string {
+  return rangoDiaVE(sumarDiasVE(hoyVE(), -dias)).desde;
 }
 
-export async function fetchDashboardKPIs(): Promise<DashboardKPIs> {
+/**
+ * KPIs del día (hora de Venezuela). `tasaHoy` (Bs por USD) convierte a Bs los
+ * pagos anteriores a la fase 2, que no guardan `monto_bs`.
+ */
+export async function fetchDashboardKPIs(tasaHoy: number | null = null): Promise<DashboardKPIs> {
   const supabase = await createClient();
-  const now = new Date();
-  const { start: hoyInicio, end: hoyFin } = getVenezuelaDayRange(now);
+  const { desde: hoyInicio, hasta: hoyFin } = rangoDiaVE(hoyVE());
 
   const [
     encomiendasRes,
     boletosRes,
     pagosRes,
-    pagosComisionesRes,
     cooperativasRes,
     alertasRes,
     solicitudesRes,
@@ -57,36 +46,29 @@ export async function fetchDashboardKPIs(): Promise<DashboardKPIs> {
       .gte("created_at", hoyInicio)
       .lte("created_at", hoyFin),
 
-    // 3. Ingresos brutos hoy
+    // 3. Pagos verificados hoy (por verificado_at: un pago registrado ayer y aprobado hoy
+    //    es ingreso de hoy): ingresos (USD + Bs) y comisión de su cooperativa
     supabase
       .from("pagos")
-      .select("monto")
+      .select("monto, monto_bs, cooperativa:cooperativas!cooperativa_id(comision_porcentaje)")
       .eq("verificado", true)
-      .gte("created_at", hoyInicio)
-      .lte("created_at", hoyFin),
+      .gte("verificado_at", hoyInicio)
+      .lte("verificado_at", hoyFin),
 
-    // 4. Para comisiones estimadas: traer monto + comisión de la cooperativa relacionada
-    supabase
-      .from("pagos")
-      .select("monto, cooperativa:cooperativas!cooperativa_id(comision_porcentaje)")
-      .eq("verificado", true)
-      .gte("created_at", hoyInicio)
-      .lte("created_at", hoyFin),
-
-    // 5. Cooperativas activas
+    // 4. Cooperativas activas
     supabase
       .from("cooperativas")
       .select("id", { count: "exact", head: true })
       .eq("estado", "ACTIVA"),
 
-    // 6. Alertas amarillas abiertas
+    // 5. Alertas amarillas abiertas
     supabase
       .from("incidencias")
       .select("id", { count: "exact", head: true })
       .eq("tipo", "ALERTA_AMARILLA")
       .eq("estado", "ABIERTA"),
 
-    // 7. Solicitudes pendientes
+    // 6. Solicitudes pendientes
     supabase
       .from("cooperativas")
       .select("id", { count: "exact", head: true })
@@ -94,46 +76,46 @@ export async function fetchDashboardKPIs(): Promise<DashboardKPIs> {
   ]);
 
   // Log any Supabase errors without crashing the dashboard
-  if (encomiendasRes.error) console.error("[fetchDashboardKPIs] encomiendas:", encomiendasRes.error.message);
-  if (boletosRes.error) console.error("[fetchDashboardKPIs] boletos:", boletosRes.error.message);
-  if (pagosRes.error) console.error("[fetchDashboardKPIs] pagos:", pagosRes.error.message);
-  if (pagosComisionesRes.error) console.error("[fetchDashboardKPIs] pagosComisiones:", pagosComisionesRes.error.message);
-  if (cooperativasRes.error) console.error("[fetchDashboardKPIs] cooperativas:", cooperativasRes.error.message);
-  if (alertasRes.error) console.error("[fetchDashboardKPIs] alertas:", alertasRes.error.message);
-  if (solicitudesRes.error) console.error("[fetchDashboardKPIs] solicitudes:", solicitudesRes.error.message);
-
-  const encomiendas_hoy = encomiendasRes.count ?? 0;
-  const boletos_hoy = boletosRes.count ?? 0;
-  const ingresos_brutos_hoy = pagosRes.data?.reduce((sum, p) => sum + Number(p.monto), 0) ?? 0;
+  if (encomiendasRes.error) console.error("[fetchDashboardKPIs] encomiendas:", encomiendasRes.error);
+  if (boletosRes.error) console.error("[fetchDashboardKPIs] boletos:", boletosRes.error);
+  if (pagosRes.error) console.error("[fetchDashboardKPIs] pagos:", pagosRes.error);
+  if (cooperativasRes.error) console.error("[fetchDashboardKPIs] cooperativas:", cooperativasRes.error);
+  if (alertasRes.error) console.error("[fetchDashboardKPIs] alertas:", alertasRes.error);
+  if (solicitudesRes.error) console.error("[fetchDashboardKPIs] solicitudes:", solicitudesRes.error);
 
   // Each pago row has a nested cooperativa object with comision_porcentaje
-  type PagoConCooperativa = { monto: number; cooperativa: { comision_porcentaje: number } | null };
-  const comisiones_estimadas_hoy = (pagosComisionesRes.data as PagoConCooperativa[] | null)?.reduce((sum, p) => {
-    const pct = p.cooperativa?.comision_porcentaje ?? 0;
-    return sum + (Number(p.monto) * Number(pct)) / 100;
-  }, 0) ?? 0;
+  type PagoConCooperativa = {
+    monto: number | string;
+    monto_bs: number | string | null;
+    cooperativa: { comision_porcentaje: number | string } | null;
+  };
+  const pagos = (pagosRes.data ?? []) as unknown as PagoConCooperativa[];
 
-  const cooperativas_activas = cooperativasRes.count ?? 0;
-  const alertas_amarillas_abiertas = alertasRes.count ?? 0;
-  const solicitudes_pendientes = solicitudesRes.count ?? 0;
+  // Si la consulta falla, el KPI muestra "—" y un aviso en vez de un 0 engañoso.
+  const errorPagos = Boolean(pagosRes.error);
+  const ingresos_hoy = { ...resumirIngresos(pagos, tasaHoy), error: errorPagos };
+  const comisiones_hoy = {
+    ...resumirIngresos(pagos, tasaHoy, (p) => Number(p.cooperativa?.comision_porcentaje ?? 0) / 100),
+    error: errorPagos,
+  };
 
   return {
-    encomiendas_hoy,
-    boletos_hoy,
-    ingresos_brutos_hoy,
-    comisiones_estimadas_hoy,
-    cooperativas_activas,
-    alertas_amarillas_abiertas,
-    solicitudes_pendientes,
+    encomiendas_hoy: encomiendasRes.count ?? 0,
+    boletos_hoy: boletosRes.count ?? 0,
+    ingresos_brutos_hoy: ingresos_hoy.usd,
+    ingresos_hoy,
+    comisiones_estimadas_hoy: comisiones_hoy.usd,
+    comisiones_hoy,
+    cooperativas_activas: cooperativasRes.count ?? 0,
+    alertas_amarillas_abiertas: alertasRes.count ?? 0,
+    solicitudes_pendientes: solicitudesRes.count ?? 0,
   };
 }
 
 export async function fetchActivityLast30Days(): Promise<DailyActivity[]> {
   const supabase = await createClient();
-  const now = new Date();
-  const thirtyDaysAgo = new Date();
-  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-  const { start: startUTC } = getVenezuelaDayRange(thirtyDaysAgo);
+  const hoy = hoyVE();
+  const startUTC = inicioHaceDiasVE(29);
 
   // Only select created_at — the minimal payload needed for grouping
   const [encomiendasRes, boletosRes] = await Promise.all([
@@ -150,32 +132,24 @@ export async function fetchActivityLast30Days(): Promise<DailyActivity[]> {
       .limit(5000),
   ]);
 
-  if (encomiendasRes.error) console.error("[fetchActivityLast30Days] encomiendas:", encomiendasRes.error.message);
-  if (boletosRes.error) console.error("[fetchActivityLast30Days] boletos:", boletosRes.error.message);
+  if (encomiendasRes.error) console.error("[fetchActivityLast30Days] encomiendas:", encomiendasRes.error);
+  if (boletosRes.error) console.error("[fetchActivityLast30Days] boletos:", boletosRes.error);
 
-  const tzOffset = -4 * 60; // Venezuela is UTC-4
   const activityMap: Record<string, { fecha: string; encomiendas: number; boletos: number }> = {};
 
-  // Initialize map with last 30 days (ensures all days appear even with 0 activity)
+  // Initialize map with last 30 days in Venezuela (ensures all days appear even with 0 activity)
   for (let i = 29; i >= 0; i--) {
-    const d = new Date(now);
-    d.setDate(d.getDate() - i);
-    const veTime = new Date(d.getTime() + (d.getTimezoneOffset() + tzOffset) * 60000);
-    const dateStr = veTime.toISOString().split("T")[0];
+    const dateStr = sumarDiasVE(hoy, -i);
     activityMap[dateStr] = { fecha: dateStr, encomiendas: 0, boletos: 0 };
   }
 
   encomiendasRes.data?.forEach((item) => {
-    const d = new Date(item.created_at);
-    const veTime = new Date(d.getTime() + (d.getTimezoneOffset() + tzOffset) * 60000);
-    const dateStr = veTime.toISOString().split("T")[0];
+    const dateStr = fechaVE(item.created_at);
     if (activityMap[dateStr]) activityMap[dateStr].encomiendas++;
   });
 
   boletosRes.data?.forEach((item) => {
-    const d = new Date(item.created_at);
-    const veTime = new Date(d.getTime() + (d.getTimezoneOffset() + tzOffset) * 60000);
-    const dateStr = veTime.toISOString().split("T")[0];
+    const dateStr = fechaVE(item.created_at);
     if (activityMap[dateStr]) activityMap[dateStr].boletos++;
   });
 
@@ -184,9 +158,7 @@ export async function fetchActivityLast30Days(): Promise<DailyActivity[]> {
 
 export async function fetchTop5Cooperativas(): Promise<TopCooperativa[]> {
   const supabase = await createClient();
-  const thirtyDaysAgo = new Date();
-  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-  const { start: startUTC } = getVenezuelaDayRange(thirtyDaysAgo);
+  const startUTC = inicioHaceDiasVE(30);
 
   const [cooperativasRes, encomiendasRes, boletosRes] = await Promise.all([
     supabase.from("cooperativas").select("id, nombre"),
@@ -203,9 +175,9 @@ export async function fetchTop5Cooperativas(): Promise<TopCooperativa[]> {
       .limit(10000),
   ]);
 
-  if (cooperativasRes.error) console.error("[fetchTop5Cooperativas] cooperativas:", cooperativasRes.error.message);
-  if (encomiendasRes.error) console.error("[fetchTop5Cooperativas] encomiendas:", encomiendasRes.error.message);
-  if (boletosRes.error) console.error("[fetchTop5Cooperativas] boletos:", boletosRes.error.message);
+  if (cooperativasRes.error) console.error("[fetchTop5Cooperativas] cooperativas:", cooperativasRes.error);
+  if (encomiendasRes.error) console.error("[fetchTop5Cooperativas] encomiendas:", encomiendasRes.error);
+  if (boletosRes.error) console.error("[fetchTop5Cooperativas] boletos:", boletosRes.error);
 
   const counts: Record<string, number> = {};
   encomiendasRes.data?.forEach((item) => {
@@ -227,9 +199,7 @@ export async function fetchTop5Cooperativas(): Promise<TopCooperativa[]> {
 
 export async function fetchRutasPopulares(): Promise<RutaPopular[]> {
   const supabase = await createClient();
-  const thirtyDaysAgo = new Date();
-  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-  const { start: startUTC } = getVenezuelaDayRange(thirtyDaysAgo);
+  const startUTC = inicioHaceDiasVE(30);
 
   const { data: encomiendas, error } = await supabase
     .from("encomiendas")
@@ -237,7 +207,7 @@ export async function fetchRutasPopulares(): Promise<RutaPopular[]> {
     .gte("created_at", startUTC)
     .limit(10000);
 
-  if (error) console.error("[fetchRutasPopulares]:", error.message);
+  if (error) console.error("[fetchRutasPopulares]:", error);
 
   const routeCounts: Record<string, number> = {};
   encomiendas?.forEach((item) => {
@@ -271,7 +241,7 @@ export async function fetchIncidenciasRecientes(): Promise<IncidenciaReciente[]>
     .order("created_at", { ascending: false })
     .limit(10);
 
-  if (error) console.error("[fetchIncidenciasRecientes]:", error.message);
+  if (error) console.error("[fetchIncidenciasRecientes]:", error);
 
   // Local types matching the Supabase join shape (FK relations infer as array; cast via unknown)
   type EncomiendaJoin = { tracking_id: string } | null;
@@ -304,7 +274,7 @@ export async function fetchCooperativasConBalance(): Promise<CooperativaBalance[
       comisiones_ciclo(monto_comision, pagado)
     `);
 
-  if (error) console.error("[fetchCooperativasConBalance]:", error.message);
+  if (error) console.error("[fetchCooperativasConBalance]:", error);
 
   type CicloJoin = { monto_comision: string; pagado: boolean };
   type CooperativaRow = {

@@ -65,7 +65,10 @@ CREATE TYPE estado_boleto AS ENUM (
 );
 
 -- Estados de cooperativa
+-- PENDIENTE: 20260713000001. RECHAZADA: 20260720000001 (va sola, sin BEGIN/COMMIT).
 CREATE TYPE estado_cooperativa AS ENUM (
+  'PENDIENTE',
+  'RECHAZADA',
   'ACTIVA',
   'SUSPENDIDA',
   'DESACTIVADA'
@@ -158,10 +161,19 @@ CREATE TYPE estado_viaje AS ENUM (
 | `estado` | `estado_cooperativa` | NO | `'ACTIVA'` | — |
 | `calificacion_promedio` | DECIMAL(2,1) | NO | `0.0` | Promedio de estrellas (1-5) |
 | `total_calificaciones` | INTEGER | NO | `0` | Cantidad de calificaciones |
+| `representante` | TEXT | SÍ | NULL | Representante legal (registro). Fase 3; se rellenó desde `descripcion` ("Representante: X. Mensaje: Y") en las solicitudes antiguas |
+| `mensaje_registro` | TEXT | SÍ | NULL | Mensaje o rutas de interés del registro; `fn_solicitar_revision_cooperativa` lo actualiza. Fase 3 |
+| `motivo_estado` | TEXT | SÍ | NULL | *Comentario SQL*: "Motivo del último rechazo, suspensión o desactivación (lo ve la cooperativa en su panel). NULL si está ACTIVA o PENDIENTE." Fase 3 |
+| `estado_cambiado_at` | TIMESTAMPTZ | SÍ | NULL | Último cambio de estado. Fase 3 |
+| `estado_cambiado_por` | UUID | SÍ | NULL | Quién cambió el estado. **Sin FK** a `profiles` (ver nota). Fase 3 |
 | `created_at` | TIMESTAMPTZ | NO | `now()` | — |
 | `updated_at` | TIMESTAMPTZ | NO | `now()` | — |
 
 **Índices**: `rif` (unique), `estado`
+
+**Protección** (trigger `aa_proteger_cooperativa` → `proteger_cooperativa_fn`, fase 3): solo el Super Admin (o `service_role`) cambia `estado`, `comision_porcentaje`, `motivo_estado`, `estado_cambiado_at`, `estado_cambiado_por`, `calificacion_promedio` y `total_calificaciones`; `nombre` y `rif` solo se cambian en `PENDIENTE` o `RECHAZADA`. El estado se cambia con `fn_cambiar_estado_cooperativa` y `fn_solicitar_revision_cooperativa` (ver `State_Machines_Spec.md` §3).
+
+> **Nota (columnas `*_por` de la fase 3)**: `estado_cambiado_por`, `boletos.reembolso_procesado_por` y `encomiendas.entregada_por` **no tienen FK** a `profiles` a propósito: una relación más entre `profiles` y `cooperativas`/`boletos`/`encomiendas` vuelve ambiguos los embeds de PostgREST (por ejemplo `cooperativas(nombre, estado)` desde `profiles` en `getUserProfile`, error PGRST201).
 
 ---
 
@@ -176,10 +188,13 @@ CREATE TYPE estado_viaje AS ENUM (
 | `ciudad` | TEXT | NO | — | Ciudad |
 | `direccion` | TEXT | NO | — | Dirección física |
 | `telefono` | TEXT | SÍ | NULL | Teléfono de la sucursal |
+| `horario` | TEXT | SÍ | NULL | *Comentario SQL*: "Horario de atención en texto libre, p. ej. "Lun a sáb 7:00 a. m. – 6:00 p. m."". Fase 3 |
 | `activa` | BOOLEAN | NO | `true` | — |
 | `created_at` | TIMESTAMPTZ | NO | `now()` | — |
 
 **Índices**: `cooperativa_id`, `(estado_geografico, ciudad)`
+
+**RPC**: `fn_sucursales_en_ciudad(p_cooperativa_id, p_ciudad)` (authenticated, fase 3) devuelve las sucursales activas de una cooperativa en una ciudad (comparación con `normalizar_localidad`): `{id, nombre, direccion, telefono, horario, ciudad, estado_geografico}`.
 
 ---
 
@@ -272,12 +287,27 @@ CREATE TYPE estado_viaje AS ENUM (
 | `intentos_pin` | INTEGER | NO | `0` | Intentos fallidos de PIN |
 | `pin_bloqueado` | BOOLEAN | NO | `false` | True si intentos >= 10 |
 | `qr_data` | TEXT | SÍ | NULL | Datos codificados en el QR |
-| `foto_evidencia_url` | TEXT | SÍ | NULL | Foto del paquete (Supabase Storage) |
-| `motivo_cancelacion` | TEXT | SÍ | NULL | Si fue cancelada |
+| `foto_evidencia_url` | TEXT | SÍ | NULL | *Comentario SQL*: "Foto que toma la taquilla. Ruta del objeto en el bucket privado fotos-encomiendas (se muestra con URL firmada). Filas antiguas pueden tener la URL completa." |
+| `foto_cliente_path` | TEXT | SÍ | NULL | *Comentario SQL*: "Foto que subió el remitente desde la app (ruta del objeto en fotos-encomiendas, carpeta = id del usuario)." Fase 3 |
+| `foto_omitida_motivo` | TEXT | SÍ | NULL | Por qué la taquilla omitió la foto ("La cámara no funciona", "El cliente tiene prisa", "Otro"). Fase 3 |
+| `origen_registro` | TEXT | NO | `'APP'` | `CHECK (origen_registro IN ('APP', 'TAQUILLA'))` (`chk_encomiendas_origen_registro`). *Comentario SQL*: "APP: la creó el remitente en la app. TAQUILLA: alta presencial; sender_id es el empleado y el remitente real va en remitente_*." Fase 3 |
+| `remitente_nombre` | TEXT | SÍ | NULL | Remitente real en altas de taquilla (`origen_registro = 'TAQUILLA'`). Fase 3 |
+| `remitente_cedula` | TEXT | SÍ | NULL | Ídem. Fase 3 |
+| `remitente_telefono` | TEXT | SÍ | NULL | Ídem. Fase 3 |
+| `idempotency_key` | TEXT | SÍ | NULL | Clave de la operación de alta presencial (`fn_registrar_encomienda_taquilla`). Fase 3 |
+| `entregada_at` | TIMESTAMPTZ | SÍ | NULL | Cuándo se entregó (`fn_entregar_encomienda`). Fase 3 |
+| `entregada_por` | UUID | SÍ | NULL | Empleado que entregó. **Sin FK** (ver nota en §3.2). Fase 3 |
+| `retiro_tercero` | BOOLEAN | NO | `false` | Retiró otra persona autorizada. Fase 3 |
+| `retiro_nombre` | TEXT | SÍ | NULL | Nombre de quien retiró (destinatario o tercero). Fase 3 |
+| `retiro_cedula` | TEXT | SÍ | NULL | Cédula de quien retiró. Fase 3 |
+| `entrega_sin_pin_motivo` | TEXT | SÍ | NULL | Motivo de la entrega sin PIN (solo `admin_cooperativa`, ≥ 10 caracteres). Fase 3 |
+| `motivo_cancelacion` | TEXT | SÍ | NULL | Si fue cancelada ("No recibida en taquilla: …" si la rechazó la taquilla) |
 | `created_at` | TIMESTAMPTZ | NO | `now()` | — |
-| `updated_at` | TIMESTAMPTZ | NO | `now()` | Auto-actualizado |
+| `updated_at` | TIMESTAMPTZ | NO | `now()` | Auto-actualizado (`encomiendas_updated_at_fn`); **no** lo mueven el vínculo del destinatario, las sucursales, `intentos_pin`, `pin_bloqueado` ni las fotos |
 
-**Índices**: `tracking_id` (unique), `sender_id`, `receiver_user_id`, `receiver_telefono`, `cooperativa_id`, `viaje_id`, `estado`, `created_at DESC`
+**Índices**: `tracking_id` (unique), `sender_id`, `receiver_user_id`, `receiver_telefono`, `cooperativa_id`, `viaje_id`, `estado`, `created_at DESC`, `uq_encomiendas_idempotencia` (unique `(sender_id, idempotency_key) WHERE idempotency_key IS NOT NULL`, fase 3)
+
+**Clientes** (trigger `aa_proteger_encomiendas_cliente`): al crear desde la app el servidor fuerza `origen_registro = 'APP'`, mueve una foto enviada en `foto_evidencia_url` a `foto_cliente_path` y limpia `remitente_*`, `foto_omitida_motivo` y las columnas de entrega.
 
 ---
 
@@ -311,13 +341,18 @@ CREATE TYPE estado_viaje AS ENUM (
 | `estado` | `estado_boleto` | NO | `'RESERVADO'` | — |
 | `qr_embarque_data` | TEXT | SÍ | NULL | Datos del QR de embarque. Generado al pagar. |
 | `motivo_cancelacion` | TEXT | SÍ | NULL | Si fue cancelado |
-| `monto_reembolso` | DECIMAL(10,2) | SÍ | NULL | 95% del precio si cancelado |
-| `reembolso_procesado` | BOOLEAN | NO | `false` | Si la cooperativa procesó |
+| `monto_reembolso` | DECIMAL(10,2) | SÍ | NULL | USD de referencia: 95 % del precio si cancela el pasajero (`fn_cancelar_boleto`); 100 % si la cooperativa cancela el viaje (`fn_cancelar_viaje`) |
+| `reembolso_procesado` | BOOLEAN | NO | `false` | Si la cooperativa registró la devolución (`fn_registrar_reembolso`) |
+| `reembolso_procesado_at` | TIMESTAMPTZ | SÍ | NULL | Cuándo se registró la devolución. Fase 3 |
+| `reembolso_procesado_por` | UUID | SÍ | NULL | Empleado que la registró. **Sin FK** (ver nota en §3.2). Fase 3 |
+| `reembolso_metodo` | TEXT | SÍ | NULL | `PAGO_MOVIL`, `TRANSFERENCIA_BANCARIA`, `ZELLE` o `EFECTIVO`. Fase 3 |
+| `reembolso_referencia` | TEXT | SÍ | NULL | Referencia de la devolución (obligatoria salvo efectivo). Fase 3 |
+| `reembolso_nota` | TEXT | SÍ | NULL | Nota opcional (máx. 300). Fase 3 |
 | `reserva_expira_at` | TIMESTAMPTZ | SÍ | NULL | Cuándo expira la reserva sin pago |
 | `created_at` | TIMESTAMPTZ | NO | `now()` | — |
 | `updated_at` | TIMESTAMPTZ | NO | `now()` | — |
 
-**Índices**: `codigo_boleto` (unique), `comprador_id`, `viaje_id`, `cooperativa_id`, `estado`, `created_at DESC`
+**Índices**: `codigo_boleto` (unique), `comprador_id`, `viaje_id`, `cooperativa_id`, `estado`, `created_at DESC`, `idx_boletos_codigo_norm` (`regexp_replace(upper(codigo_boleto), '[^A-Z0-9]', '', 'g')`, fase 3: `fn_validar_embarque` acepta el código con espacios, guiones o en minúsculas)
 
 ---
 
@@ -444,8 +479,10 @@ CREATE TYPE estado_viaje AS ENUM (
 |---|---|---|---|---|
 | `id` | UUID PK | NO | `gen_random_uuid()` | — |
 | `encomienda_id` | UUID FK | SÍ | NULL | → `encomiendas.id` |
+| `boleto_id` | UUID FK | SÍ | NULL | → `boletos.id` ON DELETE SET NULL. Boleto del reporte. Fase 3 |
 | `reportado_por` | UUID FK | SÍ | NULL | → `profiles.id` |
 | `tipo` | TEXT | NO | — | 'ALERTA_AMARILLA', 'REPORTE_USUARIO', 'PERDIDA' |
+| `categoria` | TEXT | SÍ | NULL | Reportes de usuario: 'PAGO', 'BOLETO', 'ENCOMIENDA', 'CUENTA', 'OTRO'. Fase 3 |
 | `descripcion` | TEXT | NO | — | — |
 | `estado` | TEXT | NO | `'ABIERTA'` | ABIERTA, EN_PROCESO, RESUELTA |
 | `resolucion` | TEXT | SÍ | NULL | — |
@@ -453,7 +490,17 @@ CREATE TYPE estado_viaje AS ENUM (
 | `created_at` | TIMESTAMPTZ | NO | `now()` | — |
 | `updated_at` | TIMESTAMPTZ | NO | `now()` | — |
 
-**Índices**: `encomienda_id`, `estado`, `tipo`
+**Índices**: `encomienda_id`, `estado`, `tipo`, `idx_incidencias_reportado_por (reportado_por, created_at)` (fase 3)
+
+Los usuarios crean reportes **solo** con `fn_reportar_problema(p_categoria, p_descripcion, p_boleto_id, p_encomienda_id)` (tipo `REPORTE_USUARIO`, descripción ≥ 10, boleto o encomienda propios, máximo 5 por 24 horas: `EB_DEMASIADOS_REPORTES`); devuelve `{id, codigo: 'INC-XXXXXX', creada_at}`.
+
+---
+
+### 3.17 `invitaciones` (cambios de la fase 3)
+
+| Columna | Tipo | Nullable | Default | Descripción |
+|---|---|---|---|---|
+| `revocada_at` | TIMESTAMPTZ | SÍ | NULL | Cuándo la revocó el administrador. Una invitación revocada no es válida aunque no haya vencido. Fase 3 |
 
 ## 4. Triggers Principales
 
@@ -461,49 +508,65 @@ CREATE TYPE estado_viaje AS ENUM (
 |---|---|---|---|
 | `update_updated_at` | Múltiples | BEFORE UPDATE | Set `updated_at = now()` |
 | `validar_transicion_encomienda` | `encomiendas` | BEFORE UPDATE on `estado` | Valida que la transición `OLD.estado → NEW.estado` esté en la lista de transiciones permitidas (ver `State_Machines_Spec.md §1.3`). Si la transición no es válida, lanza excepción y rechaza el UPDATE. |
-| `validar_transicion_boleto` | `boletos` | BEFORE UPDATE on `estado` | Valida que la transición `OLD.estado → NEW.estado` esté en la lista de transiciones permitidas (ver `State_Machines_Spec.md §2.3`). Si la transición no es válida, lanza excepción y rechaza el UPDATE. |
-| `on_auth_user_created` | `auth.users` | AFTER INSERT | Ejecuta `handle_new_user()`: crea registro en `profiles` usando `raw_user_meta_data` (nombre, teléfono, cédula). `SECURITY DEFINER`. Ver §4.1. |
+| `validar_transicion_boleto` | `boletos` | BEFORE UPDATE on `estado` | Valida que la transición `OLD.estado → NEW.estado` esté en la lista de transiciones permitidas (ver `State_Machines_Spec.md §2.4`). Si la transición no es válida, lanza excepción y rechaza el UPDATE. |
+| `on_auth_user_created` | `auth.users` | AFTER INSERT | Ejecuta `handle_new_user()`: crea registro en `profiles` usando `raw_user_meta_data` (nombre, teléfono, cédula; marcador `PENDIENTE-<id>` si faltan o están repetidos). `SECURITY DEFINER`. Versionado en `20260720000002`. Ver §4.1. |
+| `aa_proteger_cooperativa` | `cooperativas` | BEFORE UPDATE | `proteger_cooperativa_fn`: estado, comisión y calificación solo los cambia el Super Admin; nombre y RIF solo en `PENDIENTE`/`RECHAZADA` (`EB_SIN_PERMISO`). Fase 3 |
 | `log_estado_encomienda` | `encomiendas` | AFTER UPDATE on `estado` | Inserta en `encomienda_estado_historial` (`SECURITY DEFINER`) |
 | `generar_tracking_id` | `encomiendas` | BEFORE INSERT | Genera `EB-YYMMDD-XXXXX` auto |
 | `generar_pin_retiro` | `encomiendas` | AFTER UPDATE to `EN_RECEPCION` | Genera PIN **único** aleatorio de 4 dígitos (verifica unicidad antes de asignar, reintenta si hay colisión). El PIN es inmutable tras su creación. |
 | `calcular_calificacion` | `calificaciones` | AFTER INSERT/UPDATE/DELETE | Recalcula promedio en `cooperativas` |
 | `actualizar_asientos` | `boletos` | AFTER INSERT/UPDATE/DELETE | Actualiza `viajes.asientos_disponibles` |
 | `auto_expirar_reserva` | `boletos` | CRON (cada 1 min) | Expira reservas donde `reserva_expira_at < now()` |
-| `auto_devolver_encomienda` | `encomiendas` | CRON (diario, medianoche) | Marca DEVUELTA si EN_OFICINA_DESTINO > 7 días naturales |
+| `auto_devolver_encomienda` | `encomiendas` | CRON (diario, medianoche) | Marca DEVUELTA si lleva 5 días hábiles o más en EN_OFICINA_DESTINO (`calcular_dias_habiles(updated_at, now())`); avisa al remitente solo si `origen_registro = 'APP'` (fase 3) |
 | `alerta_amarilla_72h` | `encomiendas` | CRON (cada 1 hora) | Crea incidencia si EN_TRANSITO > 72 horas |
 
 ### 4.1 Función `handle_new_user()` (Crítica)
 
 Esta función es el **puente obligatorio** entre `auth.users` y `public.profiles`. Sin ella, los usuarios recién registrados no pueden operar en el sistema (RLS los bloquea).
 
+**Versionada por primera vez en `20260720000002_fase3_base.sql`** (antes solo existía en el proyecto desplegado). Google no envía teléfono ni cédula, y ambos son `UNIQUE NOT NULL` en `profiles`: la versión anterior hacía fallar el alta con Google ("Database error saving new user") o dejaba datos basura.
+
 ```sql
 CREATE OR REPLACE FUNCTION public.handle_new_user()
-RETURNS trigger AS $$
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
+DECLARE
+  m jsonb := coalesce(NEW.raw_user_meta_data, '{}'::jsonb);
+  v_nombre text; v_tel text; v_ced text;
 BEGIN
+  v_nombre := coalesce(nullif(btrim(m->>'nombre_completo'), ''), nullif(btrim(m->>'full_name'), ''),
+                       nullif(btrim(m->>'name'), ''), nullif(split_part(coalesce(NEW.email, ''), '@', 1), ''),
+                       'Usuario EnBus');
+  v_tel := nullif(btrim(m->>'telefono'), '');
+  v_ced := nullif(btrim(m->>'cedula_rif'), '');
+  IF v_tel IS NULL OR EXISTS (SELECT 1 FROM public.profiles p WHERE p.telefono = v_tel) THEN
+    v_tel := 'PENDIENTE-' || NEW.id::text;
+  END IF;
+  IF v_ced IS NULL OR EXISTS (SELECT 1 FROM public.profiles p WHERE p.cedula_rif = v_ced) THEN
+    v_ced := 'PENDIENTE-' || NEW.id::text;
+  END IF;
   INSERT INTO public.profiles (id, role, nombre_completo, telefono, cedula_rif)
-  VALUES (
-    NEW.id,
-    'user',
-    NEW.raw_user_meta_data->>'nombre_completo',
-    NEW.raw_user_meta_data->>'telefono',
-    NEW.raw_user_meta_data->>'cedula_rif'
-  );
+  VALUES (NEW.id, 'user', v_nombre, v_tel, v_ced)
+  ON CONFLICT (id) DO NOTHING;
   RETURN NEW;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+END $$;
 ```
 
-**Reglas estrictas**:
-- **No se usan fallbacks aleatorios**. Si `raw_user_meta_data` no contiene los campos obligatorios (nombre, teléfono, cédula), el INSERT falla y la transacción de registro se revierte. Esto fuerza al frontend a enviar siempre los datos completos.
+**Reglas**:
+- **Nombre**: `nombre_completo` → `full_name` → `name` (Google) → parte local del correo → "Usuario EnBus".
+- **Teléfono y cédula ausentes o ya usados por otra cuenta** → marcador único **`PENDIENTE-<id>`** (id del usuario). Así el alta nunca aborta. `normalizar_cedula` y `normalizar_telefono` tratan cualquier valor que empiece por `PENDIENTE` como vacío, y la app pide nombre, cédula y teléfono (`CompletarPerfilSheet`) antes de la primera compra o del primer envío; el servidor exige cédula válida por pasajero en `fn_checkout_boletos` (`EB_DATOS_PASAJERO`).
+- `_asegurar_asientos` solo copia del perfil al boleto datos válidos: un perfil con `PENDIENTE-…` deja el boleto sin cédula hasta `fn_asignar_pasajeros`.
+- `ON CONFLICT (id) DO NOTHING`: compatible con el onboarding de empleados (invitaciones), que crea o ajusta el perfil por su cuenta.
 - La función usa `SECURITY DEFINER` para poder escribir en `profiles` sin depender de RLS.
 - Solo aplica `role = 'user'`. Los roles `taquillero`, `admin_cooperativa` y `super_admin` se crean mediante funciones de invitación independientes que asignan el rol y `cooperativa_id` correctos.
 
-**Trigger**:
+**Trigger** (la migración lo crea **solo si** no existe ya un trigger en `auth.users` que llame a `handle_new_user()`):
 ```sql
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 ```
+
+**Correo ya registrado**: `fn_email_registrado(p_email)` (solo `service_role`, sin distinguir mayúsculas) responde si existe una cuenta en `auth.users`; la usa el registro de cooperativas en lugar de `listUsers()` sin paginar.
 
 **Rescate de usuarios huérfanos** (ejecutar una sola vez en migración):
 ```sql
@@ -534,3 +597,21 @@ WHERE NOT EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = u.id);
 |---|---|---|
 | `logos-cooperativas` | Público (lectura) | Logos de cooperativas |
 | `fotos-encomiendas` | Privado (RLS) | Fotos de evidencia de embalaje |
+
+**`fotos-encomiendas` (fase 3)**: el bucket es privado, así que en la base se guarda la **ruta** del objeto (no una URL pública) y las pantallas la muestran con una URL firmada.
+- Foto del remitente (app): `<id del usuario>/<archivo>` → `encomiendas.foto_cliente_path` (políticas "Usuario sube fotos de sus envios" y "Usuario reemplaza fotos de sus envios", ver `RLS_Policies_Spec.md`).
+- Foto de la taquilla (panel): `<id de la encomienda>/<ts>.jpg` → `encomiendas.foto_evidencia_url`; si se omite, `foto_omitida_motivo`.
+- La migración `20260720000002` movió a `foto_cliente_path` las fotos del remitente que la app anterior guardaba en `foto_evidencia_url`.
+
+## 7. RPC de la fase 3
+
+Contratos completos en `Audits/fase3_spec.md` §3.2. Todas son `SECURITY DEFINER`; errores `P0001` con `message = 'EB_<CODIGO>'` y `hint` para el usuario.
+
+| Migración | RPC |
+|---|---|
+| `20260720000002_fase3_base.sql` | `fn_sucursales_en_ciudad` |
+| `20260720000003_fase3_rpc_boletos.sql` | `fn_asientos_ocupados`, `fn_asignar_pasajeros`, `fn_checkout_boletos` (redefinida), `fn_validar_embarque` (redefinida), `fn_cancelar_viaje`, `fn_reembolsos`, `fn_registrar_reembolso`; internas `_fecha_hora_ve`, `_resumen_compra`, `_asegurar_asientos`, `_resultado_embarque` |
+| `20260720000004_fase3_rpc_encomiendas.sql` | `fn_registrar_encomienda_taquilla`, `fn_rechazar_encomienda_origen`, `fn_validar_pin_retiro`, `fn_entregar_encomienda`, `fn_desbloquear_pin`, `fn_cotizar_envio_publico`, `fn_rastrear_encomienda_publico` (solo `service_role`), `fn_rutas_populares`, `fn_estadisticas_publicas` |
+| `20260720000005_fase3_rpc_cuenta_soporte.sql` | `fn_reportar_problema`, `fn_cambiar_estado_cooperativa`, `fn_solicitar_revision_cooperativa`, `fn_checklist_cooperativa`, `fn_email_registrado` (solo `service_role`) |
+
+Las funciones internas (`_…`) no tienen `EXECUTE` para `anon` ni `authenticated`.

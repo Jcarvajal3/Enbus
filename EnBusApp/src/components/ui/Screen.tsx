@@ -1,5 +1,6 @@
 /**
- * Screen shell primitives: Screen, FloatingBar, EmptyState, LoadingState.
+ * Screen shell primitives: Screen, FloatingBar, EmptyState, ErrorState,
+ * StaleBanner, LoadingState.
  *
  * These encode the layout rules that screens kept re-deriving by hand:
  * the horizontal gutter, and — critically — the bottom inset needed to clear
@@ -7,11 +8,17 @@
  * `bottom: 110`; both now come from `Layout`, so moving the tab bar moves
  * everything with it.
  */
-import React from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View, ViewStyle } from 'react-native';
 import { SafeAreaView, type Edge } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import type { IconProps } from 'phosphor-react-native';
+import {
+  ArrowClockwise,
+  ClockCounterClockwise,
+  WarningCircle,
+  type IconProps,
+} from 'phosphor-react-native';
+import { PressableScale } from '../PressableScale';
 import { Button, type ButtonProps } from './Button';
 import { Text } from './Text';
 import { Colors, Gradients, Layout, Radius, Sizes, Spacing } from '@/src/theme';
@@ -151,6 +158,144 @@ export function EmptyState({
   );
 }
 
+// ─── Error state ─────────────────────────────────────────────────────────────
+
+/**
+ * Lo que se muestra cuando una carga falla y no hay nada que enseñar (DS-08).
+ * El botón "Reintentar" muestra carga mientras corre `onRetry`, así el usuario
+ * sabe que su toque hizo algo (antes "Intentar de nuevo" no daba señal).
+ * `description` suele ser `humanizeError(err, …)`.
+ */
+export function ErrorState({
+  title,
+  description,
+  onRetry,
+  compact,
+}: {
+  title: string;
+  description?: string;
+  onRetry: () => Promise<void> | void;
+  compact?: boolean;
+}) {
+  const [retrying, setRetrying] = useState(false);
+  const mounted = useRef(true);
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
+  // Ref además del estado: dos toques seguidos llegan antes del re-render.
+  const enCurso = useRef(false);
+
+  const handleRetry = useCallback(async () => {
+    if (enCurso.current) return;
+    enCurso.current = true;
+    setRetrying(true);
+    try {
+      await onRetry();
+    } catch {
+      // `onRetry` muestra su propio error (la pantalla vuelve a este estado).
+    } finally {
+      enCurso.current = false;
+      if (mounted.current) setRetrying(false);
+    }
+  }, [onRetry]);
+
+  return (
+    <View
+      style={[s.empty, compact && s.emptyCompact]}
+      accessibilityRole="alert"
+      accessibilityLiveRegion="polite"
+    >
+      <View style={[s.emptyIcon, s.errorIcon, compact && s.emptyIconCompact]}>
+        <WarningCircle
+          size={compact ? Sizes.icon.xl : Sizes.icon['2xl']}
+          color={Colors.dangerText}
+          weight="regular"
+        />
+      </View>
+      <Text variant="subheading" align="center">
+        {title}
+      </Text>
+      {description ? (
+        <Text variant="secondary" color="muted" align="center" style={s.emptyDescription}>
+          {description}
+        </Text>
+      ) : null}
+      <View style={s.emptyAction}>
+        <Button
+          size="md"
+          variant="secondary"
+          icon={ArrowClockwise}
+          loading={retrying}
+          onPress={handleRetry}
+          accessibilityLabel={retrying ? 'Reintentando' : 'Reintentar'}
+        >
+          Reintentar
+        </Button>
+      </View>
+    </View>
+  );
+}
+
+// ─── Stale banner ────────────────────────────────────────────────────────────
+
+/** "hace 5 min", "hace 2 h", "hace 3 días"; `null` si no hay fecha. */
+function haceCuanto(ms: number | null | undefined): string | null {
+  if (!ms || !Number.isFinite(ms)) return null;
+  const minutos = Math.max(0, Math.floor((Date.now() - ms) / 60_000));
+  if (minutos < 1) return 'hace un momento';
+  if (minutos < 60) return `hace ${minutos} min`;
+  const horas = Math.floor(minutos / 60);
+  if (horas < 24) return `hace ${horas} h`;
+  const dias = Math.floor(horas / 24);
+  return dias === 1 ? 'hace 1 día' : `hace ${dias} días`;
+}
+
+/**
+ * Aviso de que la lista muestra datos guardados porque la carga falló.
+ * Va encima del contenido en caché; `onRetry` añade el enlace "Reintentar".
+ */
+export function StaleBanner({
+  actualizadoAt,
+  onRetry,
+}: {
+  /** `Date.now()` de la última carga buena */
+  actualizadoAt?: number | null;
+  onRetry?: () => void;
+}) {
+  const hace = haceCuanto(actualizadoAt);
+  const texto = hace
+    ? `Mostrando datos guardados · actualizado ${hace}`
+    : 'Mostrando datos guardados';
+
+  return (
+    <View style={s.stale} accessibilityRole="alert" accessibilityLiveRegion="polite">
+      <ClockCounterClockwise size={Sizes.icon.sm} color={Colors.warningText} weight="bold" />
+      <Text variant="caption" color="warningText" style={s.staleText}>
+        {texto}
+      </Text>
+      {onRetry ? (
+        <PressableScale
+          onPress={onRetry}
+          haptic
+          hapticType="selection"
+          style={s.staleActionBox}
+          accessibilityRole="button"
+          accessibilityLabel="Reintentar la carga"
+        >
+          <Text variant="caption" weight="bold" color="warningText" style={s.staleAction}>
+            Reintentar
+          </Text>
+        </PressableScale>
+      ) : null}
+    </View>
+  );
+}
+
 // ─── Loading state ───────────────────────────────────────────────────────────
 
 /**
@@ -237,5 +382,29 @@ const s = StyleSheet.create({
   },
   emptyAction: {
     marginTop: Spacing.xl,
+  },
+  errorIcon: {
+    backgroundColor: Colors.destructiveLight,
+  },
+  stale: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm + 2,
+    borderRadius: Radius.lg,
+    backgroundColor: Colors.warningLight,
+    marginBottom: Spacing.md,
+  },
+  staleText: {
+    flex: 1,
+  },
+  staleAction: {
+    textDecorationLine: 'underline',
+  },
+  /** Área táctil cómoda alrededor de un enlace de texto pequeño */
+  staleActionBox: {
+    paddingVertical: Spacing.xs,
+    paddingHorizontal: Spacing.xs,
   },
 });

@@ -4,26 +4,47 @@ import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { Barcode } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
+import { humanizeError, isNetworkError } from "@/lib/errores";
 import type { Encomienda } from "@/lib/types/encomiendas";
 import { Input } from "@/components/ui/input";
 import { useBarcodeScan } from "@/hooks/use-barcode-scan";
 import { CameraQRTrigger } from "@/components/camera-qr-scanner";
 
 interface ScanInputProps {
+  /** Modo `encomiendas`: la encomienda encontrada en la cooperativa. */
   onEncomiendaFound?: (encomienda: Encomienda) => void;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  onBoletoFound?: (boleto: any) => void;
+  /**
+   * Modo `boletos`: el código escaneado o escrito, limpio y en mayúsculas.
+   * La página lo resuelve con `validarEmbarque` (la causa la decide el servidor).
+   */
+  onCodigo?: (codigo: string) => void;
   cooperativaId: string;
   disabled?: boolean;
   mode?: "encomiendas" | "boletos";
+  /** Texto de ayuda dentro del campo (por defecto, uno según el modo). */
+  placeholder?: string;
 }
 
-export function ScanInput({ 
-  onEncomiendaFound, 
-  onBoletoFound, 
-  cooperativaId, 
+const PLACEHOLDER: Record<NonNullable<ScanInputProps["mode"]>, string> = {
+  encomiendas: "Escanea el QR o escribe el código de seguimiento (EB-…)",
+  boletos: "Escanea el QR del boleto o escribe su código",
+};
+
+const MSG_SIN_RED = "Sin conexión: no se puede validar el código. Revisa tu internet.";
+
+/** Solo se re-enfoca si nadie tiene el foco: nunca se le quita a otro campo o botón. */
+function focoLibre() {
+  const activo = document.activeElement;
+  return !activo || activo === document.body;
+}
+
+export function ScanInput({
+  onEncomiendaFound,
+  onCodigo,
+  cooperativaId,
   disabled = false,
-  mode = "encomiendas" 
+  mode = "encomiendas",
+  placeholder,
 }: ScanInputProps) {
   const [value, setValue] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
@@ -39,88 +60,105 @@ export function ScanInput({
 
   const handleSearch = useCallback(async (code: string) => {
     if (!code) return;
+
+    if (mode === "boletos") {
+      // La validación (y su mensaje por causa) la hace la página con el servidor.
+      const limpio = code.trim().toUpperCase();
+      setValue("");
+      if (limpio) onCodigo?.(limpio);
+      return;
+    }
+
+    const limpio = code.trim();
+    // Sin red no se puede validar: decirlo, nunca "no encontrada".
+    if (typeof navigator !== "undefined" && navigator.onLine === false) {
+      toast.error(MSG_SIN_RED);
+      setValue("");
+      return;
+    }
+
     setIsSearching(true);
-    
     try {
-      if (mode === "encomiendas") {
-        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(code);
-        const orCondition = isUUID 
-          ? `id.eq.${code},tracking_id.eq.${code},qr_data.eq.${code}`
-          : `tracking_id.eq.${code},qr_data.eq.${code}`;
+      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(limpio);
+      // El código de seguimiento se guarda en mayúsculas (EB-AAMMDD-NNNNN); el QR puede traer cualquier texto.
+      const tracking = limpio.toUpperCase().replace(/\s+/g, "");
+      // Valores entre comillas: un código con comas o paréntesis no rompe el filtro.
+      const q = (v: string) => `"${v.replace(/["\\]/g, "")}"`;
+      const condiciones = [`tracking_id.eq.${q(tracking)}`, `qr_data.eq.${q(limpio)}`];
+      if (isUUID) condiciones.unshift(`id.eq.${limpio}`);
 
-        const { data, error } = await supabase
-          .from("encomiendas")
-          .select("*")
-          .eq("cooperativa_id", cooperativaId)
-          .or(orCondition)
-          .single();
-          
-        if (error || !data) {
-          toast.error("Encomienda no encontrada");
-        } else {
-          onEncomiendaFound?.(data as Encomienda);
-        }
-      } else if (mode === "boletos") {
-        const { data, error } = await supabase
-          .from("boletos")
-          .select(`
-            id, codigo_boleto, asiento, estado, pasajero_nombre,
-            comprador:profiles!comprador_id(nombre_completo),
-            viaje:viajes!viaje_id(ruta:rutas(ciudad_origen, ciudad_destino))
-          `)
-          .eq("cooperativa_id", cooperativaId)
-          .or(`qr_embarque_data.eq.${code},codigo_boleto.eq.${code}`)
-          .single();
+      const { data, error } = await supabase
+        .from("encomiendas")
+        .select("*")
+        .eq("cooperativa_id", cooperativaId)
+        .or(condiciones.join(","))
+        .limit(1)
+        .maybeSingle();
 
-        if (error || !data) {
-          toast.error("Boleto no encontrado");
-        } else {
-          onBoletoFound?.(data);
-        }
+      if (error) {
+        toast.error(
+          isNetworkError(error) ? MSG_SIN_RED : humanizeError(error, "buscar la encomienda")
+        );
+      } else if (!data) {
+        // Un QR ajeno puede traer un texto largo: se recorta para que el aviso se lea.
+        const mostrado = tracking.length > 32 ? `${tracking.slice(0, 32)}…` : tracking;
+        toast.error(
+          `No encontramos la encomienda ${mostrado}. Revisa el código o búscala en la lista.`
+        );
+      } else {
+        onEncomiendaFound?.(data as Encomienda);
       }
-    } catch {
-      toast.error(mode === "encomiendas" ? "Error al buscar la encomienda" : "Error al buscar el boleto");
+    } catch (err) {
+      toast.error(isNetworkError(err) ? MSG_SIN_RED : humanizeError(err, "buscar la encomienda"));
     } finally {
       setIsSearching(false);
       setValue(""); // Limpiar input después de procesar
     }
-  }, [cooperativaId, onEncomiendaFound, onBoletoFound, mode, supabase]);
+  }, [cooperativaId, onEncomiendaFound, onCodigo, mode, supabase]);
 
   // Use the custom hook for barcode scanner detection
   useBarcodeScan(handleSearch, disabled || isSearching);
 
-  // Auto-focus logic
+  // Auto-focus: listo para escanear, sin robar el foco a otro campo (filtros, buscadores…).
   useEffect(() => {
     if (disabled) return;
-    
-    // Focus immediately if not disabled
-    inputRef.current?.focus();
-    
-    let timeoutId: NodeJS.Timeout;
-    
+
+    if (focoLibre()) inputRef.current?.focus();
+
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
     const handleBlur = () => {
+      clearTimeout(timeoutId);
       // Use ref to avoid stale closure capturing initial value of `disabled`
       timeoutId = setTimeout(() => {
-        if (!disabledRef.current && document.activeElement !== inputRef.current) {
+        if (!disabledRef.current && focoLibre()) {
           inputRef.current?.focus();
         }
       }, 2000);
     };
-    
+
     const inputEl = inputRef.current;
     inputEl?.addEventListener("blur", handleBlur);
-    
+
     return () => {
       clearTimeout(timeoutId);
       inputEl?.removeEventListener("blur", handleBlur);
     };
   }, [disabled]);
 
+  // Mientras busca, el campo queda deshabilitado y pierde el foco: al terminar
+  // se devuelve para el siguiente escaneo (si nadie más lo tomó).
+  useEffect(() => {
+    if (!isSearching && !disabledRef.current && focoLibre()) inputRef.current?.focus();
+  }, [isSearching]);
+
   const handleManualKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter" && value.trim()) {
       handleSearch(value.trim());
     }
   };
+
+  const texto = placeholder ?? PLACEHOLDER[mode];
 
   return (
     <div className="flex items-center gap-2 w-full">
@@ -131,12 +169,16 @@ export function ScanInput({
         <Input
           ref={inputRef}
           type="text"
-          placeholder="Escanear QR o escribir Tracking ID..."
+          placeholder={texto}
+          aria-label={texto}
+          autoComplete="off"
+          autoCapitalize="characters"
+          spellCheck={false}
           value={value}
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={handleManualKeyDown}
           disabled={disabled || isSearching}
-          className="pl-11 h-12 text-lg shadow-sm transition-shadow focus-visible:ring-primary"
+          className="pl-11 h-12 text-lg shadow-sm transition-shadow"
           autoFocus
         />
       </div>

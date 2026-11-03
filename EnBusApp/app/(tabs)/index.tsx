@@ -11,6 +11,7 @@ import { StaggerItem } from '@/src/components/StaggerItem';
 import { PressableScale } from '@/src/components/PressableScale';
 import { IconButton, Screen, Text } from '@/src/components/ui';
 import { supabase } from '@/src/utils/supabase';
+import { nombreValido } from '@/src/utils/validation';
 import { Colors, Layout, Motion, Radius, Shadows, Sizes, Spacing } from '@/src/theme';
 
 export default function HomeScreen() {
@@ -37,7 +38,8 @@ export default function HomeScreen() {
       .eq('id', user.id)
       .single()
       .then(({ data }) => {
-        if (data?.nombre_completo && isMounted) {
+        // Sin el relleno "Usuario EnBus" del alta con Google.
+        if (data?.nombre_completo && nombreValido(data.nombre_completo) && isMounted) {
           setProfileName(data.nombre_completo.trim().split(' ')[0]);
         }
       });
@@ -76,7 +78,7 @@ export default function HomeScreen() {
       <View style={s.header}>
         <View style={s.brand}>
           <View style={s.logoBadge}>
-            <Text variant="overline" size="sm" weight="heavy" color="primary" compact>
+            <Text variant="overline" size="sm" weight="heavy" color="foreground" compact>
               EB
             </Text>
           </View>
@@ -126,7 +128,7 @@ export default function HomeScreen() {
 
             <StaggerItem index={1} delayStep={110} translateYStart={22} style={s.heroSubtitleSlot}>
               <Text variant="secondary" color="muted" align="center">
-                Compra tu boleto o envía un paquete en menos de un minuto.
+                Compra tu boleto o envía una encomienda desde tu teléfono.
               </Text>
             </StaggerItem>
 
@@ -170,7 +172,7 @@ export default function HomeScreen() {
               icon={Ticket}
               count={boletosActivos}
               label="Boletos activos"
-              empty="Sin viajes en curso"
+              empty="Sin boletos activos"
               tint={Colors.accent}
               tintBackground={Colors.accentLight}
               onPress={() => router.push('/(tabs)/boletos')}
@@ -178,8 +180,8 @@ export default function HomeScreen() {
             <ActivityTile
               icon={Package}
               count={encomiendasActivas}
-              label="Paquetes en camino"
-              empty="Sin envíos activos"
+              label="Encomiendas activas"
+              empty="Sin encomiendas activas"
               tint={Colors.secondary}
               tintBackground={Colors.secondaryLight}
               onPress={() => router.push('/(tabs)/encomiendas')}
@@ -234,17 +236,18 @@ function ActivityTile({
         <CaretRight size={Sizes.icon.sm} color={Colors.mutedForeground} weight="bold" />
       </View>
 
+      {/* El número va en `foreground`: el coral y el azul claros no llegan a 3:1 sobre beige. */}
       {hasItems ? (
-        <Text variant="title" size="3xl" color={tint} compact style={s.tileCount}>
+        <Text variant="title" size="3xl" color="foreground" compact style={s.tileCount}>
           {String(count)}
         </Text>
       ) : (
-        <Text variant="title" size="3xl" color={Colors.border} compact style={s.tileCount}>
-          —
+        <Text variant="title" size="3xl" color="muted" compact style={s.tileCount}>
+          0
         </Text>
       )}
 
-      <Text variant="caption" color="muted" numberOfLines={1}>
+      <Text variant="caption" color="muted" numberOfLines={2}>
         {hasItems ? label : empty}
       </Text>
     </PressableScale>

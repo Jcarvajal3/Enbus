@@ -1,7 +1,8 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import type { Tarifa } from "@/lib/types/admin-tarifas";
-import { formatCurrency, dateFormatterShort } from "@/lib/utils";
+import { dateFormatterShort } from "@/lib/utils";
+import { formatUsd } from "@/lib/dinero";
 import { Scales, Ruler, Calendar, User, CheckCircle, Info } from "@phosphor-icons/react/dist/ssr";
 
 interface TarifaVigenteCardProps {
@@ -16,7 +17,7 @@ export function TarifaVigenteCard({ tarifa }: TarifaVigenteCardProps) {
           <Info className="size-10 text-muted-foreground mb-4" />
           <p className="font-semibold text-muted-foreground">No hay tarifa activa</p>
           <p className="text-xs text-muted-foreground max-w-[250px] mt-1">
-            Por favor cree una nueva tarifa para activar la simulación y el cálculo de costos.
+            Crea una tarifa con «Nueva tarifa» para que el simulador y el cálculo de costos funcionen.
           </p>
         </CardContent>
       </Card>
@@ -35,7 +36,7 @@ export function TarifaVigenteCard({ tarifa }: TarifaVigenteCardProps) {
           <CardTitle className="text-xl font-bold tracking-tight">Tarifa Vigente</CardTitle>
           <CardDescription className="text-xs">Parámetros globales de facturación</CardDescription>
         </div>
-        <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center gap-1 py-1">
+        <Badge variant="outline" className="border-transparent bg-emerald-100 text-emerald-900 dark:bg-emerald-400/15 dark:text-emerald-200 flex items-center gap-1 py-1">
           <CheckCircle weight="fill" className="size-3.5" />
           Activa
         </Badge>
@@ -44,21 +45,21 @@ export function TarifaVigenteCard({ tarifa }: TarifaVigenteCardProps) {
       <CardContent className="space-y-6">
         <div className="grid grid-cols-2 gap-4">
           <div className="flex items-center gap-3 p-3 rounded-xl bg-background/50 border border-border/50">
-            <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <div className="flex size-10 items-center justify-center rounded-lg bg-primary/15 text-primary-text">
               <Scales className="size-5" />
             </div>
             <div className="flex flex-col">
-              <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Tarifa base / Kg</span>
-              <span className="text-lg font-bold text-foreground">{formatCurrency(tarifa.tarifa_por_kg)}</span>
+              <span className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Tarifa por kg</span>
+              <span className="text-lg font-bold text-foreground">{formatUsd(tarifa.tarifa_por_kg)}</span>
             </div>
           </div>
 
           <div className="flex items-center gap-3 p-3 rounded-xl bg-background/50 border border-border/50">
-            <div className="flex size-10 items-center justify-center rounded-lg bg-orange-500/10 text-orange-500">
+            <div className="flex size-10 items-center justify-center rounded-lg bg-muted text-muted-foreground">
               <Scales className="size-5" />
             </div>
             <div className="flex flex-col">
-              <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Factor Distancia</span>
+              <span className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Factor de distancia</span>
               <span className="text-lg font-bold text-foreground">{tarifa.factor_distancia_por_min.toFixed(4)} <span className="text-xs font-normal text-muted-foreground">/min</span></span>
             </div>
           </div>
@@ -66,15 +67,15 @@ export function TarifaVigenteCard({ tarifa }: TarifaVigenteCardProps) {
 
         <div className="grid grid-cols-2 gap-4 border-t border-border/50 pt-4">
           <div className="flex flex-col gap-1">
-            <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider flex items-center gap-1">
-              <Scales className="size-3 text-primary" /> Peso máx.
+            <span className="text-xs text-muted-foreground uppercase font-bold tracking-wider flex items-center gap-1">
+              <Scales className="size-3 text-primary-text" aria-hidden /> Peso máx.
             </span>
             <span className="text-sm font-semibold">{tarifa.peso_max_kg} kg</span>
           </div>
 
           <div className="flex flex-col gap-1">
-            <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider flex items-center gap-1">
-              <Ruler className="size-3 text-primary" /> Dimensión máx.
+            <span className="text-xs text-muted-foreground uppercase font-bold tracking-wider flex items-center gap-1">
+              <Ruler className="size-3 text-primary-text" aria-hidden /> Dimensión máx.
             </span>
             <span className="text-sm font-semibold">{tarifa.dimensiones_max_cm} cm</span>
           </div>

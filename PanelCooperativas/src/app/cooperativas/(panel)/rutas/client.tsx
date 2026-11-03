@@ -11,13 +11,31 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Plus, DotsThree, PencilSimple, MapTrifold } from "@phosphor-icons/react";
 import { ESTADOS_VENEZUELA, CIUDADES_POR_ESTADO } from "@/lib/data/venezuela";
 import { guardarRuta, toggleActivaRuta, checkDesactivarRuta } from "./actions";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
 import { requireOnline } from "@/components/connectivity-banner";
-import { formatCurrency } from "@/lib/utils";
+import { Monto } from "@/components/monto";
+import { useTasaBCV } from "@/components/tasa-bcv-provider";
+import { formatBs, formatUsd, usdABs } from "@/lib/dinero";
+import { toast } from "sonner";
+import { humanizeError } from "@/lib/errores";
+
+/** Por encima de este precio (USD) se pide confirmar que no se escribió en bolívares. */
+const PRECIO_ALTO_USD = 500;
+
+/** "15,50" | "15.50" | "1.250,00" -> número (NaN si no es válido). */
+function leerPrecio(texto: string): number {
+  const limpio = texto.trim().replace(/\s/g, "");
+  if (!limpio) return NaN;
+  // El último separador es el decimal: "1.234,56" y "1,234.56" -> 1234.56.
+  const normalizado =
+    limpio.lastIndexOf(",") > limpio.lastIndexOf(".") ? limpio.replace(/\./g, "").replace(",", ".") : limpio.replace(/,/g, "");
+  return /^\d+(\.\d+)?$/.test(normalizado) ? Number(normalizado) : NaN;
+}
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 export function RutasClient({
@@ -34,15 +52,24 @@ export function RutasClient({
   const [isPending, startTransition] = useTransition();
   const [activaSwitch, setActivaSwitch] = useState(true);
 
-  // Alert Dialog state
+  // Desactivar una ruta con viajes programados (con confirmación)
   const [alertOpen, setAlertOpen] = useState(false);
-  const [alertData, setAlertData] = useState<{ id: string, count: number } | null>(null);
+  const [alertData, setAlertData] = useState<{ id: string; count: number; nombre: string } | null>(null);
 
   // Form states
   const [estadoOrigen, setEstadoOrigen] = useState<string>("");
   const [ciudadOrigen, setCiudadOrigen] = useState<string>("");
   const [estadoDestino, setEstadoDestino] = useState<string>("");
   const [ciudadDestino, setCiudadDestino] = useState<string>("");
+  // Precio en USD (texto controlado para mostrar el equivalente en Bs mientras se escribe)
+  const [precioTexto, setPrecioTexto] = useState<string>("");
+  // Formulario en espera de confirmar un precio muy alto (¿escrito en Bs?)
+  const [precioAltoPendiente, setPrecioAltoPendiente] = useState<FormData | null>(null);
+
+  const tasa = useTasaBCV();
+  const precioUsd = leerPrecio(precioTexto);
+  const precioValido = Number.isFinite(precioUsd) && precioUsd > 0;
+  const precioAltoUsd = precioAltoPendiente ? leerPrecio(String(precioAltoPendiente.get("precio_pasaje") ?? "")) : NaN;
 
   function openCreateModal() {
     setEditingRuta(null);
@@ -50,6 +77,7 @@ export function RutasClient({
     setCiudadOrigen("");
     setEstadoDestino("");
     setCiudadDestino("");
+    setPrecioTexto("");
     setActivaSwitch(true);
     setIsModalOpen(true);
   }
@@ -60,6 +88,7 @@ export function RutasClient({
     setCiudadOrigen(ruta.ciudad_origen);
     setEstadoDestino(ruta.estado_destino);
     setCiudadDestino(ruta.ciudad_destino);
+    setPrecioTexto(ruta.precio_pasaje != null ? String(ruta.precio_pasaje) : "");
     setActivaSwitch(ruta.activa);
     setIsModalOpen(true);
   }
@@ -71,19 +100,24 @@ export function RutasClient({
         try {
           const check = await checkDesactivarRuta(ruta.id);
           if (check.error) {
-            alert(check.error);
+            toast.error(check.error);
             return;
           }
           if (check.hasViajes) {
-            setAlertData({ id: ruta.id, count: check.count });
+            setAlertData({
+              id: ruta.id,
+              count: check.count,
+              nombre: `${formatCity(ruta.ciudad_origen)} → ${formatCity(ruta.ciudad_destino)}`,
+            });
             setAlertOpen(true);
           } else {
             // desactivar seguro
             const res = await requireOnline(() => toggleActivaRuta(ruta.id, false))();
-            if (res.error) alert(res.error);
+            if (res.error) toast.error(res.error);
+            else toast.success(`Ruta ${formatCity(ruta.ciudad_origen)} → ${formatCity(ruta.ciudad_destino)} desactivada.`);
           }
         } catch (err: any) {
-          alert(err.message || "Error inesperado");
+          toast.error(humanizeError(err, "desactivar la ruta"));
         }
       });
     } else {
@@ -91,43 +125,58 @@ export function RutasClient({
       startTransition(async () => {
         try {
           const res = await requireOnline(() => toggleActivaRuta(ruta.id, true))();
-          if (res.error) alert(res.error);
+          if (res.error) toast.error(res.error);
         } catch (err: any) {
-          alert(err.message || "Error inesperado");
+          toast.error(humanizeError(err, "reactivar la ruta"));
         }
       });
     }
   }
 
   async function forceDesactivar() {
-    if (!alertData) return;
-    startTransition(async () => {
-      try {
-        const res = await requireOnline(() => toggleActivaRuta(alertData.id, false))();
-        if (res.error) alert(res.error);
-        setAlertOpen(false);
-        setAlertData(null);
-      } catch (err: any) {
-        alert(err.message || "Error inesperado");
-      }
-    });
+    if (!alertData) return { ok: false, error: "No encontramos la ruta. Actualiza la página." };
+    try {
+      const res = await requireOnline(() => toggleActivaRuta(alertData.id, false))();
+      if (res.error) return { ok: false, error: res.error };
+    } catch (err: any) {
+      return { ok: false, error: humanizeError(err, "desactivar la ruta") };
+    }
+    toast.success(`Ruta ${alertData.nombre} desactivada.`);
+    return { ok: true };
   }
 
-  async function handleSubmit(formData: FormData) {
+  function guardar(formData: FormData) {
     startTransition(async () => {
       try {
         // Inject activa from controlled state since shadcn Switch with checked= won't add to FormData
         formData.set("activa", activaSwitch ? "on" : "off");
         const res = await requireOnline(() => guardarRuta(formData, editingRuta?.id))();
         if (res.error) {
-          alert(res.error);
+          toast.error(res.error);
         } else {
+          toast.success(editingRuta ? "Ruta actualizada." : "Ruta creada.");
           setIsModalOpen(false);
         }
       } catch (err: any) {
-        alert(err.message || "Error inesperado");
+        toast.error(humanizeError(err, "guardar la ruta"));
       }
     });
+  }
+
+  function handleSubmit(formData: FormData) {
+    const precio = leerPrecio(String(formData.get("precio_pasaje") ?? ""));
+    // Un precio muy alto suele ser un monto en bolívares escrito por error: pedir confirmación.
+    if (Number.isFinite(precio) && precio > PRECIO_ALTO_USD) {
+      setPrecioAltoPendiente(formData);
+      return;
+    }
+    guardar(formData);
+  }
+
+  function confirmarPrecioAlto() {
+    const formData = precioAltoPendiente;
+    setPrecioAltoPendiente(null);
+    if (formData) guardar(formData);
   }
 
   function formatCity(val: string | undefined) {
@@ -152,7 +201,7 @@ export function RutasClient({
             <TableRow>
               <TableHead>Origen → Destino</TableHead>
               <TableHead>Duración</TableHead>
-              <TableHead>Precio Pasaje</TableHead>
+              <TableHead>Precio del pasaje</TableHead>
               <TableHead>Estado</TableHead>
               {isAdmin && <TableHead className="text-right">Acciones</TableHead>}
             </TableRow>
@@ -174,13 +223,13 @@ export function RutasClient({
                     : `${ruta.duracion_estimada_min} min`}
                 </TableCell>
                 <TableCell>
-                  {formatCurrency(ruta.precio_pasaje)}
+                  <Monto usd={Number(ruta.precio_pasaje)} size="sm" />
                 </TableCell>
                 <TableCell>
                   {ruta.activa ? (
-                    <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20">Activa</Badge>
+                    <Badge variant="secondary" className="bg-emerald-100 text-emerald-900 dark:bg-emerald-400/15 dark:text-emerald-200">Activa</Badge>
                   ) : (
-                    <Badge variant="outline" className="bg-slate-500/10 text-slate-600 border-slate-500/20">Inactiva</Badge>
+                    <Badge variant="secondary" className="bg-slate-200 text-slate-800 dark:bg-slate-400/15 dark:text-slate-200">Inactiva</Badge>
                   )}
                 </TableCell>
                 
@@ -214,8 +263,8 @@ export function RutasClient({
                 <TableCell colSpan={isAdmin ? 5 : 4} className="h-48 text-center text-muted-foreground p-0">
                   <EmptyState 
                     icon={MapTrifold} 
-                    title="Sin rutas" 
-                    description="No has creado ninguna ruta operativa aún." 
+                    title="Aún no tienes rutas" 
+                    description={isAdmin ? "Crea tu primera ruta con su precio en USD para poder programar viajes." : "Cuando el administrador cree rutas, aparecerán aquí."} 
                   />
                 </TableCell>
               </TableRow>
@@ -230,7 +279,13 @@ export function RutasClient({
             <DialogTitle>{editingRuta ? "Editar Ruta" : "Crear Nueva Ruta"}</DialogTitle>
           </DialogHeader>
           
-          <form action={handleSubmit}>
+          {/* onSubmit (no `action`): React no reinicia el formulario si hay error o se pide confirmar el precio. */}
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleSubmit(new FormData(e.currentTarget));
+            }}
+          >
             <div className="grid gap-6 py-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="grid gap-2">
@@ -280,9 +335,28 @@ export function RutasClient({
                   <Input type="number" name="duracion_estimada_min" defaultValue={editingRuta?.duracion_estimada_min || ""} min={1} required />
                 </div>
                 <div className="grid gap-2">
-                  <Label>Precio Pasaje ($)</Label>
-                  <Input type="number" step="0.01" name="precio_pasaje" defaultValue={editingRuta?.precio_pasaje || ""} min={0.1} required />
+                  <Label htmlFor="precio_pasaje">Precio del pasaje (USD)</Label>
+                  <Input
+                    id="precio_pasaje"
+                    type="text"
+                    inputMode="decimal"
+                    autoComplete="off"
+                    name="precio_pasaje"
+                    placeholder="Ej: 15,00"
+                    value={precioTexto}
+                    onChange={(e) => setPrecioTexto(e.target.value)}
+                    aria-describedby="precio_pasaje_ayuda"
+                    required
+                  />
                 </div>
+                <p id="precio_pasaje_ayuda" className="col-span-2 -mt-2 text-xs text-muted-foreground">
+                  Es el precio de referencia. El pasajero paga en bolívares a la tasa BCV del día
+                  {tasa && precioValido
+                    ? ` (hoy ≈ ${formatBs(usdABs(precioUsd, tasa.tasa))}).`
+                    : tasa
+                      ? "."
+                      : " (hoy no hay tasa BCV registrada)."}
+                </p>
               </div>
 
               <div className="flex items-center justify-between rounded-lg border p-4">
@@ -307,19 +381,47 @@ export function RutasClient({
         </DialogContent>
       </Dialog>
 
-      <AlertDialog open={alertOpen} onOpenChange={setAlertOpen}>
+      <ConfirmDialog
+        open={alertOpen && alertData !== null}
+        onOpenChange={setAlertOpen}
+        tono="destructive"
+        titulo={alertData ? `¿Desactivar la ruta ${alertData.nombre}?` : "¿Desactivar la ruta?"}
+        impacto={
+          alertData
+            ? [
+                alertData.count === 1
+                  ? "Tiene 1 viaje programado: seguirá en pie. Cancélalo en Viajes si no va a salir."
+                  : `Tiene ${alertData.count} viajes programados: seguirán en pie. Cancélalos en Viajes si no van a salir.`,
+                "No podrás programar viajes nuevos en esta ruta hasta reactivarla.",
+              ]
+            : []
+        }
+        verbo="Desactivar ruta"
+        verboCargando="Desactivando…"
+        onConfirm={forceDesactivar}
+      />
+
+      <AlertDialog
+        open={precioAltoPendiente !== null}
+        onOpenChange={(abierto) => {
+          if (!abierto) setPrecioAltoPendiente(null);
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>¡Atención!</AlertDialogTitle>
+            <AlertDialogTitle>¿Seguro que el precio está en dólares?</AlertDialogTitle>
             <AlertDialogDescription>
-              Esta ruta tiene <strong>{alertData?.count} viajes futuros programados</strong>. ¿Estás seguro de que deseas desactivarla de todos modos?
+              Escribiste <strong>{Number.isFinite(precioAltoUsd) ? formatUsd(precioAltoUsd) : ""}</strong> como precio del
+              pasaje.
+              {tasa && Number.isFinite(precioAltoUsd)
+                ? ` A la tasa BCV de hoy, el pasajero pagaría ${formatBs(usdABs(precioAltoUsd, tasa.tasa))}.`
+                : ""}{" "}
+              Si ese monto está en bolívares, conviértelo a dólares antes de guardar.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isPending}>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={forceDesactivar} disabled={isPending} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              {isPending ? "Desactivando..." : "Sí, desactivar ruta"}
-            </AlertDialogAction>
+            <AlertDialogCancel autoFocus>Corregir precio</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmarPrecioAlto}>Sí, está en dólares</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

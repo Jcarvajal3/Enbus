@@ -16,7 +16,7 @@ Deno.serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { user_id, titulo, mensaje, recurso_tipo, recurso_id } = await req.json();
+    const { user_id, titulo, mensaje, recurso_tipo, recurso_id, sin_bandeja } = await req.json();
 
     if (!user_id || !titulo || !mensaje) {
         return new Response(JSON.stringify({ error: "Missing parameters" }), { status: 400, headers: corsHeaders });
@@ -29,7 +29,10 @@ Deno.serve(async (req) => {
       .eq('id', user_id)
       .single();
 
-    if (error || !profile) throw new Error("Usuario no encontrado");
+    if (error || !profile) {
+        // 404 = error permanente: procesar-notificaciones-pendientes no lo reintenta.
+        return new Response(JSON.stringify({ error: "Usuario no encontrado" }), { status: 404, headers: corsHeaders });
+    }
 
     // Revisar preferencias (ej: si es recurso de encomienda y tiene las notificaciones de encomienda apagadas, no enviar push)
     if (recurso_tipo === 'encomienda' && !profile.notif_encomiendas) {
@@ -69,14 +72,17 @@ Deno.serve(async (req) => {
         }
     }
 
-    // 3. Registrar en bandeja in-app (notificaciones_usuario)
-    await supabase.from('notificaciones_usuario').insert({
-        usuario_id: user_id,
-        titulo: titulo,
-        mensaje: mensaje,
-        recurso_tipo: recurso_tipo,
-        recurso_id: recurso_id
-    });
+    // 3. Registrar en bandeja in-app (notificaciones_usuario).
+    //    sin_bandeja = true: la RPC que encoló el aviso ya la escribió en la misma transacción.
+    if (sin_bandeja !== true) {
+        await supabase.from('notificaciones_usuario').insert({
+            usuario_id: user_id,
+            titulo: titulo,
+            mensaje: mensaje,
+            recurso_tipo: recurso_tipo,
+            recurso_id: recurso_id
+        });
+    }
 
     // 4. Logear en notificaciones_log (con service_role bypass)
     await supabase.from('notificaciones_log').insert({

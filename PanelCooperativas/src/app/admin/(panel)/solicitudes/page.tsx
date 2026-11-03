@@ -1,5 +1,5 @@
 import { PageHeader } from "@/components/page-header";
-import { fetchSolicitudesPendientes } from "@/lib/data/admin-solicitudes";
+import { fetchSolicitudes } from "@/lib/data/admin-solicitudes";
 import { SolicitudesTable } from "@/components/admin/solicitudes/solicitudes-table";
 import { requireSuperAdmin } from "@/lib/supabase/auth-guards";
 
@@ -7,15 +7,16 @@ export const dynamic = "force-dynamic";
 
 export default async function SolicitudesPage() {
   await requireSuperAdmin();
-  const solicitudes = await fetchSolicitudesPendientes();
+  // Si la consulta falla, el error llega a (panel)/error.tsx con "Reintentar".
+  const solicitudes = await fetchSolicitudes();
 
   return (
-    <div className="flex flex-col gap-6 font-sans">
+    <div className="flex flex-col gap-6">
       <PageHeader
-        title="Solicitudes de Registro"
-        description="Revisa y aprueba las solicitudes de registro de nuevas cooperativas."
+        title="Solicitudes"
+        description="Revisa los datos de cada cooperativa y apruébala o recházala con un motivo. Un rechazo se puede reabrir."
       />
-      
+
       <SolicitudesTable solicitudes={solicitudes} />
     </div>
   );

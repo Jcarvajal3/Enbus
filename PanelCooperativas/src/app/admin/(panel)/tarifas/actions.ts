@@ -3,6 +3,9 @@
 import { createClient } from "@/lib/supabase/server";
 import { requireSuperAdmin } from "@/lib/supabase/auth-guards";
 import { revalidatePath } from "next/cache";
+import { humanizeError, parseDetalleEB } from "@/lib/errores";
+import { formatNumeroVE } from "@/lib/dinero";
+import { fechaHoraVEaISO, hoyVE, sumarDiasVE } from "@/lib/fechas";
 
 export async function createTarifa(formData: FormData) {
   try {
@@ -16,14 +19,20 @@ export async function createTarifa(formData: FormData) {
     const vigenteDesdeStr = formData.get("vigente_desde") as string;
 
     if (!tarifaPorKgStr || !factorDistanciaStr || !dimensionesMaxStr || !pesoMaxStr) {
-      return { success: false, error: "Todos los campos obligatorios deben ser completados." };
+      return { success: false, error: "Completa todos los campos de la tarifa." };
     }
 
     const tarifa_por_kg = parseFloat(tarifaPorKgStr);
     const factor_distancia_por_min = parseFloat(factorDistanciaStr);
     const dimensiones_max_cm = parseInt(dimensionesMaxStr, 10);
     const peso_max_kg = parseFloat(pesoMaxStr);
-    const vigente_desde = vigenteDesdeStr ? new Date(vigenteDesdeStr).toISOString() : new Date().toISOString();
+    // El campo datetime-local llega sin zona ("YYYY-MM-DDTHH:mm"): es hora de Venezuela, no la del servidor.
+    const fechaHoraLocal = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})/.exec(vigenteDesdeStr ?? "");
+    const vigente_desde = fechaHoraLocal
+      ? fechaHoraVEaISO(fechaHoraLocal[1], fechaHoraLocal[2])
+      : vigenteDesdeStr
+        ? new Date(vigenteDesdeStr).toISOString()
+        : new Date().toISOString();
 
     if (isNaN(tarifa_por_kg) || tarifa_por_kg <= 0) {
       return { success: false, error: "La tarifa por kg debe ser un número positivo." };
@@ -46,7 +55,7 @@ export async function createTarifa(formData: FormData) {
 
     if (deactivateError) {
       console.error("Error deactivating previous tariffs:", deactivateError);
-      return { success: false, error: "Error al actualizar las tarifas anteriores." };
+      return { success: false, error: humanizeError(deactivateError, "reemplazar la tarifa vigente") };
     }
 
     // Insert new active tariff
@@ -64,14 +73,14 @@ export async function createTarifa(formData: FormData) {
 
     if (insertError) {
       console.error("Error inserting new tariff:", insertError);
-      return { success: false, error: insertError.message || "Error al crear la nueva tarifa." };
+      return { success: false, error: humanizeError(insertError, "crear la tarifa") };
     }
 
     revalidatePath("/admin/tarifas");
     return { success: true };
-  } catch (error: any) {
+  } catch (error) {
     console.error("Error in createTarifa server action:", error);
-    return { success: false, error: error.message || "Error interno del servidor." };
+    return { success: false, error: humanizeError(error, "crear la tarifa") };
   }
 }
 
@@ -81,7 +90,7 @@ export async function simularCosto(pesoKg: number, rutaId: string) {
     const supabase = await createClient();
 
     if (!rutaId) {
-      return { success: false, error: "Debe seleccionar una ruta." };
+      return { success: false, error: "Elige una ruta." };
     }
 
     if (isNaN(pesoKg) || pesoKg <= 0) {
@@ -97,11 +106,11 @@ export async function simularCosto(pesoKg: number, rutaId: string) {
 
     if (tariffError) {
       console.error("Error fetching tariff for simulation:", tariffError);
-      return { success: false, error: "Error al consultar la tarifa activa." };
+      return { success: false, error: humanizeError(tariffError, "consultar la tarifa vigente") };
     }
 
     if (!tariff) {
-      return { success: false, error: "No hay ninguna tarifa activa configurada en el sistema." };
+      return { success: false, error: "No hay una tarifa vigente. Crea una con «Nueva tarifa»." };
     }
 
     // Fetch route details
@@ -113,7 +122,7 @@ export async function simularCosto(pesoKg: number, rutaId: string) {
 
     if (routeError || !route) {
       console.error("Error fetching route for simulation:", routeError);
-      return { success: false, error: "Error al consultar la ruta especificada." };
+      return { success: false, error: humanizeError(routeError ?? { code: "PGRST116" }, "consultar la ruta") };
     }
 
     // Weight limit check
@@ -136,7 +145,7 @@ export async function simularCosto(pesoKg: number, rutaId: string) {
     const costo_distancia = costo_base * (factor_distancia_por_min * duracion_estimada_min);
     const costo_total = costo_base + costo_distancia;
 
-    const formula = `${pesoKg.toFixed(2)} kg × $${tarifa_por_kg.toFixed(2)} × (1 + ${factor_distancia_por_min.toFixed(4)} × ${duracion_estimada_min} min)`;
+    const formula = `${formatNumeroVE(pesoKg)} kg × USD ${formatNumeroVE(tarifa_por_kg)} × (1 + ${formatNumeroVE(factor_distancia_por_min, 4)} × ${duracion_estimada_min} min)`;
 
     return {
       success: true,
@@ -151,8 +160,104 @@ export async function simularCosto(pesoKg: number, rutaId: string) {
         peso_kg: pesoKg
       }
     };
-  } catch (error: any) {
+  } catch (error) {
     console.error("Error in simularCosto server action:", error);
-    return { success: false, error: error.message || "Error interno de simulación." };
+    return { success: false, error: humanizeError(error, "simular el costo") };
+  }
+}
+
+// ─── Tasa BCV manual ─────────────────────────────────────────────────────────
+// Respaldo cuando la tasa automática (cada 30 min) falla. La RPC solo la acepta
+// del super admin y la tarea programada no sobrescribe una tasa manual.
+
+export type RegistrarTasaManualInput = {
+  /** Fecha de vigencia 'YYYY-MM-DD' (hora de Venezuela). */
+  fecha: string;
+  /** Bs por 1 USD. Acepta "100,81", "100.81" o "1.234,56". */
+  tasa: string | number;
+  motivo: string;
+};
+
+export type RegistrarTasaManualResult = {
+  success: boolean;
+  data?: { fecha: string; tasa: number };
+  error?: string;
+  /** Campo a marcar en el formulario: 'fecha' | 'tasa' | 'motivo'. */
+  campo?: string;
+};
+
+/** "1.234,56" -> 1234.56 · "100,81" -> 100.81 · "100.81" -> 100.81 */
+function parseTasa(valor: string | number): number {
+  if (typeof valor === "number") return valor;
+  const texto = valor.trim().replace(/\s/g, "");
+  if (!texto) return NaN;
+  // El último separador es el decimal: "1.234,56" y "1,234.56" -> 1234.56.
+  const normalizado =
+    texto.lastIndexOf(",") > texto.lastIndexOf(".") ? texto.replace(/\./g, "").replace(",", ".") : texto.replace(/,/g, "");
+  return /^\d+(\.\d+)?$/.test(normalizado) ? Number(normalizado) : NaN;
+}
+
+export async function registrarTasaManual(
+  input: RegistrarTasaManualInput
+): Promise<RegistrarTasaManualResult> {
+  try {
+    await requireSuperAdmin();
+  } catch {
+    return { success: false, error: "Solo el super administrador puede cargar la tasa BCV." };
+  }
+
+  const fecha = String(input.fecha ?? "").trim();
+  const tasa = parseTasa(input.tasa);
+  const motivo = String(input.motivo ?? "").trim();
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) {
+    return { success: false, error: "Elige la fecha de vigencia de la tasa.", campo: "fecha" };
+  }
+  if (fecha > sumarDiasVE(hoyVE(), 1)) {
+    return { success: false, error: "La fecha no puede ser posterior a mañana.", campo: "fecha" };
+  }
+  if (!Number.isFinite(tasa) || tasa <= 0) {
+    return {
+      success: false,
+      error: "Escribe la tasa en bolívares por 1 dólar, por ejemplo 100,81.",
+      campo: "tasa",
+    };
+  }
+  if (motivo.length < 5) {
+    return {
+      success: false,
+      error: "Escribe por qué cargas la tasa a mano (mínimo 5 caracteres).",
+      campo: "motivo",
+    };
+  }
+
+  try {
+    const supabase = await createClient();
+    const { data, error } = await supabase.rpc("fn_registrar_tasa_bcv_manual", {
+      p_fecha: fecha,
+      p_tasa: tasa,
+      p_motivo: motivo,
+    });
+
+    if (error) {
+      console.error("Error registrando tasa BCV manual:", error);
+      const detalle = parseDetalleEB(error);
+      return {
+        success: false,
+        error: humanizeError(error, "guardar la tasa BCV"),
+        campo: typeof detalle.campo === "string" ? detalle.campo : undefined,
+      };
+    }
+
+    const fila = (data ?? {}) as { fecha?: string; tasa?: number | string };
+    revalidatePath("/admin/tarifas");
+    revalidatePath("/admin/dashboard");
+    return {
+      success: true,
+      data: { fecha: String(fila.fecha ?? fecha).slice(0, 10), tasa: Number(fila.tasa ?? tasa) },
+    };
+  } catch (error) {
+    console.error("Error in registrarTasaManual server action:", error);
+    return { success: false, error: humanizeError(error, "guardar la tasa BCV") };
   }
 }

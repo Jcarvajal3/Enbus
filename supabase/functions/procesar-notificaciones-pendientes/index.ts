@@ -7,6 +7,9 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Un aviso que sigue fallando después de 24 h se descarta (el push ya no sería oportuno).
+const MAX_REINTENTO_MS = 24 * 60 * 60 * 1000;
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -28,6 +31,7 @@ Deno.serve(async (req) => {
       .from('pending_notifications')
       .select('*')
       .eq('procesado', false)
+      .order('created_at', { ascending: true })
       .limit(50); // Batch de 50 para evitar timeout
 
     if (error) throw error;
@@ -40,10 +44,11 @@ Deno.serve(async (req) => {
 
     for (const notif of notifications) {
         try {
-            // Ejemplo de router
+            // Router por tipo de notificación
+            let invokeError: unknown = null;
             if (notif.tipo_notificacion.includes('DEVOLUCION')) {
                 // Invoca enviar-push
-                await supabase.functions.invoke('enviar-push', {
+                const { error: errDevolucion } = await supabase.functions.invoke('enviar-push', {
                     body: {
                         user_id: notif.destinatario_id,
                         titulo: "Encomienda Devuelta",
@@ -52,14 +57,42 @@ Deno.serve(async (req) => {
                         recurso_id: notif.recurso_id
                     }
                 });
+                invokeError = errDevolucion;
+            } else if (notif.payload?.titulo && notif.payload?.mensaje) {
+                // Genérica (encolada por las RPC de pagos, boletos y encomiendas). La bandeja in-app
+                // ya la escribió la RPC en la misma transacción: sin_bandeja evita duplicarla.
+                const { error: errGenerica } = await supabase.functions.invoke('enviar-push', {
+                    body: {
+                        user_id: notif.destinatario_id,
+                        titulo: notif.payload.titulo,
+                        mensaje: notif.payload.mensaje,
+                        recurso_tipo: notif.recurso_tipo,
+                        recurso_id: notif.recurso_id,
+                        sin_bandeja: notif.payload.sin_bandeja === true
+                    }
+                });
+                invokeError = errGenerica;
             }
-            
+
+            if (invokeError) {
+                // Se reintenta en la próxima pasada del cron.
+                throw invokeError;
+            }
+
             // Marca como procesado
             await supabase.from('pending_notifications').update({ procesado: true }).eq('id', notif.id);
             procesadas++;
         } catch (e) {
             console.error(`Error procesando notificacion ${notif.id}:`, e);
             fallidas++;
+            // Errores permanentes (400/404 de enviar-push) o avisos con más de 24 h fallando se
+            // descartan: si no, 50 fallos fijos bloquearían la cola para siempre.
+            const status = (e as { context?: { status?: number } })?.context?.status;
+            const edadMs = Date.now() - new Date(notif.created_at).getTime();
+            if (status === 400 || status === 404 || edadMs > MAX_REINTENTO_MS) {
+                console.error(`Notificacion ${notif.id} descartada (status ${status ?? 'n/d'}).`);
+                await supabase.from('pending_notifications').update({ procesado: true }).eq('id', notif.id);
+            }
         }
     }
 

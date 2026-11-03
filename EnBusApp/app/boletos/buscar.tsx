@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
@@ -10,7 +10,9 @@ import {
 import * as Haptics from 'expo-haptics';
 import { LocationSelector } from '@/src/components/LocationSelector';
 import { CalendarModal } from '@/src/components/CalendarModal';
-import { SeatSelector } from '@/src/components/SeatSelector';
+import { ReservaEstado, SeatSelector, TasaCambiadaSheet } from '@/src/components/SeatSelector';
+import { PasajerosForm } from '@/src/components/PasajerosForm';
+import { CompletarPerfilSheet } from '@/src/components/CompletarPerfilSheet';
 import { PaymentFlow } from '@/src/components/PaymentFlow';
 import { PressableScale } from '@/src/components/PressableScale';
 import { StaggerItem } from '@/src/components/StaggerItem';
@@ -23,9 +25,11 @@ import {
   Divider,
   EmptyState,
   EntityCard,
+  ErrorState,
   FloatingBar,
   InfoRow,
   LoadingState,
+  Monto,
   RouteSummary,
   Screen,
   ScreenHeader,
@@ -34,29 +38,24 @@ import {
   scrollContent,
 } from '@/src/components/ui';
 import { supabase } from '@/src/utils/supabase';
-import { useAuth } from '@/src/contexts/AuthContext';
 import { useToast } from '@/src/components/Toast';
 import { Localidad, normalizeCityForDb } from '@/src/utils/venezuela';
-import { dateFull, formatCity, formatDate } from '@/src/utils/formatters';
-import { BOLETO_ESTADOS_OCUPAN_ASIENTO } from '@/src/utils/estados';
+import { dateFull, formatCity, formatDate, toDateKey } from '@/src/utils/formatters';
+import { esErrorEB, humanizeError } from '@/src/utils/errores';
+import { formatMoney, tasaRefDe } from '@/src/utils/dinero';
+import { useWizardBack } from '@/src/hooks/useWizardBack';
+import { useTasaBCV } from '@/src/hooks/useTasaBCV';
+import { usePerfil } from '@/src/hooks/usePerfil';
+import {
+  asientosDelError,
+  formatHora,
+  mensajeAsientosTomados,
+  unirAsientos,
+  useCheckoutBoletos,
+  useSegundosRestantes,
+} from '@/src/hooks/useCheckoutBoletos';
+import type { PasajeroAsiento, ResumenCompra } from '@/src/types';
 import { Colors, Layout, Motion, Radius, Sizes, Spacing } from '@/src/theme';
-
-// ─── Código de boleto (CSPRNG) ───────────────────────────────────────────────
-
-const BOLETO_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-
-/**
- * `Math.random()` must not generate public identifiers: 36^6 leaves a real
- * collision risk in production. `crypto.getRandomValues` is available in Hermes.
- */
-function generateBoletoCode(): string {
-  const bytes = new Uint8Array(8);
-  crypto.getRandomValues(bytes);
-  const suffix = Array.from(bytes)
-    .map((b) => BOLETO_CHARS[b % BOLETO_CHARS.length])
-    .join('');
-  return `BOL-${suffix}`;
-}
 
 function formatShortDate(date: Date): string {
   return date.toLocaleDateString('es-VE', {
@@ -67,11 +66,18 @@ function formatShortDate(date: Date): string {
   });
 }
 
-function dateKey(date: Date): string {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, '0');
-  const d = String(date.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
+/**
+ * Fecha que llega por parámetro: 'YYYY-MM-DD' (día local, p. ej. desde
+ * `viajes/[id]`) o un ISO completo (desde el buscador de Inicio).
+ */
+function fechaDeParametro(valor?: string): Date {
+  if (valor) {
+    const dia = /^(\d{4})-(\d{2})-(\d{2})$/.exec(valor);
+    if (dia) return new Date(Number(dia[1]), Number(dia[2]) - 1, Number(dia[3]));
+    const d = new Date(valor);
+    if (!Number.isNaN(d.getTime())) return d;
+  }
+  return new Date();
 }
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
@@ -99,15 +105,27 @@ const SORT_OPTIONS: { id: SortType; label: string }[] = [
   { id: 'precio_desc', label: 'Precio: mayor a menor' },
 ];
 
-const STEP_TITLES = ['Selecciona tu viaje', 'Elige tus asientos', 'Confirmar pago'];
+/** Asistente de 4 pasos (#25): Salida · Asientos · Pasajeros · Pago. */
+const STEP_TITLES = ['Elige tu salida', 'Elige tus asientos', '¿Quién viaja?', 'Registra tu pago'];
+const PASOS_RESUMEN = 'Salida · Asientos · Pasajeros · Pago';
+
+type Paso = 1 | 2 | 3 | 4;
 
 export default function BuscarBoletoScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ origen?: string; destino?: string; fecha?: string }>();
-  const { user } = useAuth();
+  const params = useLocalSearchParams<{
+    origen?: string;
+    destino?: string;
+    fecha?: string;
+    /** Salida a preseleccionar (llega desde `viajes/[id]`) */
+    viajeId?: string;
+  }>();
   const toast = useToast();
+  const mostrarToast = toast.show;
+  const { tasaRef } = useTasaBCV();
+  const { perfil, completo: perfilCompleto, loading: perfilCargando } = usePerfil();
 
-  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [step, setStep] = useState<Paso>(1);
 
   const [origen, setOrigen] = useState<Localidad | null>(
     params.origen ? { ciudad: params.origen, estado: '' } : null
@@ -115,30 +133,105 @@ export default function BuscarBoletoScreen() {
   const [destino, setDestino] = useState<Localidad | null>(
     params.destino ? { ciudad: params.destino, estado: '' } : null
   );
-  const [fecha, setFecha] = useState<Date>(() => {
-    const parsed = params.fecha ? new Date(params.fecha) : new Date();
-    return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
-  });
+  const [fecha, setFecha] = useState<Date>(() => fechaDeParametro(params.fecha));
 
   const [showCalendar, setShowCalendar] = useState(false);
   const [activeDates, setActiveDates] = useState<string[] | null>(null);
   const [loadingDates, setLoadingDates] = useState(false);
+  const [errorFechas, setErrorFechas] = useState(false);
+  const [reintentoFechas, setReintentoFechas] = useState(0);
 
   const [viajes, setViajes] = useState<ViajeResumen[]>([]);
   const [loadingViajes, setLoadingViajes] = useState(false);
+  const [errorViajes, setErrorViajes] = useState<string | null>(null);
+  const [reintentoViajes, setReintentoViajes] = useState(0);
   const [seleccionado, setSeleccionado] = useState<ViajeResumen | null>(null);
+  /** Salida pedida por parámetro: se elige en cuanto aparece en la lista. */
+  const preseleccionRef = useRef<string | null>(
+    typeof params.viajeId === 'string' && params.viajeId ? params.viajeId : null
+  );
 
-  const [asientosSeleccionados, setAsientosSeleccionados] = useState<string[]>([]);
+  // ── Asientos ocupados (fn_asientos_ocupados: la RLS oculta los de otros) ──
   const [asientosOcupados, setAsientosOcupados] = useState<string[]>([]);
+  /** Viaje al que pertenecen `asientosOcupados` (`null` = aún no se leyeron). */
+  const [ocupadosDe, setOcupadosDe] = useState<string | null>(null);
+  const [errorOcupados, setErrorOcupados] = useState<string | null>(null);
+  // Sube cuando hay que volver a leer los asientos ocupados (choque, realtime…).
+  const [asientosVersion, setAsientosVersion] = useState(0);
+  // Asientos de esta compra que otro pasajero tomó al vencer la reserva.
+  const [asientosPerdidos, setAsientosPerdidos] = useState<string[]>([]);
+
+  // ── Pasajeros ────────────────────────────────────────────────────────────
+  const [pasajerosGuardados, setPasajerosGuardados] = useState<PasajeroAsiento[] | null>(null);
+  const [asientosSinDatos, setAsientosSinDatos] = useState<string[]>([]);
+  const [errorPasajeros, setErrorPasajeros] = useState<string | null>(null);
+
+  // ── Datos del comprador antes de apartar (#24) ───────────────────────────
+  const [pedirDatos, setPedirDatos] = useState(false);
+  const [asientosPendientes, setAsientosPendientes] = useState<string[] | null>(null);
 
   const [filtersVisible, setFiltersVisible] = useState(false);
   const [selectedCoop, setSelectedCoop] = useState<string | null>(null);
   const [sortType, setSortType] = useState<SortType>('hora_asc');
 
+  // ── Compra: reservar, asignar pasajeros, registrar el pago, liberar al salir ──
+  const checkout = useCheckoutBoletos({
+    viajeId: seleccionado?.id,
+    onExito: (r) => irACompra(r, 'pago'),
+    onAsientosOcupados: (tomados) => manejarAsientosTomados(tomados, true),
+    onPagoYaRegistrado: (mensaje, reserva) => {
+      toast.show('info', mensaje);
+      irACompra(reserva, 'pago');
+    },
+    onDatosPasajero: (asientos, mensaje) => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      setAsientosSinDatos(asientos);
+      setErrorPasajeros(mensaje);
+      setStep(3);
+    },
+  });
+  const { estaEnCurso, liberar } = checkout;
+
+  // Atrás deshabilitado mientras corre una RPC; volver a la lista de salidas
+  // suelta los asientos (la compra es de un solo viaje). Liberar una compra sin
+  // asientos no llama al servidor.
+  const irAPaso = useCallback(
+    (paso: Paso) => {
+      if (estaEnCurso()) return;
+      if (paso === 1) {
+        void liberar().finally(() => setAsientosVersion((v) => v + 1));
+        // Otra salida, otra compra: los pasajeros guardados eran de esos asientos.
+        setPasajerosGuardados(null);
+        setAsientosSinDatos([]);
+        setErrorPasajeros(null);
+      }
+      if (paso === 2) setAsientosVersion((v) => v + 1);
+      setStep(paso);
+    },
+    [estaEnCurso, liberar]
+  );
+
+  // Atrás (header, botón de Android o gesto) retrocede un paso; en el paso 1
+  // pide confirmación si ya se eligió una salida. Mientras corre una RPC
+  // (apartar, guardar pasajeros, registrar el pago) no hace nada.
+  const { handleBack, allowLeave } = useWizardBack({
+    step,
+    setStep: irAPaso,
+    isDirty: seleccionado !== null,
+    bloqueado: checkout.enCurso,
+  });
+
+  const segundosReserva = useSegundosRestantes(
+    checkout.reserva?.reserva_expira_at,
+    checkout.offsetServidor
+  );
+  const reservaVencida = (step === 3 || step === 4) && segundosReserva === 0;
+
   // ── Fechas con salidas ───────────────────────────────────────────────────
   useEffect(() => {
     if (!origen || !destino) {
       setActiveDates(null);
+      setErrorFechas(false);
       return;
     }
 
@@ -146,6 +239,7 @@ export default function BuscarBoletoScreen() {
     const fetchDates = async () => {
       try {
         setLoadingDates(true);
+        setErrorFechas(false);
         const { data, error } = await supabase
           .from('viajes')
           .select('fecha_hora_salida, rutas!inner ( ciudad_origen, ciudad_destino )')
@@ -162,13 +256,18 @@ export default function BuscarBoletoScreen() {
           Array.from(
             new Set(
               (data ?? []).map((v: { fecha_hora_salida: string }) =>
-                dateKey(new Date(v.fecha_hora_salida))
+                toDateKey(new Date(v.fecha_hora_salida))
               )
             )
           ).sort()
         );
       } catch (err) {
-        if (__DEV__) console.error('[buscar] Error cargando fechas:', err);
+        if (__DEV__) console.warn('[buscar] Error cargando fechas:', err);
+        // Sin fechas el calendario no se restringe: se puede buscar igual (#19).
+        if (isMounted) {
+          setActiveDates(null);
+          setErrorFechas(true);
+        }
       } finally {
         if (isMounted) setLoadingDates(false);
       }
@@ -178,7 +277,7 @@ export default function BuscarBoletoScreen() {
     return () => {
       isMounted = false;
     };
-  }, [origen, destino]);
+  }, [origen, destino, reintentoFechas]);
 
   // ── Viajes del día seleccionado ──────────────────────────────────────────
   useEffect(() => {
@@ -191,6 +290,7 @@ export default function BuscarBoletoScreen() {
     const fetchViajes = async () => {
       try {
         setLoadingViajes(true);
+        setErrorViajes(null);
         const startOfDay = new Date(fecha.getFullYear(), fecha.getMonth(), fecha.getDate());
         const endOfDay = new Date(
           fecha.getFullYear(),
@@ -220,35 +320,43 @@ export default function BuscarBoletoScreen() {
         if (error) throw error;
         if (!isMounted) return;
 
-        setViajes(
-          (data ?? []).map((viaje: any): ViajeResumen => {
-            const ruta = Array.isArray(viaje.rutas) ? viaje.rutas[0] : viaje.rutas;
-            const coop = Array.isArray(viaje.cooperativas)
-              ? viaje.cooperativas[0]
-              : viaje.cooperativas;
-            const minutos = ruta?.duracion_estimada_min ?? 0;
+        const lista = (data ?? []).map((viaje: any): ViajeResumen => {
+          const ruta = Array.isArray(viaje.rutas) ? viaje.rutas[0] : viaje.rutas;
+          const coop = Array.isArray(viaje.cooperativas)
+            ? viaje.cooperativas[0]
+            : viaje.cooperativas;
+          const minutos = ruta?.duracion_estimada_min ?? 0;
 
-            return {
-              id: viaje.id,
-              cooperativa_id: coop?.id ?? '',
-              cooperativa: coop?.nombre ?? 'Cooperativa',
-              calificacion: coop?.calificacion_promedio ?? 0,
-              fecha_hora_salida: viaje.fecha_hora_salida,
-              horaSalida: new Date(viaje.fecha_hora_salida).toLocaleTimeString('es-VE', {
-                hour: '2-digit',
-                minute: '2-digit',
-              }),
-              duracion: `${Math.floor(minutos / 60)}h ${minutos % 60}m`,
-              precio: ruta?.precio_pasaje ?? 0,
-              asientosDisponibles: viaje.asientos_disponibles,
-              asientosTotales: viaje.asientos_totales,
-              ciudadOrigen: ruta?.ciudad_origen,
-              ciudadDestino: ruta?.ciudad_destino,
-            };
-          })
-        );
+          return {
+            id: viaje.id,
+            cooperativa_id: coop?.id ?? '',
+            cooperativa: coop?.nombre ?? 'Cooperativa',
+            calificacion: coop?.calificacion_promedio ?? 0,
+            fecha_hora_salida: viaje.fecha_hora_salida,
+            horaSalida: formatHora(viaje.fecha_hora_salida),
+            duracion: `${Math.floor(minutos / 60)}h ${minutos % 60}m`,
+            precio: ruta?.precio_pasaje ?? 0,
+            asientosDisponibles: viaje.asientos_disponibles,
+            asientosTotales: viaje.asientos_totales,
+            ciudadOrigen: ruta?.ciudad_origen,
+            ciudadDestino: ruta?.ciudad_destino,
+          };
+        });
+        setViajes(lista);
+
+        // La salida elegida ya no está en la lista (otro día, otra ruta o agotada).
+        setSeleccionado((prev) => (prev && lista.some((v) => v.id === prev.id) ? prev : null));
+
+        const objetivo = preseleccionRef.current;
+        if (objetivo) {
+          preseleccionRef.current = null;
+          const viaje = lista.find((v) => v.id === objetivo);
+          if (viaje) setSeleccionado(viaje);
+          else mostrarToast('info', 'Esa salida ya no tiene asientos a la venta. Elige otra.');
+        }
       } catch (err) {
-        if (__DEV__) console.error('[buscar] Error cargando viajes:', err);
+        if (__DEV__) console.warn('[buscar] Error cargando viajes:', err);
+        if (isMounted) setErrorViajes(humanizeError(err, 'carga'));
       } finally {
         if (isMounted) setLoadingViajes(false);
       }
@@ -258,30 +366,64 @@ export default function BuscarBoletoScreen() {
     return () => {
       isMounted = false;
     };
-  }, [origen, destino, fecha]);
+  }, [origen, destino, fecha, reintentoViajes, mostrarToast]);
 
   // ── Asientos ocupados del viaje elegido ──────────────────────────────────
+  const viajeElegidoId = seleccionado?.id ?? null;
+
+  // Al cambiar de salida, los ocupados de la anterior no sirven (M-17).
   useEffect(() => {
-    if (!seleccionado) return;
+    setAsientosOcupados([]);
+    setOcupadosDe(null);
+    setErrorOcupados(null);
+  }, [viajeElegidoId]);
+
+  const ocupadosDeRef = useRef<string | null>(null);
+  ocupadosDeRef.current = ocupadosDe;
+
+  useEffect(() => {
+    if (!viajeElegidoId) return;
     let isMounted = true;
 
-    supabase
-      .from('boletos')
-      .select('asiento')
-      .eq('viaje_id', seleccionado.id)
-      .in('estado', [...BOLETO_ESTADOS_OCUPAN_ASIENTO])
-      .then(({ data, error }) => {
-        if (error) {
-          if (__DEV__) console.error('[buscar] Error cargando asientos:', error.message);
-          return;
-        }
-        if (isMounted) setAsientosOcupados((data ?? []).map((b) => b.asiento));
-      });
+    const fallar = (err: unknown) => {
+      if (!isMounted) return;
+      if (__DEV__) console.warn('[buscar] Error cargando asientos ocupados:', err);
+      // Si ya había una lista de este viaje (recarga por realtime), se conserva:
+      // el servidor igual rechaza un asiento tomado al apartar.
+      if (ocupadosDeRef.current !== viajeElegidoId) setErrorOcupados(humanizeError(err, 'carga'));
+    };
+
+    supabase.rpc('fn_asientos_ocupados', { p_viaje_id: viajeElegidoId }).then(({ data, error }) => {
+      if (error) return fallar(error);
+      if (!isMounted) return;
+      setAsientosOcupados(Array.isArray(data) ? data.map((a) => String(a)) : []);
+      setOcupadosDe(viajeElegidoId);
+      setErrorOcupados(null);
+    }, fallar);
 
     return () => {
       isMounted = false;
     };
-  }, [seleccionado]);
+  }, [viajeElegidoId, asientosVersion]);
+
+  // Mientras se eligen asientos, cada cambio de `asientos_disponibles` del viaje
+  // (otro pasajero apartó o liberó) vuelve a leer los ocupados.
+  useEffect(() => {
+    if (!viajeElegidoId || step !== 2) return;
+    const channel = supabase
+      .channel(`rt:viaje:${viajeElegidoId}:${Math.random().toString(36).slice(2, 8)}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'viajes', filter: `id=eq.${viajeElegidoId}` },
+        () => setAsientosVersion((v) => v + 1)
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [viajeElegidoId, step]);
+
+  const cargandoOcupados = !!viajeElegidoId && ocupadosDe !== viajeElegidoId && !errorOcupados;
 
   // ── Filtros ──────────────────────────────────────────────────────────────
   const cooperativas = useMemo(
@@ -303,66 +445,154 @@ export default function BuscarBoletoScreen() {
   const filtersActive = selectedCoop !== null || sortType !== 'hora_asc';
 
   // ── Compra ───────────────────────────────────────────────────────────────
-  const handlePaymentSuccess = async (
-    _pagoId?: string,
-    pagoPayload?: Record<string, unknown>
-  ) => {
-    if (!user || !seleccionado) return;
+  /**
+   * Éxito (pago registrado o "pagar en taquilla"): a "Tu compra", con todos los
+   * boletos de la compra (M-16, APP-34).
+   */
+  function irACompra(r: ResumenCompra | null, recien: 'pago' | 'reserva') {
+    checkout.conservar();
+    allowLeave();
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    const compraId = r?.compra_id ?? checkout.compraId;
+    router.replace({ pathname: '/boletos/compra/[id]', params: { id: compraId, recien } });
+  }
 
+  /** Otro pasajero tomó asientos: marcarlos ocupados y volver a elegir. */
+  function manejarAsientosTomados(tomados: string[], desdePago = false) {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    // En el mapa, `SeatSelector` avisa "El asiento 14 acaba de ser tomado…".
+    if (desdePago) toast.show('error', mensajeAsientosTomados(tomados));
+    setAsientosOcupados((prev) => Array.from(new Set([...prev, ...tomados])));
+    setAsientosPerdidos((prev) => Array.from(new Set([...prev, ...tomados])));
+    setAsientosVersion((v) => v + 1);
+    if (desdePago) setStep(2);
+  }
+
+  /** Aparta los asientos y pasa al paso "Pasajeros". */
+  const apartar = async (asientos: string[]) => {
     try {
-      const inserts = asientosSeleccionados.map((asiento) => ({
-        codigo_boleto: generateBoletoCode(),
-        comprador_id: user.id,
-        viaje_id: seleccionado.id,
-        cooperativa_id: seleccionado.cooperativa_id,
-        asiento,
-        precio: seleccionado.precio,
-        estado: 'RESERVADO',
-        // 30 minutos para que la cooperativa verifique el pago
-        reserva_expira_at: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
-      }));
-
-      const { data: boletos, error } = await supabase
-        .from('boletos')
-        .insert(inserts)
-        .select('id, codigo_boleto');
-
-      if (error || !boletos?.length) {
-        throw error ?? new Error('No se devolvieron los boletos insertados');
-      }
-
-      if (pagoPayload) {
-        const { error: pagoError } = await supabase
-          .from('pagos')
-          .insert({ ...pagoPayload, boleto_id: boletos[0].id });
-        if (pagoError && __DEV__) {
-          console.error('[buscar] Pago insert falló:', pagoError.message);
-        }
-      }
-
-      router.replace({ pathname: '/boletos/[id]', params: { id: boletos[0].codigo_boleto } });
+      await checkout.reservar(asientos);
+      setAsientosPerdidos([]);
+      setAsientosSinDatos([]);
+      setErrorPasajeros(null);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setStep(3);
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Error desconocido';
+      if (esErrorEB(err, 'EB_ASIENTO_OCUPADO')) {
+        manejarAsientosTomados(asientosDelError(err));
+        return;
+      }
+      // El pago de esta compra ya se registró (p. ej. se perdió la respuesta): a sus boletos.
+      if (esErrorEB(err, 'EB_PAGO_YA_REGISTRADO')) {
+        toast.show('info', humanizeError(err));
+        irACompra(checkout.reserva, 'pago');
+        return;
+      }
+      if (__DEV__) console.warn('[buscar] Error apartando asientos:', err);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      toast.show('error', `No se pudo generar el boleto: ${message}`);
+      toast.show('error', humanizeError(err, 'asiento'));
     }
   };
 
-  const handleBack = () => {
-    if (step > 1) setStep((prev) => (prev - 1) as 1 | 2);
-    else router.back();
+  /** "Apartar asientos": antes, la cédula y el teléfono del comprador (#24). */
+  const confirmarAsientos = async (asientos: string[]) => {
+    if (!perfilCargando && !perfilCompleto) {
+      setAsientosPendientes(asientos);
+      setPedirDatos(true);
+      return;
+    }
+    await apartar(asientos);
   };
 
+  /** Paso "Pasajeros": `fn_asignar_pasajeros` y al pago. */
+  const guardarPasajeros = async (pasajeros: PasajeroAsiento[]) => {
+    setErrorPasajeros(null);
+    try {
+      const r = await checkout.asignarPasajeros(pasajeros);
+      setPasajerosGuardados(pasajeros);
+      const faltan = Array.isArray(r.asientos_sin_datos) ? r.asientos_sin_datos : [];
+      if (faltan.length > 0) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        setAsientosSinDatos(faltan);
+        setErrorPasajeros(
+          `Falta el nombre o la cédula del pasajero del asiento ${unirAsientos(faltan)}.`
+        );
+        return;
+      }
+      setAsientosSinDatos([]);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setStep(4);
+    } catch (err) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      if (esErrorEB(err, 'EB_DATOS_PASAJERO')) {
+        setAsientosSinDatos(asientosDelError(err));
+        setErrorPasajeros(humanizeError(err));
+        return;
+      }
+      // La reserva venció o cambió mientras se escribían los datos.
+      if (esErrorEB(err, 'EB_ESTADO_CAMBIO')) {
+        toast.show('error', humanizeError(err));
+        volverAElegirAsientos();
+        return;
+      }
+      if (__DEV__) console.warn('[buscar] Error guardando pasajeros:', err);
+      setErrorPasajeros(`No pudimos guardar los datos; siguen aquí. ${humanizeError(err)}`);
+    }
+  };
+
+  /** La reserva venció en pantalla: soltar lo que quede y volver al mapa. */
+  const volverAElegirAsientos = () => {
+    // Releer los ocupados cuando el servidor ya soltó los asientos.
+    void liberar().finally(() => setAsientosVersion((v) => v + 1));
+    setAsientosPerdidos([]);
+    setStep(2);
+  };
+
+  const confirmarTasaCambiada = async () => {
+    try {
+      await checkout.confirmarTasaCambiada();
+    } catch (err) {
+      if (__DEV__) console.warn('[buscar] Error registrando pago:', err);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      toast.show(
+        'error',
+        `No pudimos registrar tu pago; tus datos siguen aquí. ${humanizeError(err, 'pago')}`
+      );
+    }
+  };
+
+  // Los asientos de esta compra no cuentan como ocupados en el mapa.
+  const misAsientos = checkout.asientosApartados.filter((a) => !asientosPerdidos.includes(a));
+  const ocupadosAjenos = asientosOcupados.filter((a) => !misAsientos.includes(a));
+  const cotizacion = checkout.cotizacion;
+
+  /** Lo último que se guardó, o lo que el servidor tiene en cada boleto. */
+  const reservaBoletos = checkout.reserva?.boletos;
+  const pasajerosIniciales = useMemo<PasajeroAsiento[]>(
+    () =>
+      pasajerosGuardados ??
+      (reservaBoletos ?? [])
+        .filter((b) => b.estado === 'RESERVADO')
+        .map((b) => ({
+          asiento: b.asiento,
+          nombre: b.pasajero_nombre ?? '',
+          cedula: b.pasajero_cedula ?? '',
+          telefono: b.pasajero_telefono ?? null,
+        })),
+    [pasajerosGuardados, reservaBoletos]
+  );
+
   const calendarEnabled = !!origen && !!destino && !loadingDates;
-  const total = asientosSeleccionados.length * (seleccionado?.precio ?? 0);
+  const nBoletos = checkout.asientosApartados.length;
 
   return (
     <Screen>
       <ScreenHeader
         variant="steps"
         title={STEP_TITLES[step - 1]}
+        subtitle={PASOS_RESUMEN}
         step={step}
-        totalSteps={3}
+        totalSteps={4}
         onBack={handleBack}
         backLabel={step > 1 ? 'Volver al paso anterior' : 'Volver'}
       />
@@ -372,7 +602,7 @@ export default function BuscarBoletoScreen() {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        {/* ─── Paso 1: elegir viaje ─────────────────────────────────────── */}
+        {/* ─── Paso 1: elegir la salida ─────────────────────────────────── */}
         {step === 1 && (
           <>
             <Card tone="sunken" padding="sm" elevated={false} radius="2xl">
@@ -421,6 +651,26 @@ export default function BuscarBoletoScreen() {
                   {formatShortDate(fecha)}
                 </Text>
               </PressableScale>
+
+              {errorFechas ? (
+                <View style={s.fechasAviso} accessibilityRole="alert">
+                  <Text variant="caption" color="muted" style={s.fechasAvisoTexto}>
+                    No pudimos verificar las fechas con salidas. Puedes buscar igual.
+                  </Text>
+                  <PressableScale
+                    onPress={() => setReintentoFechas((n) => n + 1)}
+                    haptic
+                    hapticType="selection"
+                    style={s.fechasReintentar}
+                    accessibilityRole="button"
+                    accessibilityLabel="Reintentar la carga de fechas con salidas"
+                  >
+                    <Text variant="caption" weight="bold" color="accent" style={s.enlace}>
+                      Reintentar
+                    </Text>
+                  </PressableScale>
+                </View>
+              ) : null}
             </Card>
 
             {viajes.length > 0 && (
@@ -454,6 +704,13 @@ export default function BuscarBoletoScreen() {
                   icon={MapPin}
                   title="Elige tu ruta"
                   description="Selecciona origen y destino para ver las salidas disponibles."
+                  compact
+                />
+              ) : errorViajes ? (
+                <ErrorState
+                  title="No pudimos cargar las salidas"
+                  description={errorViajes}
+                  onRetry={() => setReintentoViajes((n) => n + 1)}
                   compact
                 />
               ) : viajes.length === 0 ? (
@@ -504,15 +761,15 @@ export default function BuscarBoletoScreen() {
                       }
                       meta={
                         <View style={s.priceMeta}>
-                          <Text variant="bodyStrong" weight="heavy" compact>
-                            {`${viaje.precio} Bs`}
-                          </Text>
+                          <Monto usd={viaje.precio} tasa={tasaRef} size="sm" align="right" />
                           <Text variant="caption" size="xs" color="muted" compact>
                             {`${viaje.asientosDisponibles} libres`}
                           </Text>
                         </View>
                       }
-                      accessibilityLabel={`${viaje.cooperativa}, sale ${viaje.horaSalida}, ${viaje.precio} bolívares, ${viaje.asientosDisponibles} asientos libres`}
+                      accessibilityLabel={`${viaje.cooperativa}, sale ${viaje.horaSalida}, ${
+                        formatMoney({ usd: viaje.precio, tasa: tasaRef }).accesible
+                      }, ${viaje.asientosDisponibles} asientos libres`}
                     />
                   </StaggerItem>
                 ))
@@ -526,51 +783,91 @@ export default function BuscarBoletoScreen() {
           <>
             <TripCard viaje={seleccionado} />
             <SeatSelector
-              viaje_id={seleccionado.id}
+              key={seleccionado.id}
               asientosTotales={seleccionado.asientosTotales ?? 0}
-              asientosOcupados={asientosOcupados}
+              asientosOcupados={ocupadosAjenos}
               precioUnitario={seleccionado.precio}
-              onConfirm={(asientos) => {
-                setAsientosSeleccionados(asientos);
-                setStep(3);
+              seleccionInicial={misAsientos}
+              confirmando={checkout.enCurso}
+              cargandoOcupados={cargandoOcupados}
+              errorOcupados={errorOcupados}
+              onReintentarOcupados={() => {
+                setErrorOcupados(null);
+                setAsientosVersion((v) => v + 1);
               }}
+              onConfirm={confirmarAsientos}
             />
           </>
         )}
 
-        {/* ─── Paso 3: pago ─────────────────────────────────────────────── */}
+        {/* ─── Paso 3: pasajeros ────────────────────────────────────────── */}
         {step === 3 && seleccionado && (
           <>
+            <ReservaEstado
+              asientos={checkout.asientosApartados}
+              segundos={segundosReserva}
+              onElegirDeNuevo={volverAElegirAsientos}
+            />
+            {!reservaVencida ? (
+              <PasajerosForm
+                asientos={checkout.asientosApartados}
+                perfil={perfil}
+                perfilCargando={perfilCargando}
+                inicial={pasajerosIniciales}
+                asientosConError={asientosSinDatos}
+                mensajeError={errorPasajeros}
+                guardando={checkout.enCurso}
+                onSubmit={guardarPasajeros}
+              />
+            ) : null}
+          </>
+        )}
+
+        {/* ─── Paso 4: pago ─────────────────────────────────────────────── */}
+        {step === 4 && seleccionado && (
+          <>
+            <ReservaEstado
+              asientos={checkout.asientosApartados}
+              segundos={segundosReserva}
+              onElegirDeNuevo={volverAElegirAsientos}
+            />
             <TripCard
               viaje={seleccionado}
               extras={
-                <>
-                  <Divider spacing={Spacing.lg} />
-                  <View style={s.summaryRow}>
-                    <InfoRow
-                      label="Asientos"
-                      value={[...asientosSeleccionados]
-                        .sort((a, b) => Number(a) - Number(b))
-                        .join(', ')}
-                    />
-                    <InfoRow
-                      label="Total a pagar"
-                      value={`${total} Bs`}
-                      align="right"
-                      valueColor={Colors.secondary}
-                    />
-                  </View>
-                </>
+                cotizacion ? (
+                  <>
+                    <Divider spacing={Spacing.lg} />
+                    <View style={s.summaryRow}>
+                      <InfoRow label="Asientos" value={unirAsientos(checkout.asientosApartados)} />
+                      <View style={s.totalBlock}>
+                        <Text variant="overline" color="muted" uppercase align="right">
+                          Total a pagar
+                        </Text>
+                        <Monto
+                          usd={cotizacion.totalUsd}
+                          bs={cotizacion.totalBs}
+                          tasa={tasaRefDe(cotizacion.tasa, cotizacion.tasaFecha)}
+                          align="right"
+                        />
+                      </View>
+                    </View>
+                  </>
+                ) : null
               }
             />
-            <PaymentFlow
-              monto={total}
-              cooperativa_id={seleccionado.cooperativa_id}
-              concepto={`${asientosSeleccionados.length} asiento(s) · ${formatCity(
-                seleccionado.ciudadOrigen
-              )} → ${formatCity(seleccionado.ciudadDestino)}`}
-              onPaymentSuccess={handlePaymentSuccess}
-            />
+            {!reservaVencida && cotizacion ? (
+              <PaymentFlow
+                cooperativaId={seleccionado.cooperativa_id}
+                concepto={`${nBoletos === 1 ? '1 boleto' : `${nBoletos} boletos`} · ${formatCity(
+                  seleccionado.ciudadOrigen
+                )} → ${formatCity(seleccionado.ciudadDestino)}`}
+                tipoRecurso="boleto"
+                cotizacion={cotizacion}
+                onRegistrar={checkout.onRegistrar}
+                onEfectivo={() => irACompra(checkout.reserva, 'reserva')}
+                bloqueado={checkout.enCurso}
+              />
+            ) : null}
           </>
         )}
       </ScrollView>
@@ -583,13 +880,35 @@ export default function BuscarBoletoScreen() {
             disabled={!seleccionado}
             onPress={() => {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-              setStep(2);
+              irAPaso(2);
             }}
           >
             {seleccionado ? `Continuar con ${seleccionado.cooperativa}` : 'Elige una salida'}
           </Button>
         </FloatingBar>
       )}
+
+      <CompletarPerfilSheet
+        visible={pedirDatos}
+        motivo="compra"
+        onClose={() => {
+          setPedirDatos(false);
+          setAsientosPendientes(null);
+        }}
+        onCompletado={() => {
+          setPedirDatos(false);
+          const pendientes = asientosPendientes;
+          setAsientosPendientes(null);
+          if (pendientes && pendientes.length > 0) void apartar(pendientes);
+        }}
+      />
+
+      <TasaCambiadaSheet
+        cambio={checkout.tasaCambiada}
+        enviando={checkout.enCurso}
+        onConfirmar={confirmarTasaCambiada}
+        onRevisar={checkout.descartarTasaCambiada}
+      />
 
       <CalendarModal
         visible={showCalendar}
@@ -671,12 +990,12 @@ function TripCard({ viaje, extras }: { viaje: ViajeResumen; extras?: React.React
       <View style={s.tripFooter}>
         <InfoRow label="Fecha" value={formatDate(viaje.fecha_hora_salida, dateFull)} />
         <InfoRow label="Salida" value={viaje.horaSalida} />
-        <InfoRow
-          label="Precio"
-          value={`${viaje.precio} Bs`}
-          align="right"
-          valueColor={Colors.secondary}
-        />
+        <View style={s.totalBlock}>
+          <Text variant="overline" color="muted" uppercase align="right">
+            Por asiento
+          </Text>
+          <Monto usd={viaje.precio} size="sm" align="right" />
+        </View>
       </View>
 
       {extras}
@@ -756,6 +1075,25 @@ const s = StyleSheet.create({
     flex: 1,
     textTransform: 'capitalize',
   },
+  fechasAviso: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: Spacing.xs,
+    marginTop: Spacing.sm,
+    paddingHorizontal: Spacing.sm,
+  },
+  fechasAvisoTexto: {
+    flexShrink: 1,
+  },
+  /** Área táctil cómoda alrededor del enlace de texto */
+  fechasReintentar: {
+    paddingVertical: Spacing.xs,
+    paddingHorizontal: Spacing.xs,
+  },
+  enlace: {
+    textDecorationLine: 'underline',
+  },
   filterRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -801,6 +1139,10 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     gap: Spacing.md,
+  },
+  totalBlock: {
+    alignItems: 'flex-end',
+    gap: Spacing.xs / 2,
   },
   sheetContent: {
     paddingHorizontal: Layout.screenPadding,

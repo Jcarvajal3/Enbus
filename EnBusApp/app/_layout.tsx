@@ -45,7 +45,7 @@ function LoadingScreen() {
   return (
     <View style={s.splash}>
       <Animated.View style={[s.splashLogo, animStyle]}>
-        <Text variant="title" size="2xl" weight="heavy" color="primary" compact>
+        <Text variant="title" size="2xl" weight="heavy" color="foreground" compact>
           EB
         </Text>
       </Animated.View>
@@ -87,9 +87,17 @@ function RootLayoutNav() {
   useEffect(() => {
     if (!initialized) return;
     const inAuthGroup = segments[0] === '(auth)';
+    // `auth/callback` canjea el enlace del correo o de Google: nunca se le saca
+    // de ahí (empieza sin sesión y termina con ella; él mismo redirige).
+    const enCallback = segments[0] === 'auth';
+    // Con la sesión de recuperación hay que poder crear la contraseña nueva.
+    const pantallaAuth = segments[1] as string | undefined;
+    const permitidaConSesion = inAuthGroup && pantallaAuth === 'restablecer';
+
+    if (enCallback) return;
     if (!session && !inAuthGroup) {
       router.replace('/(auth)/login');
-    } else if (session && inAuthGroup) {
+    } else if (session && inAuthGroup && !permitidaConSesion) {
       router.replace('/(tabs)');
     }
   }, [session, initialized, segments, router]);
@@ -101,9 +109,11 @@ function RootLayoutNav() {
       {isOffline && <OfflineBanner />}
       <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
         <Stack.Screen name="(auth)" options={{ animation: 'fade' }} />
+        <Stack.Screen name="auth/callback" options={{ animation: 'fade', gestureEnabled: false }} />
         <Stack.Screen name="(tabs)" options={{ animation: 'fade' }} />
         <Stack.Screen name="perfil" options={{ animation: 'slide_from_bottom' }} />
         <Stack.Screen name="notificaciones" options={{ animation: 'slide_from_bottom' }} />
+        <Stack.Screen name="ayuda" options={{ animation: 'slide_from_bottom' }} />
       </Stack>
     </>
   );

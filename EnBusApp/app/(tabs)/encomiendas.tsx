@@ -5,21 +5,26 @@ import { useFocusEffect } from '@react-navigation/native';
 import { DownloadSimple, Package, Plus, UploadSimple } from 'phosphor-react-native';
 import { useAuth } from '@/src/contexts/AuthContext';
 import { useEncomiendas } from '@/src/hooks/useEncomiendas';
+import { usePerfil } from '@/src/hooks/usePerfil';
 import { TransactionCard } from '@/src/components/TransactionCard';
 import { CardSkeleton } from '@/src/components/CardSkeleton';
+import { CompletarPerfilSheet } from '@/src/components/CompletarPerfilSheet';
 import { StaggerItem } from '@/src/components/StaggerItem';
 import {
   Button,
   EmptyState,
+  ErrorState,
   FloatingBar,
   Gutter,
   Screen,
   ScreenHeader,
   SegmentedControl,
+  StaleBanner,
   scrollContent,
 } from '@/src/components/ui';
-import { formatDate } from '@/src/utils/formatters';
+import { formatCity, formatDate } from '@/src/utils/formatters';
 import { isEncomiendaActiva } from '@/src/utils/estados';
+import { formatCedula, formatTelefono } from '@/src/utils/validation';
 import type { Encomienda } from '@/src/types';
 import { Colors, Spacing } from '@/src/theme';
 
@@ -32,6 +37,7 @@ export default function EncomiendasScreen() {
   const [tab, setTab] = useState<BuzonTab>('recibir');
   const [isFocused, setIsFocused] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [completarPerfil, setCompletarPerfil] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -40,10 +46,30 @@ export default function EncomiendasScreen() {
     }, [])
   );
 
-  const { data: todas, loading, refetch } = useEncomiendas(user?.id, {
+  const {
+    data: todas,
+    loading,
+    error,
+    actualizadoAt,
+    refetch,
+  } = useEncomiendas(user?.id, {
     enabled: isFocused && !!user?.id,
     limit: 30,
   });
+
+  // M-50: "Para mí" se llena cuando la base reconoce la cédula o el teléfono del
+  // usuario en un envío. El estado vacío le muestra con qué datos lo buscamos.
+  // `usePerfil` ya oculta los marcadores PENDIENTE-… del alta con Google.
+  const { perfil, loading: cargandoPerfil } = usePerfil();
+  const datosVinculo = useMemo(() => {
+    if (cargandoPerfil || !perfil) return null;
+    const cedula = formatCedula(perfil.cedula_rif);
+    const telefono = formatTelefono(perfil.telefono);
+    return {
+      cedula: cedula === '—' ? null : cedula,
+      telefono: telefono === '—' ? null : telefono,
+    };
+  }, [perfil, cargandoPerfil]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -63,6 +89,7 @@ export default function EncomiendasScreen() {
   }, [todas, user?.id]);
 
   const listData = buckets[tab];
+  const sinDatos = (todas ?? []).length === 0;
 
   const renderItem = useCallback<ListRenderItem<Encomienda>>(
     ({ item, index }) => (
@@ -73,10 +100,10 @@ export default function EncomiendasScreen() {
           estado={item.estado}
           titulo={
             item.ciudad_origen && item.ciudad_destino
-              ? `${item.ciudad_origen} → ${item.ciudad_destino}`
+              ? `${formatCity(item.ciudad_origen)} → ${formatCity(item.ciudad_destino)}`
               : tab === 'enviar'
-                ? 'Envío registrado'
-                : 'Paquete entrante'
+                ? 'Encomienda enviada'
+                : 'Encomienda para ti'
           }
           subtitulo={formatDate(item.created_at)}
           onPress={() =>
@@ -99,31 +126,52 @@ export default function EncomiendasScreen() {
       tab === 'enviar' ? (
         <EmptyState
           icon={UploadSimple}
-          title="Sin envíos registrados"
-          description="Cuando registres un paquete para enviar, lo verás aquí con su seguimiento."
+          title="Aún no has enviado encomiendas"
+          description="Cuando registres una encomienda, la verás aquí con su código y su seguimiento."
           action={{
-            children: 'Crear Nuevo Envío',
+            children: 'Enviar encomienda',
             icon: Plus,
             variant: 'accent',
             onPress: () => router.push('/encomiendas/nueva'),
           }}
         />
+      ) : datosVinculo && (!datosVinculo.cedula || !datosVinculo.telefono) ? (
+        <EmptyState
+          icon={Package}
+          title="No tienes encomiendas por recibir"
+          description={
+            // La base te encuentra por tu cédula o, si no, por tu teléfono: basta uno.
+            !datosVinculo.cedula && !datosVinculo.telefono
+              ? 'Para ver aquí las encomiendas que te envíen, agrega tu cédula y tu teléfono. Quien te envíe algo debe escribir los mismos datos.'
+              : datosVinculo.cedula
+                ? `Si alguien te envía una encomienda con tu cédula ${datosVinculo.cedula}, aparecerá aquí con su PIN de retiro. Agrega también tu teléfono para que te encuentren por cualquiera de los dos.`
+                : `Si alguien te envía una encomienda con tu teléfono ${datosVinculo.telefono}, aparecerá aquí con su PIN de retiro. Agrega también tu cédula para que te encuentren por cualquiera de los dos.`
+          }
+          action={{ children: 'Completar mis datos', onPress: () => setCompletarPerfil(true) }}
+        />
       ) : (
         <EmptyState
           icon={Package}
-          title="Sin paquetes en camino"
-          description="Los paquetes que otras personas te envíen aparecerán aquí automáticamente."
+          title="No tienes encomiendas por recibir"
+          description={
+            datosVinculo
+              ? `Si alguien te envía una encomienda con tu cédula ${datosVinculo.cedula} o tu teléfono ${datosVinculo.telefono}, aparecerá aquí con su PIN de retiro.`
+              : 'Si alguien te envía una encomienda con tu cédula o tu teléfono, aparecerá aquí con su PIN de retiro.'
+          }
+          action={{
+            children: 'Enviar encomienda',
+            icon: Plus,
+            variant: 'secondary',
+            onPress: () => router.push('/encomiendas/nueva'),
+          }}
         />
       ),
-    [tab, router]
+    [tab, router, datosVinculo]
   );
 
   return (
     <Screen>
-      <ScreenHeader
-        title="Mis Paquetes"
-        subtitle="Consulta y realiza el seguimiento de tus envíos"
-      />
+      <ScreenHeader title="Mis encomiendas" subtitle="Sigue lo que envías y lo que te envían" />
 
       <Gutter style={{ paddingBottom: Spacing.lg }}>
         <SegmentedControl<BuzonTab>
@@ -132,13 +180,13 @@ export default function EncomiendasScreen() {
           options={[
             {
               value: 'recibir',
-              label: 'Para Mí',
+              label: 'Para mí',
               icon: DownloadSimple,
               badge: buckets.recibir.filter((e) => isEncomiendaActiva(e.estado)).length,
             },
             {
               value: 'enviar',
-              label: 'Enviados',
+              label: 'Enviadas',
               icon: UploadSimple,
               badge: buckets.enviar.filter((e) => isEncomiendaActiva(e.estado)).length,
             },
@@ -146,7 +194,16 @@ export default function EncomiendasScreen() {
         />
       </Gutter>
 
-      {loading ? (
+      {error && sinDatos ? (
+        // APP-37: sin datos y con error no es "no tienes encomiendas".
+        <Gutter>
+          <ErrorState
+            title="No pudimos cargar tus encomiendas"
+            description={error}
+            onRetry={refetch}
+          />
+        </Gutter>
+      ) : loading && sinDatos ? (
         <Gutter>
           <CardSkeleton count={3} />
         </Gutter>
@@ -155,6 +212,9 @@ export default function EncomiendasScreen() {
           data={listData}
           renderItem={renderItem}
           keyExtractor={(item) => item.id}
+          ListHeaderComponent={
+            error ? <StaleBanner actualizadoAt={actualizadoAt} onRetry={() => refetch()} /> : null
+          }
           ListEmptyComponent={emptyComponent}
           contentContainerStyle={scrollContent({
             tabbed: true,
@@ -186,10 +246,21 @@ export default function EncomiendasScreen() {
             fullWidth
             onPress={() => router.push('/encomiendas/nueva')}
           >
-            Crear Nuevo Envío
+            Enviar encomienda
           </Button>
         </FloatingBar>
       )}
+
+      <CompletarPerfilSheet
+        visible={completarPerfil}
+        motivo="perfil"
+        onClose={() => setCompletarPerfil(false)}
+        onCompletado={() => {
+          setCompletarPerfil(false);
+          // La base vincula los envíos con la cédula o el teléfono nuevos.
+          refetch();
+        }}
+      />
     </Screen>
   );
 }

@@ -10,8 +10,12 @@ interface CalendarModalProps {
   value: Date;
   onChange: (date: Date) => void;
   minimumDate?: Date;
+  /** Last selectable day (inclusive). Used to block future dates, e.g. a payment date. */
+  maximumDate?: Date;
   /** `YYYY-MM-DD` keys that have departures. Days outside the list are disabled. */
   activeDates?: string[];
+  /** Sheet title. Defaults to "Seleccionar fecha". */
+  title?: string;
 }
 
 const WEEKDAYS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
@@ -41,7 +45,9 @@ export function CalendarModal({
   value,
   onChange,
   minimumDate,
+  maximumDate,
   activeDates,
+  title = 'Seleccionar fecha',
 }: CalendarModalProps) {
   // Defensive: callers have passed an undefined `value` before, which produced
   // an Invalid Date and a grid full of NaN.
@@ -55,6 +61,13 @@ export function CalendarModal({
     d.setHours(0, 0, 0, 0);
     return d;
   }, [minimumDate]);
+
+  const maxDate = useMemo(() => {
+    if (!maximumDate) return null;
+    const d = new Date(maximumDate);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }, [maximumDate]);
 
   const [selected, setSelected] = useState(() => new Date(safeValue));
   const [cursor, setCursor] = useState(() => {
@@ -87,6 +100,7 @@ export function CalendarModal({
     const d = new Date(date);
     d.setHours(0, 0, 0, 0);
     if (d.getTime() < minDate.getTime()) return true;
+    if (maxDate && d.getTime() > maxDate.getTime()) return true;
     if (activeDates) return !activeDates.includes(dateKey(date));
     return false;
   };
@@ -117,7 +131,7 @@ export function CalendarModal({
 
         <View style={s.card}>
           <View style={s.header}>
-            <Text variant="heading">Seleccionar fecha</Text>
+            <Text variant="heading">{title}</Text>
             <IconButton icon={X} label="Cerrar calendario" onPress={onClose} size="md" />
           </View>
 
@@ -166,7 +180,7 @@ export function CalendarModal({
                     style={s.cell}
                     accessibilityRole="button"
                     accessibilityLabel={`${date.getDate()} de ${MONTHS[month]}${
-                      disabled ? ', sin viajes' : ''
+                      disabled ? (activeDates ? ', sin viajes' : ', no disponible') : ''
                     }`}
                     accessibilityState={{ disabled, selected: active }}
                   >

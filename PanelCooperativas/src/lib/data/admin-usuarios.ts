@@ -1,5 +1,7 @@
 import { createClient, createAdminClient } from "@/lib/supabase/server";
 import type { User } from "@supabase/supabase-js";
+import { humanizeError } from "@/lib/errores";
+import { formatFechaHoraVE } from "@/lib/fechas";
 import type { 
   Usuario, 
   UsuarioDetalle, 
@@ -36,7 +38,7 @@ export async function fetchUsuarios(filters?: {
 
   if (profilesError) {
     console.error("Error fetching profiles:", profilesError);
-    throw new Error(profilesError.message);
+    throw new Error(humanizeError(profilesError, "cargar los usuarios"));
   }
 
   // 2. Fetch auth users to map emails and banned status
@@ -94,12 +96,15 @@ export async function fetchUsuarioById(id: string): Promise<UsuarioDetalle | nul
     .from("profiles")
     .select("*, cooperativas(nombre)")
     .eq("id", id)
-    .single();
+    .maybeSingle();
 
-  if (profileError || !profile) {
+  if (profileError) {
+    // Un id mal formado (22P02) es "no existe"; cualquier otro error va a error.tsx con "Reintentar".
     console.error("Error fetching profile:", profileError);
-    return null;
+    if (profileError.code === "22P02") return null;
+    throw new Error(humanizeError(profileError, "cargar el usuario"));
   }
+  if (!profile) return null;
 
   // 2. Fetch auth user to get email and banned status
   let authUser: User | null = null;
@@ -137,7 +142,7 @@ export async function fetchUsuarioById(id: string): Promise<UsuarioDetalle | nul
       .order("created_at", { ascending: false }),
     supabase
       .from("pagos")
-      .select("*, encomiendas(tracking_id), boletos(codigo_boleto)")
+      .select("*, encomiendas(tracking_id), boletos!pagos_boleto_id_fkey(codigo_boleto), metodo:metodos_pago_cooperativa(tipo)")
       .eq("pagador_id", id)
       .order("created_at", { ascending: false }),
     supabase
@@ -146,6 +151,13 @@ export async function fetchUsuarioById(id: string): Promise<UsuarioDetalle | nul
       .eq("destinatario_id", id)
       .order("created_at", { ascending: false })
   ]);
+
+  // Una pestaña vacía por error se ve igual que "sin datos": al menos queda en el log.
+  if (enviadasResult.error) console.error("Error encomiendas enviadas:", enviadasResult.error);
+  if (recibidasResult.error) console.error("Error encomiendas recibidas:", recibidasResult.error);
+  if (boletosResult.error) console.error("Error boletos:", boletosResult.error);
+  if (pagosResult.error) console.error("Error pagos:", pagosResult.error);
+  if (notificacionesResult.error) console.error("Error notificaciones:", notificacionesResult.error);
 
   const encomiendas_enviadas: EncomiendaUsuario[] = (enviadasResult.data || []).map((e) => ({
     id: e.id,
@@ -169,8 +181,9 @@ export async function fetchUsuarioById(id: string): Promise<UsuarioDetalle | nul
     receiver_nombre: e.receiver_nombre,
     receiver_telefono: e.receiver_telefono,
     receiver_cedula_rif: e.receiver_cedula_rif,
-    sender_nombre: e.profiles?.nombre_completo || "Desconocido",
-    sender_telefono: e.profiles?.telefono || "",
+    // Alta en taquilla: sender_id es el empleado; el remitente real va en remitente_*.
+    sender_nombre: e.remitente_nombre || e.profiles?.nombre_completo || "Sin dato",
+    sender_telefono: e.remitente_telefono || e.profiles?.telefono || "",
     estado: e.estado,
     peso_kg: e.peso_kg ? Number(e.peso_kg) : null,
     costo_calculado: Number(e.costo_calculado),
@@ -184,9 +197,7 @@ export async function fetchUsuarioById(id: string): Promise<UsuarioDetalle | nul
   const boletos: BoletoUsuario[] = (boletosResult.data || []).map((b) => {
     const origen = b.viajes?.rutas?.ciudad_origen || "";
     const destino = b.viajes?.rutas?.ciudad_destino || "";
-    const fechaSalida = b.viajes?.fecha_hora_salida 
-      ? new Date(b.viajes.fecha_hora_salida).toLocaleString("es-VE", { dateStyle: "short", timeStyle: "short" }) 
-      : "";
+    const fechaSalida = b.viajes?.fecha_hora_salida ? formatFechaHoraVE(b.viajes.fecha_hora_salida) : "";
     return {
       id: b.id,
       codigo_boleto: b.codigo_boleto,
@@ -194,7 +205,7 @@ export async function fetchUsuarioById(id: string): Promise<UsuarioDetalle | nul
       precio: Number(b.precio),
       estado: b.estado,
       cooperativa_nombre: b.cooperativas?.nombre || "N/A",
-      viaje_info: origen && destino ? `${origen} -> ${destino} (${fechaSalida})` : "Viaje N/A",
+      viaje_info: origen && destino ? `${origen} → ${destino}${fechaSalida ? ` · ${fechaSalida}` : ""}` : "Sin datos del viaje",
       created_at: b.created_at
     };
   });
@@ -204,8 +215,23 @@ export async function fetchUsuarioById(id: string): Promise<UsuarioDetalle | nul
     encomienda_tracking_id: p.encomiendas?.tracking_id || null,
     boleto_codigo: p.boletos?.codigo_boleto || null,
     monto: Number(p.monto),
+    monto_bs: p.monto_bs != null ? Number(p.monto_bs) : null,
+    moneda: p.moneda === "USD" ? "USD" : "VES",
+    tasa_bcv: p.tasa_bcv != null ? Number(p.tasa_bcv) : null,
+    tasa_bcv_fecha: p.tasa_bcv_fecha ?? null,
     tipo_pago: p.tipo_pago,
+    metodo_tipo: (Array.isArray(p.metodo) ? p.metodo[0]?.tipo : p.metodo?.tipo) ?? null,
     verificado: p.verificado,
+    // Antes de la migración 01 no existe estado_verificacion: se deduce de verificado / rechazado_at.
+    estado_verificacion:
+      p.estado_verificacion === "APROBADO" || p.estado_verificacion === "RECHAZADO" || p.estado_verificacion === "PENDIENTE"
+        ? p.estado_verificacion
+        : p.verificado
+          ? "APROBADO"
+          : p.rechazado_at
+            ? "RECHAZADO"
+            : "PENDIENTE",
+    motivo_rechazo: p.motivo_rechazo ?? null,
     numero_referencia: p.numero_referencia || null,
     created_at: p.created_at
   }));

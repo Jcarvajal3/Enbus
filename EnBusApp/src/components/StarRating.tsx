@@ -18,6 +18,17 @@ interface StarRatingProps {
   readonly?: boolean;
 }
 
+/** Semantic feedback per level (5-star scale) — "4/5" alone says little. */
+const NIVELES = ['Malo', 'Regular', 'Bueno', 'Muy bueno', 'Excelente'];
+
+/**
+ * APP-38: 32 pt glyph + 8 pt padding = 48 pt target (was 34). The empty star
+ * has a `mutedForeground` outline (5.7:1) instead of the near-invisible
+ * `border`, and the filled one keeps the brand yellow with a dark amber
+ * outline so it reads on white (WCAG 1.4.11).
+ */
+const STAR_SIZE = Sizes.icon['2xl'];
+
 function AnimatedStar({
   index,
   filled,
@@ -43,26 +54,36 @@ function AnimatedStar({
     onPress();
   };
 
+  const nivel = maxStars === NIVELES.length ? ` (${NIVELES[index]})` : '';
+
+  const glyph = filled ? (
+    <View>
+      <Star size={STAR_SIZE} weight="fill" color={Colors.primary} />
+      <View style={StyleSheet.absoluteFill} pointerEvents="none">
+        <Star size={STAR_SIZE} weight="regular" color={Colors.primaryText} />
+      </View>
+    </View>
+  ) : (
+    <Star size={STAR_SIZE} weight="regular" color={Colors.mutedForeground} />
+  );
+
+  // A read-only rating is a picture, not a disabled control: render it at full
+  // opacity (PressableScale dims disabled children).
+  if (readonly) return <View style={s.star}>{glyph}</View>;
+
   return (
     <PressableScale
-      disabled={readonly}
       onPress={handlePress}
       scaleValue={Motion.press.icon}
       duration={Motion.duration.instant}
       haptic
       hapticType="light"
       style={s.star}
-      accessibilityLabel={`${index + 1} de ${maxStars} estrellas`}
-      accessibilityRole={readonly ? undefined : 'button'}
-      accessibilityState={readonly ? undefined : { selected: filled }}
+      accessibilityLabel={`${index + 1} de ${maxStars} estrellas${nivel}`}
+      accessibilityRole="button"
+      accessibilityState={{ selected: filled }}
     >
-      <Animated.View style={animStyle}>
-        <Star
-          size={Sizes.icon.xl}
-          weight={filled ? 'fill' : 'regular'}
-          color={filled ? Colors.primary : Colors.border}
-        />
-      </Animated.View>
+      <Animated.View style={animStyle}>{glyph}</Animated.View>
     </PressableScale>
   );
 }
@@ -73,28 +94,37 @@ export function StarRating({
   onRatingChange,
   readonly = false,
 }: StarRatingProps) {
+  const rounded = Math.round(rating);
+  const nivel = maxStars === NIVELES.length && rounded > 0 ? NIVELES[rounded - 1] : null;
+
   return (
     <View
       style={s.container}
+      // Read-only stars have no accessible children: expose the group as one element.
+      accessible={readonly}
       accessibilityRole={readonly ? 'image' : 'radiogroup'}
       accessibilityLabel={
-        readonly ? `Calificación: ${rating} de ${maxStars} estrellas` : 'Calificar el viaje'
+        readonly
+          ? `Calificación: ${rating} de ${maxStars} estrellas${nivel ? ` (${nivel})` : ''}`
+          : 'Calificar el viaje'
       }
     >
-      {Array.from({ length: maxStars }).map((_, index) => (
-        <AnimatedStar
-          key={index}
-          index={index}
-          filled={index + 1 <= Math.round(rating)}
-          onPress={() => onRatingChange?.(index + 1)}
-          readonly={readonly}
-          maxStars={maxStars}
-        />
-      ))}
+      <View style={s.stars}>
+        {Array.from({ length: maxStars }).map((_, index) => (
+          <AnimatedStar
+            key={index}
+            index={index}
+            filled={index + 1 <= rounded}
+            onPress={() => onRatingChange?.(index + 1)}
+            readonly={readonly}
+            maxStars={maxStars}
+          />
+        ))}
+      </View>
 
       {!readonly && (
         <Text variant="label" color="muted" style={s.label}>
-          {rating > 0 ? `${rating}/${maxStars}` : 'Toca para calificar'}
+          {rating > 0 ? (nivel ?? `${rating}/${maxStars}`) : 'Toca una estrella para calificar'}
         </Text>
       )}
     </View>
@@ -103,13 +133,18 @@ export function StarRating({
 
 const s = StyleSheet.create({
   container: {
+    alignItems: 'flex-start',
+  },
+  stars: {
     flexDirection: 'row',
     alignItems: 'center',
+    // Compensates the touch padding so the first star lines up with the text.
+    marginLeft: -Spacing.sm,
   },
   star: {
-    padding: Spacing.xs,
+    padding: Spacing.sm,
   },
   label: {
-    marginLeft: Spacing.sm,
+    marginTop: Spacing.xs,
   },
 });

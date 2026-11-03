@@ -1,310 +1,225 @@
 "use client";
 
-import { 
-  Tabs, 
-  TabsContent, 
-  TabsList, 
-  TabsTrigger 
-} from "@/components/ui/tabs";
-import { 
-  Card, 
-  CardContent, 
-  CardDescription, 
-  CardHeader, 
-  CardTitle 
-} from "@/components/ui/card";
-import { 
-  Table, 
-  TableBody, 
-  TableCell, 
-  TableHead, 
-  TableHeader, 
-  TableRow 
-} from "@/components/ui/table";
+import Link from "next/link";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { 
-  User, 
-  Envelope, 
-  Phone, 
-  IdentificationCard, 
-  Bell, 
-  Package, 
-  Ticket, 
-  CreditCard, 
-  CheckCircle, 
-  XCircle, 
-  WarningCircle, 
-  PaperPlaneTilt 
-} from "@phosphor-icons/react";
-import type { UsuarioDetalle } from "@/lib/types/admin-usuarios";
+import { Bell, CreditCard, Envelope, IdentificationCard, Package, Phone, Ticket, User } from "@phosphor-icons/react";
+import type { PagoUsuario, UsuarioDetalle } from "@/lib/types/admin-usuarios";
+import { Monto } from "@/components/monto";
+import { StatusBadge } from "@/components/status-badge";
+import { formatFechaHoraVE, formatFechaVE } from "@/lib/fechas";
+import { formatCedula, formatTelefono } from "@/lib/ve";
+import { etiquetaMetodoPago, etiquetaRol } from "@/lib/estados";
+import { useTasaBCVAdmin } from "@/components/admin/dashboard/use-tasa-bcv-admin";
 
 interface UsuarioDetailTabsProps {
   usuario: UsuarioDetalle;
 }
 
+const CANAL: Record<string, string> = {
+  WHATSAPP: "WhatsApp",
+  PUSH: "Notificación de la app",
+  SMS: "SMS",
+  EMAIL: "Correo",
+};
+
+const CLASE_ENLACE = "text-foreground underline decoration-primary underline-offset-4";
+
+/** Cédula o teléfono legibles; si no son válidos (datos viejos o 'PENDIENTE-…') se muestra el texto guardado o "Sin dato". */
+function cedulaLegible(v: string | null | undefined) {
+  if (!v || v.toUpperCase().startsWith("PENDIENTE")) return "Sin dato";
+  const f = formatCedula(v);
+  return f === "—" ? v : f;
+}
+function telefonoLegible(v: string | null | undefined) {
+  if (!v || v.toUpperCase().startsWith("PENDIENTE")) return "Sin dato";
+  const f = formatTelefono(v);
+  return f === "—" ? v : f;
+}
+
+/** Pago Móvil, Transferencia, Zelle, Efectivo (glosario); los pagos digitales viejos sin método, "Pago digital". */
+function metodoDePago(p: PagoUsuario) {
+  if (p.metodo_tipo) return etiquetaMetodoPago(p.metodo_tipo);
+  return etiquetaMetodoPago(p.tipo_pago === "EFECTIVO" ? "EFECTIVO" : "DIGITAL");
+}
+
+function Dato({ etiqueta, children }: { etiqueta: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-1">
+      <span className="text-xs font-medium text-muted-foreground">{etiqueta}</span>
+      <div className="flex items-center gap-2 text-sm font-medium text-foreground">{children}</div>
+    </div>
+  );
+}
+
+function Preferencia({ titulo, activa, ayuda }: { titulo: string; activa: boolean; ayuda: string }) {
+  return (
+    <Card className="p-4">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-sm font-medium">{titulo}</span>
+        <Badge variant={activa ? "secondary" : "outline"}>{activa ? "Activadas" : "Desactivadas"}</Badge>
+      </div>
+      <p className="mt-2 text-xs text-muted-foreground">{ayuda}</p>
+    </Card>
+  );
+}
+
+function FilaVacia({ columnas, texto }: { columnas: number; texto: string }) {
+  return (
+    <TableRow className="hover:bg-transparent">
+      <TableCell colSpan={columnas} className="h-24 text-center text-muted-foreground">
+        {texto}
+      </TableCell>
+    </TableRow>
+  );
+}
+
 export function UsuarioDetailTabs({ usuario }: UsuarioDetailTabsProps) {
-  // Helper to format currency
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat("es-VE", {
-      style: "currency",
-      currency: "USD",
-    }).format(amount);
-  };
-
-  // Helper to render Encomiendas state badge
-  const getEncomiendaEstadoBadge = (estado: string) => {
-    switch (estado) {
-      case "PENDIENTE_DE_ESCANEO":
-        return <Badge variant="secondary" className="bg-slate-500/10 text-slate-400 border-slate-500/20">Pendiente Escaneo</Badge>;
-      case "EN_RECEPCION":
-        return <Badge className="bg-sky-500/10 text-sky-500 hover:bg-sky-500/20 border-sky-500/20">En Recepción</Badge>;
-      case "POR_PAGAR":
-        return <Badge className="bg-amber-500/10 text-amber-500 hover:bg-amber-500/20 border-amber-500/20">Por Pagar</Badge>;
-      case "PAGADA":
-        return <Badge className="bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 border-emerald-500/20">Pagada</Badge>;
-      case "EN_TRANSITO":
-        return <Badge className="bg-indigo-500/10 text-indigo-500 hover:bg-indigo-500/20 border-indigo-500/20">En Tránsito</Badge>;
-      case "EN_OFICINA_DESTINO":
-        return <Badge className="bg-purple-500/10 text-purple-500 hover:bg-purple-500/20 border-purple-500/20">En Oficina Destino</Badge>;
-      case "ENTREGADA":
-        return <Badge className="bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 border-emerald-500/20">Entregada</Badge>;
-      case "CANCELADA":
-        return <Badge className="bg-destructive/10 text-destructive hover:bg-destructive/20 border-destructive/20">Cancelada</Badge>;
-      case "DEVUELTA":
-        return <Badge className="bg-orange-500/10 text-orange-500 hover:bg-orange-500/20 border-orange-500/20">Devuelta</Badge>;
-      default:
-        return <Badge variant="outline">{estado}</Badge>;
-    }
-  };
-
-  // Helper to render Boleto state badge
-  const getBoletoEstadoBadge = (estado: string) => {
-    switch (estado) {
-      case "RESERVADO":
-        return <Badge className="bg-amber-500/10 text-amber-500 hover:bg-amber-500/20 border-amber-500/20">Reservado</Badge>;
-      case "PAGADO":
-        return <Badge className="bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 border-emerald-500/20">Pagado</Badge>;
-      case "USADO":
-        return <Badge className="bg-indigo-500/10 text-indigo-500 hover:bg-indigo-500/20 border-indigo-500/20">Usado</Badge>;
-      case "CANCELADO":
-        return <Badge className="bg-destructive/10 text-destructive hover:bg-destructive/20 border-destructive/20">Cancelado</Badge>;
-      case "EXPIRADO":
-        return <Badge variant="secondary" className="bg-slate-500/10 text-slate-400 border-slate-500/20">Expirado</Badge>;
-      default:
-        return <Badge variant="outline">{estado}</Badge>;
-    }
-  };
-
-  const getCanalBadge = (canal: string) => {
-    switch (canal) {
-      case "WHATSAPP":
-        return <Badge className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20">WhatsApp</Badge>;
-      case "PUSH":
-        return <Badge className="bg-sky-500/10 text-sky-500 border-sky-500/20">Push App</Badge>;
-      case "SMS":
-        return <Badge className="bg-slate-500/10 text-slate-300 border-slate-500/20">SMS</Badge>;
-      case "EMAIL":
-        return <Badge className="bg-indigo-500/10 text-indigo-500 border-indigo-500/20">Email</Badge>;
-      default:
-        return <Badge variant="outline">{canal}</Badge>;
-    }
-  };
+  // Montos en USD de referencia, con el equivalente en Bs a la tasa BCV de hoy.
+  const tasa = useTasaBCVAdmin();
+  const totalEncomiendas = usuario.encomiendas_enviadas.length + usuario.encomiendas_recibidas.length;
 
   return (
     <Tabs defaultValue="perfil" className="w-full space-y-4">
-      <TabsList className="bg-slate-900 border border-slate-800 p-1 rounded-lg">
-        <TabsTrigger value="perfil" className="data-[state=active]:bg-slate-800 data-[state=active]:text-emerald-400 text-slate-400">
-          <User className="h-4 w-4 mr-2" /> Perfil
+      <TabsList className="flex h-auto flex-wrap gap-1">
+        <TabsTrigger value="perfil">
+          <User className="mr-2 h-4 w-4" aria-hidden /> Perfil
         </TabsTrigger>
-        <TabsTrigger value="encomiendas" className="data-[state=active]:bg-slate-800 data-[state=active]:text-emerald-400 text-slate-400">
-          <Package className="h-4 w-4 mr-2" /> Encomiendas ({usuario.encomiendas_enviadas.length + usuario.encomiendas_recibidas.length})
+        <TabsTrigger value="encomiendas">
+          <Package className="mr-2 h-4 w-4" aria-hidden /> Encomiendas ({totalEncomiendas})
         </TabsTrigger>
-        <TabsTrigger value="boletos" className="data-[state=active]:bg-slate-800 data-[state=active]:text-emerald-400 text-slate-400">
-          <Ticket className="h-4 w-4 mr-2" /> Boletos ({usuario.boletos.length})
+        <TabsTrigger value="boletos">
+          <Ticket className="mr-2 h-4 w-4" aria-hidden /> Boletos ({usuario.boletos.length})
         </TabsTrigger>
-        <TabsTrigger value="pagos" className="data-[state=active]:bg-slate-800 data-[state=active]:text-emerald-400 text-slate-400">
-          <CreditCard className="h-4 w-4 mr-2" /> Pagos ({usuario.pagos.length})
+        <TabsTrigger value="pagos">
+          <CreditCard className="mr-2 h-4 w-4" aria-hidden /> Pagos ({usuario.pagos.length})
         </TabsTrigger>
-        <TabsTrigger value="notificaciones" className="data-[state=active]:bg-slate-800 data-[state=active]:text-emerald-400 text-slate-400">
-          <Bell className="h-4 w-4 mr-2" /> Notificaciones ({usuario.notificaciones.length})
+        <TabsTrigger value="notificaciones">
+          <Bell className="mr-2 h-4 w-4" aria-hidden /> Notificaciones ({usuario.notificaciones.length})
         </TabsTrigger>
       </TabsList>
 
-      {/* TABS CONTENT */}
-      
-      {/* 1. PERFIL */}
+      {/* 1. Perfil */}
       <TabsContent value="perfil">
-        <Card className="bg-slate-950/40 border-slate-800 text-slate-100 backdrop-blur-md">
+        <Card>
           <CardHeader>
-            <CardTitle className="text-xl font-bold flex items-center gap-2 text-slate-200">
-              <User className="h-5 w-5 text-emerald-500" /> Información del Perfil
+            <CardTitle className="flex items-center gap-2 text-xl font-bold">
+              <User className="h-5 w-5 text-muted-foreground" aria-hidden /> Perfil
             </CardTitle>
-            <CardDescription className="text-slate-500">Datos personales del usuario y configuraciones</CardDescription>
+            <CardDescription>Datos personales y preferencias de la cuenta.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              <div className="space-y-1">
-                <span className="text-xs text-slate-500 uppercase tracking-wider font-semibold">Nombre Completo</span>
-                <p className="text-slate-200 font-medium flex items-center gap-2">
-                  {usuario.nombre_completo}
-                </p>
-              </div>
-
-              <div className="space-y-1">
-                <span className="text-xs text-slate-500 uppercase tracking-wider font-semibold">Correo Electrónico</span>
-                <p className="text-slate-200 font-medium flex items-center gap-2">
-                  <Envelope className="h-4 w-4 text-slate-400" />
-                  {usuario.email || <span className="text-slate-600 italic">No disponible</span>}
-                </p>
-              </div>
-
-              <div className="space-y-1">
-                <span className="text-xs text-slate-500 uppercase tracking-wider font-semibold">Identificación / Cédula / RIF</span>
-                <p className="text-slate-200 font-medium font-mono flex items-center gap-2">
-                  <IdentificationCard className="h-4 w-4 text-slate-400" />
-                  {usuario.cedula_rif}
-                </p>
-              </div>
-
-              <div className="space-y-1">
-                <span className="text-xs text-slate-500 uppercase tracking-wider font-semibold">Teléfono</span>
-                <p className="text-slate-200 font-medium flex items-center gap-2">
-                  <Phone className="h-4 w-4 text-slate-400" />
-                  {usuario.telefono}
-                </p>
-              </div>
-
-              <div className="space-y-1">
-                <span className="text-xs text-slate-500 uppercase tracking-wider font-semibold">Rol del Sistema</span>
-                <div className="flex items-center gap-2 mt-1">
-                  {usuario.role === "super_admin" && <Badge className="bg-amber-500/10 text-amber-500 border-amber-500/20">Super Admin</Badge>}
-                  {usuario.role === "admin_cooperativa" && <Badge className="bg-indigo-500/10 text-indigo-500 border-indigo-500/20">Admin Cooperativa</Badge>}
-                  {usuario.role === "taquillero" && <Badge className="bg-sky-500/10 text-sky-500 border-sky-500/20">Taquillero</Badge>}
-                  {usuario.role === "user" && <Badge className="bg-slate-500/10 text-slate-400 border-slate-500/20">Cliente</Badge>}
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <span className="text-xs text-slate-500 uppercase tracking-wider font-semibold">Cooperativa Asociada</span>
-                <p className="text-slate-200 font-medium italic">
-                  {usuario.cooperativa_nombre || "Ninguna"}
-                </p>
-              </div>
-
-              <div className="space-y-1 col-span-1 md:col-span-2">
-                <span className="text-xs text-slate-500 uppercase tracking-wider font-semibold">Token de Notificación Push (Expo)</span>
-                <p className="text-slate-400 font-mono text-xs break-all bg-slate-900/50 p-2 rounded border border-slate-800/80 mt-1">
-                  {usuario.has_push_token ? (
-                    <span className="text-emerald-400">✓ Dispositivo registrado para Push</span>
-                  ) : (
-                    <span className="text-slate-600 italic">Sin dispositivo registrado</span>
-                  )}
-                </p>
-              </div>
-
-              <div className="space-y-1">
-                <span className="text-xs text-slate-500 uppercase tracking-wider font-semibold">Fecha de Registro</span>
-                <p className="text-slate-200 font-medium">
-                  {new Date(usuario.created_at).toLocaleString("es-VE")}
-                </p>
-              </div>
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+              <Dato etiqueta="Nombre y apellido">{usuario.nombre_completo}</Dato>
+              <Dato etiqueta="Correo">
+                <Envelope className="h-4 w-4 text-muted-foreground" aria-hidden />
+                {usuario.email || <span className="text-muted-foreground">Sin correo</span>}
+              </Dato>
+              <Dato etiqueta="Cédula o RIF">
+                <IdentificationCard className="h-4 w-4 text-muted-foreground" aria-hidden />
+                <span className="font-mono">{cedulaLegible(usuario.cedula_rif)}</span>
+              </Dato>
+              <Dato etiqueta="Teléfono">
+                <Phone className="h-4 w-4 text-muted-foreground" aria-hidden />
+                {telefonoLegible(usuario.telefono)}
+              </Dato>
+              <Dato etiqueta="Rol">
+                <Badge variant="secondary">{etiquetaRol(usuario.role)}</Badge>
+              </Dato>
+              <Dato etiqueta="Cooperativa">
+                {usuario.cooperativa_id && usuario.cooperativa_nombre ? (
+                  <Link href={`/admin/cooperativas/${usuario.cooperativa_id}`} className={CLASE_ENLACE}>
+                    {usuario.cooperativa_nombre}
+                  </Link>
+                ) : (
+                  <span className="text-muted-foreground">Ninguna</span>
+                )}
+              </Dato>
+              <Dato etiqueta="Notificaciones en el teléfono">
+                {usuario.has_push_token ? "Teléfono registrado" : <span className="text-muted-foreground">Sin teléfono registrado</span>}
+              </Dato>
+              <Dato etiqueta="Fecha de registro">{formatFechaHoraVE(usuario.created_at)}</Dato>
             </div>
 
-            <div className="border-t border-slate-800 pt-6">
-              <h3 className="text-sm font-semibold text-slate-300 mb-4 flex items-center gap-2">
-                <Bell className="h-4 w-4 text-emerald-500" /> Preferencias de Notificación
+            <div className="border-t pt-6">
+              <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold">
+                <Bell className="h-4 w-4 text-muted-foreground" aria-hidden /> Preferencias de notificación
               </h3>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <Card className="bg-slate-900/30 border-slate-800/60 p-4">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-slate-400 uppercase tracking-wider font-semibold">Encomiendas</span>
-                    {usuario.notif_encomiendas ? (
-                      <Badge variant="outline" className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20">Activado</Badge>
-                    ) : (
-                      <Badge variant="outline" className="bg-slate-700/10 text-slate-500 border-slate-700/20">Desactivado</Badge>
-                    )}
-                  </div>
-                  <p className="text-xs text-slate-500 mt-2">Alertas sobre envíos, recepción y entregas de encomiendas.</p>
-                </Card>
-
-                <Card className="bg-slate-900/30 border-slate-800/60 p-4">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-slate-400 uppercase tracking-wider font-semibold">Boletos</span>
-                    {usuario.notif_boletos ? (
-                      <Badge variant="outline" className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20">Activado</Badge>
-                    ) : (
-                      <Badge variant="outline" className="bg-slate-700/10 text-slate-500 border-slate-700/20">Desactivado</Badge>
-                    )}
-                  </div>
-                  <p className="text-xs text-slate-500 mt-2">Alertas sobre compras, reservas o cambios en boletos de viaje.</p>
-                </Card>
-
-                <Card className="bg-slate-900/30 border-slate-800/60 p-4">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-slate-400 uppercase tracking-wider font-semibold">Recordatorios</span>
-                    {usuario.notif_recordatorios ? (
-                      <Badge variant="outline" className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20">Activado</Badge>
-                    ) : (
-                      <Badge variant="outline" className="bg-slate-700/10 text-slate-500 border-slate-700/20">Desactivado</Badge>
-                    )}
-                  </div>
-                  <p className="text-xs text-slate-500 mt-2">Avisos automáticos sobre viajes programados y entregas pendientes.</p>
-                </Card>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <Preferencia
+                  titulo="Encomiendas"
+                  activa={usuario.notif_encomiendas}
+                  ayuda="Avisos de recepción, viaje y entrega de sus encomiendas."
+                />
+                <Preferencia
+                  titulo="Boletos"
+                  activa={usuario.notif_boletos}
+                  ayuda="Avisos de compras, pagos y cambios en sus boletos."
+                />
+                <Preferencia
+                  titulo="Recordatorios"
+                  activa={usuario.notif_recordatorios}
+                  ayuda="Recordatorios de viajes próximos y retiros pendientes."
+                />
               </div>
             </div>
           </CardContent>
         </Card>
       </TabsContent>
 
-      {/* 2. ENCOMIENDAS */}
+      {/* 2. Encomiendas */}
       <TabsContent value="encomiendas" className="space-y-6">
-        {/* Enviadas */}
-        <Card className="bg-slate-950/40 border-slate-800 text-slate-100 backdrop-blur-md">
+        <Card>
           <CardHeader>
-            <CardTitle className="text-lg font-bold flex items-center gap-2 text-slate-200">
-              <Package className="h-5 w-5 text-emerald-500" /> Encomiendas Enviadas
+            <CardTitle className="flex items-center gap-2 text-lg font-bold">
+              <Package className="h-5 w-5 text-muted-foreground" aria-hidden /> Enviadas
             </CardTitle>
-            <CardDescription className="text-slate-500">Historial de encomiendas registradas por este usuario como remitente</CardDescription>
+            <CardDescription>Encomiendas que registró como remitente.</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="rounded-lg border border-slate-800 overflow-hidden">
+            <div className="overflow-hidden rounded-lg border">
               <Table>
-                <TableHeader className="bg-slate-900/40 border-slate-800">
-                  <TableRow className="border-slate-800 hover:bg-transparent">
-                    <TableHead className="text-slate-400">Tracking ID</TableHead>
-                    <TableHead className="text-slate-400">Destinatario</TableHead>
-                    <TableHead className="text-slate-400">Cédula</TableHead>
-                    <TableHead className="text-slate-400">Teléfono</TableHead>
-                    <TableHead className="text-slate-400">Cooperativa</TableHead>
-                    <TableHead className="text-slate-400">Estado</TableHead>
-                    <TableHead className="text-slate-400 text-right">Costo</TableHead>
-                    <TableHead className="text-slate-400 text-right">Fecha</TableHead>
+                <TableHeader className="bg-muted/50">
+                  <TableRow className="hover:bg-transparent">
+                    <TableHead>Código de seguimiento</TableHead>
+                    <TableHead>Destinatario</TableHead>
+                    <TableHead>Cédula</TableHead>
+                    <TableHead>Teléfono</TableHead>
+                    <TableHead>Cooperativa</TableHead>
+                    <TableHead>Estado</TableHead>
+                    <TableHead className="text-right">Costo</TableHead>
+                    <TableHead className="text-right">Fecha</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {usuario.encomiendas_enviadas.length === 0 ? (
-                    <TableRow className="hover:bg-transparent border-slate-800">
-                      <TableCell colSpan={8} className="h-24 text-center text-slate-500">
-                        No se registraron encomiendas enviadas.
-                      </TableCell>
-                    </TableRow>
+                    <FilaVacia columnas={8} texto="No ha enviado encomiendas." />
                   ) : (
                     usuario.encomiendas_enviadas.map((e) => (
-                      <TableRow key={e.id} className="border-slate-800 hover:bg-slate-900/20">
-                        <TableCell className="font-semibold text-slate-200 font-mono text-sm py-3">
-                          {e.tracking_id}
+                      <TableRow key={e.id}>
+                        <TableCell className="py-3 font-mono text-sm font-semibold">
+                          <Link href={`/admin/encomiendas?codigo=${encodeURIComponent(e.tracking_id)}`} className={CLASE_ENLACE}>
+                            {e.tracking_id}
+                          </Link>
                         </TableCell>
-                        <TableCell className="text-slate-300 py-3">{e.receiver_nombre}</TableCell>
-                        <TableCell className="text-slate-400 font-mono text-xs py-3">{e.receiver_cedula_rif}</TableCell>
-                        <TableCell className="text-slate-400 py-3">{e.receiver_telefono}</TableCell>
-                        <TableCell className="text-slate-300 py-3">{e.cooperativa_nombre}</TableCell>
-                        <TableCell className="py-3">{getEncomiendaEstadoBadge(e.estado)}</TableCell>
-                        <TableCell className="text-right text-slate-200 font-semibold py-3">
-                          {formatCurrency(e.costo_calculado)}
+                        <TableCell className="py-3">{e.receiver_nombre}</TableCell>
+                        <TableCell className="py-3 font-mono text-xs text-muted-foreground">{cedulaLegible(e.receiver_cedula_rif)}</TableCell>
+                        <TableCell className="py-3 text-muted-foreground">{telefonoLegible(e.receiver_telefono)}</TableCell>
+                        <TableCell className="py-3">{e.cooperativa_nombre}</TableCell>
+                        <TableCell className="py-3">
+                          <StatusBadge status={e.estado} dominio="encomienda" />
+                          {e.pin_bloqueado && <p className="mt-1 text-xs text-destructive-text">PIN bloqueado</p>}
                         </TableCell>
-                        <TableCell className="text-right text-slate-400 text-sm py-3">
-                          {new Date(e.created_at).toLocaleDateString("es-VE")}
+                        <TableCell className="py-3 text-right font-semibold">
+                          {e.costo_calculado > 0 ? (
+                            <Monto usd={e.costo_calculado} tasa={tasa} moneda="USD" size="sm" align="right" />
+                          ) : (
+                            <span className="text-xs text-muted-foreground">Por pesar</span>
+                          )}
                         </TableCell>
+                        <TableCell className="py-3 text-right text-sm text-muted-foreground">{formatFechaVE(e.created_at)}</TableCell>
                       </TableRow>
                     ))
                   )}
@@ -314,51 +229,53 @@ export function UsuarioDetailTabs({ usuario }: UsuarioDetailTabsProps) {
           </CardContent>
         </Card>
 
-        {/* Recibidas */}
-        <Card className="bg-slate-950/40 border-slate-800 text-slate-100 backdrop-blur-md">
+        <Card>
           <CardHeader>
-            <CardTitle className="text-lg font-bold flex items-center gap-2 text-slate-200">
-              <Package className="h-5 w-5 text-indigo-500" /> Encomiendas Recibidas
+            <CardTitle className="flex items-center gap-2 text-lg font-bold">
+              <Package className="h-5 w-5 text-muted-foreground" aria-hidden /> Recibidas
             </CardTitle>
-            <CardDescription className="text-slate-500">Historial de encomiendas enviadas a este usuario (remitente de destino)</CardDescription>
+            <CardDescription>Encomiendas que otra persona le envió.</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="rounded-lg border border-slate-800 overflow-hidden">
+            <div className="overflow-hidden rounded-lg border">
               <Table>
-                <TableHeader className="bg-slate-900/40 border-slate-800">
-                  <TableRow className="border-slate-800 hover:bg-transparent">
-                    <TableHead className="text-slate-400">Tracking ID</TableHead>
-                    <TableHead className="text-slate-400">Remitente</TableHead>
-                    <TableHead className="text-slate-400">Teléfono Remitente</TableHead>
-                    <TableHead className="text-slate-400">Cooperativa</TableHead>
-                    <TableHead className="text-slate-400">Estado</TableHead>
-                    <TableHead className="text-slate-400 text-right">Costo</TableHead>
-                    <TableHead className="text-slate-400 text-right">Fecha</TableHead>
+                <TableHeader className="bg-muted/50">
+                  <TableRow className="hover:bg-transparent">
+                    <TableHead>Código de seguimiento</TableHead>
+                    <TableHead>Remitente</TableHead>
+                    <TableHead>Teléfono del remitente</TableHead>
+                    <TableHead>Cooperativa</TableHead>
+                    <TableHead>Estado</TableHead>
+                    <TableHead className="text-right">Costo</TableHead>
+                    <TableHead className="text-right">Fecha</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {usuario.encomiendas_recibidas.length === 0 ? (
-                    <TableRow className="hover:bg-transparent border-slate-800">
-                      <TableCell colSpan={7} className="h-24 text-center text-slate-500">
-                        No se registraron encomiendas recibidas.
-                      </TableCell>
-                    </TableRow>
+                    <FilaVacia columnas={7} texto="No ha recibido encomiendas." />
                   ) : (
                     usuario.encomiendas_recibidas.map((e) => (
-                      <TableRow key={e.id} className="border-slate-800 hover:bg-slate-900/20">
-                        <TableCell className="font-semibold text-slate-200 font-mono text-sm py-3">
-                          {e.tracking_id}
+                      <TableRow key={e.id}>
+                        <TableCell className="py-3 font-mono text-sm font-semibold">
+                          <Link href={`/admin/encomiendas?codigo=${encodeURIComponent(e.tracking_id)}`} className={CLASE_ENLACE}>
+                            {e.tracking_id}
+                          </Link>
                         </TableCell>
-                        <TableCell className="text-slate-300 py-3">{e.sender_nombre || "N/A"}</TableCell>
-                        <TableCell className="text-slate-400 py-3">{e.sender_telefono || "N/A"}</TableCell>
-                        <TableCell className="text-slate-300 py-3">{e.cooperativa_nombre}</TableCell>
-                        <TableCell className="py-3">{getEncomiendaEstadoBadge(e.estado)}</TableCell>
-                        <TableCell className="text-right text-slate-200 font-semibold py-3">
-                          {formatCurrency(e.costo_calculado)}
+                        <TableCell className="py-3">{e.sender_nombre || "Sin dato"}</TableCell>
+                        <TableCell className="py-3 text-muted-foreground">{telefonoLegible(e.sender_telefono)}</TableCell>
+                        <TableCell className="py-3">{e.cooperativa_nombre}</TableCell>
+                        <TableCell className="py-3">
+                          <StatusBadge status={e.estado} dominio="encomienda" />
+                          {e.pin_bloqueado && <p className="mt-1 text-xs text-destructive-text">PIN bloqueado</p>}
                         </TableCell>
-                        <TableCell className="text-right text-slate-400 text-sm py-3">
-                          {new Date(e.created_at).toLocaleDateString("es-VE")}
+                        <TableCell className="py-3 text-right font-semibold">
+                          {e.costo_calculado > 0 ? (
+                            <Monto usd={e.costo_calculado} tasa={tasa} moneda="USD" size="sm" align="right" />
+                          ) : (
+                            <span className="text-xs text-muted-foreground">Por pesar</span>
+                          )}
                         </TableCell>
+                        <TableCell className="py-3 text-right text-sm text-muted-foreground">{formatFechaVE(e.created_at)}</TableCell>
                       </TableRow>
                     ))
                   )}
@@ -369,52 +286,46 @@ export function UsuarioDetailTabs({ usuario }: UsuarioDetailTabsProps) {
         </Card>
       </TabsContent>
 
-      {/* 3. BOLETOS */}
+      {/* 3. Boletos */}
       <TabsContent value="boletos">
-        <Card className="bg-slate-950/40 border-slate-800 text-slate-100 backdrop-blur-md">
+        <Card>
           <CardHeader>
-            <CardTitle className="text-lg font-bold flex items-center gap-2 text-slate-200">
-              <Ticket className="h-5 w-5 text-emerald-500" /> Historial de Boletos
+            <CardTitle className="flex items-center gap-2 text-lg font-bold">
+              <Ticket className="h-5 w-5 text-muted-foreground" aria-hidden /> Boletos
             </CardTitle>
-            <CardDescription className="text-slate-500">Pasajes de viaje comprados o reservados por este usuario</CardDescription>
+            <CardDescription>Boletos que compró o apartó.</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="rounded-lg border border-slate-800 overflow-hidden">
+            <div className="overflow-hidden rounded-lg border">
               <Table>
-                <TableHeader className="bg-slate-900/40 border-slate-800">
-                  <TableRow className="border-slate-800 hover:bg-transparent">
-                    <TableHead className="text-slate-400">Código Boleto</TableHead>
-                    <TableHead className="text-slate-400">Información del Viaje</TableHead>
-                    <TableHead className="text-slate-400">Asiento</TableHead>
-                    <TableHead className="text-slate-400">Cooperativa</TableHead>
-                    <TableHead className="text-slate-400">Estado</TableHead>
-                    <TableHead className="text-slate-400 text-right">Precio</TableHead>
-                    <TableHead className="text-slate-400 text-right">Fecha Compra</TableHead>
+                <TableHeader className="bg-muted/50">
+                  <TableRow className="hover:bg-transparent">
+                    <TableHead>Código</TableHead>
+                    <TableHead>Viaje</TableHead>
+                    <TableHead className="text-center">Asiento</TableHead>
+                    <TableHead>Cooperativa</TableHead>
+                    <TableHead>Estado</TableHead>
+                    <TableHead className="text-right">Precio</TableHead>
+                    <TableHead className="text-right">Fecha de compra</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {usuario.boletos.length === 0 ? (
-                    <TableRow className="hover:bg-transparent border-slate-800">
-                      <TableCell colSpan={7} className="h-24 text-center text-slate-500">
-                        No se encontraron boletos comprados.
-                      </TableCell>
-                    </TableRow>
+                    <FilaVacia columnas={7} texto="No ha comprado boletos." />
                   ) : (
                     usuario.boletos.map((b) => (
-                      <TableRow key={b.id} className="border-slate-800 hover:bg-slate-900/20">
-                        <TableCell className="font-semibold text-slate-200 font-mono text-sm py-3">
-                          {b.codigo_boleto}
+                      <TableRow key={b.id}>
+                        <TableCell className="py-3 font-mono text-sm font-semibold">{b.codigo_boleto}</TableCell>
+                        <TableCell className="py-3">{b.viaje_info}</TableCell>
+                        <TableCell className="py-3 text-center font-semibold">{b.asiento}</TableCell>
+                        <TableCell className="py-3">{b.cooperativa_nombre}</TableCell>
+                        <TableCell className="py-3">
+                          <StatusBadge status={b.estado} dominio="boleto" />
                         </TableCell>
-                        <TableCell className="text-slate-300 py-3">{b.viaje_info}</TableCell>
-                        <TableCell className="text-slate-400 py-3 font-semibold text-center">{b.asiento}</TableCell>
-                        <TableCell className="text-slate-300 py-3">{b.cooperativa_nombre}</TableCell>
-                        <TableCell className="py-3">{getBoletoEstadoBadge(b.estado)}</TableCell>
-                        <TableCell className="text-right text-slate-200 font-semibold py-3">
-                          {formatCurrency(b.precio)}
+                        <TableCell className="py-3 text-right font-semibold">
+                          <Monto usd={b.precio} tasa={tasa} moneda="USD" size="sm" align="right" />
                         </TableCell>
-                        <TableCell className="text-right text-slate-400 text-sm py-3">
-                          {new Date(b.created_at).toLocaleDateString("es-VE")}
-                        </TableCell>
+                        <TableCell className="py-3 text-right text-sm text-muted-foreground">{formatFechaVE(b.created_at)}</TableCell>
                       </TableRow>
                     ))
                   )}
@@ -425,71 +336,73 @@ export function UsuarioDetailTabs({ usuario }: UsuarioDetailTabsProps) {
         </Card>
       </TabsContent>
 
-      {/* 4. PAGOS */}
+      {/* 4. Pagos */}
       <TabsContent value="pagos">
-        <Card className="bg-slate-950/40 border-slate-800 text-slate-100 backdrop-blur-md">
+        <Card>
           <CardHeader>
-            <CardTitle className="text-lg font-bold flex items-center gap-2 text-slate-200">
-              <CreditCard className="h-5 w-5 text-emerald-500" /> Transacciones de Pago
+            <CardTitle className="flex items-center gap-2 text-lg font-bold">
+              <CreditCard className="h-5 w-5 text-muted-foreground" aria-hidden /> Pagos
             </CardTitle>
-            <CardDescription className="text-slate-500">Pagos ejecutados para encomiendas o compra de boletos</CardDescription>
+            <CardDescription>Pagos que registró por boletos o encomiendas.</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="rounded-lg border border-slate-800 overflow-hidden">
+            <div className="overflow-hidden rounded-lg border">
               <Table>
-                <TableHeader className="bg-slate-900/40 border-slate-800">
-                  <TableRow className="border-slate-800 hover:bg-transparent">
-                    <TableHead className="text-slate-400">Referencia de Pago</TableHead>
-                    <TableHead className="text-slate-400">Recurso Relacionado</TableHead>
-                    <TableHead className="text-slate-400">Tipo de Pago</TableHead>
-                    <TableHead className="text-slate-400">Estado de Verificación</TableHead>
-                    <TableHead className="text-slate-400 text-right">Monto</TableHead>
-                    <TableHead className="text-slate-400 text-right">Fecha</TableHead>
+                <TableHeader className="bg-muted/50">
+                  <TableRow className="hover:bg-transparent">
+                    <TableHead>Referencia</TableHead>
+                    <TableHead>Para</TableHead>
+                    <TableHead>Método</TableHead>
+                    <TableHead>Estado</TableHead>
+                    <TableHead className="text-right">Monto</TableHead>
+                    <TableHead className="text-right">Fecha</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {usuario.pagos.length === 0 ? (
-                    <TableRow className="hover:bg-transparent border-slate-800">
-                      <TableCell colSpan={6} className="h-24 text-center text-slate-500">
-                        No se registraron pagos.
-                      </TableCell>
-                    </TableRow>
+                    <FilaVacia columnas={6} texto="No ha registrado pagos." />
                   ) : (
                     usuario.pagos.map((p) => (
-                      <TableRow key={p.id} className="border-slate-800 hover:bg-slate-900/20">
-                        <TableCell className="font-semibold text-slate-200 py-3 font-mono">
-                          {p.numero_referencia || <span className="text-slate-600 italic">Efectivo / Sin ref</span>}
+                      <TableRow key={p.id}>
+                        <TableCell className="py-3 font-mono font-semibold">
+                          {p.numero_referencia || <span className="font-sans font-normal text-muted-foreground">Sin referencia</span>}
                         </TableCell>
-                        <TableCell className="text-slate-300 py-3">
+                        <TableCell className="py-3">
                           {p.encomienda_tracking_id && (
                             <span className="flex items-center gap-1.5 font-mono text-sm">
-                              <Package className="h-3.5 w-3.5 text-emerald-500" /> Encomienda: {p.encomienda_tracking_id}
+                              <Package className="h-3.5 w-3.5 text-muted-foreground" aria-hidden /> {p.encomienda_tracking_id}
                             </span>
                           )}
                           {p.boleto_codigo && (
                             <span className="flex items-center gap-1.5 font-mono text-sm">
-                              <Ticket className="h-3.5 w-3.5 text-sky-500" /> Boleto: {p.boleto_codigo}
+                              <Ticket className="h-3.5 w-3.5 text-muted-foreground" aria-hidden /> {p.boleto_codigo}
                             </span>
                           )}
                         </TableCell>
-                        <TableCell className="text-slate-400 py-3">
-                          <Badge variant="outline" className="border-slate-800 bg-slate-900/40 text-slate-300">
-                            {p.tipo_pago === "DIGITAL" ? "Pago Móvil / Transferencia" : "Efectivo"}
-                          </Badge>
-                        </TableCell>
+                        <TableCell className="py-3">{metodoDePago(p)}</TableCell>
                         <TableCell className="py-3">
-                          {p.verificado ? (
-                            <Badge className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20 gap-1"><CheckCircle className="h-3 w-3" /> Verificado</Badge>
-                          ) : (
-                            <Badge className="bg-amber-500/10 text-amber-500 border-amber-500/20 gap-1"><WarningCircle className="h-3 w-3" /> Por Verificar</Badge>
+                          <StatusBadge status={p.estado_verificacion} dominio="pago" />
+                          {p.estado_verificacion === "RECHAZADO" && p.motivo_rechazo && (
+                            <p className="mt-1 max-w-[220px] text-xs text-muted-foreground">Motivo: {p.motivo_rechazo}</p>
                           )}
                         </TableCell>
-                        <TableCell className="text-right text-slate-200 font-semibold py-3">
-                          {formatCurrency(p.monto)}
+                        <TableCell className="py-3 text-right font-semibold">
+                          {p.monto_bs != null ? (
+                            // Pago con Bs registrados: se muestra lo que se cobró, a la tasa de ese pago.
+                            <Monto
+                              usd={p.monto}
+                              bs={p.monto_bs}
+                              tasa={p.tasa_bcv && p.tasa_bcv_fecha ? { tasa: p.tasa_bcv, fecha: p.tasa_bcv_fecha } : null}
+                              moneda={p.moneda}
+                              size="sm"
+                              align="right"
+                            />
+                          ) : (
+                            // Pago anterior a la conversión a Bs: solo hay referencia en USD.
+                            <Monto usd={p.monto} tasa={null} moneda="USD" size="sm" align="right" />
+                          )}
                         </TableCell>
-                        <TableCell className="text-right text-slate-400 text-sm py-3">
-                          {new Date(p.created_at).toLocaleDateString("es-VE")}
-                        </TableCell>
+                        <TableCell className="py-3 text-right text-sm text-muted-foreground">{formatFechaVE(p.created_at)}</TableCell>
                       </TableRow>
                     ))
                   )}
@@ -500,54 +413,50 @@ export function UsuarioDetailTabs({ usuario }: UsuarioDetailTabsProps) {
         </Card>
       </TabsContent>
 
-      {/* 5. NOTIFICACIONES */}
+      {/* 5. Notificaciones */}
       <TabsContent value="notificaciones">
-        <Card className="bg-slate-950/40 border-slate-800 text-slate-100 backdrop-blur-md">
+        <Card>
           <CardHeader>
-            <CardTitle className="text-lg font-bold flex items-center gap-2 text-slate-200">
-              <Bell className="h-5 w-5 text-emerald-500" /> Historial de Envío de Notificaciones
+            <CardTitle className="flex items-center gap-2 text-lg font-bold">
+              <Bell className="h-5 w-5 text-muted-foreground" aria-hidden /> Notificaciones enviadas
             </CardTitle>
-            <CardDescription className="text-slate-500">Historial de alertas y mensajes enviados al dispositivo o teléfono del usuario</CardDescription>
+            <CardDescription>Avisos que EnBus le envió por la app, WhatsApp, SMS o correo.</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="rounded-lg border border-slate-800 overflow-hidden">
+            <div className="overflow-hidden rounded-lg border">
               <Table>
-                <TableHeader className="bg-slate-900/40 border-slate-800">
-                  <TableRow className="border-slate-800 hover:bg-transparent">
-                    <TableHead className="text-slate-400">Título / Tipo</TableHead>
-                    <TableHead className="text-slate-400">Canal</TableHead>
-                    <TableHead className="text-slate-400">Mensaje / Contenido</TableHead>
-                    <TableHead className="text-slate-400">Estado de Envío</TableHead>
-                    <TableHead className="text-slate-400 text-right">Fecha</TableHead>
+                <TableHeader className="bg-muted/50">
+                  <TableRow className="hover:bg-transparent">
+                    <TableHead>Título</TableHead>
+                    <TableHead>Canal</TableHead>
+                    <TableHead>Mensaje</TableHead>
+                    <TableHead>Envío</TableHead>
+                    <TableHead className="text-right">Fecha</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {usuario.notificaciones.length === 0 ? (
-                    <TableRow className="hover:bg-transparent border-slate-800">
-                      <TableCell colSpan={5} className="h-24 text-center text-slate-500">
-                        No se han registrado notificaciones enviadas a este usuario.
-                      </TableCell>
-                    </TableRow>
+                    <FilaVacia columnas={5} texto="No le hemos enviado notificaciones." />
                   ) : (
                     usuario.notificaciones.map((n) => (
-                      <TableRow key={n.id} className="border-slate-800 hover:bg-slate-900/20">
-                        <TableCell className="font-semibold text-slate-200 py-3 max-w-[200px] truncate">
-                          {n.titulo}
+                      <TableRow key={n.id}>
+                        <TableCell className="max-w-[200px] truncate py-3 font-semibold">{n.titulo}</TableCell>
+                        <TableCell className="py-3">
+                          <Badge variant="outline">{CANAL[n.canal] ?? n.canal}</Badge>
                         </TableCell>
-                        <TableCell className="py-3">{getCanalBadge(n.canal)}</TableCell>
-                        <TableCell className="text-slate-300 py-3 text-sm max-w-sm truncate" title={n.contenido}>
+                        <TableCell className="max-w-sm truncate py-3 text-sm" title={n.contenido}>
                           {n.contenido}
                         </TableCell>
                         <TableCell className="py-3">
                           {n.estado_envio === "ENVIADO" ? (
-                            <Badge className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20 gap-1"><PaperPlaneTilt className="h-3 w-3" /> Enviado</Badge>
+                            <Badge variant="secondary">Enviada</Badge>
                           ) : (
-                            <Badge className="bg-destructive/10 text-destructive border-destructive/20 gap-1"><XCircle className="h-3 w-3" /> Fallido</Badge>
+                            <Badge variant="outline" className="border-destructive/40 text-destructive-text">
+                              No se envió
+                            </Badge>
                           )}
                         </TableCell>
-                        <TableCell className="text-right text-slate-400 text-sm py-3">
-                          {new Date(n.created_at).toLocaleString("es-VE")}
-                        </TableCell>
+                        <TableCell className="py-3 text-right text-sm text-muted-foreground">{formatFechaHoraVE(n.created_at)}</TableCell>
                       </TableRow>
                     ))
                   )}

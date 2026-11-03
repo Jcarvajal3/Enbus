@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { CheckCircle, Clock, Truck } from 'phosphor-react-native';
+import { CheckCircle, Clock, Truck, XCircle } from 'phosphor-react-native';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -9,6 +9,8 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { Text } from '@/src/components/ui';
+import { dateTime, formatDate } from '@/src/utils/formatters';
+import { getEncomiendaTimeline } from '@/src/utils/estados';
 import { Colors, Motion, Radius, Sizes, Spacing } from '@/src/theme';
 
 export interface EstadoItem {
@@ -18,6 +20,30 @@ export interface EstadoItem {
   descripcion?: string;
   activo: boolean;
   completado: boolean;
+  /** Terminal node (cancelled / returned): drawn in red and ends the timeline */
+  cortado?: boolean;
+}
+
+/**
+ * Timeline of a shipment for both the sender and the receiver screens, derived
+ * from the single `estado → etapa` table in `estados.ts` (APP-44 / M-46). Las
+ * etiquetas son las etapas del glosario (§4): Envío creado · Recibida en
+ * taquilla · En camino · Lista para retirar · Entregada.
+ */
+export function buildEncomiendaTimeline(
+  estado: string | null | undefined,
+  historial: readonly { estado_nuevo: string; created_at: string }[],
+  options: { creadaAt?: string | null; descripcionActual?: string } = {}
+): EstadoItem[] {
+  return getEncomiendaTimeline(estado, historial, options.creadaAt).map((etapa) => ({
+    estado: etapa.id,
+    label: etapa.label,
+    timestamp: etapa.fecha ? formatDate(etapa.fecha, dateTime) : null,
+    completado: etapa.situacion === 'completada',
+    activo: etapa.situacion === 'actual',
+    cortado: etapa.situacion === 'cortada',
+    descripcion: etapa.situacion === 'actual' ? options.descripcionActual : undefined,
+  }));
 }
 
 const ICON_BOX = Sizes.avatar.sm;
@@ -32,14 +58,34 @@ export function StatusTimeline({ estados }: { estados: EstadoItem[] }) {
     <View style={s.container}>
       {estados.map((item, index) => {
         const isLast = index === estados.length - 1;
-        const tone = item.completado
-          ? { fg: Colors.success, bg: Colors.successLight }
-          : item.activo
-            ? { fg: Colors.accent, bg: Colors.accentLight }
-            : { fg: Colors.mutedForeground, bg: Colors.surface };
+        const tone = item.cortado
+          ? { fg: Colors.destructive, bg: Colors.destructiveLight }
+          : item.completado
+            ? { fg: Colors.success, bg: Colors.successLight }
+            : item.activo
+              ? { fg: Colors.accent, bg: Colors.accentLight }
+              : { fg: Colors.mutedForeground, bg: Colors.surface };
 
         return (
-          <View key={item.estado} style={s.row}>
+          <View
+            key={item.estado}
+            style={s.row}
+            accessible
+            accessibilityLabel={[
+              item.label,
+              item.cortado
+                ? null
+                : item.completado
+                  ? 'completada'
+                  : item.activo
+                    ? 'etapa actual'
+                    : 'pendiente',
+              item.timestamp,
+              item.descripcion,
+            ]
+              .filter(Boolean)
+              .join(', ')}
+          >
             {!isLast && (
               <View
                 style={[
@@ -53,6 +99,7 @@ export function StatusTimeline({ estados }: { estados: EstadoItem[] }) {
               index={index}
               completado={item.completado}
               activo={item.activo}
+              cortado={item.cortado}
               color={tone.fg}
               background={tone.bg}
             />
@@ -61,7 +108,13 @@ export function StatusTimeline({ estados }: { estados: EstadoItem[] }) {
               <View style={s.header}>
                 <Text
                   variant="bodyStrong"
-                  color={item.activo || item.completado ? 'foreground' : 'muted'}
+                  color={
+                    item.cortado
+                      ? 'dangerText'
+                      : item.activo || item.completado
+                        ? 'foreground'
+                        : 'muted'
+                  }
                   style={s.label}
                 >
                   {item.label}
@@ -90,12 +143,14 @@ function TimelineIcon({
   index,
   completado,
   activo,
+  cortado,
   color,
   background,
 }: {
   index: number;
   completado: boolean;
   activo: boolean;
+  cortado?: boolean;
   color: string;
   background: string;
 }) {
@@ -113,11 +168,15 @@ function TimelineIcon({
     transform: [{ scale: scale.value }],
   }));
 
-  const Icon = completado ? CheckCircle : activo ? Truck : Clock;
+  const Icon = cortado ? XCircle : completado ? CheckCircle : activo ? Truck : Clock;
 
   return (
     <Animated.View style={[s.icon, { backgroundColor: background }, animStyle]}>
-      <Icon weight={completado ? 'fill' : 'bold'} color={color} size={Sizes.icon.lg} />
+      <Icon
+        weight={completado || cortado ? 'fill' : 'bold'}
+        color={color}
+        size={Sizes.icon.lg}
+      />
     </Animated.View>
   );
 }

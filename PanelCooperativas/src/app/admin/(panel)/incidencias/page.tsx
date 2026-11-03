@@ -17,9 +17,9 @@ export default async function AdminIncidenciasPage({ searchParams }: PageProps) 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Control de Incidencias</h1>
+        <h1 className="text-3xl font-bold tracking-tight">Incidencias</h1>
         <p className="text-muted-foreground mt-1">
-          Supervisa, asigna y gestiona las incidencias y alertas reportadas en la plataforma.
+          Reportes de usuarios y alertas automáticas. Toma un caso para atenderlo y regístralo como resuelto al terminar.
         </p>
       </div>
 

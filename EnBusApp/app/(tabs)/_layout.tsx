@@ -94,7 +94,11 @@ function CustomTabBar({ state, descriptors, navigation, badges }: TabBarProps) {
             style={s.tab}
             accessibilityRole="tab"
             accessibilityState={{ selected: isFocused }}
-            accessibilityLabel={badgeCount > 0 ? `${label}, ${badgeCount} activos` : label}
+            accessibilityLabel={
+              badgeCount > 0
+                ? `${label}, ${badgeCount} ${route.name === 'encomiendas' ? 'activas' : 'activos'}`
+                : label
+            }
           >
             <View style={s.iconWrapper}>
               <Icon
@@ -104,7 +108,7 @@ function CustomTabBar({ state, descriptors, navigation, badges }: TabBarProps) {
               />
               {badgeCount > 0 && (
                 <View style={s.badge}>
-                  <Text variant="caption" size="micro" weight="heavy" color="inverse" compact>
+                  <Text variant="caption" size="micro" weight="heavy" color="foreground" compact>
                     {badgeCount > 9 ? '9+' : String(badgeCount)}
                   </Text>
                 </View>
@@ -173,7 +177,8 @@ const s = StyleSheet.create({
     position: 'absolute',
     left: Layout.tabBar.innerPadding,
     height: Layout.tabBar.height - Layout.tabBar.innerPadding * 2,
-    backgroundColor: Colors.accent,
+    // Darker than `accent` so the white label clears 4.5:1 (5.7:1)
+    backgroundColor: Colors.tabActive,
     borderRadius: Radius.full,
   },
   tab: {
@@ -196,11 +201,16 @@ const s = StyleSheet.create({
     height: Spacing.lg,
     paddingHorizontal: Spacing.xs / 2,
     borderRadius: Radius.full,
-    backgroundColor: Colors.secondary,
+    // Texto oscuro sobre el amarillo de marca (≈ 13:1). Antes era blanco sobre
+    // coral (2,6:1), ilegible para muchos.
+    backgroundColor: Colors.primary,
+    borderWidth: Sizes.hairline,
+    borderColor: Colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
   },
   label: {
     marginTop: Spacing.xs / 2,
+    fontSize: Layout.tabBar.labelSize,
   },
 });

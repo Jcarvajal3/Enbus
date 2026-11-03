@@ -1,120 +1,75 @@
 "use client";
 
 import { useState } from "react";
-import { 
-  Dialog, 
-  DialogContent, 
-  DialogDescription, 
-  DialogHeader, 
-  DialogTitle, 
-  DialogTrigger 
-} from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { X } from "@phosphor-icons/react";
-import { rechazarSolicitud } from "@/app/admin/(panel)/solicitudes/actions";
-import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+import { X } from "@phosphor-icons/react";
+import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { rechazarSolicitud } from "@/app/admin/(panel)/solicitudes/actions";
+import { avisoSinCorreo } from "./aprobar-dialog";
 
 interface RechazarDialogProps {
   cooperativaId: string;
   nombre: string;
-  trigger?: React.ReactNode;
+  /** Se llama tras rechazar (p. ej. para cerrar la hoja lateral). */
+  onHecho?: () => void;
 }
 
-export function RechazarDialog({ cooperativaId, nombre, trigger }: RechazarDialogProps) {
+const MOTIVOS_RECHAZO = [
+  "RIF inválido o incompleto",
+  "Datos de contacto incompletos",
+  "No pudimos verificar la cooperativa",
+  "Documentación pendiente",
+  "Otro",
+];
+
+/** Rechazo reversible (#37): la cooperativa recibe el motivo y puede pedir una nueva revisión. */
+export function RechazarDialog({ cooperativaId, nombre, onHecho }: RechazarDialogProps) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [motivo, setMotivo] = useState("");
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!motivo || motivo.trim().length === 0) {
-      toast.error("Por favor ingrese el motivo del rechazo.");
-      return;
-    }
-
-    setLoading(true);
-
-    try {
-      const res = await rechazarSolicitud(cooperativaId, motivo);
-      if (res.success) {
-        toast.success(`Solicitud de "${nombre}" rechazada.`);
-        setOpen(false);
-        router.refresh();
-      } else {
-        toast.error(res.error || "Error al rechazar la solicitud.");
-      }
-    } catch (error) {
-      console.error(error);
-      toast.error("Error al comunicarse con el servidor.");
-    } finally {
-      setLoading(false);
-    }
-  };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        {trigger || (
-          <Button variant="outline" className="border-rose-500/25 text-rose-500 hover:bg-rose-500/10 gap-2 cursor-pointer font-sans">
-            <X className="h-4 w-4" /> Rechazar
-          </Button>
-        )}
-      </DialogTrigger>
-      <DialogContent className="sm:max-w-md bg-popover text-popover-foreground font-sans">
-        <DialogHeader>
-          <DialogTitle>Rechazar Solicitud de Registro</DialogTitle>
-          <DialogDescription>
-            Indica el motivo por el cual estás rechazando la solicitud. Se enviará un correo explicativo a la cooperativa.
-          </DialogDescription>
-        </DialogHeader>
-
-        <form onSubmit={handleSubmit} className="space-y-4 pt-4">
-          <div className="rounded-lg bg-muted p-4 text-sm">
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Cooperativa:</span>
-              <span className="font-semibold">{nombre}</span>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="motivo_rechazo">Motivo del Rechazo</Label>
-            <Textarea
-              id="motivo_rechazo"
-              required
-              rows={4}
-              value={motivo}
-              onChange={(e) => setMotivo(e.target.value)}
-              placeholder="Ej. El número de RIF ingresado no corresponde a la cooperativa registrada..."
-              className="bg-background resize-none font-sans"
-            />
-          </div>
-
-          <div className="flex justify-end gap-3 pt-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setOpen(false)}
-              disabled={loading}
-              className="cursor-pointer"
-            >
-              Cancelar
-            </Button>
-            <Button
-              type="submit"
-              variant="destructive"
-              disabled={loading}
-              className="cursor-pointer"
-            >
-              {loading ? "Procesando..." : "Confirmar Rechazo"}
-            </Button>
-          </div>
-        </form>
-      </DialogContent>
-    </Dialog>
+    <>
+      <Button
+        size="sm"
+        variant="outline"
+        className="gap-1.5 border-destructive/40 text-destructive-text hover:bg-destructive/10"
+        onClick={() => setOpen(true)}
+      >
+        <X className="size-4" aria-hidden /> Rechazar
+      </Button>
+      <ConfirmDialog
+        open={open}
+        onOpenChange={setOpen}
+        titulo={`¿Rechazar la solicitud de ${nombre}?`}
+        descripcion="La cooperativa recibirá el motivo por correo y lo verá en su panel. Podrá corregir sus datos y pedir una nueva revisión."
+        motivo={{
+          etiqueta: "Motivo del rechazo",
+          placeholder: "Por ejemplo: el RIF no corresponde a la cooperativa registrada.",
+          chips: MOTIVOS_RECHAZO,
+        }}
+        verbo="Rechazar y avisar"
+        verboCargando="Rechazando…"
+        tono="destructive"
+        onConfirm={async (motivo) => {
+          const res = await rechazarSolicitud(cooperativaId, motivo ?? "");
+          if (!res.success) return { ok: false, error: res.error };
+          if (res.emailEnviado) {
+            toast.success(`Solicitud de ${nombre} rechazada. Le enviamos el motivo por correo a ${res.email}.`);
+          } else {
+            avisoSinCorreo(
+              res.email
+                ? `Solicitud de ${nombre} rechazada, pero no pudimos enviar el correo a ${res.email}. Avísale por otro medio.`
+                : `Solicitud de ${nombre} rechazada, pero no tiene correo registrado. Avísale por otro medio.`,
+              `Hola. Revisamos la solicitud de ${nombre} en EnBus y por ahora no pudimos aprobarla. Motivo: ${(motivo ?? "").replace(/\.+$/, "")}. Corrige tus datos en tu panel y pide una nueva revisión.`
+            );
+          }
+          onHecho?.();
+          router.refresh();
+          return { ok: true };
+        }}
+      />
+    </>
   );
 }

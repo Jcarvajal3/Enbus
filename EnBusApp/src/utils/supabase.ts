@@ -13,22 +13,23 @@ const SecureStorageAdapter: SupportedStorage = {
   getItem: async (key: string) => {
     try {
       return await SecureStore.getItemAsync(key);
-    } catch (e) {
+    } catch {
       return null;
     }
   },
   setItem: async (key: string, value: string) => {
     try {
       await SecureStore.setItemAsync(key, value);
-    } catch (e) {
-      // ignore
+    } catch {
+      // Sin almacenamiento seguro la sesión vive solo en memoria: se pedirá
+      // iniciar sesión de nuevo al reabrir la app.
     }
   },
   removeItem: async (key: string) => {
     try {
       await SecureStore.deleteItemAsync(key);
-    } catch (e) {
-      // ignore
+    } catch {
+      // Nada que borrar o almacenamiento no disponible: no afecta al usuario.
     }
   },
 };
@@ -39,5 +40,9 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: false,
+    // #24: todos los enlaces (Google, confirmar correo, recuperar contraseña)
+    // vuelven a `auth/callback` con `?code=` y se canjean ahí
+    // (`completarSesionDesdeUrl` en `authLinks.ts`).
+    flowType: 'pkce',
   },
 });

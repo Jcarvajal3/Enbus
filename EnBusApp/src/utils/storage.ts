@@ -1,22 +1,29 @@
 import { supabase } from './supabase';
-import * as FileSystem from 'expo-file-system';
+// SDK 54: los métodos clásicos (`getInfoAsync`, `readAsStringAsync`) solo
+// funcionan importados de `expo-file-system/legacy`; desde la raíz lanzan.
+import * as FileSystem from 'expo-file-system/legacy';
+import { AppError } from './errores';
+import { urlFotoEncomienda } from './fotos';
+
+const BUCKET = 'fotos-encomiendas';
 
 /**
- * Sube una imagen local (URI) al bucket de Supabase storage 'fotos-encomiendas'
- * y retorna la URL pública.
+ * Sube una imagen local (URI) al bucket privado `fotos-encomiendas`, en la
+ * carpeta del usuario, y devuelve la RUTA del objeto (`<userId>/<ts>.<ext>`),
+ * no una URL: el bucket es privado y la foto se muestra con
+ * `urlFotoEncomienda(ruta)` (URL firmada).
  */
 export async function uploadEvidencePhoto(localUri: string, userId: string): Promise<string> {
-  // Use expo-file-system for reliable local file reading on React Native.
   // fetch().blob() is unreliable on Android and doesn't support HEIC.
   const fileInfo = await FileSystem.getInfoAsync(localUri);
   if (!fileInfo.exists) {
-    throw new Error('El archivo de imagen no existe en la ruta indicada.');
+    throw new AppError('No pudimos leer la imagen. Selecciónala de nuevo.');
   }
 
   // Validate file size (10MB max to avoid memory pressure and upload timeouts)
   const MAX_SIZE_BYTES = 10 * 1024 * 1024;
   if (fileInfo.size && fileInfo.size > MAX_SIZE_BYTES) {
-    throw new Error('La imagen es demasiado grande. El tamaño máximo es 10 MB.');
+    throw new AppError('La imagen es demasiado grande. El tamaño máximo es 10 MB.');
   }
 
   const base64 = await FileSystem.readAsStringAsync(localUri, {
@@ -24,8 +31,7 @@ export async function uploadEvidencePhoto(localUri: string, userId: string): Pro
   });
 
   const cleanUri = localUri.split('?')[0].split('#')[0];
-  const rawExt = cleanUri.split('.').pop()?.toLowerCase() || 'jpg';
-  const fileExt = rawExt;
+  const rawExt = cleanUri.split('.').pop()?.toLowerCase() ?? '';
 
   // Map extension to MIME type (covers HEIC common on iOS, WEBP from Android)
   const MIME_MAP: Record<string, string> = {
@@ -37,7 +43,8 @@ export async function uploadEvidencePhoto(localUri: string, userId: string): Pro
     webp: 'image/webp',
     gif: 'image/gif',
   };
-  const contentType = MIME_MAP[fileExt] ?? 'image/jpeg';
+  const fileExt = MIME_MAP[rawExt] ? rawExt : 'jpg';
+  const contentType = MIME_MAP[fileExt];
 
   // Supabase storage accepts ArrayBuffer; decode base64 string to Uint8Array
   const byteCharacters = atob(base64);
@@ -46,60 +53,28 @@ export async function uploadEvidencePhoto(localUri: string, userId: string): Pro
     byteArray[i] = byteCharacters.charCodeAt(i);
   }
 
-  const fileName = `${userId}/${Date.now()}.${fileExt}`;
+  const ruta = `${userId}/${Date.now()}.${fileExt}`;
 
-  const { data, error } = await supabase.storage
-    .from('fotos-encomiendas')
-    .upload(fileName, byteArray, {
-      contentType,
-      upsert: true,
-    });
+  const { error } = await supabase.storage.from(BUCKET).upload(ruta, byteArray, {
+    contentType,
+    upsert: true,
+  });
 
   if (error) {
     throw error;
   }
 
-  // Return the public URL for the uploaded file
-  const { data: urlData } = supabase.storage
-    .from('fotos-encomiendas')
-    .getPublicUrl(fileName);
-
-  return urlData.publicUrl;
+  return ruta;
 }
 
 /**
- * Si el bucket es privado y la URL de la evidencia da error 400/403,
- * generamos una URL firmada válida por 24 horas a partir del path de la URL.
+ * @deprecated Usa `urlFotoEncomienda` de `src/utils/fotos.ts` (devuelve `null`
+ * si no se puede mostrar). Se mantiene para las pantallas que aún la usan:
+ * devuelve la URL firmada (1 h), la URL antigua si no es de este bucket, o `''`.
  */
 export async function getSignedPhotoUrl(urlOrPath: string): Promise<string> {
   if (!urlOrPath) return '';
-  
-  try {
-    let path = urlOrPath;
-    if (urlOrPath.startsWith('http')) {
-      const token = 'fotos-encomiendas/';
-      const index = urlOrPath.indexOf(token);
-      if (index !== -1) {
-        path = urlOrPath.substring(index + token.length);
-        // Quitar posibles query params
-        path = path.split('?')[0];
-      } else {
-        return urlOrPath; // No pertenece a este bucket, retornar tal cual
-      }
-    }
-
-    const { data, error } = await supabase.storage
-      .from('fotos-encomiendas')
-      .createSignedUrl(path, 86400); // 24 horas
-
-    if (error) {
-      console.warn('Error al generar URL firmada para la evidencia:', error.message);
-      return urlOrPath;
-    }
-
-    return data.signedUrl;
-  } catch (err) {
-    console.error('Error en getSignedPhotoUrl:', err);
-    return urlOrPath;
-  }
+  const firmada = await urlFotoEncomienda(urlOrPath);
+  if (firmada) return firmada;
+  return /^https?:\/\//i.test(urlOrPath) && !urlOrPath.includes(`/${BUCKET}/`) ? urlOrPath : '';
 }

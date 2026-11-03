@@ -4,12 +4,14 @@ import { fetchCiclosComisiones, fetchCooperativasList } from "@/lib/data/admin-c
 import { GenerarCicloDialog } from "@/components/admin/comisiones/generar-ciclo-dialog";
 import { CiclosTable } from "@/components/admin/comisiones/ciclos-table";
 import { Receipt } from "@phosphor-icons/react/dist/ssr";
+import { obtenerTasaBCV } from "@/lib/tasa-bcv";
 
 export default async function AdminComisionesPage() {
   // Fetch data concurrently on the server side
-  const [ciclos, cooperativas] = await Promise.all([
+  const [ciclos, cooperativas, tasa] = await Promise.all([
     fetchCiclosComisiones(),
     fetchCooperativasList(),
+    obtenerTasaBCV(),
   ]);
 
   return (
@@ -18,19 +20,19 @@ export default async function AdminComisionesPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="space-y-1">
           <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-            <Receipt className="h-6 w-6 text-emerald-500" /> Control de Comisiones
+            <Receipt className="h-6 w-6 text-muted-foreground" aria-hidden /> Comisiones
           </h1>
           <p className="text-sm text-muted-foreground">
-            Administra los ciclos de liquidación y pagos de comisiones de las cooperativas.
+            Genera los ciclos de comisiones de cada cooperativa y registra sus pagos.
           </p>
         </div>
         <div className="flex-shrink-0">
-          <GenerarCicloDialog cooperativas={cooperativas} />
+          <GenerarCicloDialog cooperativas={cooperativas} tasa={tasa} />
         </div>
       </div>
 
       {/* Tabla e interfaz interactiva */}
-      <CiclosTable data={ciclos} cooperativas={cooperativas} />
+      <CiclosTable data={ciclos} cooperativas={cooperativas} tasa={tasa} />
     </div>
   );
 }

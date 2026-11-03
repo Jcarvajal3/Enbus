@@ -1,26 +1,31 @@
-import { Calculator, ArrowRight } from "@phosphor-icons/react/dist/ssr"
+import { Calculator } from "@phosphor-icons/react/dist/ssr"
 
-import { Button } from "@/components/ui/button"
+import { Calculadora } from "@/components/calculadora"
+import type { OrigenConDestinos } from "@/lib/consultas"
 
-export function CalculatorCTA() {
+/**
+ * Sección #calcular con la calculadora real. Sin rutas activas (o sin configuración)
+ * no se muestra; el hero y el menú ocultan sus enlaces a #calcular en ese caso.
+ */
+export function CalculatorCTA({ origenes }: { origenes: OrigenConDestinos[] }) {
+  if (origenes.length === 0) return null
+
   return (
-    <section className="bg-primary py-20 text-center lg:py-28">
-      <div className="mx-auto max-w-2xl px-6">
-        <Calculator className="mx-auto size-12 text-foreground/80" />
+    <section id="calcular" className="scroll-mt-20 bg-primary py-20 lg:py-28">
+      <div className="mx-auto max-w-4xl px-6">
+        <div className="text-center">
+          <Calculator className="mx-auto size-12 text-foreground" aria-hidden />
+          <h2 className="mt-6 font-serif text-3xl font-bold tracking-tight text-foreground lg:text-4xl">
+            Calcula el costo de tu envío
+          </h2>
+          <p className="mt-4 text-lg text-foreground/85">
+            Sin registro. Elige origen, destino y peso, y compara el precio de cada cooperativa.
+          </p>
+        </div>
 
-        <h2 className="mt-6 font-serif text-3xl font-bold tracking-tight text-foreground lg:text-4xl">
-          Calcula el costo de tu envio en segundos
-        </h2>
-
-        <p className="mt-4 text-lg text-foreground/70">
-          Sin registro. Sin compromiso. Conoce el precio antes de enviar tu
-          paquete.
-        </p>
-
-        <Button size="lg" className="mt-8 bg-foreground text-background hover:bg-foreground/90">
-          Calcular ahora
-          <ArrowRight data-icon="inline-end" />
-        </Button>
+        <div className="mt-10">
+          <Calculadora origenes={origenes} />
+        </div>
       </div>
     </section>
   )

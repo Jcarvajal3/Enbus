@@ -18,14 +18,14 @@ export async function sendInvitationEmail({
   if (!resend) {
     console.warn("Resend is not configured. Missing RESEND_API_KEY.");
     console.log(`[Email Mock] Sending invitation to ${email} for cooperativa ${cooperativaNombre}. Link: ${inviteLink}`);
-    return { success: false, error: "Resend not configured" };
+    return { success: false, error: "El envío de correos no está configurado (falta RESEND_API_KEY)." };
   }
 
   try {
     const { data, error } = await resend.emails.send({
       from: "EnBus <onboarding@resend.dev>", // Resend test sender by default
       to: [email],
-      subject: `Completar Registro de Cooperativa - ${cooperativaNombre}`,
+      subject: `Completa el registro de tu cooperativa · ${cooperativaNombre}`,
       html: `
         <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;">
           <h2 style="color: #0f172a; margin-bottom: 16px;">¡Tu solicitud ha sido recibida en EnBus!</h2>
@@ -37,7 +37,7 @@ export async function sendInvitationEmail({
           </p>
           <div style="margin: 32px 0; text-align: center;">
             <a href="${inviteLink}" style="background-color: #f59e0b; color: #000000; padding: 12px 24px; font-weight: bold; text-decoration: none; border-radius: 6px; display: inline-block;">
-              Completar Registro
+              Completar el registro
             </a>
           </div>
           <p style="color: #94a3b8; font-size: 14px; margin-top: 32px;">
@@ -60,6 +60,6 @@ export async function sendInvitationEmail({
     return { success: true, data };
   } catch (error) {
     console.error("Exception sending email:", error);
-    return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
+    return { success: false, error: error instanceof Error ? error.message : "Error desconocido al enviar el correo" };
   }
 }

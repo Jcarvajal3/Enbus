@@ -9,6 +9,10 @@ export type UserProfile = {
   cooperativa_id: string | null;
   cooperativa_nombre?: string | null;
   cooperativa_estado?: string | null;
+  /** Motivo del último cambio de estado (rechazo, suspensión, baja). Fase 3. */
+  cooperativa_motivo_estado?: string | null;
+  /** Cuándo cambió el estado por última vez (ISO). Fase 3. */
+  cooperativa_estado_cambiado_at?: string | null;
 };
 
 type UserContextType = {

@@ -50,9 +50,21 @@ export interface PagoUsuario {
   id: string;
   encomienda_tracking_id: string | null;
   boleto_codigo: string | null;
+  /** Precio de referencia en USD. */
   monto: number;
+  /** Bs esperados (monto × tasa del pago). Null en pagos anteriores a la fase 2. */
+  monto_bs: number | null;
+  /** Moneda en la que pagó el cliente (Zelle / efectivo USD → "USD"). */
+  moneda: "VES" | "USD";
+  /** Tasa BCV usada en el pago, si se registró con ella. */
+  tasa_bcv: number | null;
+  tasa_bcv_fecha: string | null;
   tipo_pago: string;
+  /** Tipo del método de la cooperativa (PAGO_MOVIL, TRANSFERENCIA_BANCARIA, ZELLE, EFECTIVO); null en efectivo de taquilla. */
+  metodo_tipo: string | null;
   verificado: boolean;
+  estado_verificacion: "PENDIENTE" | "APROBADO" | "RECHAZADO";
+  motivo_rechazo: string | null;
   /** Matches DB column name: numero_referencia */
   numero_referencia: string | null;
   created_at: string;

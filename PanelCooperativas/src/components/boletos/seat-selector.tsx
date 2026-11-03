@@ -1,28 +1,60 @@
 "use client";
 
+// ─── Selector de asientos (taquilla) ────────────────────────────────────────
+// Asientos numerados "1".."N" en filas 2 + pasillo + 2: el mismo formato y la
+// misma distribución que la app (EnBusApp/src/utils/seatLayout.ts). Permite
+// elegir varios asientos para vender una compra completa.
+
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
-import { Check } from "@phosphor-icons/react";
+import { Check, ArrowClockwise } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
+import { humanizeError } from "@/lib/errores";
 
 interface SeatSelectorProps {
   viajeId: string;
   totalAsientos: number;
-  onSelect: (asiento: string) => void;
+  /** Asientos ya elegidos (al volver desde el paso siguiente). */
+  seleccionInicial?: string[];
+  /** Máximo de asientos por venta (el servidor acepta hasta 10). */
+  maxSeleccion?: number;
+  onConfirm: (asientos: string[]) => void;
   onCancel: () => void;
 }
 
-export function SeatSelector({ viajeId, totalAsientos, onSelect, onCancel }: SeatSelectorProps) {
+/** Asientos guardados con el formato antiguo del panel ("3B") → número ("10"). */
+function asientoNumerico(asiento: string): string {
+  const m = /^(\d+)([A-D])$/i.exec(asiento.trim());
+  if (!m) return asiento.trim();
+  return String((Number(m[1]) - 1) * 4 + "ABCD".indexOf(m[2].toUpperCase()) + 1);
+}
+
+/** "14" / "14 y 15" / "3, 14 y 15" */
+export function listaAsientos(asientos: string[]): string {
+  const orden = [...asientos].sort((a, b) => Number(a) - Number(b));
+  if (orden.length <= 1) return orden.join("");
+  return `${orden.slice(0, -1).join(", ")} y ${orden[orden.length - 1]}`;
+}
+
+export function SeatSelector({
+  viajeId,
+  totalAsientos,
+  seleccionInicial = [],
+  maxSeleccion = 10,
+  onConfirm,
+  onCancel,
+}: SeatSelectorProps) {
   const supabase = useMemo(() => createClient(), []);
-  const [ocupados, setOcupados] = useState<string[]>([]);
+  const [ocupados, setOcupados] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
-  const [selectedSeat, setSelectedSeat] = useState<string | null>(null);
+  const [errorCarga, setErrorCarga] = useState<string | null>(null);
+  const [seleccion, setSeleccion] = useState<string[]>(seleccionInicial);
 
   const fetchOcupados = useCallback(async () => {
     setLoading(true);
+    setErrorCarga(null);
     try {
       const { data, error } = await supabase
         .from("boletos")
@@ -31,12 +63,14 @@ export function SeatSelector({ viajeId, totalAsientos, onSelect, onCancel }: Sea
         .in("estado", ["RESERVADO", "PAGADO", "USADO"]);
 
       if (error) throw error;
-      
-      const ocupadosList = (data as { asiento: string }[] || []).map((b) => b.asiento);
-      setOcupados(ocupadosList);
+      const lista = ((data as { asiento: string }[] | null) ?? []).map((b) => asientoNumerico(b.asiento));
+      const nuevos = new Set(lista);
+      setOcupados(nuevos);
+      // Un asiento elegido que acaba de ocuparse deja de estar seleccionado.
+      setSeleccion((prev) => prev.filter((a) => !nuevos.has(a)));
     } catch (error) {
       console.error("Error cargando asientos ocupados:", error);
-      toast.error("Error al cargar la disponibilidad de asientos.");
+      setErrorCarga(humanizeError(error, "cargar los asientos"));
     } finally {
       setLoading(false);
     }
@@ -47,105 +81,105 @@ export function SeatSelector({ viajeId, totalAsientos, onSelect, onCancel }: Sea
     void fetchOcupados();
   }, [fetchOcupados]);
 
-  // Generar asientos basados en totalAsientos
-  const totalFilas = Math.ceil(totalAsientos / 4);
-  const asientosData = [];
-  
-  for (let fila = 1; fila <= totalFilas; fila++) {
-    const filaAsientos = [];
-    for (const col of ["A", "B", "C", "D"]) {
-      const id = `${fila}${col}`;
-      const num = (fila - 1) * 4 + "ABCD".indexOf(col) + 1;
-      
-      if (num <= totalAsientos) {
-        filaAsientos.push({
-          id,
-          ocupado: ocupados.includes(id)
-        });
-      } else {
-        filaAsientos.push(null); // Placeholder para mantener la cuadrícula
-      }
+  const filas = useMemo(() => {
+    const resultado: (string | null)[][] = [];
+    for (let numero = 1; numero <= totalAsientos; numero += 4) {
+      resultado.push([0, 1, 2, 3].map((i) => (numero + i <= totalAsientos ? String(numero + i) : null)));
     }
-    asientosData.push(filaAsientos);
-  }
+    return resultado;
+  }, [totalAsientos]);
+
+  const libres = totalAsientos - ocupados.size;
+  const lleno = seleccion.length >= maxSeleccion;
+
+  const alternar = (asiento: string) => {
+    setSeleccion((prev) =>
+      prev.includes(asiento)
+        ? prev.filter((a) => a !== asiento)
+        : prev.length >= maxSeleccion
+          ? prev
+          : [...prev, asiento].sort((a, b) => Number(a) - Number(b))
+    );
+  };
+
+  const confirmar = () => {
+    if (seleccion.length > 0) onConfirm(seleccion);
+  };
 
   if (loading) {
     return (
       <div className="py-12 flex flex-col items-center justify-center text-muted-foreground gap-3">
         <Spinner size="lg" />
-        <p>Verificando disponibilidad de asientos...</p>
+        <p>Revisando qué asientos están libres…</p>
       </div>
     );
   }
 
-  return (
-    <div className="space-y-6 flex flex-col items-center animate-in fade-in zoom-in-95 duration-300">
-      <div className="w-full max-w-sm p-6 bg-muted/20 border rounded-2xl">
-        <div className="flex justify-center mb-8 border-b-2 border-dashed pb-4 text-muted-foreground font-medium uppercase tracking-widest text-xs">
-          Frente del Bus
+  if (errorCarga) {
+    return (
+      <div className="py-8 flex flex-col items-center gap-3 text-center">
+        <p className="text-sm text-destructive-text">{errorCarga}</p>
+        <div className="flex gap-2">
+          <Button variant="ghost" onClick={onCancel}>Volver</Button>
+          <Button variant="outline" onClick={() => void fetchOcupados()}>
+            <ArrowClockwise className="w-4 h-4 mr-2" />
+            Reintentar
+          </Button>
         </div>
-        
-        <div className="space-y-3">
-          {asientosData.map((fila, filaIdx) => (
+      </div>
+    );
+  }
+
+  const boton = (asiento: string | null, idx: number) => {
+    if (!asiento) return <div key={`vacio-${idx}`} className="w-12 h-12 sm:w-14 sm:h-14" />;
+    const ocupado = ocupados.has(asiento);
+    const elegido = seleccion.includes(asiento);
+    const bloqueado = ocupado || (lleno && !elegido);
+    return (
+      <button
+        key={asiento}
+        type="button"
+        disabled={bloqueado}
+        aria-pressed={elegido}
+        aria-label={`Asiento ${asiento}, ${ocupado ? "ocupado" : elegido ? "elegido" : "libre"}`}
+        onClick={() => alternar(asiento)}
+        className={cn(
+          "relative w-12 h-12 sm:w-14 sm:h-14 rounded-xl flex items-center justify-center gap-0.5 font-bold text-sm tabular-nums transition-all duration-200 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
+          ocupado && "bg-muted text-muted-foreground/50 cursor-not-allowed border-none line-through",
+          !ocupado && !elegido && "bg-background border-2 border-border hover:border-primary/50 text-foreground shadow-sm",
+          !ocupado && !elegido && bloqueado && "opacity-50 cursor-not-allowed",
+          elegido && "bg-primary text-primary-foreground shadow-md ring-2 ring-primary ring-offset-2 ring-offset-background"
+        )}
+      >
+        {elegido && <Check weight="bold" className="w-3.5 h-3.5" aria-hidden />}
+        {asiento}
+      </button>
+    );
+  };
+
+  return (
+    <div className="space-y-5 flex flex-col items-center animate-in fade-in zoom-in-95 duration-300">
+      <p className="text-sm text-muted-foreground text-center">
+        Toca los asientos que vas a vender (hasta {maxSeleccion}). Quedan {libres} libres de {totalAsientos}.
+      </p>
+
+      <div className="w-full max-w-sm p-6 bg-muted/20 border rounded-2xl">
+        <div className="flex justify-center mb-6 border-b-2 border-dashed pb-4 text-muted-foreground font-medium uppercase tracking-widest text-xs">
+          Frente del bus
+        </div>
+
+        <div className="space-y-3" role="group" aria-label="Asientos del bus">
+          {filas.map((fila, filaIdx) => (
             <div key={`fila-${filaIdx}`} className="flex justify-between items-center w-full">
-              {/* Lado izquierdo (Ventana y Pasillo) */}
-              <div className="flex gap-2">
-                {fila.slice(0, 2).map((asiento, idx) => {
-                  if (!asiento) return <div key={`empty-${idx}`} className="w-12 h-12" />;
-                  
-                  const isSelected = selectedSeat === asiento.id;
-                  
-                  return (
-                    <button
-                      key={asiento.id}
-                      disabled={asiento.ocupado}
-                      onClick={() => setSelectedSeat(asiento.id)}
-                      className={cn(
-                        "relative w-12 h-12 sm:w-14 sm:h-14 rounded-xl flex items-center justify-center font-bold text-sm transition-all duration-200",
-                        asiento.ocupado && "bg-muted text-muted-foreground/50 cursor-not-allowed border-none",
-                        !asiento.ocupado && !isSelected && "bg-background border-2 border-border hover:border-primary/50 text-foreground shadow-sm",
-                        isSelected && "bg-primary text-primary-foreground shadow-md ring-2 ring-primary ring-offset-2 ring-offset-background"
-                      )}
-                    >
-                      {isSelected ? <Check className="w-5 h-5" /> : asiento.id}
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* Pasillo central */}
-              <div className="w-6 sm:w-8" />
-
-              {/* Lado derecho (Pasillo y Ventana) */}
-              <div className="flex gap-2">
-                {fila.slice(2, 4).map((asiento, idx) => {
-                  if (!asiento) return <div key={`empty-${idx}`} className="w-12 h-12" />;
-                  
-                  const isSelected = selectedSeat === asiento.id;
-                  
-                  return (
-                    <button
-                      key={asiento.id}
-                      disabled={asiento.ocupado}
-                      onClick={() => setSelectedSeat(asiento.id)}
-                      className={cn(
-                        "relative w-12 h-12 sm:w-14 sm:h-14 rounded-xl flex items-center justify-center font-bold text-sm transition-all duration-200",
-                        asiento.ocupado && "bg-muted text-muted-foreground/50 cursor-not-allowed border-none",
-                        !asiento.ocupado && !isSelected && "bg-background border-2 border-border hover:border-primary/50 text-foreground shadow-sm",
-                        isSelected && "bg-primary text-primary-foreground shadow-md ring-2 ring-primary ring-offset-2 ring-offset-background"
-                      )}
-                    >
-                      {isSelected ? <Check className="w-5 h-5" /> : asiento.id}
-                    </button>
-                  );
-                })}
-              </div>
+              <div className="flex gap-2">{fila.slice(0, 2).map((a, i) => boton(a, filaIdx * 4 + i))}</div>
+              <div className="w-6 sm:w-8" aria-hidden />
+              <div className="flex gap-2">{fila.slice(2, 4).map((a, i) => boton(a, filaIdx * 4 + 2 + i))}</div>
             </div>
           ))}
         </div>
       </div>
 
-      <div className="flex items-center gap-6 text-sm text-muted-foreground mt-4">
+      <div className="flex items-center gap-6 text-sm text-muted-foreground">
         <div className="flex items-center gap-2">
           <div className="w-4 h-4 rounded-md border-2 border-border bg-background" />
           <span>Libre</span>
@@ -156,19 +190,26 @@ export function SeatSelector({ viajeId, totalAsientos, onSelect, onCancel }: Sea
         </div>
         <div className="flex items-center gap-2">
           <div className="w-4 h-4 rounded-md bg-primary" />
-          <span className="text-foreground font-medium">Seleccionado</span>
+          <span className="text-foreground font-medium">Elegido</span>
         </div>
       </div>
 
-      <div className="flex w-full justify-between mt-8 pt-4 border-t">
+      {lleno && (
+        <p className="text-sm text-amber-700 dark:text-amber-400" role="status">
+          Llegaste al máximo de {maxSeleccion} asientos por venta.
+        </p>
+      )}
+
+      <div className="flex w-full justify-between pt-4 border-t">
         <Button variant="ghost" onClick={onCancel}>
           Volver
         </Button>
-        <Button 
-          disabled={!selectedSeat} 
-          onClick={() => selectedSeat && onSelect(selectedSeat)}
-        >
-          Confirmar Asiento
+        <Button disabled={seleccion.length === 0} onClick={confirmar}>
+          {seleccion.length === 0
+            ? "Elige al menos un asiento"
+            : seleccion.length === 1
+              ? `Continuar con el asiento ${seleccion[0]}`
+              : `Continuar con los asientos ${listaAsientos(seleccion)}`}
         </Button>
       </div>
     </div>

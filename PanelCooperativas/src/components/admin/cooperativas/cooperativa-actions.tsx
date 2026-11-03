@@ -1,333 +1,461 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useId, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+import {
+  CheckCircle,
+  Copy,
+  Check,
+  EnvelopeSimple,
+  HandPalm,
+  PencilSimple,
+  SpinnerIcon,
+  Trash,
+  UploadSimple,
+  WarningCircle,
+} from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
-import { 
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger
-} from "@/components/ui/alert-dialog";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger
+  DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { 
-  PencilSimple, 
-  HandPalm, 
-  CheckCircle, 
-  Trash, 
-  EnvelopeSimple, 
-  Copy, 
-  Check, 
-  UploadSimple 
-} from "@phosphor-icons/react";
-import { 
-  updateCooperativa, 
-  changeCooperativaEstado, 
-  inviteCooperativaAdmin 
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { normalizeRif, RIF_AYUDA, RIF_PLACEHOLDER } from "@/lib/rif";
+import { humanizeError } from "@/lib/errores";
+import { formatUsd } from "@/lib/dinero";
+import {
+  changeCooperativaEstado,
+  inviteCooperativaAdmin,
+  updateCooperativa,
 } from "@/app/admin/(panel)/cooperativas/actions";
-import { toast } from "sonner";
-import type { Cooperativa, EstadoCooperativa } from "@/lib/types/admin-cooperativas";
+import type { CooperativaDetalle, EstadoCooperativa } from "@/lib/types/admin-cooperativas";
 
 interface CooperativaActionsProps {
-  cooperativa: Cooperativa;
+  cooperativa: CooperativaDetalle;
+}
+
+const LOGO_MAX_BYTES = 2 * 1024 * 1024;
+
+function plural(n: number, uno: string, varios: string) {
+  return `${n} ${n === 1 ? uno : varios}`;
+}
+
+function ErrorEnLinea({ texto }: { texto: string }) {
+  return (
+    <div
+      role="alert"
+      className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive-text"
+    >
+      <WarningCircle className="mt-0.5 size-4 shrink-0" weight="fill" aria-hidden />
+      <p>{texto}</p>
+    </div>
+  );
 }
 
 export function CooperativaActions({ cooperativa }: CooperativaActionsProps) {
   const router = useRouter();
-  const [loading, setLoading] = useState(false);
+  const uid = useId();
 
-  // Edit State
+  // Editar
   const [editOpen, setEditOpen] = useState(false);
+  const [guardando, setGuardando] = useState(false);
+  const [errorEditar, setErrorEditar] = useState<string | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(cooperativa.logo_url);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Invite State
+  // Invitar
   const [inviteOpen, setInviteOpen] = useState(false);
+  const [invitando, setInvitando] = useState(false);
+  const [errorInvitar, setErrorInvitar] = useState<string | null>(null);
   const [inviteLink, setInviteLink] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
+  // Cambios de estado
+  const [confirmar, setConfirmar] = useState<"SUSPENDIDA" | "ACTIVA" | "DESACTIVADA" | null>(null);
+
   const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => setLogoPreview(reader.result as string);
-      reader.readAsDataURL(file);
+    setErrorEditar(null);
+    if (!file) return;
+    if (file.size > LOGO_MAX_BYTES) {
+      setErrorEditar("El logo no puede superar los 2 MB. Usa una imagen más liviana.");
+      e.target.value = "";
+      return;
     }
+    const reader = new FileReader();
+    reader.onloadend = () => setLogoPreview(reader.result as string);
+    reader.readAsDataURL(file);
   };
 
   const handleEditSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    setLoading(true);
-    const formData = new FormData(e.currentTarget);
-
+    if (guardando) return;
+    setErrorEditar(null);
+    setGuardando(true);
     try {
-      const res = await updateCooperativa(cooperativa.id, formData);
-      if (res.success) {
-        toast.success("Cooperativa actualizada correctamente");
-        setEditOpen(false);
-        router.refresh();
-      } else {
-        toast.error(res.error || "Error al actualizar la cooperativa");
+      const res = await updateCooperativa(cooperativa.id, new FormData(e.currentTarget));
+      if (!res.success) {
+        setErrorEditar(res.error || "No pudimos guardar los cambios. Intenta de nuevo.");
+        return;
       }
-    } catch {
-      toast.error("Error al actualizar la cooperativa");
+      if (res.aviso) toast.warning(res.aviso);
+      else toast.success("Cambios guardados.");
+      setEditOpen(false);
+      router.refresh();
+    } catch (err) {
+      setErrorEditar(humanizeError(err, "guardar los cambios de la cooperativa"));
     } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleStatusChange = async (nuevoEstado: EstadoCooperativa) => {
-    setLoading(true);
-    try {
-      const res = await changeCooperativaEstado(cooperativa.id, nuevoEstado);
-      if (res.success) {
-        toast.success(`Estado cambiado a ${nuevoEstado.toLowerCase()}`);
-        router.refresh();
-      } else {
-        toast.error(res.error || "Error al cambiar el estado");
-      }
-    } catch {
-      toast.error("Error de comunicación con el servidor");
-    } finally {
-      setLoading(false);
+      setGuardando(false);
     }
   };
 
   const handleInviteSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    setLoading(true);
-    const formData = new FormData(e.currentTarget);
-    const email = formData.get("email") as string;
-
+    if (invitando) return;
+    setErrorInvitar(null);
+    setInvitando(true);
+    const email = String(new FormData(e.currentTarget).get("email") ?? "");
     try {
       const res = await inviteCooperativaAdmin(cooperativa.id, email);
       if (res.success && res.invite_link) {
         setInviteLink(`${window.location.origin}${res.invite_link}`);
-        toast.success("Invitación creada");
       } else {
-        toast.error(res.error || "Error al enviar la invitación");
+        setErrorInvitar(res.error || "No pudimos crear la invitación. Intenta de nuevo.");
       }
-    } catch {
-      toast.error("Error al enviar la invitación");
+    } catch (err) {
+      setErrorInvitar(humanizeError(err, "crear la invitación"));
     } finally {
-      setLoading(false);
+      setInvitando(false);
     }
   };
 
   const copyInviteLink = async () => {
-    if (inviteLink) {
+    if (!inviteLink) return;
+    try {
       await navigator.clipboard.writeText(inviteLink);
       setCopied(true);
-      toast.success("Enlace de invitación copiado");
+      toast.success("Enlace copiado.");
       setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast.error("No pudimos copiar el enlace. Selecciónalo y cópialo a mano.");
     }
+  };
+
+  const cambiarEstado = async (estado: EstadoCooperativa, motivo: string | undefined, exito: string) => {
+    const res = await changeCooperativaEstado(cooperativa.id, estado, motivo);
+    if (!res.success) return { ok: false, error: res.error };
+    toast.success(exito);
+    router.refresh();
+    return { ok: true };
   };
 
   const isActive = cooperativa.estado === "ACTIVA";
   const isSuspended = cooperativa.estado === "SUSPENDIDA";
   const isDeactivated = cooperativa.estado === "DESACTIVADA";
+  const enRevision = cooperativa.estado === "PENDIENTE" || cooperativa.estado === "RECHAZADA";
 
   if (isDeactivated) {
     return (
-      <div className="flex items-center gap-2">
-        <span className="text-sm text-slate-500 italic">Esta cooperativa ha sido desactivada permanentemente.</span>
-      </div>
+      <p className="text-sm text-muted-foreground">Esta cooperativa está desactivada y ya no puede operar en EnBus.</p>
     );
   }
 
+  const impactoDesactivar = [
+    "Deja de aparecer en la app: los pasajeros no podrán comprarle boletos ni enviar encomiendas.",
+    "Sus empleados no podrán vender ni recibir desde el panel.",
+    cooperativa.encomiendas_en_curso > 0
+      ? `${plural(cooperativa.encomiendas_en_curso, "encomienda sigue", "encomiendas siguen")} en curso: coordina con la cooperativa su entrega o devolución.`
+      : "No tiene encomiendas en curso.",
+    cooperativa.ciclos_sin_pagar > 0
+      ? `${plural(cooperativa.ciclos_sin_pagar, "ciclo de comisiones sin pagar", "ciclos de comisiones sin pagar")} (${formatUsd(Number(cooperativa.comisiones_pendientes ?? 0))}): seguirán pendientes en Comisiones.`
+      : "No tiene comisiones pendientes.",
+    "No se puede deshacer: una cooperativa desactivada no se puede reactivar.",
+  ];
+
   return (
     <div className="flex flex-wrap items-center gap-3">
-      {/* Botón: Editar */}
-      <Dialog open={editOpen} onOpenChange={(v) => { if (!loading) { setEditOpen(v); if (!v) setLogoPreview(cooperativa.logo_url); } }}>
+      {/* Editar */}
+      <Dialog
+        open={editOpen}
+        onOpenChange={(v) => {
+          if (guardando) return;
+          setEditOpen(v);
+          setErrorEditar(null);
+          if (!v) setLogoPreview(cooperativa.logo_url);
+        }}
+      >
         <DialogTrigger asChild>
-          <Button variant="outline" className="border-slate-800 text-slate-200 hover:bg-slate-900">
-            <PencilSimple className="mr-2 h-4 w-4" /> Editar Datos
+          <Button variant="outline">
+            <PencilSimple className="mr-2 h-4 w-4" aria-hidden /> Editar datos
           </Button>
         </DialogTrigger>
-        <DialogContent className="bg-slate-950 border-slate-800 text-slate-100 max-w-md">
-          <form onSubmit={handleEditSubmit} className="space-y-4">
+        <DialogContent className="max-w-md">
+          <form onSubmit={handleEditSubmit} noValidate className="space-y-4">
             <DialogHeader>
-              <DialogTitle className="text-slate-100 text-lg font-bold">Editar Cooperativa</DialogTitle>
-              <DialogDescription className="text-slate-400">Modifica los datos generales de la cooperativa.</DialogDescription>
+              <DialogTitle>Editar cooperativa</DialogTitle>
+              <DialogDescription>Cambia el nombre, el RIF, la comisión o el logo.</DialogDescription>
             </DialogHeader>
 
             <div className="flex flex-col items-center gap-2 py-2">
-              <Avatar className="h-20 w-20 border border-slate-800 bg-slate-900">
-                <AvatarImage src={logoPreview || ""} alt="Logo preview" />
-                <AvatarFallback className="bg-slate-900 text-slate-500">
-                  <UploadSimple className="h-8 w-8" />
+              <Avatar className="h-20 w-20 border bg-muted">
+                <AvatarImage src={logoPreview || ""} alt="Vista previa del logo" />
+                <AvatarFallback className="bg-muted text-muted-foreground">
+                  <UploadSimple className="h-8 w-8" aria-hidden />
                 </AvatarFallback>
               </Avatar>
-              <Button 
-                type="button" 
-                variant="outline" 
+              <Button
+                type="button"
+                variant="outline"
                 size="sm"
                 onClick={() => fileInputRef.current?.click()}
-                className="border-slate-800 text-slate-300 hover:bg-slate-900"
+                disabled={guardando}
               >
-                Cambiar Logo
+                Cambiar logo
               </Button>
-              <input type="file" name="logo" ref={fileInputRef} onChange={handleLogoChange} accept="image/*" className="hidden" />
+              <input
+                type="file"
+                name="logo"
+                ref={fileInputRef}
+                onChange={handleLogoChange}
+                accept="image/jpeg,image/png,image/webp,image/gif"
+                className="hidden"
+              />
+              <p className="text-xs text-muted-foreground">JPEG, PNG, WebP o GIF de hasta 2 MB.</p>
             </div>
 
             <div className="space-y-3">
               <div className="space-y-1">
-                <Label htmlFor="nombre" className="text-slate-300">Nombre de la Cooperativa</Label>
-                <Input id="nombre" name="nombre" defaultValue={cooperativa.nombre} required className="bg-slate-900 border-slate-800 text-slate-100" />
+                <Label htmlFor={`${uid}-nombre`}>Nombre de la cooperativa</Label>
+                <Input id={`${uid}-nombre`} name="nombre" defaultValue={cooperativa.nombre} required disabled={guardando} />
               </div>
               <div className="space-y-1">
-                <Label htmlFor="rif" className="text-slate-300">RIF</Label>
-                <Input id="rif" name="rif" defaultValue={cooperativa.rif} required className="bg-slate-900 border-slate-800 text-slate-100" />
+                <Label htmlFor={`${uid}-rif`}>RIF</Label>
+                <Input
+                  id={`${uid}-rif`}
+                  name="rif"
+                  defaultValue={cooperativa.rif}
+                  placeholder={RIF_PLACEHOLDER}
+                  required
+                  disabled={guardando}
+                  autoCapitalize="characters"
+                  aria-describedby={`${uid}-rif-ayuda`}
+                  onBlur={(e) => {
+                    const normalizado = normalizeRif(e.target.value);
+                    if (normalizado) e.target.value = normalizado;
+                  }}
+                />
+                <p id={`${uid}-rif-ayuda`} className="text-xs text-muted-foreground">{RIF_AYUDA}</p>
               </div>
               <div className="space-y-1">
-                <Label htmlFor="comision_porcentaje" className="text-slate-300">Comisión por Transacción (%)</Label>
-                <Input id="comision_porcentaje" name="comision_porcentaje" type="number" step="0.01" min="0" max="100" defaultValue={cooperativa.comision_porcentaje} required className="bg-slate-900 border-slate-800 text-slate-100" />
+                <Label htmlFor={`${uid}-comision`}>Comisión de EnBus (%)</Label>
+                <Input
+                  id={`${uid}-comision`}
+                  name="comision_porcentaje"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max="100"
+                  defaultValue={cooperativa.comision_porcentaje}
+                  required
+                  disabled={guardando}
+                />
               </div>
             </div>
 
-            <div className="flex justify-end gap-2 pt-4">
-              <Button type="button" variant="outline" onClick={() => setEditOpen(false)} disabled={loading} className="border-slate-800 text-slate-400 hover:bg-slate-900">Cancelar</Button>
-              <Button type="submit" disabled={loading} className="bg-emerald-600 hover:bg-emerald-500 text-white">{loading ? "Guardando..." : "Guardar Cambios"}</Button>
+            {errorEditar && <ErrorEnLinea texto={errorEditar} />}
+
+            <div className="flex justify-end gap-2 pt-2">
+              <Button type="button" variant="outline" onClick={() => setEditOpen(false)} disabled={guardando}>
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={guardando} aria-busy={guardando || undefined}>
+                {guardando && <SpinnerIcon className="animate-spin" aria-hidden />}
+                {guardando ? "Guardando…" : "Guardar cambios"}
+              </Button>
             </div>
           </form>
         </DialogContent>
       </Dialog>
 
-      {/* Botón: Invitar Administrador */}
-      <Dialog open={inviteOpen} onOpenChange={(v) => { if (!loading) { setInviteOpen(v); if (!v) setInviteLink(null); } }}>
+      {/* Invitar administrador */}
+      <Dialog
+        open={inviteOpen}
+        onOpenChange={(v) => {
+          if (invitando) return;
+          setInviteOpen(v);
+          setErrorInvitar(null);
+          if (!v) setInviteLink(null);
+        }}
+      >
         <DialogTrigger asChild>
-          <Button variant="outline" className="border-slate-800 text-slate-200 hover:bg-slate-900">
-            <EnvelopeSimple className="mr-2 h-4 w-4" /> Invitar Administrador
+          <Button variant="outline">
+            <EnvelopeSimple className="mr-2 h-4 w-4" aria-hidden /> Invitar administrador
           </Button>
         </DialogTrigger>
-        <DialogContent className="bg-slate-950 border-slate-800 text-slate-100 max-w-md">
+        <DialogContent className="max-w-md">
           {inviteLink ? (
-            <div className="space-y-6 py-4 text-center">
-              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-500">
-                <CheckCircle className="h-8 w-8" />
+            <div className="space-y-6 py-2 text-center">
+              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-emerald-900 dark:bg-emerald-400/15 dark:text-emerald-200">
+                <CheckCircle className="h-8 w-8" aria-hidden />
               </div>
               <div className="space-y-2">
-                <DialogTitle className="text-xl text-slate-100">Invitación Generada</DialogTitle>
-                <DialogDescription className="text-slate-400">
-                  Copia y comparte este enlace con el nuevo administrador de la cooperativa.
+                <DialogTitle className="text-xl">Invitación lista</DialogTitle>
+                <DialogDescription>
+                  Copia el enlace y envíaselo al administrador de {cooperativa.nombre}. Vence en 48 horas.
                 </DialogDescription>
               </div>
-              <div className="flex items-center gap-2 bg-slate-900 border border-slate-800 p-3 rounded-lg">
-                <span className="text-sm text-slate-300 truncate flex-1 text-left">{inviteLink}</span>
-                <Button onClick={copyInviteLink} size="sm" variant="secondary" className="bg-slate-800 text-slate-200 hover:bg-slate-700">
-                  {copied ? <Check className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
+              <div className="flex items-center gap-2 rounded-lg border bg-muted p-3">
+                <span className="flex-1 truncate text-left text-sm text-foreground">{inviteLink}</span>
+                <Button onClick={copyInviteLink} size="sm" variant="secondary" aria-label="Copiar enlace">
+                  {copied ? <Check className="h-4 w-4" aria-hidden /> : <Copy className="h-4 w-4" aria-hidden />}
                 </Button>
               </div>
-              <Button onClick={() => setInviteOpen(false)} className="w-full bg-emerald-600 hover:bg-emerald-500 text-white">Cerrar</Button>
+              <Button onClick={() => setInviteOpen(false)} className="w-full">
+                Listo
+              </Button>
             </div>
           ) : (
-            <form onSubmit={handleInviteSubmit} className="space-y-4">
+            <form onSubmit={handleInviteSubmit} noValidate className="space-y-4">
               <DialogHeader>
-                <DialogTitle className="text-slate-100">Invitar Administrador</DialogTitle>
-                <DialogDescription className="text-slate-400">
-                  Introduce el correo electrónico para invitar a un nuevo administrador a {cooperativa.nombre}.
+                <DialogTitle>Invitar administrador</DialogTitle>
+                <DialogDescription>
+                  Escribe el correo de la persona que administrará {cooperativa.nombre}. Te daremos un enlace para que cree su cuenta.
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-1">
-                <Label htmlFor="email" className="text-slate-300">Correo Electrónico</Label>
-                <Input id="email" name="email" type="email" placeholder="admin@cooperativa.com" required className="bg-slate-900 border-slate-800 text-slate-100" />
+                <Label htmlFor={`${uid}-email`}>Correo del administrador</Label>
+                <Input
+                  id={`${uid}-email`}
+                  name="email"
+                  type="email"
+                  autoComplete="off"
+                  placeholder="admin@cooperativa.com"
+                  required
+                  disabled={invitando}
+                />
               </div>
-              <div className="flex justify-end gap-2 pt-4">
-                <Button type="button" variant="outline" onClick={() => setInviteOpen(false)} className="border-slate-800 text-slate-400 hover:bg-slate-900">Cancelar</Button>
-                <Button type="submit" disabled={loading} className="bg-emerald-600 hover:bg-emerald-500 text-white">Generar Invitación</Button>
+              {errorInvitar && <ErrorEnLinea texto={errorInvitar} />}
+              <div className="flex justify-end gap-2 pt-2">
+                <Button type="button" variant="outline" onClick={() => setInviteOpen(false)} disabled={invitando}>
+                  Cancelar
+                </Button>
+                <Button type="submit" disabled={invitando} aria-busy={invitando || undefined}>
+                  {invitando && <SpinnerIcon className="animate-spin" aria-hidden />}
+                  {invitando ? "Creando…" : "Crear invitación"}
+                </Button>
               </div>
             </form>
           )}
         </DialogContent>
       </Dialog>
 
-      {/* Botón: Suspender o Reactivar */}
+      {enRevision && (
+        <p className="text-sm text-muted-foreground">
+          {cooperativa.estado === "PENDIENTE"
+            ? "Su solicitud está en revisión: apruébala o recházala desde "
+            : "Su solicitud fue rechazada: puedes reabrirla o descartarla desde "}
+          <Link href="/admin/solicitudes" className="text-foreground underline decoration-primary underline-offset-4">
+            Solicitudes
+          </Link>
+          .
+        </p>
+      )}
+
       {isActive && (
-        <AlertDialog>
-          <AlertDialogTrigger asChild>
-            <Button variant="outline" className="border-amber-900/30 text-amber-500 hover:bg-amber-950/20 hover:text-amber-400">
-              <HandPalm className="mr-2 h-4 w-4" /> Suspender
-            </Button>
-          </AlertDialogTrigger>
-          <AlertDialogContent className="bg-slate-950 border-slate-800 text-slate-100">
-            <AlertDialogHeader>
-              <AlertDialogTitle className="text-slate-100">¿Suspender Cooperativa?</AlertDialogTitle>
-              <AlertDialogDescription className="text-slate-400">
-                Al suspender a la cooperativa **{cooperativa.nombre}**, no podrá realizar nuevas ventas de boletos o despachar encomiendas de manera temporal.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel className="border-slate-800 text-slate-400 hover:bg-slate-900 hover:text-slate-300">Cancelar</AlertDialogCancel>
-              <AlertDialogAction onClick={() => handleStatusChange("SUSPENDIDA")} className="bg-amber-600 hover:bg-amber-500 text-white">
-                Suspender Temporalmente
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+        <Button
+          variant="outline"
+          className="border-amber-600/40 text-warning-text hover:bg-amber-100 dark:hover:bg-amber-400/15"
+          onClick={() => setConfirmar("SUSPENDIDA")}
+        >
+          <HandPalm className="mr-2 h-4 w-4" aria-hidden /> Suspender
+        </Button>
       )}
 
       {isSuspended && (
-        <AlertDialog>
-          <AlertDialogTrigger asChild>
-            <Button variant="outline" className="border-emerald-900/30 text-emerald-500 hover:bg-emerald-950/20 hover:text-emerald-400">
-              <CheckCircle className="mr-2 h-4 w-4" /> Reactivar
-            </Button>
-          </AlertDialogTrigger>
-          <AlertDialogContent className="bg-slate-950 border-slate-800 text-slate-100">
-            <AlertDialogHeader>
-              <AlertDialogTitle className="text-slate-100">¿Reactivar Cooperativa?</AlertDialogTitle>
-              <AlertDialogDescription className="text-slate-400">
-                Esto restaurará por completo el acceso y operatividad de la cooperativa **{cooperativa.nombre}**.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel className="border-slate-800 text-slate-400 hover:bg-slate-900 hover:text-slate-300">Cancelar</AlertDialogCancel>
-              <AlertDialogAction onClick={() => handleStatusChange("ACTIVA")} className="bg-emerald-600 hover:bg-emerald-500 text-white">
-                Reactivar Cooperativa
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+        <Button variant="outline" onClick={() => setConfirmar("ACTIVA")}>
+          <CheckCircle className="mr-2 h-4 w-4" aria-hidden /> Reactivar
+        </Button>
       )}
 
-      {/* Botón: Desactivar */}
-      <AlertDialog>
-        <AlertDialogTrigger asChild>
-          <Button variant="destructive" className="bg-rose-950/40 border border-rose-900/50 text-rose-400 hover:bg-rose-950/80">
-            <Trash className="mr-2 h-4 w-4" /> Desactivar
-          </Button>
-        </AlertDialogTrigger>
-        <AlertDialogContent className="bg-slate-950 border-slate-800 text-slate-100">
-          <AlertDialogHeader>
-            <AlertDialogTitle className="text-slate-100 text-rose-500 font-bold">⚠️ ADVERTENCIA CRÍTICA</AlertDialogTitle>
-            <AlertDialogDescription className="text-slate-400">
-              ¿Estás seguro de que deseas desactivar a **{cooperativa.nombre}**? 
-              <span className="block mt-2 font-semibold text-rose-400">Esta acción es irreversible y permanente. La cooperativa no podrá reactivarse ni operar en la plataforma.</span>
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel className="border-slate-800 text-slate-400 hover:bg-slate-900 hover:text-slate-300">Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={() => handleStatusChange("DESACTIVADA")} className="bg-rose-600 hover:bg-rose-500 text-white">
-              Desactivar Permanentemente
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {!enRevision && (
+        <Button
+          variant="outline"
+          className="border-destructive/40 text-destructive-text hover:bg-destructive/10"
+          onClick={() => setConfirmar("DESACTIVADA")}
+        >
+          <Trash className="mr-2 h-4 w-4" aria-hidden /> Desactivar
+        </Button>
+      )}
+
+      <ConfirmDialog
+        open={confirmar === "SUSPENDIDA"}
+        onOpenChange={(v) => !v && setConfirmar(null)}
+        titulo={`¿Suspender ${cooperativa.nombre}?`}
+        descripcion="La suspensión es temporal: podrás reactivarla cuando se resuelva el problema."
+        impacto={[
+          "No podrá vender boletos ni recibir encomiendas en la app mientras esté suspendida.",
+          "Verá el motivo en su panel.",
+          "Los boletos y encomiendas ya pagados se mantienen.",
+        ]}
+        motivo={{
+          etiqueta: "Motivo de la suspensión",
+          placeholder: "Por ejemplo: comisiones de dos ciclos sin pagar.",
+          chips: ["Comisiones sin pagar", "Reclamos de pasajeros", "Datos sin verificar", "Otro"],
+        }}
+        verbo="Suspender cooperativa"
+        verboCargando="Suspendiendo…"
+        tono="destructive"
+        onConfirm={(motivo) =>
+          cambiarEstado("SUSPENDIDA", motivo, `${cooperativa.nombre} suspendida. No podrá vender en la app.`)
+        }
+      />
+
+      <ConfirmDialog
+        open={confirmar === "ACTIVA"}
+        onOpenChange={(v) => !v && setConfirmar(null)}
+        titulo={`¿Reactivar ${cooperativa.nombre}?`}
+        descripcion={
+          cooperativa.motivo_estado ? (
+            <>
+              Se suspendió por: <strong>{cooperativa.motivo_estado}</strong>. Al reactivarla volverá a vender en la app.
+            </>
+          ) : (
+            "Al reactivarla volverá a vender en la app."
+          )
+        }
+        verbo="Reactivar cooperativa"
+        verboCargando="Reactivando…"
+        onConfirm={() => cambiarEstado("ACTIVA", undefined, `${cooperativa.nombre} está activa de nuevo.`)}
+      />
+
+      <ConfirmDialog
+        open={confirmar === "DESACTIVADA"}
+        onOpenChange={(v) => !v && setConfirmar(null)}
+        titulo={`¿Desactivar ${cooperativa.nombre} para siempre?`}
+        descripcion="Si solo necesitas pausarla, usa Suspender: se puede deshacer."
+        impacto={impactoDesactivar}
+        motivo={{
+          etiqueta: "Motivo de la desactivación",
+          placeholder: "Por ejemplo: la cooperativa dejó de operar.",
+          chips: ["La cooperativa dejó de operar", "Incumplimiento grave", "Solicitud de la cooperativa", "Otro"],
+        }}
+        confirmarEscribiendo={cooperativa.rif ? [cooperativa.nombre, cooperativa.rif] : cooperativa.nombre}
+        verbo="Sí, desactivar para siempre"
+        verboCargando="Desactivando…"
+        tono="destructive"
+        onConfirm={(motivo) =>
+          cambiarEstado("DESACTIVADA", motivo, `${cooperativa.nombre} desactivada. Ya no puede operar en EnBus.`)
+        }
+      />
     </div>
   );
 }

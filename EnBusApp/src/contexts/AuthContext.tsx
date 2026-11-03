@@ -135,16 +135,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       subscription.unsubscribe();
       appStateSubscription.remove();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // PERF-03: Stable reference — useCallback prevents consumers from re-rendering
   // when AuthProvider re-renders for unrelated state changes.
   const signOut = useCallback(async () => {
+    // Sin conexión, el cierre global devuelve `{ error }` (o lanza) y deja la
+    // sesión en el teléfono: en ese caso se cierra al menos localmente.
     try {
-      await supabase.auth.signOut();
+      const { error } = await supabase.auth.signOut();
+      if (!error) return;
+      console.warn('[Auth] signOut global falló, se cierra localmente:', error);
     } catch (e) {
-      console.warn('[Auth] signOut failed:', e);
+      console.warn('[Auth] signOut global falló, se cierra localmente:', e);
+    }
+    try {
+      await supabase.auth.signOut({ scope: 'local' });
+    } catch (e) {
+      console.warn('[Auth] signOut local falló:', e);
     }
   }, []);
 

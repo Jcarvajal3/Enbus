@@ -1,97 +1,163 @@
 "use server";
 
+// ─── Registro de cooperativa (canónico, #39) ────────────────────────────────
+// Crea la cooperativa en estado PENDIENTE y la cuenta de su administrador, y
+// entra al panel de inmediato: puede configurarlo mientras EnBus revisa la
+// solicitud (24 a 48 horas hábiles).
+
 import { createAdminClient } from "@/lib/supabase/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { normalizeRif, RIF_ERROR } from "@/lib/rif";
+import { humanizeError } from "@/lib/errores";
+import { telefonoParaGuardar, TELEFONO_ERROR } from "@/lib/ve";
 
-interface ActionState {
+export type CampoRegistro =
+  | "nombre"
+  | "email"
+  | "password"
+  | "confirmPassword"
+  | "rif"
+  | "telefono"
+  | "representante"
+  | "mensaje";
+
+export interface ActionState {
   error?: string | null;
   success?: boolean;
+  /** Primer campo con error, para volver al paso donde está y llevar el foco. */
+  campo?: CampoRegistro;
+  /** Errores por campo. */
+  errores?: Partial<Record<CampoRegistro, string>>;
+}
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const MSG_EMAIL_USADO = "Ya existe una cuenta con este correo. Inicia sesión o usa otro correo.";
+
+/** Errores del paso 1 (cuenta). Mismas reglas en el cliente y aquí. */
+function validarCuenta(d: { nombre: string; email: string; password: string; confirmPassword: string }) {
+  const errores: Partial<Record<CampoRegistro, string>> = {};
+  if (d.nombre.trim().length < 3) errores.nombre = "Escribe el nombre de tu cooperativa (mínimo 3 caracteres).";
+  if (!EMAIL_RE.test(d.email.trim())) errores.email = "Escribe un correo válido, por ejemplo contacto@tucooperativa.com.";
+  if (d.password.length < 8) errores.password = "La contraseña debe tener al menos 8 caracteres.";
+  else if (d.password !== d.confirmPassword) errores.confirmPassword = "Las contraseñas no coinciden.";
+  return errores;
+}
+
+/**
+ * ¿Ya hay una cuenta con este correo? Se consulta al salir del paso 1 para no
+ * pedir los datos de la cooperativa en vano. `null` = no se pudo verificar (el
+ * registro lo vuelve a comprobar al crear la cuenta).
+ */
+export async function verificarCorreoRegistro(email: string): Promise<{ registrado: boolean | null }> {
+  const limpio = (email ?? "").trim().toLowerCase();
+  if (!EMAIL_RE.test(limpio)) return { registrado: null };
+  const { data, error } = await createAdminClient().rpc("fn_email_registrado", { p_email: limpio });
+  if (error) {
+    console.error("[verificarCorreoRegistro] Error:", error);
+    return { registrado: null };
+  }
+  return { registrado: data === true };
 }
 
 export async function registrarCooperativa(
-  prevState: ActionState,
+  _prevState: ActionState,
   formData: FormData
 ): Promise<ActionState> {
-  const nombre = formData.get("nombre") as string;
-  const email = formData.get("email") as string;
-  const password = formData.get("password") as string;
-  const confirmPassword = formData.get("confirmPassword") as string;
-  const rif = formData.get("rif") as string;
-  const telefono = formData.get("telefono") as string;
-  const representante = formData.get("representante") as string;
+  const texto = (k: string) => String(formData.get(k) ?? "");
+  const nombre = texto("nombre").trim().replace(/\s+/g, " ");
+  const email = texto("email").trim().toLowerCase();
+  const password = texto("password");
+  const confirmPassword = texto("confirmPassword");
+  const rifInput = texto("rif");
+  const telefonoInput = texto("telefono");
+  const representante = texto("representante").trim().replace(/\s+/g, " ");
+  const mensaje = texto("mensaje").trim().slice(0, 1000);
 
-  // Validations
-  if (!nombre || !email || !password || !confirmPassword || !rif || !telefono || !representante) {
-    return { error: "Todos los campos son requeridos." };
-  }
+  // ── Validación por campo ──
+  const errores = validarCuenta({ nombre, email, password, confirmPassword });
+  // Acepta el RIF con o sin guiones y lo guarda normalizado ("J-12345678-9")
+  const rif = normalizeRif(rifInput);
+  if (!rif) errores.rif = RIF_ERROR;
+  const telefono = telefonoParaGuardar(telefonoInput);
+  if (!telefono) errores.telefono = TELEFONO_ERROR;
+  if (representante.length < 3) errores.representante = "Escribe el nombre y apellido del representante legal.";
 
-  if (password !== confirmPassword) {
-    return { error: "Las contraseñas no coinciden." };
-  }
-
-  if (password.length < 8) {
-    return { error: "La contraseña debe tener al menos 8 caracteres." };
-  }
-
-  // Validate RIF format (J-XXXXXXXX)
-  const rifRegex = /^J-\d{8,9}$/;
-  if (!rifRegex.test(rif)) {
-    return { error: "El RIF debe tener el formato J-XXXXXXXX (letra J seguida de guión y 8 o 9 dígitos)." };
+  const orden: CampoRegistro[] = ["nombre", "email", "password", "confirmPassword", "rif", "telefono", "representante"];
+  const primero = orden.find((c) => errores[c]);
+  if (primero) {
+    return { error: "Revisa los campos marcados.", campo: primero, errores };
   }
 
   const supabase = createAdminClient();
+  let cooperativaId: string | null = null;
 
   try {
-    // 1. Check if cooperativa with same RIF already exists
+    // 1. ¿Ya existe una cooperativa con este RIF?
     const { data: existingCoop, error: checkError } = await supabase
       .from("cooperativas")
       .select("id")
       .eq("rif", rif)
       .maybeSingle();
-
     if (checkError) {
-      console.error("Error checking existing cooperativa:", checkError);
-      return { error: "Error al verificar el registro." };
+      console.error("[registrarCooperativa] Error al verificar el RIF:", checkError);
+      return { error: humanizeError(checkError, "verificar el registro") };
     }
-
     if (existingCoop) {
-      return { error: "Ya existe una cooperativa registrada con este RIF." };
+      const msg = "Ya existe una cooperativa registrada con este RIF. Si es la tuya, inicia sesión.";
+      return { error: msg, campo: "rif", errores: { rif: msg } };
     }
 
-    // 2. Check if email is already in use
-    const { data: existingUsers } = await supabase.auth.admin.listUsers();
-    const emailExists = existingUsers?.users?.some(u => u.email === email);
-    if (emailExists) {
-      return { error: "Ya existe una cuenta con este correo electrónico." };
+    // 2. ¿El correo ya tiene cuenta? (sin listar usuarios: RPC solo para service_role)
+    const { data: emailExiste, error: emailError } = await supabase.rpc("fn_email_registrado", { p_email: email });
+    if (emailError) {
+      // Si la RPC no está disponible, createUser lo vuelve a comprobar (email_exists).
+      console.error("[registrarCooperativa] Error al verificar el correo:", emailError);
+    } else if (emailExiste === true) {
+      return { error: MSG_EMAIL_USADO, campo: "email", errores: { email: MSG_EMAIL_USADO } };
     }
 
-    // 3. Create the cooperativa in PENDIENTE state
-    const { data: cooperativa, error: insertError } = await supabase
+    // 3. Cooperativa en estado PENDIENTE (representante y mensaje en sus columnas de la fase 3)
+    const base = {
+      nombre,
+      rif,
+      estado: "PENDIENTE",
+      comision_porcentaje: 0.0,
+      telefono,
+      email,
+    };
+    let insert = await supabase
       .from("cooperativas")
-      .insert({
-        nombre,
-        rif,
-        estado: "PENDIENTE",
-        comision_porcentaje: 0.00,
-        telefono,
-        email,
-        descripcion: `Representante: ${representante}`
-      })
-      .select()
+      .insert({ ...base, representante, mensaje_registro: mensaje || null })
+      .select("id")
       .single();
-
-    if (insertError || !cooperativa) {
-      console.error("Error inserting cooperativa:", insertError);
-      return { error: "Error al registrar la cooperativa." };
+    if (insert.error?.code === "42703" || insert.error?.code === "PGRST204") {
+      // La migración 20260720000002 aún no se aplicó: se guarda como antes, en la descripción.
+      insert = await supabase
+        .from("cooperativas")
+        .insert({
+          ...base,
+          descripcion: mensaje ? `Representante: ${representante}. Mensaje: ${mensaje}` : `Representante: ${representante}`,
+        })
+        .select("id")
+        .single();
     }
+    if (insert.error || !insert.data) {
+      console.error("[registrarCooperativa] Error al crear la cooperativa:", insert.error);
+      const esRif = insert.error?.code === "23505";
+      const msg = esRif
+        ? "Ya existe una cooperativa registrada con este RIF. Si es la tuya, inicia sesión."
+        : humanizeError(insert.error, "registrar la cooperativa");
+      return { error: msg, campo: esRif ? "rif" : undefined, errores: esRif ? { rif: msg } : undefined };
+    }
+    cooperativaId = insert.data.id as string;
 
-    // 4. Create auth user with email confirmation disabled
+    // 4. Cuenta del administrador (correo confirmado: entra de inmediato)
     const { data: authData, error: createUserError } = await supabase.auth.admin.createUser({
       email,
       password,
-      email_confirm: true, // Auto-confirm email (skip verification)
+      email_confirm: true,
       user_metadata: {
         nombre_completo: representante,
         telefono,
@@ -100,44 +166,51 @@ export async function registrarCooperativa(
     });
 
     if (createUserError || !authData.user) {
-      console.error("Error creating auth user:", createUserError);
-      // Rollback cooperativa
-      await supabase.from("cooperativas").delete().eq("id", cooperativa.id);
-      return { error: "Error al crear la cuenta: " + (createUserError?.message || "Error desconocido") };
+      console.error("[registrarCooperativa] Error al crear la cuenta:", createUserError);
+      // Se deshace la cooperativa para que pueda reintentar con el mismo RIF
+      const { error: rollbackError } = await supabase.from("cooperativas").delete().eq("id", cooperativaId);
+      if (rollbackError) console.error("[registrarCooperativa] Error al deshacer la cooperativa:", rollbackError);
+      const code = createUserError?.code;
+      const esEmail = code === "email_exists" || code === "user_already_exists" || code === "email_address_invalid";
+      const msg = humanizeError(createUserError, "crear la cuenta");
+      const campo: CampoRegistro | undefined = esEmail ? "email" : code === "weak_password" ? "password" : undefined;
+      return { error: msg, campo, errores: campo ? { [campo]: msg } : undefined };
     }
 
     const userId = authData.user.id;
 
-    // 5. Update profile with admin_cooperativa role and link to cooperativa
-    const { error: profileError } = await supabase
+    // 5. Perfil: administrador de la cooperativa (el trigger handle_new_user crea la fila)
+    const { data: perfiles, error: profileError } = await supabase
       .from("profiles")
       .update({
         role: "admin_cooperativa",
-        cooperativa_id: cooperativa.id,
+        cooperativa_id: cooperativaId,
         nombre_completo: representante,
       })
-      .eq("id", userId);
+      .eq("id", userId)
+      .select("id");
 
-    if (profileError) {
-      console.error("Error updating profile:", profileError);
-      // Profile might not exist yet (trigger delay), try inserting directly
-      const { error: insertProfileError } = await supabase
-        .from("profiles")
-        .upsert({
-          id: userId,
-          role: "admin_cooperativa",
-          cooperativa_id: cooperativa.id,
-          nombre_completo: representante,
-          telefono,
-          cedula_rif: rif,
-        });
-
-      if (insertProfileError) {
-        console.error("Error upserting profile:", insertProfileError);
+    if (profileError || !perfiles || perfiles.length === 0) {
+      if (profileError) console.error("[registrarCooperativa] Error al actualizar el perfil:", profileError);
+      // Si el trigger aún no creó la fila, se crea aquí.
+      const { error: upsertError } = await supabase.from("profiles").upsert({
+        id: userId,
+        role: "admin_cooperativa",
+        cooperativa_id: cooperativaId,
+        nombre_completo: representante,
+        telefono,
+        cedula_rif: rif,
+      });
+      if (upsertError) {
+        console.error("[registrarCooperativa] Error al crear el perfil:", upsertError);
+        // Sin perfil la cuenta no puede entrar al panel: se deshace todo para reintentar.
+        await supabase.auth.admin.deleteUser(userId);
+        await supabase.from("cooperativas").delete().eq("id", cooperativaId);
+        return { error: humanizeError(upsertError, "configurar tu cuenta") };
       }
     }
 
-    // 6. Auto-login the user
+    // 6. Inicio de sesión automático
     const cookieStore = await cookies();
     const supabaseSession = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -149,29 +222,28 @@ export async function registrarCooperativa(
           },
           setAll(cookiesToSet) {
             try {
-              cookiesToSet.forEach(({ name, value, options }) =>
-                cookieStore.set(name, value, options)
-              );
+              cookiesToSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options));
             } catch {
-              // Ignore in server components
+              // Llamado desde un Server Component: las cookies las fija el proxy.
             }
           },
         },
       }
     );
 
-    await supabaseSession.auth.signInWithPassword({
-      email,
-      password,
-    });
-
-    redirect("/cooperativas/dashboard");
-  } catch (error) {
-    // Re-throw redirect errors (Next.js uses them internally)
-    if (error instanceof Error && error.message === "NEXT_REDIRECT") {
-      throw error;
+    const { error: loginError } = await supabaseSession.auth.signInWithPassword({ email, password });
+    if (loginError) {
+      console.error("[registrarCooperativa] Error al iniciar sesión:", loginError);
+      return {
+        success: true,
+        error: "Tu cooperativa quedó registrada, pero no pudimos iniciar tu sesión. Entra con tu correo y contraseña.",
+      };
     }
-    console.error("Exception in registrarCooperativa:", error);
-    return { error: "Ocurrió un error inesperado al procesar el registro." };
+  } catch (error) {
+    console.error("[registrarCooperativa] Excepción:", error);
+    return { error: humanizeError(error, "procesar el registro") };
   }
+
+  // redirect() lanza una excepción interna: va fuera del try (docs de Next.js 16).
+  redirect("/cooperativas/dashboard");
 }

@@ -1,5 +1,6 @@
-import React, { useEffect } from 'react';
-import { StyleSheet, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Modal, StyleSheet, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import QRCode from 'react-native-qrcode-svg';
 import Animated, {
   useAnimatedStyle,
@@ -7,20 +8,37 @@ import Animated, {
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
-import { Text } from '@/src/components/ui';
-import { Colors, Motion, Radius, Shadows, Sizes, Spacing } from '@/src/theme';
+import { ArrowsOut, SunDim } from 'phosphor-react-native';
+import { Button, Text } from '@/src/components/ui';
+import { Colors, Layout, Motion, Radius, Shadows, Sizes, Spacing } from '@/src/theme';
+
+/** Tamaño del QR en pantalla completa: lo bastante grande para cualquier lector. */
+const QR_GRANDE = 280;
 
 interface QRCodeViewerProps {
+  /** Lo que codifica el QR (p. ej. `PASS-BOL-…` o el código de seguimiento). */
   data: string;
   size?: number;
-  /** Reserved for `expo-brightness`: raise screen brightness while scanning. */
+  /**
+   * Código que la persona puede dictar si el lector falla (p. ej.
+   * `BOL-7CAB-E4AD` o `EB-261003-12345`). Se muestra bajo el QR; el contenido
+   * técnico del QR nunca se muestra.
+   */
+  codigoLegible?: string;
+  /** Añade "Mostrar QR en grande": pantalla blanca con el QR de 280 pt. */
+  ampliable?: boolean;
+  /**
+   * @deprecated Se ignora: subir el brillo requiere `expo-brightness`, que no
+   * está instalada. Con `ampliable` se muestra la ayuda "Sube el brillo…".
+   */
   autoMaxBrightness?: boolean;
 }
 
 /** QR with a spring reveal — it should feel like the code "arrives", not blink in. */
-export function QRCodeViewer({ data, size = 200 }: QRCodeViewerProps) {
+export function QRCodeViewer({ data, size = 200, codigoLegible, ampliable }: QRCodeViewerProps) {
   const opacity = useSharedValue(0);
   const scale = useSharedValue(0.9);
+  const [grande, setGrande] = useState(false);
 
   useEffect(() => {
     opacity.value = withTiming(1, { duration: Motion.duration.base, easing: Motion.easing.out });
@@ -32,18 +50,71 @@ export function QRCodeViewer({ data, size = 200 }: QRCodeViewerProps) {
     transform: [{ scale: scale.value }],
   }));
 
+  const etiqueta = codigoLegible ? `Código QR ${codigoLegible}` : 'Código QR';
+
   return (
-    <Animated.View
-      style={[s.container, animatedStyle]}
-      accessibilityLabel={`Código QR: ${data}`}
-      accessibilityRole="image"
-    >
-      <View style={s.frame}>
+    <Animated.View style={[s.container, animatedStyle]}>
+      <View style={s.frame} accessible accessibilityLabel={etiqueta} accessibilityRole="image">
         <QRCode value={data} size={size} color={Colors.foreground} backgroundColor={Colors.white} />
       </View>
-      <Text variant="overline" color="muted" uppercase align="center" style={s.code}>
-        {data}
-      </Text>
+
+      {codigoLegible ? (
+        <Text variant="bodyStrong" align="center" selectable style={s.code}>
+          {codigoLegible}
+        </Text>
+      ) : null}
+
+      {ampliable ? (
+        <Button
+          variant="ghost"
+          size="sm"
+          icon={ArrowsOut}
+          onPress={() => setGrande(true)}
+          style={s.ampliar}
+        >
+          Mostrar QR en grande
+        </Button>
+      ) : null}
+
+      {ampliable ? (
+        <Modal
+          visible={grande}
+          animationType="fade"
+          onRequestClose={() => setGrande(false)}
+          statusBarTranslucent
+          presentationStyle="fullScreen"
+        >
+          <SafeAreaView style={s.fullscreen} edges={['top', 'bottom']}>
+            <View style={s.fullscreenBody}>
+              <View accessible accessibilityLabel={etiqueta} accessibilityRole="image">
+                <QRCode
+                  value={data}
+                  size={QR_GRANDE}
+                  color={Colors.black}
+                  backgroundColor={Colors.white}
+                  quietZone={Spacing.lg}
+                />
+              </View>
+              {codigoLegible ? (
+                <Text variant="heading" align="center" selectable style={s.fullscreenCode}>
+                  {codigoLegible}
+                </Text>
+              ) : null}
+              <View style={s.ayuda}>
+                <SunDim size={Sizes.icon.md} color={Colors.mutedForeground} weight="bold" />
+                <Text variant="secondary" color="muted" align="center" style={s.ayudaTexto}>
+                  Sube el brillo de tu pantalla para que lo lean más rápido.
+                </Text>
+              </View>
+            </View>
+            <View style={s.fullscreenFooter}>
+              <Button variant="secondary" fullWidth onPress={() => setGrande(false)}>
+                Cerrar
+              </Button>
+            </View>
+          </SafeAreaView>
+        </Modal>
+      ) : null}
     </Animated.View>
   );
 }
@@ -64,6 +135,37 @@ const s = StyleSheet.create({
   },
   code: {
     marginTop: Spacing.md,
+    letterSpacing: 1.5,
+  },
+  ampliar: {
+    marginTop: Spacing.sm,
+  },
+  fullscreen: {
+    flex: 1,
+    backgroundColor: Colors.white,
+  },
+  fullscreenBody: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: Layout.screenPadding,
+  },
+  fullscreenCode: {
+    marginTop: Spacing.xl,
     letterSpacing: 2,
+  },
+  ayuda: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    marginTop: Spacing.xl,
+    maxWidth: 320,
+  },
+  ayudaTexto: {
+    flexShrink: 1,
+  },
+  fullscreenFooter: {
+    paddingHorizontal: Layout.screenPadding,
+    paddingBottom: Spacing.xl,
   },
 });

@@ -1,61 +1,54 @@
-import { Calculator, Package, Truck } from "@phosphor-icons/react/dist/ssr"
+import { MagnifyingGlass, CreditCard, Ticket } from "@phosphor-icons/react/dist/ssr"
 
 const steps = [
   {
     number: "01",
-    icon: Calculator,
-    title: "Cotiza tu envio",
+    icon: MagnifyingGlass,
+    title: "Elige tu viaje o cotiza tu envío",
     description:
-      "Ingresa origen, destino y peso. Recibe cotizaciones al instante de cooperativas verificadas.",
+      "Busca la salida y el asiento que quieres, o calcula cuánto cuesta enviar tu paquete con cada cooperativa.",
   },
   {
     number: "02",
-    icon: Package,
-    title: "Reserva y entrega",
+    icon: CreditCard,
+    title: "Paga con Pago Móvil o transferencia",
     description:
-      "Selecciona la cooperativa, confirma el pago y entrega tu paquete en la agencia mas cercana.",
+      "Los precios de referencia están en dólares y pagas en bolívares a la tasa BCV del día. La cooperativa verifica tu pago.",
   },
   {
     number: "03",
-    icon: Truck,
-    title: "Recibe con tranquilidad",
+    icon: Ticket,
+    title: "Viaja o sigue tu encomienda",
     description:
-      "Sigue tu envio en tiempo real. El destinatario recibe notificacion y PIN de retiro.",
+      "Muestra tu pase de abordaje en la taquilla. Si envías un paquete, síguelo con su código; quien lo recibe lo retira con un PIN.",
   },
 ]
 
 export function HowItWorks() {
   return (
-    <section id="como-funciona" className="bg-background py-24 lg:py-32">
+    <section id="como-funciona" className="scroll-mt-20 bg-background py-24 lg:py-32">
       <div className="mx-auto max-w-6xl px-6">
         <div className="mx-auto mb-16 max-w-2xl text-center">
-          <h2 className="text-3xl font-bold tracking-tight lg:text-4xl">
-            Como funciona
-          </h2>
+          <h2 className="text-3xl font-bold tracking-tight lg:text-4xl">Cómo funciona</h2>
           <p className="mt-4 text-lg text-muted-foreground">
-            Enviar un paquete nunca fue tan sencillo
+            Comprar un pasaje o enviar una encomienda, en tres pasos
           </p>
         </div>
 
-        <div className="grid grid-cols-1 gap-8 md:grid-cols-3">
+        <ol className="grid grid-cols-1 gap-8 md:grid-cols-3">
           {steps.map((step) => (
-            <div
-              key={step.number}
-              className="border-l-4 border-primary pl-6"
-            >
-              <span className="text-6xl font-bold text-muted-foreground/20">
+            <li key={step.number} className="border-l-4 border-primary pl-6">
+              <span className="text-6xl font-bold text-muted-foreground/30" aria-hidden>
                 {step.number}
               </span>
               <div className="mt-4 flex items-center gap-3">
-                <step.icon className="size-6 text-primary" weight="duotone" />
+                <step.icon className="size-6 shrink-0 text-foreground" weight="duotone" aria-hidden />
                 <h3 className="text-lg font-semibold">{step.title}</h3>
               </div>
-              <p className="mt-3 text-muted-foreground leading-relaxed">
-                {step.description}
-              </p>
-            </div>
+              <p className="mt-3 leading-relaxed text-muted-foreground">{step.description}</p>
+            </li>
           ))}
-        </div>
+        </ol>
       </div>
     </section>
   )

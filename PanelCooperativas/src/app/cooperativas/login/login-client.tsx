@@ -11,6 +11,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Spinner } from "@/components/ui/spinner";
 import { Bus, WarningCircle } from "@phosphor-icons/react";
 import Link from "next/link";
+import { humanizeError } from "@/lib/errores";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -31,7 +32,11 @@ export default function LoginPage() {
     });
 
     if (authError || !authData.user) {
-      setError("Credenciales inválidas");
+      setError(
+        authError
+          ? humanizeError(authError, { accion: "iniciar sesión", email })
+          : "Correo o contraseña incorrectos. Revisa los datos o recupera tu contraseña."
+      );
       setLoading(false);
       return;
     }
@@ -43,21 +48,21 @@ export default function LoginPage() {
       .single();
 
     if (profileError || !profile) {
-      setError("Error al obtener el perfil. Intenta nuevamente.");
+      setError(humanizeError(profileError, "cargar tu perfil"));
       setLoading(false);
       return;
     }
 
     if (profile.role !== "taquillero" && profile.role !== "admin_cooperativa") {
       await supabase.auth.signOut();
-      setError("No tienes permisos para acceder a este panel");
+      setError("Tu cuenta no tiene acceso al panel de cooperativas. Si eres administrador o taquillero, pide al administrador de tu cooperativa que te invite.");
       setLoading(false);
       return;
     }
 
     if (!profile.cooperativa_id) {
       await supabase.auth.signOut();
-      setError("Tu cuenta no está vinculada a una cooperativa");
+      setError("Tu cuenta no está vinculada a ninguna cooperativa. Pide al administrador de tu cooperativa que te envíe una invitación.");
       setLoading(false);
       return;
     }
@@ -84,14 +89,14 @@ export default function LoginPage() {
         <div className="flex flex-col gap-4">
           <h1 className="text-5xl font-bold leading-tight">
             Panel de <br />
-            <span className="text-primary">Cooperativas</span>
+            <span className="text-amber-300">Cooperativas</span>
           </h1>
           <p className="text-xl text-slate-400">
             Gestión operativa de rutas, taquilla y despacho.
           </p>
         </div>
         
-        <p className="text-sm text-slate-500">
+        <p className="text-sm text-slate-400">
           &copy; {new Date().getFullYear()} EnBus. Todos los derechos reservados.
         </p>
       </div>
@@ -105,7 +110,7 @@ export default function LoginPage() {
                 <Bus weight="fill" className="size-8 text-primary-foreground" />
               </div>
             </div>
-            <CardTitle className="text-2xl">Iniciar Sesión</CardTitle>
+            <CardTitle className="text-2xl">Iniciar sesión</CardTitle>
             <CardDescription>Accede al panel de tu cooperativa</CardDescription>
           </CardHeader>
           <CardContent>
@@ -134,7 +139,7 @@ export default function LoginPage() {
                 <Field>
                   <div className="flex items-center justify-between">
                     <FieldLabel htmlFor="password">Contraseña</FieldLabel>
-                    <Link href="/cooperativas/recuperar" className="text-sm font-medium text-primary hover:underline">
+                    <Link href="/cooperativas/recuperar" className="text-sm font-medium text-primary-text underline-offset-4 hover:underline">
                       ¿Olvidaste tu contraseña?
                     </Link>
                   </div>
@@ -151,12 +156,12 @@ export default function LoginPage() {
               
               <Button type="submit" className="w-full" disabled={loading}>
                 {loading ? <Spinner data-icon="inline-start" /> : null}
-                Iniciar Sesión
+                Iniciar sesión
               </Button>
 
               <p className="text-center text-sm text-muted-foreground">
                 ¿No tienes cuenta?{" "}
-                <Link href="/cooperativas/registro" className="font-medium text-primary hover:underline">
+                <Link href="/cooperativas/registro" className="font-medium text-primary-text underline-offset-4 hover:underline">
                   Registra tu cooperativa
                 </Link>
               </p>

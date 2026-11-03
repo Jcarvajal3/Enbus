@@ -4,6 +4,8 @@ import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { GenerarCicloInput, CicloPreview } from "@/lib/types/admin-comisiones";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { fechaHoraVEaISO, hoyVE, rangoDiaVE } from "@/lib/fechas";
+import { humanizeError } from "@/lib/errores";
 
 /**
  * Valida que el usuario autenticado es super_admin.
@@ -14,7 +16,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 async function checkSuperAdmin(supabase: SupabaseClient) {
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) {
-    throw new Error("No autenticado. Por favor inicia sesión nuevamente.");
+    throw Object.assign(new Error("Auth session missing"), { code: "session_not_found" });
   }
 
   const { data: profile, error: profileError } = await supabase
@@ -24,7 +26,7 @@ async function checkSuperAdmin(supabase: SupabaseClient) {
     .single();
 
   if (profileError || !profile || profile.role !== "super_admin") {
-    throw new Error("No autorizado. Se requiere perfil de Super Admin.");
+    throw Object.assign(new Error("Sin permiso"), { code: "42501" });
   }
 
   return user;
@@ -47,6 +49,11 @@ export async function previewCiclosComision(input: GenerarCicloInput): Promise<{
 
     if (!periodo_inicio || !periodo_fin) {
       return { success: false, error: "Las fechas de inicio y fin son obligatorias." };
+    }
+
+    const FECHA_RE = /^\d{4}-\d{2}-\d{2}$/;
+    if (!FECHA_RE.test(periodo_inicio) || !FECHA_RE.test(periodo_fin)) {
+      return { success: false, error: "Las fechas no tienen un formato válido. Elígelas de nuevo en el calendario." };
     }
 
     if (new Date(periodo_inicio) > new Date(periodo_fin)) {
@@ -107,16 +114,15 @@ export async function previewCiclosComision(input: GenerarCicloInput): Promise<{
           monto,
           boleto_id,
           encomienda_id,
-          boletos!left ( estado ),
+          boletos!pagos_boleto_id_fkey ( estado ),
           encomiendas!left ( estado )
         `)
         .eq("cooperativa_id", coop.id)
         .eq("verificado", true)
-        // Filtrar por hora Venezuela (UTC-4):
-        // 00:00 hora Caracas = 04:00 UTC del mismo día
-        // 23:59 hora Caracas = 03:59 UTC del día siguiente
-        .gte("created_at", `${periodo_inicio}T04:00:00.000Z`)
-        .lte("created_at", `${periodo_fin}T03:59:59.999Z`);
+        // Filtrar por hora Venezuela (UTC-4): desde las 00:00 del primer día
+        // hasta las 23:59:59.999 del último día, ambos incluidos.
+        .gte("created_at", rangoDiaVE(periodo_inicio).desde)
+        .lte("created_at", rangoDiaVE(periodo_fin).hasta);
 
       if (pagosError) throw pagosError;
 
@@ -154,9 +160,8 @@ export async function previewCiclosComision(input: GenerarCicloInput): Promise<{
 
     return { success: true, previews };
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Error al calcular la previsualización.";
     console.error("Error in previewCiclosComision:", err);
-    return { success: false, error: message };
+    return { success: false, error: humanizeError(err, "calcular la vista previa") };
   }
 }
 
@@ -179,7 +184,7 @@ export async function generarCiclosComision(input: GenerarCicloInput): Promise<{
     // Reutilizar la lógica de cálculo del preview (principio DRY)
     const previewRes = await previewCiclosComision(input);
     if (!previewRes.success || !previewRes.previews) {
-      return { success: false, error: previewRes.error || "Error al previsualizar los ciclos." };
+      return { success: false, error: previewRes.error || "No pudimos calcular la vista previa. Intenta de nuevo." };
     }
 
     const summary = {
@@ -251,63 +256,81 @@ export async function generarCiclosComision(input: GenerarCicloInput): Promise<{
     if (pgError?.code === "23505") {
       return {
         success: false,
-        error: "Conflicto: uno o más ciclos ya fueron generados por otro proceso en paralelo. Recarga la página e intenta nuevamente.",
+        error: "Otro administrador generó uno de estos ciclos al mismo tiempo. Actualiza la página e intenta de nuevo.",
       };
     }
-    const message = err instanceof Error ? err.message : "Error al generar los ciclos de comisiones.";
     console.error("Error in generarCiclosComision:", err);
-    return { success: false, error: message };
+    return { success: false, error: humanizeError(err, "generar los ciclos de comisiones") };
   }
 }
 
 /**
- * Marca un ciclo de comisiones como pagado (liquidado).
- * Incluye guardia de idempotencia: si el ciclo ya fue pagado, retorna error informativo
- * en vez de sobrescribir la fecha de pago original.
+ * Registra el pago de un ciclo de comisiones: fecha en que la cooperativa pagó y
+ * referencia del pago. Idempotente: si otro admin ya lo registró, no sobrescribe
+ * la fecha original.
  */
-export async function marcarCicloComoPagado(cicloId: string): Promise<{
+export async function marcarCicloComoPagado(
+  cicloId: string,
+  pago: { fecha: string; referencia: string }
+): Promise<{
   success: boolean;
   error?: string;
+  aviso?: string;
 }> {
   try {
     const supabase = await createClient();
     await checkSuperAdmin(supabase);
 
     if (!cicloId) {
-      return { success: false, error: "El ID del ciclo es obligatorio." };
+      return { success: false, error: "No encontramos el ciclo. Actualiza la página e intenta de nuevo." };
+    }
+    const fecha = (pago?.fecha ?? "").trim();
+    const referencia = (pago?.referencia ?? "").trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha) || fecha > hoyVE()) {
+      return { success: false, error: "Elige la fecha en que la cooperativa pagó (no puede ser futura)." };
+    }
+    if (referencia.length < 4) {
+      return { success: false, error: "Escribe la referencia del pago (mínimo 4 caracteres)." };
     }
 
-    // Verificar que el ciclo exista y no esté ya liquidado (idempotencia)
     const { data: existing, error: fetchError } = await supabase
       .from("comisiones_ciclo")
       .select("id, pagado")
       .eq("id", cicloId)
-      .single();
+      .maybeSingle();
 
     if (fetchError || !existing) {
-      return { success: false, error: "Ciclo de comisión no encontrado." };
+      console.error("Error fetching ciclo:", fetchError);
+      return { success: false, error: humanizeError(fetchError ?? { code: "PGRST116" }, "cargar el ciclo") };
     }
-
     if (existing.pagado) {
-      return { success: false, error: "Este ciclo ya fue liquidado anteriormente." };
+      return { success: false, error: "Este ciclo ya tiene un pago registrado. Actualiza la página." };
     }
 
-    const { error } = await supabase
-      .from("comisiones_ciclo")
-      .update({
-        pagado: true,
-        pagado_at: new Date().toISOString(),
-      })
-      .eq("id", cicloId);
+    const base = { pagado: true, pagado_at: fechaHoraVEaISO(fecha, "12:00") };
+    const guardar = (cambios: Record<string, unknown>) =>
+      supabase.from("comisiones_ciclo").update(cambios).eq("id", cicloId).eq("pagado", false).select("id");
 
-    if (error) throw error;
+    let aviso: string | undefined;
+    let { data: actualizados, error } = await guardar({ ...base, pago_referencia: referencia });
+    // Sin la columna pago_referencia (pendiente de migración): se guarda la fecha y se avisa.
+    if (error && (error.code === "PGRST204" || error.code === "42703")) {
+      ({ data: actualizados, error } = await guardar(base));
+      aviso = `Registramos el pago con fecha ${fecha.split("-").reverse().join("/")}, pero la referencia ${referencia} no se pudo guardar. Anótala aparte.`;
+    }
+    if (error) {
+      console.error("Error registering ciclo payment:", error);
+      return { success: false, error: humanizeError(error, "registrar el pago") };
+    }
+    if (!actualizados || actualizados.length === 0) {
+      return { success: false, error: "Este ciclo ya tiene un pago registrado. Actualiza la página." };
+    }
 
     revalidatePath("/admin/comisiones");
-
-    return { success: true };
+    revalidatePath("/admin/cooperativas", "layout");
+    return { success: true, aviso };
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Error al liquidar el ciclo de comisiones.";
     console.error("Error in marcarCicloComoPagado:", err);
-    return { success: false, error: message };
+    return { success: false, error: humanizeError(err, "registrar el pago") };
   }
 }
