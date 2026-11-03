@@ -79,6 +79,11 @@ const PREGUNTAS: { pregunta: string; respuesta: string }[] = [
     respuesta:
       'Abre el boleto o la encomienda y lee el motivo del rechazo. Revisa la referencia, el banco y el monto, y registra el pago de nuevo. Si crees que es un error, repórtalo aquí con la referencia.',
   },
+  {
+    pregunta: '¿Cómo elimino mi cuenta?',
+    respuesta:
+      'Desde Perfil › Eliminar mi cuenta. Si tienes boletos o envíos en curso, espera a que terminen.',
+  },
 ];
 
 function unParam(v: string | string[] | undefined): string | undefined {

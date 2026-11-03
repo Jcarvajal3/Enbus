@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { PageHeader } from "@/components/page-header";
 import { ScanInput } from "@/components/scan-input";
+import { UltimoEscaneo, useUltimoEscaneo } from "@/components/ultimo-escaneo";
 import { EmptyState } from "@/components/empty-state";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -21,6 +22,7 @@ import { etiquetaEstado } from "@/lib/estados";
 import { ErrorState } from "@/components/error-state";
 import { remitenteDe } from "@/components/encomiendas/detalle-sheet";
 import { formatFechaVE } from "@/lib/fechas";
+import { formatCiudad } from "@/lib/ciudades";
 import { vaASucursal, type SucursalRecepcion } from "./sucursal";
 
 type ViajeData = {
@@ -61,6 +63,8 @@ export default function RecepcionDestinoPage() {
   const [alcanceCargado, setAlcanceCargado] = useState(false);
 
   const [isLoteModalOpen, setIsLoteModalOpen] = useState(false);
+  const [recibiendo, setRecibiendo] = useState(false);
+  const { ultimo, registrar } = useUltimoEscaneo();
 
   useEffect(() => {
     let isMounted = true;
@@ -127,27 +131,51 @@ export default function RecepcionDestinoPage() {
   useEncomiendasRealtime(cooperativaId, alCambiar);
 
   const handleScanFound = async (encomienda: Encomienda) => {
-    // 2.1.b Validar estado
+    const codigo = encomienda.tracking_id;
+    // Solo se reciben las que vienen en camino; si no, se dice por qué.
     if (encomienda.estado !== "EN_TRANSITO") {
-      toast.error(
+      registrar(
         encomienda.estado === "EN_OFICINA_DESTINO"
-          ? `${encomienda.tracking_id} ya fue recibida: está lista para entregar en «Entrega».`
-          : `${encomienda.tracking_id} no viene en camino (estado: ${etiquetaEstado("encomienda", encomienda.estado)}). Solo se reciben encomiendas en tránsito.`
+          ? {
+              codigo,
+              tono: "aviso",
+              titulo: "Ya está recibida",
+              detalle: "Está lista para entregar en «Entrega».",
+            }
+          : {
+              codigo,
+              tono: "error",
+              titulo: "No viene en camino",
+              detalle: `Estado: ${etiquetaEstado("encomienda", encomienda.estado)}. Solo se reciben encomiendas en tránsito.`,
+            }
       );
       return;
     }
 
-    // 2.1.c Procesar recepción (el servidor rechaza las que van a otra sucursal)
+    // El servidor rechaza las que van a otra sucursal.
+    setRecibiendo(true);
     try {
       const result = await requireOnline(() => recibirEncomienda(encomienda.id))();
       if (result.success) {
-        toast.success(`${encomienda.tracking_id} (${encomienda.receiver_nombre}) recibida. Ya puedes entregarla desde «Entrega».`);
-        fetchEncomiendas();
+        registrar({
+          codigo,
+          tono: "exito",
+          titulo: `Recibida en tu oficina · ${codigo}`,
+          detalle: `${encomienda.receiver_nombre}. Ya puedes entregarla desde «Entrega».`,
+        });
+        void fetchEncomiendas();
       } else {
-        toast.error(result.error || humanizeError(null, "recibir la encomienda"));
+        registrar({
+          codigo,
+          tono: "error",
+          titulo: "No se recibió",
+          detalle: result.error || humanizeError(null, "recibir la encomienda"),
+        });
       }
     } catch (err) {
-      toast.error(humanizeError(err, "recibir la encomienda"));
+      registrar({ codigo, tono: "error", titulo: "No se recibió", detalle: humanizeError(err, "recibir la encomienda") });
+    } finally {
+      setRecibiendo(false);
     }
   };
 
@@ -157,7 +185,7 @@ export default function RecepcionDestinoPage() {
   };
 
   const descripcion = sucursal
-    ? `Escanea o selecciona las encomiendas que llegaron a tu sucursal ${sucursal.nombre} (${sucursal.ciudad}) para marcarlas como recibidas.`
+    ? `Escanea o selecciona las encomiendas que llegaron a tu sucursal ${sucursal.nombre} (${formatCiudad(sucursal.ciudad)}) para marcarlas como recibidas.`
     : user.role === "admin_cooperativa"
       ? "Escanea o selecciona las encomiendas que llegaron para marcarlas como recibidas. Ves las de todas las sucursales de tu cooperativa."
       : "Escanea o selecciona las encomiendas que llegaron para marcarlas como recibidas. Tu cuenta no tiene sucursal asignada, así que ves las de toda la cooperativa: avísale al administrador.";
@@ -169,17 +197,21 @@ export default function RecepcionDestinoPage() {
         description={descripcion}
       >
         <Button onClick={() => setIsLoteModalOpen(true)} className="flex items-center gap-2" disabled={!alcanceCargado}>
-          <Truck size={18} weight="bold" />
+          <Truck size={18} weight="bold" aria-hidden />
           <span>Recibir lote del viaje</span>
         </Button>
       </PageHeader>
 
-      <ScanInput
-        onEncomiendaFound={handleScanFound}
-        cooperativaId={cooperativaId}
-        mode="encomiendas"
-        disabled={isLoteModalOpen}
-      />
+      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
+        <ScanInput
+          onEncomiendaFound={(e) => void handleScanFound(e)}
+          onError={(err) => registrar({ codigo: err.codigo, tono: "error", titulo: "No encontrada", detalle: err.mensaje })}
+          cooperativaId={cooperativaId}
+          mode="encomiendas"
+          disabled={isLoteModalOpen || recibiendo}
+        />
+        <UltimoEscaneo resultado={ultimo} />
+      </div>
 
       <div className="flex-1 rounded-md border bg-card">
         {loading && encomiendas.length === 0 ? (
@@ -225,13 +257,13 @@ export default function RecepcionDestinoPage() {
                     {encomienda.receiver_nombre}
                   </TableCell>
                   <TableCell className="truncate max-w-[120px]">
-                    {encomienda.ciudad_origen}
+                    {formatCiudad(encomienda.ciudad_origen)}
                   </TableCell>
                   <TableCell className="text-muted-foreground text-sm">
                     {encomienda.viaje ? (
                       <div className="flex flex-col">
                         <span className="font-medium text-foreground">
-                          {encomienda.viaje.ruta?.ciudad_origen} → {encomienda.viaje.ruta?.ciudad_destino}
+                          {formatCiudad(encomienda.viaje.ruta?.ciudad_origen)} → {formatCiudad(encomienda.viaje.ruta?.ciudad_destino)}
                         </span>
                         <span>{formatDate(encomienda.viaje.fecha_hora_salida)}</span>
                       </div>

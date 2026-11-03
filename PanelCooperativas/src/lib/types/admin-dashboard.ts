@@ -1,4 +1,4 @@
-import { formatBs, formatUsd } from "@/lib/dinero";
+import { formatBs, formatNumeroVE, formatUsd } from "@/lib/dinero";
 
 export type DashboardKPIs = {
   encomiendas_hoy: number;
@@ -12,9 +12,48 @@ export type DashboardKPIs = {
   /** Comisiones estimadas de hoy en Bs (misma regla que los ingresos). */
   comisiones_hoy: IngresosResumen;
   cooperativas_activas: number;
+  /** Incidencias ALERTA_AMARILLA abiertas o en proceso (más de 72 h en tránsito). */
   alertas_amarillas_abiertas: number;
   solicitudes_pendientes: number;
+  /** Los mismos conteos de ayer (hora de Venezuela) para el delta; null si la consulta falló. */
+  ayer: {
+    encomiendas: number | null;
+    boletos: number | null;
+    ingresos: IngresosResumen;
+    comisiones: IngresosResumen;
+  };
+  /** true si falló la consulta de encomiendas o boletos de hoy (no se muestra un 0 engañoso). */
+  error_encomiendas?: boolean;
+  error_boletos?: boolean;
 };
+
+// ─── Delta frente a ayer (#54, AD-06) ───────────────────────────────────────
+
+export type DeltaKPI = {
+  /** "▲ 12 % vs. ayer", "▼ 3 % vs. ayer", "Igual que ayer", "Sin datos de ayer". */
+  texto: string;
+  /** "subió 12 % respecto a ayer". */
+  accesible: string;
+  tendencia: "sube" | "baja" | "igual" | "sin_datos";
+};
+
+/** Compara el valor de hoy con el de ayer. `ayer` null = no hay dato de ayer. */
+export function calcularDelta(hoy: number | null | undefined, ayer: number | null | undefined): DeltaKPI {
+  if (hoy === null || hoy === undefined || ayer === null || ayer === undefined || !Number.isFinite(hoy) || !Number.isFinite(ayer)) {
+    return { texto: "Sin datos de ayer", accesible: "sin datos de ayer para comparar", tendencia: "sin_datos" };
+  }
+  if (ayer === 0) {
+    if (hoy === 0) return { texto: "Igual que ayer", accesible: "igual que ayer", tendencia: "igual" };
+    // Sin base para un porcentaje: se dice cuánto fue ayer.
+    return { texto: "▲ Ayer: 0", accesible: "subió respecto a ayer, que fue 0", tendencia: "sube" };
+  }
+  const pct = Math.round(((hoy - ayer) / ayer) * 100);
+  if (pct === 0) return { texto: "Igual que ayer", accesible: "igual que ayer", tendencia: "igual" };
+  const abs = formatNumeroVE(Math.abs(pct), 0);
+  return pct > 0
+    ? { texto: `▲ ${abs} % vs. ayer`, accesible: `subió ${abs} % respecto a ayer`, tendencia: "sube" }
+    : { texto: `▼ ${abs} % vs. ayer`, accesible: `bajó ${abs} % respecto a ayer`, tendencia: "baja" };
+}
 
 export type DailyActivity = {
   fecha: string;       // YYYY-MM-DD

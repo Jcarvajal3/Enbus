@@ -49,7 +49,7 @@ export default function AdminPanelError({
       </p>
       <div className="mt-4 flex flex-wrap justify-center gap-3">
         <Button onClick={reintentar} disabled={reintentando} aria-busy={reintentando || undefined}>
-          {reintentando && <SpinnerIcon className="animate-spin" aria-hidden />}
+          {reintentando && <SpinnerIcon className="motion-safe:animate-spin" aria-hidden />}
           {reintentando ? "Reintentando…" : "Reintentar"}
         </Button>
         <Link href="/admin/dashboard" className={buttonVariants({ variant: "outline" })}>

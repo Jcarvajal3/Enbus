@@ -30,8 +30,8 @@ export function RutasChart({ data }: RutasChartProps) {
   return (
     <Card className="col-span-1">
       <CardHeader>
-        <CardTitle>Distribución por Ruta</CardTitle>
-        <CardDescription>Rutas más populares del mes (encomiendas)</CardDescription>
+        <CardTitle>Rutas con más encomiendas</CardTitle>
+        <CardDescription>Encomiendas registradas en los últimos 30 días</CardDescription>
       </CardHeader>
       <CardContent>
         {data.length === 0 ? (
@@ -43,22 +43,26 @@ export function RutasChart({ data }: RutasChartProps) {
             <BarChart
               accessibilityLayer
               data={data}
+              layout="vertical"
               margin={{ left: 10, right: 10, top: 10, bottom: 10 }}
             >
-              <CartesianGrid vertical={false} className="stroke-muted/40" />
-              <XAxis
+              <CartesianGrid horizontal={false} className="stroke-muted/40" />
+              {/* Barras horizontales: los nombres de las rutas no se solapan (AD-08). */}
+              <YAxis
                 dataKey="ruta_nombre"
+                type="category"
                 tickLine={false}
                 axisLine={false}
-                className="text-[10px] sm:text-xs text-muted-foreground"
+                width={170}
+                className="text-xs text-muted-foreground"
               />
-              <YAxis tickLine={false} axisLine={false} className="text-xs text-muted-foreground" hide />
+              <XAxis type="number" allowDecimals={false} tickLine={false} axisLine={false} className="text-xs text-muted-foreground" />
               <ChartTooltip content={<ChartTooltipContent />} />
               <Bar
                 dataKey="total"
                 fill="var(--color-chart-4)"
-                radius={[4, 4, 0, 0]}
-                barSize={30}
+                radius={[0, 4, 4, 0]}
+                barSize={20}
               />
             </BarChart>
           </ChartContainer>

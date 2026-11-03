@@ -5,19 +5,11 @@ import { revalidatePath } from "next/cache";
 import { codigoEB, humanizeError, parseDetalleEB } from "@/lib/errores";
 import type { SalidaViaje } from "@/lib/types/pagos";
 import type { ImpactoCancelarViaje, ResultadoCancelarViaje } from "@/lib/types/reembolsos";
-import { fechaHoraVEaISO, sumarDiasVE } from "@/lib/fechas";
+import type { ResultadoCompletarViaje, ResultadoEditarViaje } from "@/lib/types/operacion";
+import { fechaHoraVEaISO } from "@/lib/fechas";
+import { planificarSalidas } from "./salidas";
 
-const FECHA_RE = /^\d{4}-\d{2}-\d{2}$/;
-const HORA_RE = /^\d{2}:\d{2}(:\d{2})?$/;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-// Índice = getUTCDay() (0 = domingo). Deben coincidir con los valores del ToggleGroup del cliente.
-const DIAS_SEMANA = ["D", "L", "M", "Mi", "J", "V", "S"];
-
-/** Día de la semana de una fecha 'YYYY-MM-DD' (calendario puro, sin zona horaria). */
-function diaSemana(fecha: string): string {
-  const [y, m, d] = fecha.split("-").map(Number);
-  return DIAS_SEMANA[new Date(Date.UTC(y, m - 1, d)).getUTCDay()];
-}
 
 /** Llegada estimada en ISO a partir de la salida ISO y la duración de la ruta. */
 function llegadaEstimada(salidaISO: string, duracionMin: number): string {
@@ -43,7 +35,7 @@ export async function guardarViaje(
   if (!profile || profile.role !== "admin_cooperativa") return { error: "Solo el administrador de la cooperativa puede programar viajes." };
 
   const rutaId = payload.ruta_id;
-  if (!rutaId) return { error: "Debes seleccionar una ruta" };
+  if (!rutaId) return { error: "Elige la ruta del viaje." };
 
   const { data: ruta } = await supabase
     .from("rutas")
@@ -53,58 +45,37 @@ export async function guardarViaje(
     .single();
 
   if (!ruta) return { error: "No encontramos la ruta. Actualiza la página y vuelve a elegirla." };
-  if (!ruta.activa) return { error: "La ruta seleccionada está inactiva" };
+  if (!ruta.activa) return { error: "Esa ruta está desactivada. Reactívala en Rutas o elige otra." };
 
   // Parse numeric fields — FormData always delivers strings
   const asientosTotales = parseInt(payload.asientos_totales);
-  if (isNaN(asientosTotales) || asientosTotales < 1) {
-    return { error: "El número de asientos debe ser mayor a 0" };
+  if (isNaN(asientosTotales) || asientosTotales < 1 || asientosTotales > 80) {
+    return { error: "El bus debe tener entre 1 y 80 asientos." };
   }
 
   // Las fechas y horas del formulario son hora de Venezuela. Se convierten a ISO con
   // lib/fechas para no depender de la zona horaria del servidor (Vercel corre en UTC).
   if (isRecurring) {
-    if (!recurringDays || recurringDays.length === 0) {
-      return { error: "Debes seleccionar al menos un día de la semana" };
-    }
-    if (!recurringStart || !recurringEnd || !FECHA_RE.test(recurringStart) || !FECHA_RE.test(recurringEnd)) {
-      return { error: "Elige las fechas «Desde» y «Hasta» del periodo." };
-    }
-    if (recurringStart > recurringEnd) {
-      return { error: "La fecha «Desde» debe ser anterior o igual a la fecha «Hasta»." };
-    }
+    // Misma función que el resumen del formulario: se crea exactamente lo anunciado.
+    const plan = planificarSalidas({
+      dias: recurringDays ?? [],
+      desde: recurringStart ?? "",
+      hasta: recurringEnd ?? "",
+      hora: payload.hora_fija ?? "",
+    });
+    if (!plan.ok) return { error: plan.error };
 
-    const horaFija = payload.hora_fija ?? "";
-    if (!HORA_RE.test(horaFija)) return { error: "La hora de salida es requerida" };
-
-    const viajesToInsert: object[] = [];
-
-    try {
-      // Comparar 'YYYY-MM-DD' como texto equivale a comparar fechas
-      for (let fecha = recurringStart; fecha <= recurringEnd; fecha = sumarDiasVE(fecha, 1)) {
-        if (!recurringDays.includes(diaSemana(fecha))) continue;
-
-        const salida = fechaHoraVEaISO(fecha, horaFija);
-
-        viajesToInsert.push({
-          cooperativa_id: profile.cooperativa_id,
-          ruta_id: rutaId,
-          fecha_hora_salida: salida,
-          fecha_hora_llegada_est: llegadaEstimada(salida, ruta.duracion_estimada_min),
-          asientos_totales: asientosTotales,
-          asientos_disponibles: asientosTotales,
-          numero_unidad: payload.numero_unidad || null,
-          nombre_chofer: payload.nombre_chofer || null,
-          estado: "PROGRAMADO",
-        });
-      }
-    } catch {
-      return { error: "Revisa las fechas y la hora de salida: alguna no es válida." };
-    }
-
-    if (viajesToInsert.length === 0) {
-      return { error: "No hay fechas coincidentes en el rango con los días seleccionados" };
-    }
+    const viajesToInsert = plan.salidas.map((salida) => ({
+      cooperativa_id: profile.cooperativa_id,
+      ruta_id: rutaId,
+      fecha_hora_salida: salida,
+      fecha_hora_llegada_est: llegadaEstimada(salida, ruta.duracion_estimada_min),
+      asientos_totales: asientosTotales,
+      asientos_disponibles: asientosTotales,
+      numero_unidad: payload.numero_unidad || null,
+      nombre_chofer: payload.nombre_chofer || null,
+      estado: "PROGRAMADO",
+    }));
 
     const { error } = await supabase.from("viajes").insert(viajesToInsert);
     if (error) {
@@ -113,14 +84,17 @@ export async function guardarViaje(
     }
   } else {
     // Viaje único. El input datetime-local envía 'YYYY-MM-DDTHH:mm' sin zona horaria.
-    if (!payload.fecha_hora_salida) return { error: "La fecha de salida es requerida" };
+    if (!payload.fecha_hora_salida) return { error: "Elige la fecha y la hora de salida." };
 
     const [fecha, hora] = payload.fecha_hora_salida.split("T");
     let salida: string;
     try {
       salida = fechaHoraVEaISO(fecha ?? "", hora ?? "");
     } catch {
-      return { error: "Fecha de salida inválida" };
+      return { error: "Revisa la fecha y la hora de salida." };
+    }
+    if (new Date(salida).getTime() <= Date.now()) {
+      return { error: "La salida tiene que ser más tarde que ahora." };
     }
 
     const { error } = await supabase.from("viajes").insert({
@@ -142,6 +116,7 @@ export async function guardarViaje(
   }
 
   revalidatePath("/cooperativas/viajes");
+  revalidatePath("/cooperativas/dashboard");
   return { success: true };
 }
 
@@ -276,4 +251,101 @@ export async function marcarSalidaViaje(viajeId: string): Promise<
   revalidatePath("/cooperativas/taquilla/boletos");
   revalidatePath("/cooperativas/pagos");
   return { success: true, data: data as SalidaViaje };
+}
+
+type FalloViaje = {
+  success: false;
+  data?: undefined;
+  error: string;
+  codigo?: string;
+  /** Campo con el error (`detail.campo`): "salida", "asientos" o "motivo". */
+  campo?: string;
+  /** EB_DATOS_INVALIDOS en asientos: mínimo que admite el bus. */
+  minimo?: number;
+};
+
+function falloViaje(error: unknown, accion: string): FalloViaje {
+  const detalle = parseDetalleEB(error);
+  const minimo = Number(detalle.minimo);
+  return {
+    success: false,
+    error: humanizeError(error, accion),
+    codigo: codigoEB(error) ?? undefined,
+    campo: typeof detalle.campo === "string" ? detalle.campo : undefined,
+    minimo: Number.isFinite(minimo) && minimo > 0 ? minimo : undefined,
+  };
+}
+
+/**
+ * Edita un viaje programado (solo el administrador; lo valida fn_editar_viaje).
+ * `undefined` = sin cambio; `""` en unidad o chofer lo borra. La salida llega en
+ * hora de Venezuela ('YYYY-MM-DDTHH:mm'). Si cambia la hora y hay pasajeros, el
+ * motivo es obligatorio y se avisa a cada comprador.
+ */
+export async function editarViaje(input: {
+  viajeId: string;
+  salida?: string;
+  numeroUnidad?: string;
+  nombreChofer?: string;
+  asientosTotales?: number;
+  motivo?: string;
+}): Promise<{ success: true; data: ResultadoEditarViaje; error?: undefined } | FalloViaje> {
+  if (!UUID_RE.test(input.viajeId ?? "")) {
+    return { success: false, error: "No encontramos ese viaje. Actualiza la página e intenta de nuevo." };
+  }
+  let salidaISO: string | null = null;
+  if (input.salida !== undefined) {
+    const [fecha, hora] = input.salida.split("T");
+    try {
+      salidaISO = fechaHoraVEaISO(fecha ?? "", hora ?? "");
+    } catch {
+      return { success: false, error: "Revisa la fecha y la hora de salida.", campo: "salida" };
+    }
+  }
+  let asientos: number | null = null;
+  if (input.asientosTotales !== undefined) {
+    asientos = Math.trunc(Number(input.asientosTotales));
+    if (!Number.isFinite(asientos) || asientos < 1 || asientos > 80) {
+      return { success: false, error: "El bus debe tener entre 1 y 80 asientos.", campo: "asientos" };
+    }
+  }
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("fn_editar_viaje", {
+    p_viaje_id: input.viajeId,
+    p_numero_unidad: input.numeroUnidad === undefined ? null : input.numeroUnidad.trim(),
+    p_nombre_chofer: input.nombreChofer === undefined ? null : input.nombreChofer.trim(),
+    p_fecha_hora_salida: salidaISO,
+    p_asientos_totales: asientos,
+    p_motivo: input.motivo?.trim() || null,
+  });
+  if (error) {
+    console.error("[editarViaje] Error:", error);
+    return falloViaje(error, "editar el viaje");
+  }
+
+  revalidatePath("/cooperativas/viajes");
+  revalidatePath("/cooperativas/taquilla/boletos");
+  revalidatePath("/cooperativas/despacho");
+  revalidatePath("/cooperativas/dashboard");
+  return { success: true, data: data as ResultadoEditarViaje };
+}
+
+/** El bus llegó: EN_CURSO → COMPLETADO (ambos roles; lo valida fn_completar_viaje). */
+export async function completarViaje(
+  viajeId: string
+): Promise<{ success: true; data: ResultadoCompletarViaje; error?: undefined } | FalloViaje> {
+  if (!UUID_RE.test(viajeId ?? "")) {
+    return { success: false, error: "No encontramos ese viaje. Actualiza la página e intenta de nuevo." };
+  }
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("fn_completar_viaje", { p_viaje_id: viajeId });
+  if (error) {
+    console.error("[completarViaje] Error:", error);
+    return falloViaje(error, "marcar la llegada del viaje");
+  }
+  revalidatePath("/cooperativas/viajes");
+  revalidatePath("/cooperativas/recepcion-destino");
+  revalidatePath("/cooperativas/dashboard");
+  return { success: true, data: (data ?? { estado: "COMPLETADO" }) as ResultadoCompletarViaje };
 }

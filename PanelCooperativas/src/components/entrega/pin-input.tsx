@@ -11,8 +11,7 @@ import { CheckCircle, Warning, LockKey } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 import { requireOnline } from "@/components/connectivity-banner";
 import { humanizeError, isNetworkError } from "@/lib/errores";
-
-const MAX_INTENTOS = 10;
+import { PIN_MAX_INTENTOS as MAX_INTENTOS, PIN_RETIRO_LONGITUD } from "@/lib/artefactos.generated";
 
 interface PinInputProps {
   encomiendaId: string;
@@ -91,7 +90,7 @@ export function PinInput({ encomiendaId, initialIntentos, initialBloqueado, onVa
       <InputOTP
         ref={inputRef}
         id={`${uid}-pin`}
-        maxLength={4}
+        maxLength={PIN_RETIRO_LONGITUD}
         inputMode="numeric"
         pattern="^[0-9]*$"
         autoFocus
@@ -99,7 +98,7 @@ export function PinInput({ encomiendaId, initialIntentos, initialBloqueado, onVa
         onChange={(value) => {
           setPin(value);
           if (errorMsg && !isBlocked) setErrorMsg("");
-          if (value.length === 4 && !isValidating && !isSuccess && !isBlocked) {
+          if (value.length === PIN_RETIRO_LONGITUD && !isValidating && !isSuccess && !isBlocked) {
             void handleValidate(value);
           }
         }}
@@ -109,11 +108,11 @@ export function PinInput({ encomiendaId, initialIntentos, initialBloqueado, onVa
         className={cn(isSuccess && "text-success-text", isBlocked && "opacity-50")}
       >
         <InputOTPGroup>
-          {[0, 1, 2, 3].map((i) => (
+          {Array.from({ length: PIN_RETIRO_LONGITUD }, (_, i) => (
             <InputOTPSlot
               key={i}
               index={i}
-              className={cn(isSuccess && "border-emerald-600", conError && "border-2 border-destructive")}
+              className={cn(isSuccess && "border-success", conError && "border-2 border-destructive")}
             />
           ))}
         </InputOTPGroup>

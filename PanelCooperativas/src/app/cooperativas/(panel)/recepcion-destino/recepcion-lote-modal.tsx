@@ -1,10 +1,9 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Spinner } from "@/components/ui/spinner";
@@ -143,6 +142,14 @@ export function RecepcionLoteModal({ isOpen, onClose, cooperativaId, sucursal, o
     };
   }, [isOpen, supabase, cooperativaId, sucursal, recarga]);
 
+  // Paso 2 con su control principal enfocado ("Llegaron todas"); Espacio lo marca.
+  const todasRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (!selectedViaje) return;
+    const t = window.setTimeout(() => todasRef.current?.focus(), 0);
+    return () => window.clearTimeout(t);
+  }, [selectedViaje]);
+
   const encomiendasPendientes = selectedViaje?.encomiendas.filter(e => e.estado === "EN_TRANSITO") || [];
 
   const handleViajeSelect = (viaje: ViajeData) => {
@@ -206,7 +213,8 @@ export function RecepcionLoteModal({ isOpen, onClose, cooperativaId, sucursal, o
     formatFechaVE(dateString, { day: "2-digit", month: "short", hour: "numeric", minute: "numeric" });
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+    // Esc o clic fuera cierran, salvo mientras se recibe el lote.
+    <Dialog open={isOpen} onOpenChange={(open) => !open && !isSubmitting && onClose()}>
       <DialogContent className="max-w-2xl sm:max-w-xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -218,10 +226,10 @@ export function RecepcionLoteModal({ isOpen, onClose, cooperativaId, sucursal, o
                 onClick={() => setSelectedViaje(null)}
                 aria-label="Volver a la lista de viajes"
               >
-                <ArrowLeft size={18} />
+                <ArrowLeft size={18} aria-hidden />
               </Button>
             )}
-            <Truck size={24} className="text-primary-text" weight="duotone" />
+            <Truck size={24} className="text-primary-text" weight="duotone" aria-hidden />
             {selectedViaje ? "Confirmar lote" : "Elegir viaje"}
           </DialogTitle>
           <DialogDescription>
@@ -247,7 +255,7 @@ export function RecepcionLoteModal({ isOpen, onClose, cooperativaId, sucursal, o
             /* PASO 1: SELECCIONAR VIAJE */
             viajes.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-[300px] text-center px-4">
-                <Truck size={48} className="text-muted/50 mb-4" />
+                <Truck size={48} className="text-muted-foreground mb-4" aria-hidden />
                 <h3 className="font-medium text-lg">No hay encomiendas en camino</h3>
                 <p className="text-muted-foreground mt-2">
                   {sucursal
@@ -258,22 +266,17 @@ export function RecepcionLoteModal({ isOpen, onClose, cooperativaId, sucursal, o
             ) : (
               <ScrollArea className="h-[400px] pr-4">
                 <div className="space-y-3">
-                  {viajes.map((viaje) => {
+                  {viajes.map((viaje, i) => {
                     const pendientes = viaje.encomiendas.filter(e => e.estado === "EN_TRANSITO").length;
                     return (
-                      <Card 
-                        key={viaje.id} 
-                        role="button"
-                        tabIndex={0}
+                      <button
+                        type="button"
+                        key={viaje.id}
+                        // El primer viaje queda enfocado: Enter lo elige.
+                        autoFocus={i === 0}
                         aria-label={`${viaje.ruta ? `Viaje ${formatCiudad(viaje.ruta.ciudad_origen)} a ${formatCiudad(viaje.ruta.ciudad_destino)}` : "Sin viaje asignado"}: ${pendientes} pendientes`}
-                        className="p-4 cursor-pointer hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors flex justify-between items-center group"
+                        className="w-full rounded-xl border bg-card p-4 text-left cursor-pointer hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors flex justify-between items-center group"
                         onClick={() => handleViajeSelect(viaje)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" || e.key === " ") {
-                            e.preventDefault();
-                            handleViajeSelect(viaje);
-                          }
-                        }}
                       >
                         <div>
                           <div className="font-semibold text-base mb-1 group-hover:text-primary-text transition-colors">
@@ -289,7 +292,7 @@ export function RecepcionLoteModal({ isOpen, onClose, cooperativaId, sucursal, o
                             )}
                           </div>
                           {viaje.estado === "PROGRAMADO" && (
-                            <div className="mt-1 text-xs text-amber-700 dark:text-amber-400">
+                            <div className="mt-1 text-xs text-warning-text">
                               En origen no se marcó la salida de este bus.
                             </div>
                           )}
@@ -298,7 +301,7 @@ export function RecepcionLoteModal({ isOpen, onClose, cooperativaId, sucursal, o
                           <span className="text-2xl font-bold text-primary-text">{pendientes}</span>
                           <span className="text-xs text-muted-foreground uppercase font-medium">Pendientes</span>
                         </div>
-                      </Card>
+                      </button>
                     );
                   })}
                 </div>
@@ -311,6 +314,7 @@ export function RecepcionLoteModal({ isOpen, onClose, cooperativaId, sucursal, o
                 <div className="flex items-center gap-2">
                   <Checkbox 
                     id="select-all" 
+                    ref={todasRef}
                     checked={selectedEncomiendaIds.size === encomiendasPendientes.length && encomiendasPendientes.length > 0}
                     onCheckedChange={(c) => handleToggleAll(c === true)}
                   />

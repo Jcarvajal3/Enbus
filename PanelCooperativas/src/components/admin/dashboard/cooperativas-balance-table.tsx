@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { CeldaEnlace } from "@/components/celda-enlace";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Monto } from "@/components/monto";
@@ -16,8 +16,8 @@ export function CooperativasBalanceTable({ data, tasa = null }: CooperativasBala
   return (
     <Card className="col-span-1">
       <CardHeader>
-        <CardTitle>Balances de Cooperativas</CardTitle>
-        <CardDescription>Comisiones pendientes por cooperativa, en USD de referencia (se pagan en Bs a la tasa BCV del día del pago).</CardDescription>
+        <CardTitle>Comisiones pendientes por cooperativa</CardTitle>
+        <CardDescription>En USD de referencia; se pagan en Bs a la tasa BCV del día del pago.</CardDescription>
       </CardHeader>
       <CardContent>
         <div className="rounded-md border overflow-hidden">
@@ -27,7 +27,7 @@ export function CooperativasBalanceTable({ data, tasa = null }: CooperativasBala
                 <TableHead>Cooperativa</TableHead>
                 <TableHead className="text-right">Comisión %</TableHead>
                 <TableHead className="text-right">Pendiente (USD)</TableHead>
-                <TableHead className="text-right">Ciclos Impagos</TableHead>
+                <TableHead className="text-right">Ciclos sin pagar</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -44,15 +44,16 @@ export function CooperativasBalanceTable({ data, tasa = null }: CooperativasBala
                     <TableRow
                       key={item.cooperativa_id}
                       className={cn(
-                        "hover:bg-muted/50 transition-colors",
+                        "relative hover:bg-muted/50 motion-safe:transition-colors",
                         isOverdue && "bg-destructive/5 hover:bg-destructive/10 dark:bg-destructive/10 dark:hover:bg-destructive/15"
                       )}
                     >
-                      <TableCell className="font-medium">
-                        <Link href={`/admin/cooperativas/${item.cooperativa_id}`} className="text-foreground underline decoration-primary underline-offset-4">
-                          {item.nombre}
-                        </Link>
-                      </TableCell>
+                      <CeldaEnlace
+                        href={`/admin/cooperativas/${item.cooperativa_id}?tab=balance`}
+                        etiqueta={`Ver el balance de ${item.nombre}`}
+                      >
+                        {item.nombre}
+                      </CeldaEnlace>
                       <TableCell className="text-right font-mono text-xs">{item.comision_porcentaje} %</TableCell>
                       <TableCell className={cn(
                         "text-right font-semibold font-mono",

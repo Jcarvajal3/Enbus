@@ -12,6 +12,7 @@ import { LocationSelector } from '@/src/components/LocationSelector';
 import { CalendarModal } from '@/src/components/CalendarModal';
 import { ReservaEstado, SeatSelector, TasaCambiadaSheet } from '@/src/components/SeatSelector';
 import { PasajerosForm } from '@/src/components/PasajerosForm';
+import { SinSalidasRuta } from '@/src/components/SearchForm';
 import { CompletarPerfilSheet } from '@/src/components/CompletarPerfilSheet';
 import { PaymentFlow } from '@/src/components/PaymentFlow';
 import { PressableScale } from '@/src/components/PressableScale';
@@ -26,7 +27,6 @@ import {
   EmptyState,
   EntityCard,
   ErrorState,
-  FloatingBar,
   InfoRow,
   LoadingState,
   Monto,
@@ -39,7 +39,9 @@ import {
 } from '@/src/components/ui';
 import { supabase } from '@/src/utils/supabase';
 import { useToast } from '@/src/components/Toast';
-import { Localidad, normalizeCityForDb } from '@/src/utils/venezuela';
+import { CIUDADES_POPULARES, Localidad, normalizeCityForDb } from '@/src/utils/venezuela';
+import { ciudadesRecientes } from '@/src/utils/busquedasRecientes';
+import { fechaVE, formatDuracion, formatHoraVE } from '@/src/utils/ve.generated';
 import { dateFull, formatCity, formatDate, toDateKey } from '@/src/utils/formatters';
 import { esErrorEB, humanizeError } from '@/src/utils/errores';
 import { formatMoney, tasaRefDe } from '@/src/utils/dinero';
@@ -48,7 +50,6 @@ import { useTasaBCV } from '@/src/hooks/useTasaBCV';
 import { usePerfil } from '@/src/hooks/usePerfil';
 import {
   asientosDelError,
-  formatHora,
   mensajeAsientosTomados,
   unirAsientos,
   useCheckoutBoletos,
@@ -80,6 +81,14 @@ function fechaDeParametro(valor?: string): Date {
   return new Date();
 }
 
+/** Días de calendario (hora de Venezuela) entre la salida y la llegada: 0, 1, 2… */
+function diasDeDiferenciaVE(desde: string, hasta: string): number {
+  const a = Date.parse(`${fechaVE(desde)}T00:00:00Z`);
+  const b = Date.parse(`${fechaVE(hasta)}T00:00:00Z`);
+  if (Number.isNaN(a) || Number.isNaN(b)) return 0;
+  return Math.max(0, Math.round((b - a) / 86_400_000));
+}
+
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 
 interface ViajeResumen {
@@ -88,8 +97,17 @@ interface ViajeResumen {
   cooperativa: string;
   calificacion: number;
   fecha_hora_salida: string;
+  /** Llegada estimada (`viajes.fecha_hora_llegada_est` o salida + duración de la ruta) */
+  llegada: string | null;
+  /** "8:30 p. m." (hora de Venezuela) */
   horaSalida: string;
+  /** "6:15 a. m. (+1)"; '' si no se conoce */
+  horaLlegada: string;
+  /** Días de diferencia entre la salida y la llegada (0 = el mismo día) */
+  diasLlegada: number;
+  /** "9 h 45 min"; '' si no se conoce */
   duracion: string;
+  duracionMin: number;
   precio: number;
   asientosDisponibles: number;
   asientosTotales: number;
@@ -97,13 +115,35 @@ interface ViajeResumen {
   ciudadDestino?: string;
 }
 
-type SortType = 'hora_asc' | 'precio_asc' | 'precio_desc';
+type SortType = 'hora_asc' | 'precio_asc' | 'duracion_asc';
 
+/** Orden en línea sobre la lista (APP-21). */
 const SORT_OPTIONS: { id: SortType; label: string }[] = [
-  { id: 'hora_asc', label: 'Salida más temprana' },
-  { id: 'precio_asc', label: 'Precio: menor a mayor' },
-  { id: 'precio_desc', label: 'Precio: mayor a menor' },
+  { id: 'hora_asc', label: 'Más temprano' },
+  { id: 'precio_asc', label: 'Más barato' },
+  { id: 'duracion_asc', label: 'Más rápido' },
 ];
+
+/** Con 5 o menos asientos libres se avisa "Quedan 3" (APP-20). */
+const POCOS_ASIENTOS = 5;
+
+/** "Expresos Mérida, sale 8:30 p. m., llega 6:15 a. m. del día siguiente, …, quedan 3 asientos" */
+function etiquetaSalida(viaje: ViajeResumen, monto: string): string {
+  const llegada = viaje.horaLlegada
+    ? `, llega ${viaje.horaLlegada.replace(/\s*\(\+\d+\)$/, '')}${
+        viaje.diasLlegada === 1
+          ? ' del día siguiente'
+          : viaje.diasLlegada > 1
+            ? `, ${viaje.diasLlegada} días después`
+            : ''
+      }`
+    : '';
+  const asientos =
+    viaje.asientosDisponibles <= POCOS_ASIENTOS
+      ? `quedan ${viaje.asientosDisponibles} ${viaje.asientosDisponibles === 1 ? 'asiento' : 'asientos'}`
+      : `${viaje.asientosDisponibles} asientos libres`;
+  return `${viaje.cooperativa}, sale ${viaje.horaSalida}${llegada}, ${monto}, ${asientos}`;
+}
 
 /** Asistente de 4 pasos (#25): Salida · Asientos · Pasajeros · Pago. */
 const STEP_TITLES = ['Elige tu salida', 'Elige tus asientos', '¿Quién viaja?', 'Registra tu pago'];
@@ -161,6 +201,23 @@ export default function BuscarBoletoScreen() {
   // Asientos de esta compra que otro pasajero tomó al vencer la reserva.
   const [asientosPerdidos, setAsientosPerdidos] = useState<string[]>([]);
 
+  /**
+   * Elige una salida. Si es otra, los ocupados de la anterior se descartan en
+   * el mismo render (M-17): el mapa nuevo nunca muestra los de la salida previa.
+   */
+  const seleccionadoIdRef = useRef<string | null>(null);
+  seleccionadoIdRef.current = seleccionado?.id ?? null;
+  const elegirSalida = useCallback((viaje: ViajeResumen) => {
+    if (seleccionadoIdRef.current !== viaje.id) {
+      setAsientosOcupados([]);
+      setOcupadosDe(null);
+      setErrorOcupados(null);
+      setAsientosPerdidos([]);
+    }
+    seleccionadoIdRef.current = viaje.id;
+    setSeleccionado(viaje);
+  }, []);
+
   // ── Pasajeros ────────────────────────────────────────────────────────────
   const [pasajerosGuardados, setPasajerosGuardados] = useState<PasajeroAsiento[] | null>(null);
   const [asientosSinDatos, setAsientosSinDatos] = useState<string[]>([]);
@@ -173,6 +230,23 @@ export default function BuscarBoletoScreen() {
   const [filtersVisible, setFiltersVisible] = useState(false);
   const [selectedCoop, setSelectedCoop] = useState<string | null>(null);
   const [sortType, setSortType] = useState<SortType>('hora_asc');
+
+  /** Ciudades de las últimas búsquedas para el selector (APP-15). Nunca lanza. */
+  const [recientes, setRecientes] = useState<Localidad[]>([]);
+  useEffect(() => {
+    let vivo = true;
+    void ciudadesRecientes().then((lista) => {
+      if (vivo) setRecientes(lista);
+    });
+    return () => {
+      vivo = false;
+    };
+  }, []);
+  /** "Cambiar destino" del aviso de ruta sin salidas abre el selector del destino. */
+  const abrirDestinoRef = useRef<(() => void) | null>(null);
+  const registrarAbrirDestino = useCallback((abrir: () => void) => {
+    abrirDestinoRef.current = abrir;
+  }, []);
 
   // ── Compra: reservar, asignar pasajeros, registrar el pago, liberar al salir ──
   const checkout = useCheckoutBoletos({
@@ -305,7 +379,7 @@ export default function BuscarBoletoScreen() {
         const { data, error } = await supabase
           .from('viajes')
           .select(
-            `id, fecha_hora_salida, asientos_disponibles, asientos_totales,
+            `id, fecha_hora_salida, fecha_hora_llegada_est, asientos_disponibles, asientos_totales,
              rutas!inner ( id, ciudad_origen, ciudad_destino, duracion_estimada_min, precio_pasaje ),
              cooperativas ( id, nombre, calificacion_promedio )`
           )
@@ -325,7 +399,23 @@ export default function BuscarBoletoScreen() {
           const coop = Array.isArray(viaje.cooperativas)
             ? viaje.cooperativas[0]
             : viaje.cooperativas;
-          const minutos = ruta?.duracion_estimada_min ?? 0;
+          const salidaMs = Date.parse(viaje.fecha_hora_salida);
+          const minutosRuta = Number(ruta?.duracion_estimada_min) || 0;
+          // La llegada estimada del viaje manda; si falta, salida + duración de la ruta.
+          const llegadaMs = viaje.fecha_hora_llegada_est
+            ? Date.parse(viaje.fecha_hora_llegada_est)
+            : minutosRuta > 0 && !Number.isNaN(salidaMs)
+              ? salidaMs + minutosRuta * 60_000
+              : NaN;
+          const llegada = Number.isNaN(llegadaMs) ? null : new Date(llegadaMs).toISOString();
+          const minutos =
+            llegada && !Number.isNaN(salidaMs) && llegadaMs > salidaMs
+              ? Math.round((llegadaMs - salidaMs) / 60_000)
+              : minutosRuta;
+          const dias = llegada ? diasDeDiferenciaVE(viaje.fecha_hora_salida, llegada) : 0;
+          const horaLlegada = llegada
+            ? `${formatHoraVE(llegada)}${dias > 0 ? ` (+${dias})` : ''}`
+            : '';
 
           return {
             id: viaje.id,
@@ -333,8 +423,12 @@ export default function BuscarBoletoScreen() {
             cooperativa: coop?.nombre ?? 'Cooperativa',
             calificacion: coop?.calificacion_promedio ?? 0,
             fecha_hora_salida: viaje.fecha_hora_salida,
-            horaSalida: formatHora(viaje.fecha_hora_salida),
-            duracion: `${Math.floor(minutos / 60)}h ${minutos % 60}m`,
+            llegada,
+            horaSalida: formatHoraVE(viaje.fecha_hora_salida),
+            horaLlegada,
+            diasLlegada: dias,
+            duracion: minutos > 0 ? formatDuracion(minutos) : '',
+            duracionMin: minutos,
             precio: ruta?.precio_pasaje ?? 0,
             asientosDisponibles: viaje.asientos_disponibles,
             asientosTotales: viaje.asientos_totales,
@@ -351,7 +445,7 @@ export default function BuscarBoletoScreen() {
         if (objetivo) {
           preseleccionRef.current = null;
           const viaje = lista.find((v) => v.id === objetivo);
-          if (viaje) setSeleccionado(viaje);
+          if (viaje) elegirSalida(viaje);
           else mostrarToast('info', 'Esa salida ya no tiene asientos a la venta. Elige otra.');
         }
       } catch (err) {
@@ -366,7 +460,7 @@ export default function BuscarBoletoScreen() {
     return () => {
       isMounted = false;
     };
-  }, [origen, destino, fecha, reintentoViajes, mostrarToast]);
+  }, [origen, destino, fecha, reintentoViajes, mostrarToast, elegirSalida]);
 
   // ── Asientos ocupados del viaje elegido ──────────────────────────────────
   const viajeElegidoId = seleccionado?.id ?? null;
@@ -433,16 +527,28 @@ export default function BuscarBoletoScreen() {
 
   const visibles = useMemo(() => {
     const filtered = selectedCoop ? viajes.filter((v) => v.cooperativa === selectedCoop) : viajes;
+    const porHora = (a: ViajeResumen, b: ViajeResumen) =>
+      Date.parse(a.fecha_hora_salida) - Date.parse(b.fecha_hora_salida);
     return [...filtered].sort((a, b) => {
-      if (sortType === 'precio_asc') return a.precio - b.precio;
-      if (sortType === 'precio_desc') return b.precio - a.precio;
-      return (
-        new Date(a.fecha_hora_salida).getTime() - new Date(b.fecha_hora_salida).getTime()
-      );
+      if (sortType === 'precio_asc') return a.precio - b.precio || porHora(a, b);
+      if (sortType === 'duracion_asc') {
+        // Sin duración conocida, al final.
+        const da = a.duracionMin > 0 ? a.duracionMin : Number.POSITIVE_INFINITY;
+        const db = b.duracionMin > 0 ? b.duracionMin : Number.POSITIVE_INFINITY;
+        return da === db ? porHora(a, b) : da - db;
+      }
+      return porHora(a, b);
     });
   }, [viajes, selectedCoop, sortType]);
 
-  const filtersActive = selectedCoop !== null || sortType !== 'hora_asc';
+  /** La hoja "Filtrar" solo sirve para elegir cooperativa, y solo si hay más de una. */
+  const puedeFiltrar = cooperativas.length > 1;
+  const filtroActivo = selectedCoop !== null;
+
+  // Si la cooperativa elegida ya no está en la lista (otro día), se quita el filtro.
+  useEffect(() => {
+    if (selectedCoop && !cooperativas.includes(selectedCoop)) setSelectedCoop(null);
+  }, [cooperativas, selectedCoop]);
 
   // ── Compra ───────────────────────────────────────────────────────────────
   /**
@@ -496,7 +602,9 @@ export default function BuscarBoletoScreen() {
 
   /** "Apartar asientos": antes, la cédula y el teléfono del comprador (#24). */
   const confirmarAsientos = async (asientos: string[]) => {
-    if (!perfilCargando && !perfilCompleto) {
+    // Sin el perfil no se sabe si faltan la cédula y el teléfono: el botón espera.
+    if (perfilCargando) return;
+    if (!perfilCompleto) {
       setAsientosPendientes(asientos);
       setPedirDatos(true);
       return;
@@ -563,7 +671,11 @@ export default function BuscarBoletoScreen() {
 
   // Los asientos de esta compra no cuentan como ocupados en el mapa.
   const misAsientos = checkout.asientosApartados.filter((a) => !asientosPerdidos.includes(a));
-  const ocupadosAjenos = asientosOcupados.filter((a) => !misAsientos.includes(a));
+  // Solo los ocupados de esta salida (o los que se marcaron a mano tras un choque,
+  // antes de la primera lectura): nunca los de la salida anterior (M-17).
+  const ocupadosVigentes =
+    ocupadosDe === null || ocupadosDe === viajeElegidoId ? asientosOcupados : [];
+  const ocupadosAjenos = ocupadosVigentes.filter((a) => !misAsientos.includes(a));
   const cotizacion = checkout.cotizacion;
 
   /** Lo último que se guardó, o lo que el servidor tiene en cada boleto. */
@@ -598,7 +710,7 @@ export default function BuscarBoletoScreen() {
       />
 
       <ScrollView
-        contentContainerStyle={scrollContent({ floatingAction: step === 1, top: Spacing.sm })}
+        contentContainerStyle={scrollContent({ top: Spacing.sm })}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
@@ -611,6 +723,10 @@ export default function BuscarBoletoScreen() {
                   label="Origen"
                   value={origen}
                   onChange={setOrigen}
+                  excluir={destino}
+                  excluirAyuda="Ya es tu destino"
+                  recientes={recientes}
+                  populares={CIUDADES_POPULARES}
                   customTrigger={(open) => (
                     <CompactLocation
                       value={origen?.ciudad}
@@ -627,12 +743,17 @@ export default function BuscarBoletoScreen() {
                   label="Destino"
                   value={destino}
                   onChange={setDestino}
+                  excluir={origen}
+                  excluirAyuda="Ya es tu origen"
+                  recientes={recientes}
+                  populares={CIUDADES_POPULARES}
                   customTrigger={(open) => (
                     <CompactLocation
                       value={destino?.ciudad}
                       placeholder="Destino"
                       tint={Colors.secondary}
                       onPress={open}
+                      registrarAbrir={registrarAbrirDestino}
                     />
                   )}
                 />
@@ -674,26 +795,58 @@ export default function BuscarBoletoScreen() {
             </Card>
 
             {viajes.length > 0 && (
-              <PressableScale
-                onPress={() => setFiltersVisible(true)}
-                haptic
-                hapticType="selection"
-                scaleValue={Motion.press.button}
-                style={s.filterRow}
-                accessibilityRole="button"
-                accessibilityLabel="Filtrar y ordenar resultados"
-              >
-                <Text variant="label">
-                  {`${visibles.length} ${visibles.length === 1 ? 'salida' : 'salidas'}`}
-                </Text>
-                <View style={s.filterTrigger}>
-                  <Text variant="label" color="accent">
-                    Filtrar
+              <>
+                <View style={s.filterRow}>
+                  <Text variant="label">
+                    {`${visibles.length} ${visibles.length === 1 ? 'salida' : 'salidas'}`}
+                    {selectedCoop ? ` · ${selectedCoop}` : ''}
                   </Text>
-                  <SlidersHorizontal color={Colors.accent} weight="bold" size={Sizes.icon.md} />
-                  {filtersActive && <View style={s.filterDot} />}
+                  {puedeFiltrar ? (
+                    <PressableScale
+                      onPress={() => setFiltersVisible(true)}
+                      haptic
+                      hapticType="selection"
+                      scaleValue={Motion.press.button}
+                      style={s.filterTrigger}
+                      accessibilityRole="button"
+                      accessibilityLabel={
+                        selectedCoop
+                          ? `Filtrar por cooperativa. Ahora: ${selectedCoop}`
+                          : 'Filtrar por cooperativa'
+                      }
+                    >
+                      <Text variant="label" color="foreground">
+                        Filtrar
+                      </Text>
+                      <SlidersHorizontal
+                        color={Colors.foreground}
+                        weight="bold"
+                        size={Sizes.icon.md}
+                      />
+                      {filtroActivo && <View style={s.filterDot} />}
+                    </PressableScale>
+                  ) : null}
                 </View>
-              </PressableScale>
+
+                {/* Orden en línea (APP-21): antes estaba escondido en la hoja. */}
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={s.sortRow}
+                  accessibilityRole="radiogroup"
+                  accessibilityLabel="Ordenar salidas"
+                >
+                  {SORT_OPTIONS.map((option) => (
+                    <Chip
+                      key={option.id}
+                      label={option.label}
+                      selected={sortType === option.id}
+                      onPress={() => setSortType(option.id)}
+                      accessibilityLabel={`Ordenar: ${option.label}`}
+                    />
+                  ))}
+                </ScrollView>
+              </>
             )}
 
             <View style={s.results}>
@@ -712,6 +865,14 @@ export default function BuscarBoletoScreen() {
                   description={errorViajes}
                   onRetry={() => setReintentoViajes((n) => n + 1)}
                   compact
+                />
+              ) : viajes.length === 0 && !errorFechas && !loadingDates && activeDates?.length === 0 ? (
+                // La ruta no tiene ninguna salida (no solo ese día): otros destinos (M-09).
+                <SinSalidasRuta
+                  origen={origen}
+                  destino={destino}
+                  onElegirDestino={setDestino}
+                  onCambiarDestino={() => abrirDestinoRef.current?.()}
                 />
               ) : viajes.length === 0 ? (
                 <EmptyState
@@ -732,24 +893,31 @@ export default function BuscarBoletoScreen() {
                   description="Ningún viaje cumple con los filtros seleccionados."
                   action={{
                     children: 'Quitar filtros',
-                    onPress: () => {
-                      setSelectedCoop(null);
-                      setSortType('hora_asc');
-                    },
+                    onPress: () => setSelectedCoop(null),
                   }}
                   compact
                 />
               ) : (
                 visibles.map((viaje, index) => (
                   <StaggerItem key={viaje.id} index={index}>
+                    {/* Un toque elige la salida y pasa a "Asientos" (APP-21). */}
                     <EntityCard
-                      selectable
-                      selected={seleccionado?.id === viaje.id}
-                      onPress={() => setSeleccionado(viaje)}
+                      onPress={() => {
+                        if (estaEnCurso()) return;
+                        elegirSalida(viaje);
+                        irAPaso(2);
+                      }}
                       title={viaje.cooperativa}
-                      subtitle={`${viaje.horaSalida} · ${viaje.duracion}`}
-                      initial={viaje.cooperativa.charAt(0).toUpperCase()}
-                      tone="accent"
+                      subtitle={[
+                        viaje.horaLlegada
+                          ? `${viaje.horaSalida} → ${viaje.horaLlegada}`
+                          : viaje.horaSalida,
+                        viaje.duracion,
+                      ]
+                        .filter(Boolean)
+                        .join(' · ')}
+                      subtitleLines={2}
+                      chevron
                       badge={
                         viaje.calificacion > 0 ? (
                           <Badge tone="pending" icon={Star}>
@@ -762,14 +930,19 @@ export default function BuscarBoletoScreen() {
                       meta={
                         <View style={s.priceMeta}>
                           <Monto usd={viaje.precio} tasa={tasaRef} size="sm" align="right" />
-                          <Text variant="caption" size="xs" color="muted" compact>
-                            {`${viaje.asientosDisponibles} libres`}
-                          </Text>
+                          {viaje.asientosDisponibles <= POCOS_ASIENTOS ? (
+                            <Badge tone="danger">{`Quedan ${viaje.asientosDisponibles}`}</Badge>
+                          ) : (
+                            <Text variant="caption" size="xs" color="muted" compact>
+                              {`${viaje.asientosDisponibles} libres`}
+                            </Text>
+                          )}
                         </View>
                       }
-                      accessibilityLabel={`${viaje.cooperativa}, sale ${viaje.horaSalida}, ${
+                      accessibilityLabel={etiquetaSalida(
+                        viaje,
                         formatMoney({ usd: viaje.precio, tasa: tasaRef }).accesible
-                      }, ${viaje.asientosDisponibles} asientos libres`}
+                      )}
                     />
                   </StaggerItem>
                 ))
@@ -791,6 +964,7 @@ export default function BuscarBoletoScreen() {
               confirmando={checkout.enCurso}
               cargandoOcupados={cargandoOcupados}
               errorOcupados={errorOcupados}
+              cargandoPerfil={perfilCargando}
               onReintentarOcupados={() => {
                 setErrorOcupados(null);
                 setAsientosVersion((v) => v + 1);
@@ -872,22 +1046,6 @@ export default function BuscarBoletoScreen() {
         )}
       </ScrollView>
 
-      {step === 1 && visibles.length > 0 && (
-        <FloatingBar>
-          <Button
-            variant="accent"
-            fullWidth
-            disabled={!seleccionado}
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-              irAPaso(2);
-            }}
-          >
-            {seleccionado ? `Continuar con ${seleccionado.cooperativa}` : 'Elige una salida'}
-          </Button>
-        </FloatingBar>
-      )}
-
       <CompletarPerfilSheet
         visible={pedirDatos}
         motivo="compra"
@@ -922,7 +1080,7 @@ export default function BuscarBoletoScreen() {
       <BottomSheet
         visible={filtersVisible}
         onClose={() => setFiltersVisible(false)}
-        title="Filtrar y ordenar"
+        title="Filtrar por cooperativa"
         footer={
           <Button variant="accent" fullWidth onPress={() => setFiltersVisible(false)}>
             Ver resultados
@@ -939,19 +1097,6 @@ export default function BuscarBoletoScreen() {
                 label={coop}
                 selected={selectedCoop === coop}
                 onPress={() => setSelectedCoop(coop)}
-              />
-            ))}
-          </View>
-
-          <SectionLabel style={s.sortLabel}>Ordenar por</SectionLabel>
-          <View style={s.sortList}>
-            {SORT_OPTIONS.map((option) => (
-              <Chip
-                key={option.id}
-                label={option.label}
-                selected={sortType === option.id}
-                onPress={() => setSortType(option.id)}
-                fullWidth
               />
             ))}
           </View>
@@ -982,7 +1127,9 @@ function TripCard({ viaje, extras }: { viaje: ViajeResumen; extras?: React.React
       <RouteSummary
         origen={viaje.ciudadOrigen}
         destino={viaje.ciudadDestino}
-        duration={viaje.duracion}
+        duration={viaje.duracion || undefined}
+        horaSalida={viaje.horaSalida}
+        horaLlegada={viaje.horaLlegada || undefined}
       />
 
       <Divider spacing={Spacing.lg} />
@@ -1010,12 +1157,19 @@ function CompactLocation({
   placeholder,
   tint,
   onPress,
+  registrarAbrir,
 }: {
   value?: string;
   placeholder: string;
   tint: string;
   onPress: () => void;
+  /** Recibe la función que abre el selector (para abrirlo desde otro lugar). */
+  registrarAbrir?: (abrir: () => void) => void;
 }) {
+  useEffect(() => {
+    registrarAbrir?.(onPress);
+  }, [registrarAbrir, onPress]);
+
   return (
     <PressableScale
       onPress={onPress}
@@ -1153,10 +1307,9 @@ const s = StyleSheet.create({
     flexWrap: 'wrap',
     gap: Spacing.sm,
   },
-  sortLabel: {
-    marginTop: Spacing['2xl'],
-  },
-  sortList: {
+  sortRow: {
     gap: Spacing.sm,
+    paddingTop: Spacing.md,
+    paddingHorizontal: Spacing.xs,
   },
 });

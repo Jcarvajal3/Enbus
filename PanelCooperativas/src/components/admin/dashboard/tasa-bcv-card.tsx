@@ -125,8 +125,7 @@ export function TasaBCVCard({ tasa, hoy, variante = "completa", className }: Tas
     <Card
       id="tasa-bcv"
       className={cn(
-        "transition-all duration-200",
-        desactualizada && "border-amber-500/40 bg-amber-500/5",
+        desactualizada && "border-warning/40",
         className
       )}
     >
@@ -136,10 +135,10 @@ export function TasaBCVCard({ tasa, hoy, variante = "completa", className }: Tas
             <div
               className={cn(
                 "flex size-7 items-center justify-center rounded",
-                desactualizada ? "bg-amber-100 text-amber-900 dark:bg-amber-400/15 dark:text-amber-200" : "bg-primary/15 text-primary-text"
+                desactualizada ? "bg-warning-light text-warning-deep" : "bg-primary/15 text-primary-text"
               )}
             >
-              <CurrencyCircleDollar className="size-4" />
+              <CurrencyCircleDollar className="size-4" aria-hidden />
             </div>
             <div>
               <CardTitle className="text-lg font-bold tracking-tight">Tasa BCV</CardTitle>
@@ -150,7 +149,7 @@ export function TasaBCVCard({ tasa, hoy, variante = "completa", className }: Tas
           </div>
           {variante === "completa" && !formAbierto && (
             <Button variant="outline" size="sm" onClick={abrirFormulario} className="shrink-0 gap-1.5">
-              <PencilSimple className="size-3.5" /> Cargar tasa manual
+              <PencilSimple className="size-3.5" aria-hidden /> Cargar tasa manual
             </Button>
           )}
         </div>
@@ -181,8 +180,8 @@ export function TasaBCVCard({ tasa, hoy, variante = "completa", className }: Tas
         </div>
 
         {tasa && desactualizada && (
-          <div className="flex gap-2.5 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-950 dark:text-amber-100">
-            <Warning weight="fill" className="size-4 shrink-0 text-warning-text" aria-hidden />
+          <div className="flex gap-2.5 rounded-lg border border-warning/40 bg-warning-light p-3 text-xs text-warning-deep">
+            <Warning weight="fill" className="size-4 shrink-0" aria-hidden />
             <p>
               La tasa no se actualiza desde el {fechaTasaCorta(tasa.fecha)}. Revisa la tarea programada o cárgala a
               mano.
@@ -192,7 +191,7 @@ export function TasaBCVCard({ tasa, hoy, variante = "completa", className }: Tas
 
         {variante === "resumen" && (desactualizada || !tasa) && (
           <Link href="/admin/tarifas#tasa-bcv" className={cn(buttonVariants({ variant: "outline", size: "sm" }), "gap-1.5")}>
-            <PencilSimple className="size-3.5" /> Cargar tasa manual
+            <PencilSimple className="size-3.5" aria-hidden /> Cargar tasa manual
           </Link>
         )}
 

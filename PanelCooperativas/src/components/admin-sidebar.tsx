@@ -5,7 +5,7 @@ import { ADMIN_NAV_ITEMS } from "@/lib/admin-navigation";
 import { etiquetaRol } from "@/lib/estados";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { Shield, SignOut, Sun, Moon, Monitor } from "@phosphor-icons/react";
+import { SignOut, Sun, Moon, Monitor } from "@phosphor-icons/react";
 import { useTheme } from "next-themes";
 import { useState, useEffect, useMemo } from "react";
 import {
@@ -91,16 +91,15 @@ export function AdminSidebar() {
   return (
     <Sidebar>
       <SidebarHeader className="p-4">
+        {/* Marca (AD-02): bloque "EB" sobre el color primario, sin el icono de escudo. */}
         <div className="flex items-center gap-2">
-          <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-            <Shield weight="fill" className="size-5" aria-hidden />
+          <div
+            aria-hidden
+            className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-sm font-bold tracking-tight text-primary-foreground"
+          >
+            EB
           </div>
-          <div className="flex flex-col">
-            <span className="font-bold tracking-tight">EnBus</span>
-            <span className="text-xs text-muted-foreground font-medium">
-              Administración
-            </span>
-          </div>
+          <span className="font-bold tracking-tight">EnBus · Administración</span>
         </div>
       </SidebarHeader>
 
@@ -120,9 +119,12 @@ export function AdminSidebar() {
                       <item.icon />
                       <span>{item.title}</span>
                       {isSolicitudes && pendingCount > 0 && (
-                        <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 text-xs font-bold text-primary-foreground">
-                          {pendingCount}
-                          <span className="sr-only"> en revisión</span>
+                        // Contador estático (sin parpadeo), "99+" como máximo.
+                        <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-xs font-bold text-primary-foreground">
+                          <span aria-hidden>{pendingCount > 99 ? "99+" : pendingCount}</span>
+                          <span className="sr-only">
+                            {pendingCount === 1 ? "1 solicitud por revisar" : `${pendingCount} solicitudes por revisar`}
+                          </span>
                         </span>
                       )}
                     </SidebarMenuButton>
@@ -173,24 +175,24 @@ export function AdminSidebar() {
               <DropdownMenuGroup>
                 <DropdownMenuLabel className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">Tema</DropdownMenuLabel>
               <DropdownMenuItem onClick={() => setTheme("light")} className="cursor-pointer">
-                <Sun className="size-4 mr-2" />
+                <Sun className="size-4 mr-2" aria-hidden />
                 <span>Claro</span>
                 {mounted && theme === "light" && <span className="ml-auto text-xs text-primary-text"><span aria-hidden>✓</span><span className="sr-only">(seleccionado)</span></span>}
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setTheme("dark")} className="cursor-pointer">
-                <Moon className="size-4 mr-2" />
+                <Moon className="size-4 mr-2" aria-hidden />
                 <span>Oscuro</span>
                 {mounted && theme === "dark" && <span className="ml-auto text-xs text-primary-text"><span aria-hidden>✓</span><span className="sr-only">(seleccionado)</span></span>}
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setTheme("system")} className="cursor-pointer">
-                <Monitor className="size-4 mr-2" />
+                <Monitor className="size-4 mr-2" aria-hidden />
                 <span>Sistema</span>
                 {mounted && theme === "system" && <span className="ml-auto text-xs text-primary-text"><span aria-hidden>✓</span><span className="sr-only">(seleccionado)</span></span>}
               </DropdownMenuItem>
               </DropdownMenuGroup>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={handleSignOut} className="cursor-pointer text-destructive-text focus:text-destructive-text">
-                <SignOut />
+                <SignOut aria-hidden />
                 <span>Cerrar sesión</span>
               </DropdownMenuItem>
             </DropdownMenuContent>

@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { fechaVE, hoyVE, rangoDiaVE, sumarDiasVE } from "@/lib/fechas";
+import { formatCiudad } from "@/lib/ciudades";
 import {
   DashboardKPIs,
   DailyActivity,
@@ -15,100 +16,96 @@ function inicioHaceDiasVE(dias: number): string {
   return rangoDiaVE(sumarDiasVE(hoyVE(), -dias)).desde;
 }
 
-/**
- * KPIs del día (hora de Venezuela). `tasaHoy` (Bs por USD) convierte a Bs los
- * pagos anteriores a la fase 2, que no guardan `monto_bs`.
- */
-export async function fetchDashboardKPIs(tasaHoy: number | null = null): Promise<DashboardKPIs> {
-  const supabase = await createClient();
-  const { desde: hoyInicio, hasta: hoyFin } = rangoDiaVE(hoyVE());
+type PagoConCooperativa = {
+  monto: number | string;
+  monto_bs: number | string | null;
+  cooperativa: { comision_porcentaje: number | string } | null;
+};
 
-  const [
-    encomiendasRes,
-    boletosRes,
-    pagosRes,
-    cooperativasRes,
-    alertasRes,
-    solicitudesRes,
-  ] = await Promise.all([
-    // 1. Encomiendas recibidas hoy
+/** Encomiendas, boletos y pagos verificados de un día (rango ISO en hora de Venezuela). */
+async function actividadDelDia(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  rango: { desde: string; hasta: string },
+  tasaHoy: number | null,
+  etiqueta: string
+) {
+  const [encomiendasRes, boletosRes, pagosRes] = await Promise.all([
     supabase
       .from("encomiendas")
       .select("id", { count: "exact", head: true })
-      .gte("created_at", hoyInicio)
-      .lte("created_at", hoyFin),
-
-    // 2. Boletos vendidos hoy
+      .gte("created_at", rango.desde)
+      .lte("created_at", rango.hasta),
     supabase
       .from("boletos")
       .select("id", { count: "exact", head: true })
       .eq("estado", "PAGADO")
-      .gte("created_at", hoyInicio)
-      .lte("created_at", hoyFin),
-
-    // 3. Pagos verificados hoy (por verificado_at: un pago registrado ayer y aprobado hoy
-    //    es ingreso de hoy): ingresos (USD + Bs) y comisión de su cooperativa
+      .gte("created_at", rango.desde)
+      .lte("created_at", rango.hasta),
+    // Por verificado_at: un pago registrado ayer y aprobado hoy es ingreso de hoy.
     supabase
       .from("pagos")
       .select("monto, monto_bs, cooperativa:cooperativas!cooperativa_id(comision_porcentaje)")
       .eq("verificado", true)
-      .gte("verificado_at", hoyInicio)
-      .lte("verificado_at", hoyFin),
+      .gte("verificado_at", rango.desde)
+      .lte("verificado_at", rango.hasta),
+  ]);
 
-    // 4. Cooperativas activas
-    supabase
-      .from("cooperativas")
-      .select("id", { count: "exact", head: true })
-      .eq("estado", "ACTIVA"),
+  if (encomiendasRes.error) console.error(`[fetchDashboardKPIs] encomiendas (${etiqueta}):`, encomiendasRes.error);
+  if (boletosRes.error) console.error(`[fetchDashboardKPIs] boletos (${etiqueta}):`, boletosRes.error);
+  if (pagosRes.error) console.error(`[fetchDashboardKPIs] pagos (${etiqueta}):`, pagosRes.error);
 
-    // 5. Alertas amarillas abiertas
+  const pagos = (pagosRes.data ?? []) as unknown as PagoConCooperativa[];
+  const errorPagos = Boolean(pagosRes.error);
+  return {
+    encomiendas: encomiendasRes.error ? null : encomiendasRes.count ?? 0,
+    boletos: boletosRes.error ? null : boletosRes.count ?? 0,
+    ingresos: { ...resumirIngresos(pagos, tasaHoy), error: errorPagos },
+    comisiones: {
+      ...resumirIngresos(pagos, tasaHoy, (p) => Number(p.cooperativa?.comision_porcentaje ?? 0) / 100),
+      error: errorPagos,
+    },
+  };
+}
+
+/**
+ * KPIs de hoy y de ayer (hora de Venezuela) para el delta de cada tarjeta.
+ * `tasaHoy` (Bs por USD) convierte a Bs los pagos anteriores a la fase 2, que no
+ * guardan `monto_bs`.
+ */
+export async function fetchDashboardKPIs(tasaHoy: number | null = null): Promise<DashboardKPIs> {
+  const supabase = await createClient();
+  const hoy = hoyVE();
+
+  const [deHoy, deAyer, cooperativasRes, alertasRes, solicitudesRes] = await Promise.all([
+    actividadDelDia(supabase, rangoDiaVE(hoy), tasaHoy, "hoy"),
+    actividadDelDia(supabase, rangoDiaVE(sumarDiasVE(hoy, -1)), tasaHoy, "ayer"),
+    supabase.from("cooperativas").select("id", { count: "exact", head: true }).eq("estado", "ACTIVA"),
+    // Más de 72 h en tránsito sin resolver (abiertas o en proceso), como el enlace del Resumen.
     supabase
       .from("incidencias")
       .select("id", { count: "exact", head: true })
       .eq("tipo", "ALERTA_AMARILLA")
-      .eq("estado", "ABIERTA"),
-
-    // 6. Solicitudes pendientes
-    supabase
-      .from("cooperativas")
-      .select("id", { count: "exact", head: true })
-      .eq("estado", "PENDIENTE"),
+      .in("estado", ["ABIERTA", "EN_PROCESO"]),
+    supabase.from("cooperativas").select("id", { count: "exact", head: true }).eq("estado", "PENDIENTE"),
   ]);
 
-  // Log any Supabase errors without crashing the dashboard
-  if (encomiendasRes.error) console.error("[fetchDashboardKPIs] encomiendas:", encomiendasRes.error);
-  if (boletosRes.error) console.error("[fetchDashboardKPIs] boletos:", boletosRes.error);
-  if (pagosRes.error) console.error("[fetchDashboardKPIs] pagos:", pagosRes.error);
   if (cooperativasRes.error) console.error("[fetchDashboardKPIs] cooperativas:", cooperativasRes.error);
   if (alertasRes.error) console.error("[fetchDashboardKPIs] alertas:", alertasRes.error);
   if (solicitudesRes.error) console.error("[fetchDashboardKPIs] solicitudes:", solicitudesRes.error);
 
-  // Each pago row has a nested cooperativa object with comision_porcentaje
-  type PagoConCooperativa = {
-    monto: number | string;
-    monto_bs: number | string | null;
-    cooperativa: { comision_porcentaje: number | string } | null;
-  };
-  const pagos = (pagosRes.data ?? []) as unknown as PagoConCooperativa[];
-
-  // Si la consulta falla, el KPI muestra "—" y un aviso en vez de un 0 engañoso.
-  const errorPagos = Boolean(pagosRes.error);
-  const ingresos_hoy = { ...resumirIngresos(pagos, tasaHoy), error: errorPagos };
-  const comisiones_hoy = {
-    ...resumirIngresos(pagos, tasaHoy, (p) => Number(p.cooperativa?.comision_porcentaje ?? 0) / 100),
-    error: errorPagos,
-  };
-
   return {
-    encomiendas_hoy: encomiendasRes.count ?? 0,
-    boletos_hoy: boletosRes.count ?? 0,
-    ingresos_brutos_hoy: ingresos_hoy.usd,
-    ingresos_hoy,
-    comisiones_estimadas_hoy: comisiones_hoy.usd,
-    comisiones_hoy,
+    encomiendas_hoy: deHoy.encomiendas ?? 0,
+    boletos_hoy: deHoy.boletos ?? 0,
+    error_encomiendas: deHoy.encomiendas === null,
+    error_boletos: deHoy.boletos === null,
+    ingresos_brutos_hoy: deHoy.ingresos.usd,
+    ingresos_hoy: deHoy.ingresos,
+    comisiones_estimadas_hoy: deHoy.comisiones.usd,
+    comisiones_hoy: deHoy.comisiones,
     cooperativas_activas: cooperativasRes.count ?? 0,
     alertas_amarillas_abiertas: alertasRes.count ?? 0,
     solicitudes_pendientes: solicitudesRes.count ?? 0,
+    ayer: deAyer,
   };
 }
 
@@ -212,8 +209,7 @@ export async function fetchRutasPopulares(): Promise<RutaPopular[]> {
   const routeCounts: Record<string, number> = {};
   encomiendas?.forEach((item) => {
     if (item.ciudad_origen && item.ciudad_destino) {
-      const capitalize = (s: string) => s.trim().charAt(0).toUpperCase() + s.trim().slice(1).toLowerCase();
-      const routeName = `${capitalize(item.ciudad_origen)} → ${capitalize(item.ciudad_destino)}`;
+      const routeName = `${formatCiudad(item.ciudad_origen)} → ${formatCiudad(item.ciudad_destino)}`;
       routeCounts[routeName] = (routeCounts[routeName] ?? 0) + 1;
     }
   });

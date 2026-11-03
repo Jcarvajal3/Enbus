@@ -30,8 +30,8 @@ export function TopCooperativasChart({ data }: TopCooperativasChartProps) {
   return (
     <Card className="col-span-1">
       <CardHeader>
-        <CardTitle>Top 5 Cooperativas</CardTitle>
-        <CardDescription>Por volumen de transacciones en los últimos 30 días</CardDescription>
+        <CardTitle>Cooperativas con más movimiento</CardTitle>
+        <CardDescription>Encomiendas y boletos pagados en los últimos 30 días</CardDescription>
       </CardHeader>
       <CardContent>
         {data.length === 0 ? (
@@ -53,9 +53,9 @@ export function TopCooperativasChart({ data }: TopCooperativasChartProps) {
                 tickLine={false}
                 axisLine={false}
                 className="text-xs text-muted-foreground"
-                width={80}
+                width={150}
               />
-              <XAxis type="number" tickLine={false} axisLine={false} className="text-xs text-muted-foreground" hide />
+              <XAxis type="number" allowDecimals={false} tickLine={false} axisLine={false} className="text-xs text-muted-foreground" />
               <ChartTooltip content={<ChartTooltipContent />} />
               <Bar
                 dataKey="total_transacciones"

@@ -9,8 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { FieldGroup, Field, FieldLabel } from "@/components/ui/field";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Spinner } from "@/components/ui/spinner";
-import { Shield, WarningCircle, GoogleLogo } from "@phosphor-icons/react";
+import { SpinnerIcon, WarningCircle, GoogleLogo } from "@phosphor-icons/react";
 import { humanizeError } from "@/lib/errores";
 
 const ERROR_GOOGLE = "No pudimos iniciar sesión con Google. Intenta de nuevo o usa tu correo.";
@@ -104,10 +103,13 @@ export default function AdminLoginClient({ errorInicial = null }: { errorInicial
       {/* Panel izquierdo decorativo (oculto en móvil) */}
       <div className="hidden w-3/5 flex-col justify-between border-r bg-muted p-12 lg:flex">
         <div className="flex items-center gap-2">
-          <div className="flex size-10 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-            <Shield weight="fill" className="size-6" aria-hidden />
+          <div
+            aria-hidden
+            className="flex size-10 items-center justify-center rounded-lg bg-primary text-base font-bold text-primary-foreground"
+          >
+            EB
           </div>
-          <span className="text-xl font-bold tracking-tight">EnBus</span>
+          <span className="text-xl font-bold tracking-tight">EnBus · Administración</span>
         </div>
 
         <div className="flex flex-col gap-4">
@@ -130,12 +132,15 @@ export default function AdminLoginClient({ errorInicial = null }: { errorInicial
         <Card className="w-full max-w-sm">
           <CardHeader>
             <div className="mb-4 flex justify-center lg:hidden">
-              <div className="flex size-12 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-                <Shield weight="fill" className="size-8" aria-hidden />
+              <div
+                aria-hidden
+                className="flex size-12 items-center justify-center rounded-lg bg-primary text-lg font-bold text-primary-foreground"
+              >
+                EB
               </div>
             </div>
             <CardTitle className="text-2xl">Iniciar sesión</CardTitle>
-            <CardDescription className="text-muted-foreground">Administración de EnBus</CardDescription>
+            <CardDescription className="text-muted-foreground">EnBus · Administración</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="flex flex-col gap-6">
@@ -185,7 +190,7 @@ export default function AdminLoginClient({ errorInicial = null }: { errorInicial
                 </FieldGroup>
 
                 <Button type="submit" className="w-full" disabled={loading || googleLoading} aria-busy={loading || undefined}>
-                  {loading ? <Spinner data-icon="inline-start" className="mr-2" /> : null}
+                  {loading ? <SpinnerIcon data-icon="inline-start" className="motion-safe:animate-spin" aria-hidden /> : null}
                   {loading ? "Entrando…" : "Entrar"}
                 </Button>
               </form>
@@ -204,7 +209,7 @@ export default function AdminLoginClient({ errorInicial = null }: { errorInicial
                 className="w-full"
               >
                 {googleLoading ? (
-                  <Spinner data-icon="inline-start" className="mr-2" />
+                  <SpinnerIcon data-icon="inline-start" className="motion-safe:animate-spin" aria-hidden />
                 ) : (
                   <GoogleLogo className="mr-2 size-5" aria-hidden />
                 )}

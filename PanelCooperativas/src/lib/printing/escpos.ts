@@ -1,6 +1,37 @@
 const ESC = 0x1b;
 const GS = 0x1d;
 
+// ─── Ancho del papel (#53) ───────────────────────────────────────────────────
+// Preferencia por equipo en localStorage ("enbus.papel"): 58 mm (32 caracteres
+// por línea, la más común) u 80 mm (48 caracteres).
+
+export type AnchoPapel = "58" | "80";
+const CLAVE_PAPEL = "enbus.papel";
+const CARACTERES: Record<AnchoPapel, number> = { "58": 32, "80": 48 };
+
+/** Ancho del papel de este equipo ("58" por defecto). */
+export function anchoPapel(): AnchoPapel {
+  try {
+    return typeof window !== "undefined" && window.localStorage.getItem(CLAVE_PAPEL) === "80" ? "80" : "58";
+  } catch {
+    return "58";
+  }
+}
+
+/** Guarda el ancho del papel de este equipo. */
+export function setAnchoPapel(ancho: AnchoPapel): void {
+  try {
+    window.localStorage.setItem(CLAVE_PAPEL, ancho);
+  } catch {
+    // Sin almacenamiento: se usa 58 mm hasta que se pueda guardar.
+  }
+}
+
+/** Caracteres por línea del ticket: 32 (58 mm) o 48 (80 mm). */
+export function caracteresPorLinea(ancho: AnchoPapel = anchoPapel()): number {
+  return CARACTERES[ancho];
+}
+
 // Las impresoras térmicas baratas usan CP437/850 y no entienden UTF-8: "Código"
 // sale como "CÃ³digo". Antes de codificar se translitera a ASCII (á→a, ñ→n,
 // ü→u…), se quitan los signos de apertura y las comillas angulares, y lo que
@@ -43,8 +74,11 @@ export function buildTicket(data: {
   lines: { label: string; value: string }[];
   qrData?: string;
   footer?: string;
+  /** Por defecto, el ancho guardado en este equipo. */
+  papel?: AnchoPapel;
 }): Uint8Array {
   const parts: Uint8Array[] = [];
+  const separador = "-".repeat(caracteresPorLinea(data.papel));
 
   // Inicializar impresora
   parts.push(new Uint8Array([ESC, 0x40])); // ESC @ — Reset
@@ -60,7 +94,7 @@ export function buildTicket(data: {
   parts.push(new Uint8Array([ESC, 0x45, 0x00])); // Bold off
 
   // Separador
-  parts.push(texto("--------------------------------\n"));
+  parts.push(texto(`${separador}\n`));
 
   // Alinear izquierda
   parts.push(new Uint8Array([ESC, 0x61, 0x00]));

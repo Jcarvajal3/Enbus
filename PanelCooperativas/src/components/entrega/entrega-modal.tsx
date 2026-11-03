@@ -6,6 +6,9 @@
 // obligatoria; puede retirar otra persona autorizada) → "Entregar encomienda".
 // fn_entregar_encomienda vuelve a revisar todo: cobro (EB_COBRO_PENDIENTE),
 // PIN (EB_PIN_INCORRECTO / EB_PIN_BLOQUEADO) y cédula (EB_CEDULA_NO_VERIFICADA).
+// La validación del PIN dura 15 minutos y es del empleado que la hizo
+// (EB_PIN_NO_VALIDADO): si vence, el modal vuelve al paso del PIN y conserva lo
+// escrito en identidad (casilla, otra persona, nombre y cédula).
 // PIN bloqueado: el administrador lo desbloquea o entrega sin PIN con motivo;
 // el taquillero ve a quién pedírselo.
 
@@ -35,11 +38,13 @@ import { remitenteDe } from "@/components/encomiendas/detalle-sheet";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { ErrorState } from "@/components/error-state";
 import { Monto } from "@/components/monto";
+import { CedulaField } from "@/components/ve-fields";
 import { formatBs, formatUsd, usdABs } from "@/lib/dinero";
+import { PIN_VALIDACION_MINUTOS } from "@/lib/artefactos.generated";
 import { humanizeError, isNetworkError } from "@/lib/errores";
-import { fechaVE, hoyVE } from "@/lib/fechas";
+import { fechaVE, formatHoraVE, hoyVE } from "@/lib/fechas";
 import { MODALIDAD_PAGO } from "@/lib/estados";
-import { CEDULA_ERROR, CEDULA_PLACEHOLDER, cedulaValida, formatCedula, formatTelefono, telefonoWhatsApp } from "@/lib/ve";
+import { CEDULA_ERROR, cedulaValida, formatCedula, formatTelefono, telefonoWhatsApp } from "@/lib/ve";
 import type { Encomienda } from "@/lib/types/encomiendas";
 import { cn } from "@/lib/utils";
 
@@ -105,6 +110,12 @@ export function textoDevolucion(diasHabiles: number): string {
   return `Se devuelve al remitente en ${faltan} ${faltan === 1 ? "día hábil" : "días hábiles"}`;
 }
 
+/** La validación del PIN vence en el servidor a los 15 minutos (fn_entregar_encomienda). */
+const VALIDEZ_PIN_MS = PIN_VALIDACION_MINUTOS * 60 * 1000;
+/** Margen para no llegar al servidor con la validación a punto de vencer. */
+const MARGEN_PIN_MS = 30 * 1000;
+const MSG_PIN_VENCIDO = "Vuelve a validar el PIN de retiro: la validación vence a los 15 minutos.";
+
 const MSG_SIN_CONEXION = "Sin conexión: esta operación necesita internet. Revisa tu conexión e intenta de nuevo.";
 
 function mensajeExcepcion(err: unknown, accion: string) {
@@ -139,6 +150,8 @@ export function EntregaModal({ encomiendaId, isOpen, onClose, onSuccess }: Entre
 
   // PIN
   const [pinValidado, setPinValidado] = useState<string | null>(null);
+  /** Cuándo se validó el PIN (Date.now()), para avisar antes de que venza. */
+  const [pinValidadoAt, setPinValidadoAt] = useState<number | null>(null);
   const [pinBloqueado, setPinBloqueado] = useState(false);
   const [intentos, setIntentos] = useState(0);
   const [pinKey, setPinKey] = useState(0);
@@ -154,6 +167,7 @@ export function EntregaModal({ encomiendaId, isOpen, onClose, onSuccess }: Entre
   const [terceroCedula, setTerceroCedula] = useState("");
   const [errores, setErrores] = useState<{ cedula?: string; nombre?: string; terceroCedula?: string; general?: string }>({});
   const [isConfirming, setIsConfirming] = useState(false);
+  const cedulaRef = useRef<HTMLElement>(null);
 
   const cargarCobro = useCallback(async (encId: string) => {
     setErrorCobro(null);
@@ -213,6 +227,7 @@ export function EntregaModal({ encomiendaId, isOpen, onClose, onSuccess }: Entre
     setCobro(null);
     setErrorCobro(null);
     setPinValidado(null);
+    setPinValidadoAt(null);
     setPinBloqueado(false);
     setIntentos(0);
     setPinKey((k) => k + 1);
@@ -245,11 +260,22 @@ export function EntregaModal({ encomiendaId, isOpen, onClose, onSuccess }: Entre
       : `Falta cobrar el envío: ${formatUsd(usd)}. Cóbralo antes de entregar.`;
   };
 
+  // Vuelve al paso del PIN. Lo escrito en identidad (casilla, otra persona,
+  // nombre y cédula) queda en el estado y reaparece al validar de nuevo.
   const volverAlPin = (aviso: string) => {
     setPinValidado(null);
+    setPinValidadoAt(null);
     setPinKey((k) => k + 1);
     setAvisoPin(aviso);
   };
+
+  // Cada paso con su campo principal enfocado: el PIN se enfoca solo (PinInput);
+  // en identidad, la casilla "Revisé la cédula".
+  useEffect(() => {
+    if (paso !== "identidad" || !encomienda) return;
+    const t = window.setTimeout(() => cedulaRef.current?.focus(), 0);
+    return () => window.clearTimeout(t);
+  }, [paso, encomienda]);
 
   const handleEntregar = async () => {
     if (!encomienda || isConfirming) return;
@@ -261,6 +287,12 @@ export function EntregaModal({ encomiendaId, isOpen, onClose, onSuccess }: Entre
     }
     setErrores(nuevos);
     if (Object.keys(nuevos).length > 0) return;
+
+    // Con PIN: si la validación ya venció (o está por vencer), se pide de nuevo sin ir al servidor.
+    if (!sinPinMotivo && pinValidadoAt !== null && Date.now() - pinValidadoAt > VALIDEZ_PIN_MS - MARGEN_PIN_MS) {
+      volverAlPin(MSG_PIN_VENCIDO);
+      return;
+    }
 
     setIsConfirming(true);
     try {
@@ -294,6 +326,10 @@ export function EntregaModal({ encomiendaId, isOpen, onClose, onSuccess }: Entre
           break;
         case "EB_PIN_INCORRECTO":
           volverAlPin("El PIN no coincide. Pídelo de nuevo a quien retira.");
+          break;
+        case "EB_PIN_NO_VALIDADO":
+          // Pasaron más de 15 minutos desde la validación (o la hizo otro empleado).
+          volverAlPin(result.error || MSG_PIN_VENCIDO);
           break;
         case "EB_PIN_BLOQUEADO":
           setPinBloqueado(true);
@@ -345,7 +381,7 @@ export function EntregaModal({ encomiendaId, isOpen, onClose, onSuccess }: Entre
     } else if (cobro) {
       seccionCobro = (
         <div className="space-y-4">
-          <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-amber-950 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100">
+          <div className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning-light p-3 text-warning-deep">
             <Warning size={20} weight="fill" className="mt-0.5 shrink-0" aria-hidden />
             <div className="flex flex-col gap-1">
               <span className="font-medium">
@@ -391,6 +427,7 @@ export function EntregaModal({ encomiendaId, isOpen, onClose, onSuccess }: Entre
           onValidado={(pin) => {
             setAvisoPin(null);
             setPinValidado(pin);
+            setPinValidadoAt(Date.now());
           }}
           onBlocked={() => {
             setPinBloqueado(true);
@@ -456,12 +493,19 @@ export function EntregaModal({ encomiendaId, isOpen, onClose, onSuccess }: Entre
   const seccionIdentidad = encomienda && paso === "identidad" && (
     <div className="space-y-4">
       {sinPinMotivo ? (
-        <p className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100">
+        <p className="rounded-md border border-warning/40 bg-warning-light p-3 text-sm text-warning-deep">
           Entrega sin PIN: {sinPinMotivo}
         </p>
       ) : (
-        <p className="flex items-center gap-2 text-sm font-medium text-success-text">
-          <CheckCircle size={18} weight="fill" aria-hidden /> PIN correcto
+        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+          <span className="inline-flex items-center gap-2 font-medium text-success-text">
+            <CheckCircle size={18} weight="fill" aria-hidden /> PIN correcto
+          </span>
+          {pinValidadoAt !== null && (
+            <span className="text-muted-foreground">
+              · Entrega antes de las {formatHoraVE(pinValidadoAt + VALIDEZ_PIN_MS)} o tendrás que validarlo de nuevo.
+            </span>
+          )}
         </p>
       )}
 
@@ -493,27 +537,24 @@ export function EntregaModal({ encomiendaId, isOpen, onClose, onSuccess }: Entre
             />
             {errores.nombre?.trim() && <p className="text-sm text-destructive-text">{errores.nombre}</p>}
           </div>
-          <div className="grid gap-1.5">
-            <Label htmlFor={id("tercero-cedula")}>Cédula de quien retira</Label>
-            <Input
-              id={id("tercero-cedula")}
-              value={terceroCedula}
-              placeholder={CEDULA_PLACEHOLDER}
-              autoComplete="off"
-              aria-invalid={errores.terceroCedula ? true : undefined}
-              onChange={(e) => {
-                setTerceroCedula(e.target.value);
-                setErrores((p) => ({ ...p, terceroCedula: undefined }));
-              }}
-            />
-            {errores.terceroCedula?.trim() && <p className="text-sm text-destructive-text">{errores.terceroCedula}</p>}
-          </div>
+          <CedulaField
+            id={id("tercero-cedula")}
+            label="Cédula de quien retira"
+            value={terceroCedula}
+            letras={["V", "E", "P"]}
+            error={errores.terceroCedula?.trim() ? errores.terceroCedula : null}
+            onChange={(v) => {
+              setTerceroCedula(v);
+              setErrores((p) => ({ ...p, terceroCedula: undefined }));
+            }}
+          />
         </div>
       )}
 
       <div className="space-y-1">
         <div className="flex items-start gap-3">
           <Checkbox
+            ref={cedulaRef}
             id={id("cedula")}
             checked={cedulaRevisada}
             aria-invalid={errores.cedula ? true : undefined}

@@ -4,6 +4,7 @@ import { ArrowClockwise, Clock, WarningCircle } from 'phosphor-react-native';
 import * as Haptics from 'expo-haptics';
 import Animated, {
   useAnimatedStyle,
+  useReducedMotion,
   useSharedValue,
   withSequence,
   withSpring,
@@ -45,6 +46,12 @@ interface SeatSelectorProps {
   /** No se pudieron leer los ocupados: mensaje + "Reintentar"; no se puede apartar. */
   errorOcupados?: string | null;
   onReintentarOcupados?: () => void;
+  /**
+   * El perfil del comprador aún se está leyendo: se pueden elegir asientos,
+   * pero "Apartar" espera ("Cargando tus datos…") para saber si hay que pedir
+   * la cédula y el teléfono antes (#24).
+   */
+  cargandoPerfil?: boolean;
 }
 
 const SEAT_SIZE = Sizes.control.md - 4;
@@ -66,13 +73,17 @@ function SeatButton({
   onToggle: (seat: string) => void;
 }) {
   const scale = useSharedValue(1);
+  const reduceMotion = useReducedMotion();
 
   const handlePress = () => {
     if (ocupado || bloqueado) return;
     // Selecting pops; deselecting settles back without the overshoot.
-    scale.value = seleccionado
-      ? withSpring(1, Motion.spring.snappy)
-      : withSequence(withSpring(1.14, Motion.spring.bouncy), withSpring(1, Motion.spring.snappy));
+    // Con "reducir movimiento" no hay rebote: el color ya dice que se eligió.
+    if (!reduceMotion) {
+      scale.value = seleccionado
+        ? withSpring(1, Motion.spring.snappy)
+        : withSequence(withSpring(1.14, Motion.spring.bouncy), withSpring(1, Motion.spring.snappy));
+    }
     Haptics.selectionAsync();
     onToggle(seat);
   };
@@ -126,6 +137,7 @@ export function SeatSelector({
   cargandoOcupados = false,
   errorOcupados = null,
   onReintentarOcupados,
+  cargandoPerfil = false,
 }: SeatSelectorProps) {
   const [seleccionados, setSeleccionados] = useState<string[]>(() =>
     (seleccionInicial ?? []).filter((a) => !asientosOcupados.includes(a))
@@ -185,7 +197,9 @@ export function SeatSelector({
         ? 'Reintenta para ver los asientos'
         : ordenados.length === 0
           ? 'Elige tus asientos'
-          : `Apartar asiento${plural ? 's' : ''} ${unirAsientos(ordenados)}`;
+          : cargandoPerfil
+            ? 'Cargando tus datos…'
+            : `Apartar asiento${plural ? 's' : ''} ${unirAsientos(ordenados)}`;
 
   return (
     <Card padding="md">
@@ -298,10 +312,11 @@ export function SeatSelector({
       <Button
         variant="accent"
         fullWidth
-        disabled={ordenados.length === 0 || mapaBloqueado}
+        disabled={ordenados.length === 0 || mapaBloqueado || cargandoPerfil}
         onPress={() => {
           // `confirmando` llega en el siguiente render: la ref frena el doble toque.
-          if (mapaBloqueado || ordenados.length === 0 || confirmandoRef.current) return;
+          if (mapaBloqueado || cargandoPerfil || ordenados.length === 0 || confirmandoRef.current)
+            return;
           confirmandoRef.current = true;
           void Promise.resolve(onConfirm(ordenados)).finally(() => {
             confirmandoRef.current = false;

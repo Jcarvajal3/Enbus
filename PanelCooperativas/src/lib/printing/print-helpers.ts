@@ -8,6 +8,7 @@ import type { Encomienda } from "@/lib/types/encomiendas";
 import type { Boleto } from "@/lib/types/boletos";
 import type { MonedaPago } from "@/lib/types/pagos";
 import { formatCiudad } from "@/lib/ciudades";
+import { formatCodigoBoleto, qrBoleto } from "@/lib/artefactos.generated";
 
 // En el ticket ESC/POS no se usan "≈", "→" ni "$" (muchas impresoras térmicas no
 // los imprimen): "Total: Bs 1.250,00" / "Ref.: USD 12,40 BCV 02/10". Las tildes
@@ -116,11 +117,12 @@ export async function printBoleto(boleto: Boleto, cobro?: CobroBoleto, viaje?: V
     if (sale) lineas.push({ label: "Sale", value: sale });
     if (viaje.unidad) lineas.push({ label: "Unidad", value: viaje.unidad });
   }
+  // Orden de Artefactos_Compartidos: … Unidad · Asiento · Pasajero · Cédula · Código · QR · Total.
   lineas.push(
-    { label: "Código", value: boleto.codigo_boleto },
+    { label: "Asiento", value: boleto.asiento },
     { label: "Pasajero", value: boleto.pasajero_nombre || "" },
-    ...(boleto.pasajero_cedula ? [{ label: "Cédula", value: boleto.pasajero_cedula }] : []),
-    { label: "Asiento", value: boleto.asiento }
+    ...(boleto.pasajero_cedula ? [{ label: "Cédula", value: formatCedula(boleto.pasajero_cedula) }] : []),
+    { label: "Código", value: formatCodigoBoleto(boleto.codigo_boleto) }
   );
 
   if (cobro) {
@@ -147,7 +149,7 @@ export async function printBoleto(boleto: Boleto, cobro?: CobroBoleto, viaje?: V
   const ticket = buildTicket({
     title: "BOLETO DE VIAJE",
     lines: lineas,
-    qrData: boleto.qr_embarque_data || undefined,
+    qrData: qrBoleto(boleto),
     footer: "Llega 30 minutos antes con tu cédula",
   });
   await printer.write(ticket);

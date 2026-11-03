@@ -1,6 +1,41 @@
 import { createClient } from "@/lib/supabase/server";
-import type { Tarifa, RouteOption } from "@/lib/types/admin-tarifas";
+import { estadoDeTarifa, type Tarifa, type RouteOption } from "@/lib/types/admin-tarifas";
 import { humanizeError } from "@/lib/errores";
+
+type FilaTarifa = Record<string, unknown> & {
+  id: string;
+  tarifa_por_kg: number | string;
+  factor_distancia_por_min: number | string;
+  dimensiones_max_cm: number;
+  peso_max_kg: number | string;
+  vigente_desde: string;
+  activa: boolean;
+  creada_por: string;
+  created_at: string;
+  publicada_at?: string | null;
+  reemplazada_at?: string | null;
+  nota?: string | null;
+  profiles?: { nombre_completo?: string | null } | null;
+};
+
+function aTarifa(row: FilaTarifa): Tarifa {
+  return {
+    id: row.id,
+    tarifa_por_kg: Number(row.tarifa_por_kg),
+    factor_distancia_por_min: Number(row.factor_distancia_por_min),
+    dimensiones_max_cm: row.dimensiones_max_cm,
+    peso_max_kg: Number(row.peso_max_kg),
+    vigente_desde: row.vigente_desde,
+    activa: row.activa,
+    creada_por: row.creada_por,
+    created_at: row.created_at,
+    creador_nombre: row.profiles?.nombre_completo || null,
+    publicada_at: row.publicada_at ?? null,
+    reemplazada_at: row.reemplazada_at ?? null,
+    nota: row.nota ?? null,
+    estado: estadoDeTarifa(row),
+  };
+}
 
 export async function fetchTarifaVigente(): Promise<Tarifa | null> {
   try {
@@ -20,23 +55,35 @@ export async function fetchTarifaVigente(): Promise<Tarifa | null> {
 
     if (!data) return null;
 
-    return {
-      id: data.id,
-      tarifa_por_kg: Number(data.tarifa_por_kg),
-      factor_distancia_por_min: Number(data.factor_distancia_por_min),
-      dimensiones_max_cm: data.dimensiones_max_cm,
-      peso_max_kg: Number(data.peso_max_kg),
-      vigente_desde: data.vigente_desde,
-      activa: data.activa,
-      creada_por: data.creada_por,
-      created_at: data.created_at,
-      creador_nombre: (data.profiles as { nombre_completo?: string | null } | null)?.nombre_completo || null,
-    };
+    return aTarifa(data);
   } catch (error) {
     // Un error no es "sin tarifa vigente": se propaga a error.tsx con "Reintentar".
     console.error("Error inside fetchTarifaVigente:", error);
     throw error instanceof Error ? error : new Error(humanizeError(error, "cargar las tarifas"));
   }
+}
+
+/**
+ * Tarifa programada (publicada con fecha futura, todavía sin entrar en vigor).
+ * fn_publicar_tarifa deja como mucho una: cada programación nueva reemplaza a la anterior.
+ */
+export async function fetchTarifaProgramada(): Promise<Tarifa | null> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("tarifas")
+    .select("*, profiles:creada_por(nombre_completo)")
+    .eq("activa", false)
+    .not("publicada_at", "is", null)
+    .is("reemplazada_at", null)
+    .order("vigente_desde", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    console.error("Error fetching scheduled tariff:", error);
+    throw new Error(humanizeError(error, "cargar las tarifas"));
+  }
+  return data ? aTarifa(data as FilaTarifa) : null;
 }
 
 export async function fetchHistorialTarifas(): Promise<Tarifa[]> {
@@ -54,18 +101,7 @@ export async function fetchHistorialTarifas(): Promise<Tarifa[]> {
       throw new Error(humanizeError(error, "cargar las tarifas"));
     }
 
-    return (data || []).map((row): Tarifa => ({
-      id: row.id,
-      tarifa_por_kg: Number(row.tarifa_por_kg),
-      factor_distancia_por_min: Number(row.factor_distancia_por_min),
-      dimensiones_max_cm: row.dimensiones_max_cm,
-      peso_max_kg: Number(row.peso_max_kg),
-      vigente_desde: row.vigente_desde,
-      activa: row.activa,
-      creada_por: row.creada_por,
-      created_at: row.created_at,
-      creador_nombre: (row.profiles as { nombre_completo?: string | null } | null)?.nombre_completo || null,
-    }));
+    return (data || []).map(aTarifa);
   } catch (error) {
     console.error("Error inside fetchHistorialTarifas:", error);
     throw error instanceof Error ? error : new Error(humanizeError(error, "cargar las tarifas"));

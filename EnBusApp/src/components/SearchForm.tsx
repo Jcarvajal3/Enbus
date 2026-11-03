@@ -471,7 +471,7 @@ export function SinSalidasRuta({
         if (!vivo) return;
         const vistos = new Set<string>([claveDestino]);
         const destinos: Localidad[] = [];
-        for (const fila of (data ?? []) as Array<{ rutas: unknown }>) {
+        for (const fila of (data ?? []) as { rutas: unknown }[]) {
           const ruta = (Array.isArray(fila.rutas) ? fila.rutas[0] : fila.rutas) as
             | { ciudad_destino?: string | null }
             | null

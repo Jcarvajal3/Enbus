@@ -6,81 +6,109 @@ import { revalidatePath } from "next/cache";
 import { humanizeError, parseDetalleEB } from "@/lib/errores";
 import { formatNumeroVE } from "@/lib/dinero";
 import { fechaHoraVEaISO, hoyVE, sumarDiasVE } from "@/lib/fechas";
+import { LIMITES_TARIFA, type CreateTarifaInput, type ResultadoPublicarTarifa } from "@/lib/types/admin-tarifas";
 
-export async function createTarifa(formData: FormData) {
+/**
+ * Publica una tarifa con fn_publicar_tarifa, en una sola operación: sin fecha (o con
+ * una fecha que ya llegó) queda vigente al instante; con fecha futura queda
+ * programada y la activa la tarea `activar_tarifas_programadas` a su hora.
+ */
+export async function createTarifa(input: CreateTarifaInput): Promise<ResultadoPublicarTarifa> {
   try {
-    const superAdmin = await requireSuperAdmin();
+    await requireSuperAdmin();
+  } catch {
+    return { success: false, error: "Solo el equipo de EnBus puede publicar tarifas." };
+  }
+
+  const tarifa_por_kg = Number(input?.tarifa_por_kg);
+  const factor = Number(input?.factor_distancia_por_min);
+  const dimensiones = Number(input?.dimensiones_max_cm);
+  const peso = Number(input?.peso_max_kg);
+
+  if (!Number.isFinite(tarifa_por_kg) || tarifa_por_kg <= 0 || tarifa_por_kg > LIMITES_TARIFA.tarifa_por_kg.max) {
+    return { success: false, error: "El precio por kilo debe ser mayor que 0.", campo: "tarifa_por_kg" };
+  }
+  if (!Number.isFinite(factor) || factor < 0 || factor > LIMITES_TARIFA.factor_distancia_por_min.max) {
+    return { success: false, error: "El recargo por minuto de viaje debe estar entre 0 y 1.", campo: "factor_distancia_por_min" };
+  }
+  if (!Number.isInteger(dimensiones) || dimensiones < 10 || dimensiones > 300) {
+    return { success: false, error: "La medida máxima debe estar entre 10 y 300 cm.", campo: "dimensiones_max_cm" };
+  }
+  if (!Number.isFinite(peso) || peso < 1 || peso > 100) {
+    return { success: false, error: "El peso máximo debe estar entre 1 y 100 kg.", campo: "peso_max_kg" };
+  }
+
+  // La fecha llega en hora de Venezuela (no la del servidor).
+  let vigenteDesde: string | null = null;
+  if (input.programar) {
+    const { fecha, hora } = input.programar;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha ?? "") || !/^\d{2}:\d{2}$/.test(hora ?? "")) {
+      return { success: false, error: "Elige la fecha y la hora en que empieza a regir.", campo: "vigente_desde" };
+    }
+    vigenteDesde = fechaHoraVEaISO(fecha, hora);
+    if (new Date(vigenteDesde).getTime() <= Date.now()) {
+      return { success: false, error: "La fecha programada tiene que ser posterior a ahora.", campo: "vigente_desde" };
+    }
+  }
+
+  try {
     const supabase = await createClient();
+    const { data, error } = await supabase.rpc("fn_publicar_tarifa", {
+      p_tarifa_por_kg: tarifa_por_kg,
+      p_factor_distancia_por_min: factor,
+      p_dimensiones_max_cm: dimensiones,
+      p_peso_max_kg: peso,
+      p_vigente_desde: vigenteDesde,
+      p_nota: (input.nota ?? "").trim() || null,
+    });
 
-    const tarifaPorKgStr = formData.get("tarifa_por_kg") as string;
-    const factorDistanciaStr = formData.get("factor_distancia_por_min") as string;
-    const dimensionesMaxStr = formData.get("dimensiones_max_cm") as string;
-    const pesoMaxStr = formData.get("peso_max_kg") as string;
-    const vigenteDesdeStr = formData.get("vigente_desde") as string;
-
-    if (!tarifaPorKgStr || !factorDistanciaStr || !dimensionesMaxStr || !pesoMaxStr) {
-      return { success: false, error: "Completa todos los campos de la tarifa." };
+    if (error) {
+      console.error("Error publishing tariff:", error);
+      const detalle = parseDetalleEB(error);
+      return {
+        success: false,
+        error: humanizeError(error, "publicar la tarifa"),
+        campo: typeof detalle.campo === "string" ? detalle.campo : undefined,
+      };
     }
 
-    const tarifa_por_kg = parseFloat(tarifaPorKgStr);
-    const factor_distancia_por_min = parseFloat(factorDistanciaStr);
-    const dimensiones_max_cm = parseInt(dimensionesMaxStr, 10);
-    const peso_max_kg = parseFloat(pesoMaxStr);
-    // El campo datetime-local llega sin zona ("YYYY-MM-DDTHH:mm"): es hora de Venezuela, no la del servidor.
-    const fechaHoraLocal = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})/.exec(vigenteDesdeStr ?? "");
-    const vigente_desde = fechaHoraLocal
-      ? fechaHoraVEaISO(fechaHoraLocal[1], fechaHoraLocal[2])
-      : vigenteDesdeStr
-        ? new Date(vigenteDesdeStr).toISOString()
-        : new Date().toISOString();
+    const fila = (data ?? {}) as { id?: string; estado?: string; vigente_desde?: string };
+    revalidatePath("/admin/tarifas");
+    return {
+      success: true,
+      data: {
+        id: String(fila.id ?? ""),
+        estado: fila.estado === "PROGRAMADA" ? "PROGRAMADA" : "VIGENTE",
+        vigente_desde: String(fila.vigente_desde ?? vigenteDesde ?? new Date().toISOString()),
+      },
+    };
+  } catch (error) {
+    console.error("Error in createTarifa server action:", error);
+    return { success: false, error: humanizeError(error, "publicar la tarifa") };
+  }
+}
 
-    if (isNaN(tarifa_por_kg) || tarifa_por_kg <= 0) {
-      return { success: false, error: "La tarifa por kg debe ser un número positivo." };
-    }
-    if (isNaN(factor_distancia_por_min) || factor_distancia_por_min < 0) {
-      return { success: false, error: "El factor de distancia debe ser un número no negativo." };
-    }
-    if (isNaN(dimensiones_max_cm) || dimensiones_max_cm <= 0) {
-      return { success: false, error: "Las dimensiones máximas deben ser un número entero positivo." };
-    }
-    if (isNaN(peso_max_kg) || peso_max_kg <= 0) {
-      return { success: false, error: "El peso máximo debe ser un número positivo." };
-    }
+/** Cancela la tarifa programada (fn_cancelar_tarifa_programada); la vigente no cambia. */
+export async function cancelarTarifaProgramada(tarifaId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    await requireSuperAdmin();
+  } catch {
+    return { success: false, error: "Solo el equipo de EnBus puede cambiar las tarifas." };
+  }
+  if (!tarifaId) return { success: false, error: "No encontramos la tarifa programada. Actualiza la página." };
 
-    // Deactivate previous active tariffs first (to satisfy idx_tarifas_activa unique index)
-    const { error: deactivateError } = await supabase
-      .from("tarifas")
-      .update({ activa: false })
-      .eq("activa", true);
-
-    if (deactivateError) {
-      console.error("Error deactivating previous tariffs:", deactivateError);
-      return { success: false, error: humanizeError(deactivateError, "reemplazar la tarifa vigente") };
+  try {
+    const supabase = await createClient();
+    const { error } = await supabase.rpc("fn_cancelar_tarifa_programada", { p_tarifa_id: tarifaId });
+    if (error) {
+      console.error("Error cancelling scheduled tariff:", error);
+      return { success: false, error: humanizeError(error, "cancelar la programación") };
     }
-
-    // Insert new active tariff
-    const { error: insertError } = await supabase
-      .from("tarifas")
-      .insert({
-        tarifa_por_kg,
-        factor_distancia_por_min,
-        dimensiones_max_cm,
-        peso_max_kg,
-        vigente_desde,
-        activa: true,
-        creada_por: superAdmin.id
-      });
-
-    if (insertError) {
-      console.error("Error inserting new tariff:", insertError);
-      return { success: false, error: humanizeError(insertError, "crear la tarifa") };
-    }
-
     revalidatePath("/admin/tarifas");
     return { success: true };
   } catch (error) {
-    console.error("Error in createTarifa server action:", error);
-    return { success: false, error: humanizeError(error, "crear la tarifa") };
+    console.error("Error in cancelarTarifaProgramada:", error);
+    return { success: false, error: humanizeError(error, "cancelar la programación") };
   }
 }
 

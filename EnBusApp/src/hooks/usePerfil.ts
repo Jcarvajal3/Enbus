@@ -14,6 +14,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { User } from '@supabase/supabase-js';
 import { useAuth } from '@/src/contexts/AuthContext';
 import { supabase } from '@/src/utils/supabase';
 import { AppError, humanizeError } from '@/src/utils/errores';
@@ -99,6 +100,24 @@ export function camposFaltantes(perfil: PerfilUsuario | null): CampoPerfil[] {
   if (!cedulaValida(perfil.cedula_rif ?? '')) faltan.push('cedula');
   if (!telefonoValido(perfil.telefono ?? '')) faltan.push('telefono');
   return faltan;
+}
+
+/**
+ * true si la cuenta tiene contraseña (proveedor `email`); false si solo entra
+ * con Google. Perfil muestra "Cambiar contraseña" o "Crear una contraseña" y
+ * `/cuenta/contrasena` decide si pide la actual (#50). Sin datos del proveedor
+ * se asume correo (pedir la actual es lo prudente).
+ */
+export function tieneContrasena(user: User | null | undefined): boolean {
+  if (!user) return false;
+  const meta = user.app_metadata ?? {};
+  const proveedores = [
+    ...(Array.isArray(meta.providers) ? (meta.providers as unknown[]) : []),
+    ...(typeof meta.provider === 'string' ? [meta.provider] : []),
+    ...(user.identities ?? []).map((i) => i.provider),
+  ].filter((p): p is string => typeof p === 'string');
+  if (proveedores.length === 0) return true;
+  return proveedores.includes('email');
 }
 
 // Todas las instancias montadas reciben el perfil recién guardado.

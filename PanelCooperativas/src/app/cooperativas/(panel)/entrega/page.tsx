@@ -10,6 +10,8 @@ import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
 import { ErrorState } from "@/components/error-state";
 import { ScanInput } from "@/components/scan-input";
+import { UltimoEscaneo, useUltimoEscaneo } from "@/components/ultimo-escaneo";
+import { CeldaEnlace } from "@/components/celda-enlace";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -29,6 +31,7 @@ import { Monto } from "@/components/monto";
 import { humanizeError } from "@/lib/errores";
 import { etiquetaEstado } from "@/lib/estados";
 import { formatFechaVE } from "@/lib/fechas";
+import { formatCiudad } from "@/lib/ciudades";
 import { formatTelefono } from "@/lib/ve";
 import type { Encomienda } from "@/lib/types/encomiendas";
 import type { EstadoVerificacion } from "@/lib/types/pagos";
@@ -57,7 +60,7 @@ function RetentionBadge({ dias }: { dias: number }) {
   const texto = `${dias} ${dias === 1 ? "día hábil" : "días hábiles"}`;
   if (dias >= DIAS_HABILES_DEVOLUCION - 1) {
     return (
-      <Badge variant="secondary" className="gap-1 bg-red-100 text-red-900 dark:bg-red-400/15 dark:text-red-200">
+      <Badge variant="secondary" className="gap-1 bg-destructive-light text-destructive-deep">
         <Warning weight="fill" className="size-3.5" aria-hidden />
         {texto}
       </Badge>
@@ -65,7 +68,7 @@ function RetentionBadge({ dias }: { dias: number }) {
   }
   if (dias >= DIAS_HABILES_DEVOLUCION - 2) {
     return (
-      <Badge variant="secondary" className="bg-amber-100 text-amber-900 dark:bg-amber-400/15 dark:text-amber-200">
+      <Badge variant="secondary" className="bg-warning-light text-warning-deep">
         {texto}
       </Badge>
     );
@@ -75,8 +78,8 @@ function RetentionBadge({ dias }: { dias: number }) {
 
 /** Cobro para la lista: verde si ya está pagada; ámbar si falta cobrar o verificar. */
 function CobroCelda({ e }: { e: EncomiendaEntrega }) {
-  const verde = "bg-emerald-100 text-emerald-900 dark:bg-emerald-400/15 dark:text-emerald-200";
-  const ambar = "bg-amber-100 text-amber-900 dark:bg-amber-400/15 dark:text-amber-200";
+  const verde = "bg-success-light text-success-deep";
+  const ambar = "bg-warning-light text-warning-deep";
   const estados = (e.pagos ?? []).map((p) => p.estado_verificacion);
   if (e.modalidad_pago === "ORIGEN" || estados.includes("APROBADO")) {
     return (
@@ -111,6 +114,7 @@ export default function EntregaPage() {
   const [loading, setLoading] = useState(true);
   const [errorCarga, setErrorCarga] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const { ultimo, registrar } = useUltimoEscaneo();
 
   // Sucursal donde entrega el usuario (null = toda la cooperativa), igual que Recepción en destino
   const [sucursal, setSucursal] = useState<SucursalRecepcion | null>(null);
@@ -197,31 +201,54 @@ export default function EntregaPage() {
     setModalState({ isOpen: true, encomiendaId });
   };
 
-  /** Código escaneado: se abre la entrega o se dice por qué no se puede. */
+  /** Código escaneado: se abre la entrega o se dice por qué no se puede (con sonido). */
   const alEscanear = (e: Encomienda) => {
+    const codigo = e.tracking_id;
     if (e.estado === "EN_OFICINA_DESTINO") {
       if (sucursal && !vaASucursal(e, sucursal)) {
-        toast.error(`Está en la oficina de ${e.ciudad_destino}, no en la tuya (${sucursal.nombre}).`);
+        registrar({
+          codigo,
+          tono: "error",
+          titulo: `Está en la oficina de ${formatCiudad(e.ciudad_destino)}`,
+          detalle: `No está en tu sucursal ${sucursal.nombre}: se retira allá.`,
+        });
         return;
       }
+      registrar({ codigo, tono: "exito", titulo: `Abriendo la entrega de ${codigo}`, detalle: e.receiver_nombre });
       abrirEntrega(e.id);
       return;
     }
     if (e.estado === "EN_TRANSITO") {
-      toast.error(`Esta encomienda todavía va en camino hacia ${e.ciudad_destino}.`);
+      registrar({
+        codigo,
+        tono: "aviso",
+        titulo: "Todavía va en camino",
+        detalle: `Va hacia ${formatCiudad(e.ciudad_destino)}. Recíbela en «Recepción en destino» cuando llegue.`,
+      });
     } else if (e.estado === "ENTREGADA") {
       const fecha = e.entregada_at ?? e.updated_at;
-      toast.info(
-        fecha
-          ? `Ya fue entregada el ${formatFechaVE(fecha, { day: "2-digit", month: "2-digit", hour: "numeric", minute: "2-digit" })}.`
-          : "Ya fue entregada."
-      );
+      registrar({
+        codigo,
+        tono: "aviso",
+        titulo: "Ya fue entregada",
+        detalle: fecha
+          ? `El ${formatFechaVE(fecha, { day: "2-digit", month: "2-digit", hour: "numeric", minute: "2-digit" })}.`
+          : undefined,
+      });
     } else if (ESTADOS_ANTES_DE_SALIR.includes(e.estado)) {
-      toast.error(
-        `Esta encomienda todavía no sale de ${e.ciudad_origen} (${etiquetaEstado("encomienda", e.estado).toLowerCase()}).`
-      );
+      registrar({
+        codigo,
+        tono: "error",
+        titulo: `Todavía no sale de ${formatCiudad(e.ciudad_origen)}`,
+        detalle: `Estado: ${etiquetaEstado("encomienda", e.estado)}.`,
+      });
     } else {
-      toast.error(`Esta encomienda está «${etiquetaEstado("encomienda", e.estado)}»: no se puede entregar.`);
+      registrar({
+        codigo,
+        tono: "error",
+        titulo: "No se puede entregar",
+        detalle: `Esta encomienda está «${etiquetaEstado("encomienda", e.estado)}».`,
+      });
     }
   };
 
@@ -236,19 +263,23 @@ export default function EntregaPage() {
   }, []);
 
   const descripcion = sucursal
-    ? `Encomiendas en tu sucursal ${sucursal.nombre} (${sucursal.ciudad}) listas para entregar. Escanea el código o elige una en la lista.`
+    ? `Encomiendas en tu sucursal ${sucursal.nombre} (${formatCiudad(sucursal.ciudad)}) listas para entregar. Escanea el código o elige una en la lista.`
     : "Encomiendas en la oficina listas para entregar. Escanea el código o elige una en la lista.";
 
   return (
     <div className="space-y-6 flex flex-col h-full animate-in fade-in duration-300">
       <PageHeader title="Entrega" description={descripcion} />
 
-      <ScanInput
-        mode="encomiendas"
-        cooperativaId={cooperativaId}
-        onEncomiendaFound={alEscanear}
-        disabled={modalState.isOpen || !alcanceCargado}
-      />
+      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
+        <ScanInput
+          mode="encomiendas"
+          cooperativaId={cooperativaId}
+          onEncomiendaFound={alEscanear}
+          onError={(err) => registrar({ codigo: err.codigo, tono: "error", titulo: "No encontrada", detalle: err.mensaje })}
+          disabled={modalState.isOpen || !alcanceCargado}
+        />
+        <UltimoEscaneo resultado={ultimo} />
+      </div>
 
       <div className="relative max-w-md">
         <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -311,18 +342,14 @@ export default function EntregaPage() {
                 {filteredEncomiendas.map((encomienda) => {
                   const dias = diasHabilesDesde(encomienda.updated_at);
                   return (
-                    <TableRow
-                      key={encomienda.id}
-                      className="hover:bg-muted/50 transition-colors cursor-pointer group"
-                      onClick={() => abrirEntrega(encomienda.id)}
-                      tabIndex={0}
-                      onKeyDown={(ev) => {
-                        if (ev.key === "Enter") abrirEntrega(encomienda.id);
-                      }}
-                    >
-                      <TableCell className="font-mono font-medium text-primary-text group-hover:underline">
-                        {encomienda.tracking_id}
-                      </TableCell>
+                    <TableRow key={encomienda.id} className="relative hover:bg-muted/50 transition-colors">
+                      <CeldaEnlace
+                        onAbrir={() => abrirEntrega(encomienda.id)}
+                        etiqueta={`Entregar encomienda ${encomienda.tracking_id}`}
+                        className="font-mono"
+                      >
+                        <span className="text-primary-text">{encomienda.tracking_id}</span>
+                      </CeldaEnlace>
                       <TableCell className="max-w-[200px] truncate font-medium">{encomienda.receiver_nombre}</TableCell>
                       <TableCell className="text-muted-foreground whitespace-nowrap">
                         {formatTelefono(encomienda.receiver_telefono)}

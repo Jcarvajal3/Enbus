@@ -3,7 +3,7 @@
  *
  * Una tarjeta por asiento ("Asiento 14") con nombre y apellido, cédula y
  * teléfono opcional. La primera se prellena con el perfil y lleva el chip
- * "Soy yo". Valida con las mismas reglas que el servidor (`validation.ts`) y
+ * "Soy yo". La cédula se escribe con `CedulaField` (letra + número, #57). Valida con las mismas reglas que el servidor (`validation.ts`) y
  * entrega los datos ya normalizados ("V-12345678", "0414-1234567") a
  * `onSubmit`, que llama a `fn_asignar_pasajeros`.
  *
@@ -22,15 +22,15 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, TextInput, View } from 'react-native';
-import { IdentificationCard, UserCircle, WarningCircle } from 'phosphor-react-native';
+import { UserCircle, WarningCircle } from 'phosphor-react-native';
 import * as Haptics from 'expo-haptics';
 import { Button, Card, Chip, Field, Text } from '@/src/components/ui';
+import { CedulaField } from '@/src/components/CedulaField';
 import {
   MENSAJE_CEDULA,
   MENSAJE_TELEFONO,
   cedulaParaGuardar,
   cedulaValida,
-  formatCedula,
   nombreValido,
   normalizarCedula,
   sanitizeText,
@@ -76,6 +76,12 @@ export interface PasajerosFormProps {
 const AYUDA_CEDULA =
   'Si viaja un menor sin cédula, usa la de su representante y escribe el nombre del menor.';
 
+/** V y E, más P para quien viaja con pasaporte (antes se podía escribir a mano). */
+const LETRAS_PASAJERO: ('V' | 'E' | 'P')[] = ['V', 'E', 'P'];
+
+/** La forma que emite `CedulaField` ("V-12345678"), o '' si no es válida. */
+const cedulaDelCampo = (v: string | null | undefined) => cedulaParaGuardar(v) ?? '';
+
 const vacia = (): DatosTarjeta => ({ nombre: '', cedula: '', telefono: '' });
 
 /** Referencia estable: un `[]` nuevo en cada render reiniciaría `marcados` sin fin. */
@@ -84,7 +90,7 @@ const SIN_ERRORES: string[] = [];
 function datosDelPerfil(perfil: PerfilUsuario | null): DatosTarjeta {
   return {
     nombre: nombreValido(perfil?.nombre_completo) ? (perfil?.nombre_completo ?? '') : '',
-    cedula: cedulaValida(perfil?.cedula_rif ?? '') ? formatCedula(perfil?.cedula_rif) : '',
+    cedula: cedulaDelCampo(perfil?.cedula_rif),
     telefono: telefonoValido(perfil?.telefono ?? '') ? (perfil?.telefono ?? '') : '',
   };
 }
@@ -178,7 +184,7 @@ export function PasajerosForm({
         } else if (guardado && cedulaValida(guardado.cedula) && !mismaCedula(guardado.cedula, perfil?.cedula_rif)) {
           next[asiento] = {
             nombre: guardado.nombre,
-            cedula: formatCedula(guardado.cedula),
+            cedula: cedulaDelCampo(guardado.cedula),
             telefono: guardado.telefono ?? '',
           };
         } else if (
@@ -190,7 +196,7 @@ export function PasajerosForm({
           // Un menor con la cédula del representante: se respeta lo guardado.
           next[asiento] = {
             nombre: guardado.nombre,
-            cedula: formatCedula(guardado.cedula),
+            cedula: cedulaDelCampo(guardado.cedula),
             telefono: guardado.telefono ?? '',
           };
         } else {
@@ -348,23 +354,15 @@ export function PasajerosForm({
               editable={!guardando}
             />
 
-            <Field
+            <CedulaField
               ref={registrar(`${asiento}:cedula`)}
               label="Cédula"
-              placeholder="V-12345678"
               value={d.cedula}
               onChangeText={(v) => actualizar(asiento, 'cedula', v)}
-              onBlur={() => {
-                if (cedulaValida(d.cedula)) actualizar(asiento, 'cedula', formatCedula(d.cedula));
-              }}
               error={e.cedula}
               helper={AYUDA_CEDULA}
-              icon={IdentificationCard}
-              tone="sunken"
-              autoCapitalize="characters"
-              autoCorrect={false}
+              letras={LETRAS_PASAJERO}
               returnKeyType="next"
-              submitBehavior="submit"
               onSubmitEditing={() => enfocar(`${asiento}:telefono`)}
               editable={!guardando}
             />

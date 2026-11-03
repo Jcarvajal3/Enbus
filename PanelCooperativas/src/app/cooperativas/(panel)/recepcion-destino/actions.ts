@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { humanizeError } from "@/lib/errores";
+import { formatCiudad } from "@/lib/ciudades";
 import { vaASucursal, type SucursalRecepcion } from "./sucursal";
 
 type SupabaseServer = Awaited<ReturnType<typeof createClient>>;
@@ -65,7 +66,7 @@ type EncomiendaDestino = {
 function mensajeOtraSucursal(encomiendas: EncomiendaDestino[], sucursal: SucursalRecepcion) {
   if (encomiendas.length === 1) {
     const e = encomiendas[0];
-    return `La encomienda ${e.tracking_id} va a ${e.ciudad_destino}, no a tu sucursal ${sucursal.nombre} (${sucursal.ciudad}). No la recibas aquí: debe seguir hasta su destino.`;
+    return `La encomienda ${e.tracking_id} va a ${formatCiudad(e.ciudad_destino)}, no a tu sucursal ${sucursal.nombre} (${formatCiudad(sucursal.ciudad)}). No la recibas aquí: debe seguir hasta su destino.`;
   }
   const lista = encomiendas.slice(0, 3).map((e) => e.tracking_id).join(", ");
   const resto = encomiendas.length > 3 ? ` y ${encomiendas.length - 3} más` : "";

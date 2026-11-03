@@ -5,6 +5,10 @@
  * JSX plus ~15 copied style rules each. Extracting it also fixed the alignment
  * drift between those copies (one had `marginBottom: 6` on the timeline, the
  * others didn't).
+ *
+ * Muestra el nombre completo de cada ciudad (hasta 2 líneas) y, si se pasan,
+ * la hora de salida y la de llegada debajo (APP-58). Antes eran códigos de
+ * tres letras tipo aeropuerto ("MER", "CAR") que nadie usa en Venezuela.
  */
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -18,32 +22,43 @@ const DOT = Spacing.sm;
 export interface RouteSummaryProps {
   origen?: string | null;
   destino?: string | null;
-  /** e.g. "5h 30m" — shown under the connector when present */
+  /** e.g. "9 h 45 min" — shown under the connector when present */
   duration?: string;
+  /** Hora de salida ya formateada ("8:30 p. m."), bajo el origen */
+  horaSalida?: string;
+  /** Hora de llegada ya formateada ("6:15 a. m. (+1)"), bajo el destino */
+  horaLlegada?: string;
 }
 
-/** Three-letter airport-style code derived from a city name. */
+/**
+ * Three-letter airport-style code derived from a city name.
+ * @deprecated Sin uso desde la fase 4 (APP-58): `RouteSummary` muestra el nombre
+ * completo. Se conserva porque `ui/index.ts` la reexporta.
+ */
 export function cityCode(city?: string | null): string {
   const name = formatCity(city);
   return name ? name.substring(0, 3).toUpperCase() : '—';
 }
 
-export function RouteSummary({ origen, destino, duration }: RouteSummaryProps) {
+export function RouteSummary({
+  origen,
+  destino,
+  duration,
+  horaSalida,
+  horaLlegada,
+}: RouteSummaryProps) {
+  const etiqueta = [
+    `Ruta de ${formatCity(origen)} a ${formatCity(destino)}`,
+    horaSalida ? `sale ${horaSalida}` : '',
+    horaLlegada ? `llega ${horaLlegada.replace('(+1)', 'del día siguiente')}` : '',
+    duration ? `duración ${duration}` : '',
+  ]
+    .filter(Boolean)
+    .join(', ');
+
   return (
-    <View
-      style={s.row}
-      accessibilityLabel={`Ruta de ${formatCity(origen)} a ${formatCity(destino)}${
-        duration ? `, duración ${duration}` : ''
-      }`}
-    >
-      <View style={s.endpoint}>
-        <Text variant="title" size="2xl" weight="heavy" align="center" compact>
-          {cityCode(origen)}
-        </Text>
-        <Text variant="caption" color="muted" align="center" numberOfLines={1} style={s.cityName}>
-          {formatCity(origen)}
-        </Text>
-      </View>
+    <View style={s.row} accessible accessibilityLabel={etiqueta}>
+      <Endpoint ciudad={origen} hora={horaSalida} />
 
       <View style={s.middle}>
         <View style={s.timeline}>
@@ -61,14 +76,22 @@ export function RouteSummary({ origen, destino, duration }: RouteSummaryProps) {
         ) : null}
       </View>
 
-      <View style={s.endpoint}>
-        <Text variant="title" size="2xl" weight="heavy" align="center" compact>
-          {cityCode(destino)}
+      <Endpoint ciudad={destino} hora={horaLlegada} />
+    </View>
+  );
+}
+
+function Endpoint({ ciudad, hora }: { ciudad?: string | null; hora?: string }) {
+  return (
+    <View style={s.endpoint}>
+      <Text variant="subheading" align="center" numberOfLines={2}>
+        {formatCity(ciudad)}
+      </Text>
+      {hora ? (
+        <Text variant="caption" color="muted" weight="bold" align="center" style={s.hora}>
+          {hora}
         </Text>
-        <Text variant="caption" color="muted" align="center" numberOfLines={1} style={s.cityName}>
-          {formatCity(destino)}
-        </Text>
-      </View>
+      ) : null}
     </View>
   );
 }
@@ -83,11 +106,12 @@ const s = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
   },
-  cityName: {
+  hora: {
     marginTop: Spacing.xs,
   },
   middle: {
-    flex: 1,
+    // Más angosto que los extremos: los nombres completos necesitan el espacio.
+    flex: 0.7,
     alignItems: 'center',
     paddingHorizontal: Spacing.sm,
   },

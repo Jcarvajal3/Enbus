@@ -1,40 +1,61 @@
+/**
+ * Mi perfil (#50, M-55, M-56, APP-52), en secciones:
+ *
+ * - **Cuenta**: datos personales (botón "Editar") y contraseña ("Cambiar
+ *   contraseña", o "Crear una contraseña" si la cuenta es solo de Google).
+ * - **Notificaciones**: las tres preferencias `notif_*`; guardan al cambiar y
+ *   vuelven atrás si falla.
+ * - **Ayuda**, **Legal** (solo con `SITIO_URL`), "Cerrar sesión", "Eliminar mi
+ *   cuenta" y la versión.
+ */
 import { useCallback, useRef, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, Switch, TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import {
   CaretRight,
-  Check,
   EnvelopeSimple,
+  FileText,
   IdentificationCard,
+  Key,
   Lifebuoy,
-  PencilSimple,
   Phone,
+  ShieldCheck,
   SignOut,
   UserCircle,
   WarningCircle,
   WhatsappLogo,
-  X,
   type IconProps,
 } from 'phosphor-react-native';
 import * as Haptics from 'expo-haptics';
 import Constants from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '@/src/contexts/AuthContext';
-import { usePerfil, type CampoPerfil } from '@/src/hooks/usePerfil';
+import {
+  tieneContrasena,
+  usePerfil,
+  type CampoPerfil,
+  type PreferenciaNotificacion,
+} from '@/src/hooks/usePerfil';
 import { humanizeError } from '@/src/utils/errores';
 import { supabase } from '@/src/utils/supabase';
-import { SOPORTE_WHATSAPP, abrirSoporteWhatsApp } from '@/src/utils/soporte';
+import {
+  SITIO_URL,
+  SOPORTE_WHATSAPP,
+  abrirPaginaLegal,
+  abrirSoporteWhatsApp,
+} from '@/src/utils/soporte';
 import { useToast } from '@/src/components/Toast';
 import { PageTransition } from '@/src/components/PageTransition';
 import { PressableScale } from '@/src/components/PressableScale';
 import { StaggerItem } from '@/src/components/StaggerItem';
 import { CompletarPerfilSheet } from '@/src/components/CompletarPerfilSheet';
+import { CedulaField } from '@/src/components/CedulaField';
+import { TelefonoField } from '@/src/components/TelefonoField';
 import {
   Button,
   Card,
   ErrorState,
   Field,
-  IconButton,
   InfoRow,
   LoadingState,
   Screen,
@@ -68,11 +89,30 @@ function listaCampos(faltan: CampoPerfil[]): string {
   return `${nombres.slice(0, -1).join(', ')} y ${nombres[nombres.length - 1]}`;
 }
 
+const PREFERENCIAS: { clave: PreferenciaNotificacion; titulo: string; detalle: string }[] = [
+  {
+    clave: 'notif_boletos',
+    titulo: 'Boletos y pagos',
+    detalle: 'Confirmaciones, pagos y cambios en tus viajes',
+  },
+  {
+    clave: 'notif_encomiendas',
+    titulo: 'Encomiendas',
+    detalle: 'Cuando lo que envías o recibes cambia de estado',
+  },
+  {
+    clave: 'notif_recordatorios',
+    titulo: 'Recordatorios de viaje',
+    detalle: 'Un aviso antes de la salida',
+  },
+];
+
 export default function PerfilScreen() {
   const router = useRouter();
   const { user, signOut } = useAuth();
   const toast = useToast();
-  const { perfil, completo, faltan, loading, error, recargar, guardar } = usePerfil();
+  const { perfil, completo, faltan, loading, error, recargar, guardar, guardarNotificaciones } =
+    usePerfil();
 
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -84,8 +124,13 @@ export default function PerfilScreen() {
   const [cedulaRif, setCedulaRif] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
 
+  /** Valor elegido mientras se guarda (o `undefined`: se muestra el del perfil). */
+  const [prefLocal, setPrefLocal] = useState<Partial<Record<PreferenciaNotificacion, boolean>>>({});
+
   const telefonoRef = useRef<TextInput>(null);
   const cedulaRef = useRef<TextInput>(null);
+
+  const conContrasena = tieneContrasena(user);
 
   const empezarEdicion = useCallback(() => {
     Haptics.selectionAsync();
@@ -101,9 +146,9 @@ export default function PerfilScreen() {
     const next: Record<string, string> = {};
     if (!nombreValido(nombreCompleto)) next.nombre = 'Escribe tu nombre y apellido.';
     const tel = validatePhone(telefono);
-    if (!tel.valid) next.telefono = tel.message;
+    if (!tel.valid) next.telefono = tel.message ?? 'Revisa el teléfono.';
     const ced = validateCedula(cedulaRif);
-    if (!ced.valid) next.cedula = ced.message;
+    if (!ced.valid) next.cedula = ced.message ?? 'Revisa la cédula.';
     setErrors(next);
     return Object.keys(next).length === 0;
   }, [nombreCompleto, telefono, cedulaRif]);
@@ -136,6 +181,34 @@ export default function PerfilScreen() {
     setIsEditing(false);
   };
 
+  const limpiarCampo = (campo: string) =>
+    setErrors((prev) => (prev[campo] ? { ...prev, [campo]: '' } : prev));
+
+  // ── Preferencias de notificación ─────────────────────────────────────────
+  const valorPreferencia = (clave: PreferenciaNotificacion): boolean =>
+    prefLocal[clave] ?? (perfil?.[clave] !== false);
+
+  const cambiarPreferencia = useCallback(
+    async (clave: PreferenciaNotificacion, valor: boolean) => {
+      setPrefLocal((prev) => ({ ...prev, [clave]: valor }));
+      try {
+        await guardarNotificaciones({ [clave]: valor });
+      } catch (err) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        toast.show('error', `No pudimos guardar tu preferencia. ${humanizeError(err, 'perfil')}`);
+      } finally {
+        // Con éxito, el perfil ya trae el valor nuevo; si falló, vuelve al anterior.
+        setPrefLocal((prev) => {
+          const next = { ...prev };
+          delete next[clave];
+          return next;
+        });
+      }
+    },
+    [guardarNotificaciones, toast]
+  );
+
+  // ── Sesión ───────────────────────────────────────────────────────────────
   const cerrarSesion = useCallback(async () => {
     setCerrandoSesion(true);
     try {
@@ -173,6 +246,11 @@ export default function PerfilScreen() {
     if (!ok) toast.show('error', 'No pudimos abrir WhatsApp. Revisa que esté instalado.');
   };
 
+  const abrirLegal = async (pagina: 'terminos' | 'privacidad') => {
+    const ok = await abrirPaginaLegal(pagina);
+    if (!ok) toast.show('error', 'No pudimos abrir la página. Revisa tu conexión e intenta de nuevo.');
+  };
+
   const displayName =
     (nombreValido(perfil?.nombre_completo) ? perfil?.nombre_completo : null) ||
     user?.email?.split('@')[0] ||
@@ -182,33 +260,7 @@ export default function PerfilScreen() {
   return (
     <Screen>
       <PageTransition>
-        <ScreenHeader
-          variant="compact"
-          title="Mi perfil"
-          onBack={() => router.back()}
-          right={
-            loading || !perfil ? undefined : isEditing ? (
-              <>
-                <IconButton
-                  icon={X}
-                  label="Descartar cambios"
-                  onPress={handleCancel}
-                  disabled={saving}
-                  color={Colors.mutedForeground}
-                />
-                <IconButton
-                  icon={Check}
-                  label="Guardar cambios"
-                  onPress={handleSave}
-                  disabled={saving}
-                  color={Colors.successText}
-                />
-              </>
-            ) : (
-              <IconButton icon={PencilSimple} label="Editar mis datos" onPress={empezarEdicion} />
-            )
-          }
-        />
+        <ScreenHeader variant="compact" title="Mi perfil" onBack={() => router.back()} />
 
         {loading && !perfil ? (
           <LoadingState label="Cargando tu perfil…" />
@@ -258,9 +310,29 @@ export default function PerfilScreen() {
               </StaggerItem>
             ) : null}
 
+            {/* ── Cuenta ───────────────────────────────────────────────────── */}
             <StaggerItem index={2}>
+              <SectionLabel>Cuenta</SectionLabel>
               <Card tone="sunken" padding="md" elevated={false}>
-                <SectionLabel>Información personal</SectionLabel>
+                <View style={s.cardHead}>
+                  <Text variant="bodyStrong" accessibilityRole="header" style={s.cardHeadTitle}>
+                    Datos personales
+                  </Text>
+                  {perfil ? (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onPress={isEditing ? handleCancel : empezarEdicion}
+                      disabled={saving}
+                      accessibilityLabel={
+                        isEditing ? 'Cancelar la edición de tus datos' : 'Editar tus datos personales'
+                      }
+                      style={s.textButton}
+                    >
+                      {isEditing ? 'Cancelar' : 'Editar'}
+                    </Button>
+                  ) : null}
+                </View>
 
                 {isEditing ? (
                   <>
@@ -268,41 +340,51 @@ export default function PerfilScreen() {
                       label="Nombre y apellido"
                       placeholder="Juan Pérez"
                       value={nombreCompleto}
-                      onChangeText={(v) => setNombreCompleto(v.slice(0, 80))}
+                      onChangeText={(v) => {
+                        setNombreCompleto(v.slice(0, 80));
+                        limpiarCampo('nombre');
+                      }}
                       editable={!saving}
                       error={errors.nombre}
                       autoComplete="name"
                       textContentType="name"
+                      autoCapitalize="words"
                       returnKeyType="next"
+                      submitBehavior="submit"
                       onSubmitEditing={() => telefonoRef.current?.focus()}
                     />
-                    <Field
+                    <TelefonoField
                       ref={telefonoRef}
-                      label="Teléfono"
-                      placeholder="0414-1234567"
-                      keyboardType="phone-pad"
                       value={telefono}
-                      onChangeText={(v) => setTelefono(v.slice(0, 16))}
+                      onChangeText={(v) => {
+                        setTelefono(v);
+                        limpiarCampo('telefono');
+                      }}
                       editable={!saving}
                       error={errors.telefono}
-                      autoComplete="tel"
-                      textContentType="telephoneNumber"
                       returnKeyType="next"
                       onSubmitEditing={() => cedulaRef.current?.focus()}
                     />
-                    <Field
+                    <CedulaField
                       ref={cedulaRef}
-                      label="Cédula"
-                      placeholder="V-12345678"
-                      autoCapitalize="characters"
                       value={cedulaRif}
-                      onChangeText={(v) => setCedulaRif(v.slice(0, 14))}
+                      onChangeText={(v) => {
+                        setCedulaRif(v);
+                        limpiarCampo('cedula');
+                      }}
                       editable={!saving}
                       error={errors.cedula}
                       returnKeyType="done"
                       onSubmitEditing={handleSave}
-                      containerStyle={s.lastField}
                     />
+                    <Button
+                      variant="accent"
+                      fullWidth
+                      disabled={saving}
+                      onPress={handleSave}
+                    >
+                      {saving ? 'Guardando…' : 'Guardar cambios'}
+                    </Button>
                   </>
                 ) : (
                   <>
@@ -340,55 +422,108 @@ export default function PerfilScreen() {
                   </>
                 )}
               </Card>
+
+              <Card tone="sunken" padding="none" elevated={false} style={s.cardSpaced}>
+                <FilaMenu
+                  icon={Key}
+                  titulo={conContrasena ? 'Cambiar contraseña' : 'Crear una contraseña'}
+                  detalle={
+                    conContrasena ? undefined : 'Para entrar también con tu correo, no solo con Google'
+                  }
+                  onPress={() => router.push('/cuenta/contrasena')}
+                />
+              </Card>
             </StaggerItem>
 
-            {isEditing ? (
-              <StaggerItem index={3} style={s.actions}>
-                <Button variant="accent" fullWidth loading={saving} onPress={handleSave}>
-                  Guardar cambios
-                </Button>
+            {/* ── Notificaciones ───────────────────────────────────────────── */}
+            <StaggerItem index={3} style={s.section}>
+              <SectionLabel>Notificaciones</SectionLabel>
+              <Card tone="sunken" padding="none" elevated={false}>
+                {PREFERENCIAS.map((p, i) => (
+                  <FilaSwitch
+                    key={p.clave}
+                    titulo={p.titulo}
+                    detalle={p.detalle}
+                    valor={valorPreferencia(p.clave)}
+                    guardando={prefLocal[p.clave] !== undefined}
+                    onCambiar={(v) => cambiarPreferencia(p.clave, v)}
+                    divided={i > 0}
+                  />
+                ))}
+              </Card>
+            </StaggerItem>
+
+            {/* ── Ayuda (#28) ──────────────────────────────────────────────── */}
+            <StaggerItem index={4} style={s.section}>
+              <SectionLabel>Ayuda</SectionLabel>
+              <Card tone="sunken" padding="none" elevated={false}>
+                <FilaMenu
+                  icon={Lifebuoy}
+                  titulo="Ayuda y soporte"
+                  detalle="Reporta un problema o lee las preguntas frecuentes"
+                  onPress={() => router.push('/ayuda')}
+                />
+                {SOPORTE_WHATSAPP ? (
+                  <FilaMenu
+                    icon={WhatsappLogo}
+                    titulo="Escríbenos por WhatsApp"
+                    detalle="Abre un chat con el equipo de EnBus"
+                    onPress={escribirSoporte}
+                    divided
+                  />
+                ) : null}
+              </Card>
+            </StaggerItem>
+
+            {/* ── Legal (solo con el sitio configurado) ────────────────────── */}
+            {SITIO_URL ? (
+              <StaggerItem index={5} style={s.section}>
+                <SectionLabel>Legal</SectionLabel>
+                <Card tone="sunken" padding="none" elevated={false}>
+                  <FilaMenu
+                    icon={FileText}
+                    titulo="Términos y condiciones"
+                    onPress={() => abrirLegal('terminos')}
+                  />
+                  <FilaMenu
+                    icon={ShieldCheck}
+                    titulo="Política de privacidad"
+                    onPress={() => abrirLegal('privacidad')}
+                    divided
+                  />
+                </Card>
               </StaggerItem>
-            ) : (
-              <>
-                {/* ── Ayuda (#28) ─────────────────────────────────────────── */}
-                <StaggerItem index={3} style={s.section}>
-                  <SectionLabel>Ayuda</SectionLabel>
-                  <Card tone="sunken" padding="none" elevated={false}>
-                    <FilaMenu
-                      icon={Lifebuoy}
-                      titulo="Ayuda y soporte"
-                      detalle="Reporta un problema o lee las preguntas frecuentes"
-                      onPress={() => router.push('/ayuda')}
-                    />
-                    {SOPORTE_WHATSAPP ? (
-                      <FilaMenu
-                        icon={WhatsappLogo}
-                        titulo="Escríbenos por WhatsApp"
-                        detalle="Abre un chat con el equipo de EnBus"
-                        onPress={escribirSoporte}
-                        divided
-                      />
-                    ) : null}
-                  </Card>
-                </StaggerItem>
+            ) : null}
 
-                <StaggerItem index={4} style={s.actions}>
-                  <Button
-                    variant="dangerSoft"
-                    icon={SignOut}
-                    fullWidth
-                    loading={cerrandoSesion}
-                    onPress={confirmarCerrarSesion}
-                  >
-                    Cerrar sesión
-                  </Button>
+            <StaggerItem index={6} style={s.actions}>
+              <Button
+                variant="dangerSoft"
+                icon={SignOut}
+                fullWidth
+                loading={cerrandoSesion}
+                onPress={confirmarCerrarSesion}
+              >
+                Cerrar sesión
+              </Button>
 
-                  <Text variant="caption" color="muted" align="center" style={s.version}>
-                    {APP_VERSION ? `EnBus · versión ${APP_VERSION}` : 'EnBus'}
-                  </Text>
-                </StaggerItem>
-              </>
-            )}
+              <PressableScale
+                onPress={() => router.push('/cuenta/eliminar')}
+                haptic
+                hapticType="selection"
+                scaleValue={Motion.press.button}
+                style={s.eliminar}
+                accessibilityRole="button"
+                accessibilityLabel="Eliminar mi cuenta"
+              >
+                <Text variant="label" color="dangerText" weight="bold">
+                  Eliminar mi cuenta
+                </Text>
+              </PressableScale>
+
+              <Text variant="caption" color="muted" align="center" style={s.version}>
+                {APP_VERSION ? `EnBus · versión ${APP_VERSION}` : 'EnBus'}
+              </Text>
+            </StaggerItem>
           </ScrollView>
         )}
       </PageTransition>
@@ -447,6 +582,54 @@ function FilaMenu({
   );
 }
 
+// ─── Fila con interruptor ────────────────────────────────────────────────────
+
+function FilaSwitch({
+  titulo,
+  detalle,
+  valor,
+  guardando,
+  onCambiar,
+  divided,
+}: {
+  titulo: string;
+  detalle?: string;
+  valor: boolean;
+  guardando: boolean;
+  onCambiar: (v: boolean) => void;
+  divided?: boolean;
+}) {
+  return (
+    <View style={[s.fila, divided && s.filaDivided]}>
+      <View
+        style={s.filaBody}
+        importantForAccessibility="no-hide-descendants"
+        accessibilityElementsHidden
+      >
+        <Text variant="bodyStrong">{titulo}</Text>
+        {detalle ? (
+          <Text variant="caption" color="muted">
+            {detalle}
+          </Text>
+        ) : null}
+      </View>
+      <Switch
+        value={valor}
+        onValueChange={(v) => {
+          Haptics.selectionAsync();
+          onCambiar(v);
+        }}
+        disabled={guardando}
+        trackColor={{ false: Colors.borderStrong, true: Colors.accent }}
+        thumbColor={Colors.white}
+        ios_backgroundColor={Colors.borderStrong}
+        accessibilityLabel={detalle ? `${titulo}. ${detalle}` : titulo}
+        accessibilityState={{ checked: valor, disabled: guardando, busy: guardando }}
+      />
+    </View>
+  );
+}
+
 const s = StyleSheet.create({
   avatarBlock: {
     alignItems: 'center',
@@ -477,8 +660,21 @@ const s = StyleSheet.create({
   avisoAction: {
     marginTop: Spacing.lg,
   },
-  lastField: {
-    marginBottom: 0,
+  cardHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.md,
+    marginBottom: Spacing.sm,
+  },
+  cardHeadTitle: {
+    flex: 1,
+  },
+  textButton: {
+    marginRight: -Spacing.md,
+  },
+  cardSpaced: {
+    marginTop: Spacing.md,
   },
   section: {
     marginTop: Spacing['2xl'],
@@ -486,8 +682,15 @@ const s = StyleSheet.create({
   actions: {
     marginTop: Spacing['2xl'],
   },
+  eliminar: {
+    alignSelf: 'center',
+    minHeight: Sizes.touchTarget,
+    justifyContent: 'center',
+    paddingHorizontal: Spacing.lg,
+    marginTop: Spacing.lg,
+  },
   version: {
-    marginTop: Spacing['2xl'],
+    marginTop: Spacing.lg,
   },
   fila: {
     flexDirection: 'row',

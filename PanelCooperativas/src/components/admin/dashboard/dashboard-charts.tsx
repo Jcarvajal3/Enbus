@@ -13,7 +13,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import type { DailyActivity, TopCooperativa, RutaPopular } from "@/lib/types/admin-dashboard";
 
 const ChartSkeleton = () => (
-  <Skeleton className="h-[300px] w-full rounded-xl bg-slate-800" />
+  <Skeleton className="h-[300px] w-full rounded-xl" aria-hidden />
 );
 
 const ActivityChart = dynamic(

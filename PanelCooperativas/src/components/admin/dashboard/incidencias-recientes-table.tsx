@@ -1,9 +1,9 @@
-import Link from "next/link";
+import { CeldaEnlace } from "@/components/celda-enlace";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { StatusBadge } from "@/components/status-badge";
 import { etiquetaTipoIncidencia } from "@/lib/estados";
-import { formatFechaVE } from "@/lib/fechas";
+import { formatHaceTiempo } from "@/lib/fechas";
 import { IncidenciaReciente } from "@/lib/types/admin-dashboard";
 
 interface IncidenciasRecientesTableProps {
@@ -43,15 +43,14 @@ export function IncidenciasRecientesTable({ data }: IncidenciasRecientesTablePro
                 </TableRow>
               ) : (
                 data.map((item) => (
-                  <TableRow key={item.id} className="transition-colors hover:bg-muted/50">
-                    <TableCell className="font-mono text-xs font-medium">
-                      <Link
-                        href={`/admin/incidencias/${item.id}`}
-                        className="text-foreground underline decoration-primary underline-offset-4"
-                      >
-                        {codigoIncidencia(item.id)}
-                      </Link>
-                    </TableCell>
+                  <TableRow key={item.id} className="relative motion-safe:transition-colors hover:bg-muted/50">
+                    <CeldaEnlace
+                      href={`/admin/incidencias/${item.id}`}
+                      etiqueta={`Ver incidencia ${codigoIncidencia(item.id)}`}
+                      className="font-mono text-xs"
+                    >
+                      {codigoIncidencia(item.id)}
+                    </CeldaEnlace>
                     <TableCell className="text-sm">{etiquetaTipoIncidencia(item.tipo)}</TableCell>
                     <TableCell>
                       {item.encomienda_tracking_id ? (
@@ -64,7 +63,7 @@ export function IncidenciasRecientesTable({ data }: IncidenciasRecientesTablePro
                       <StatusBadge status={item.estado} dominio="incidencia" />
                     </TableCell>
                     <TableCell className="text-right text-xs text-muted-foreground">
-                      {formatFechaVE(item.created_at)}
+                      {formatHaceTiempo(item.created_at)}
                     </TableCell>
                   </TableRow>
                 ))

@@ -24,11 +24,10 @@ import { useUser } from "@/hooks/use-user";
 import { createClient } from "@/lib/supabase/client";
 import { codigoEB, humanizeError } from "@/lib/errores";
 import { MODALIDAD_PAGO } from "@/lib/estados";
+import { CedulaField, TelefonoField } from "@/components/ve-fields";
 import {
   CEDULA_ERROR,
-  CEDULA_PLACEHOLDER,
   TELEFONO_ERROR,
-  TELEFONO_PLACEHOLDER,
   cedulaParaGuardar,
   cedulaValida,
   formatCedula,
@@ -42,7 +41,7 @@ import { MSG_VENTANA_BLOQUEADA, imprimirGuiaNavegador, printGuiaEncomienda } fro
 import type { Encomienda, ModalidadPago, PersonaEncomienda, RegistroEncomiendaTaquilla } from "@/lib/types/encomiendas";
 import type { CotizacionEnvioPublica } from "@/lib/types/pagos";
 import { cn } from "@/lib/utils";
-import { normalizarCiudad } from "@/app/cooperativas/(panel)/recepcion-destino/sucursal";
+import { formatCiudad, normalizarCiudad } from "@/lib/ciudades";
 import {
   datosNuevaEncomienda,
   registrarEncomiendaTaquilla,
@@ -224,7 +223,7 @@ function Contenido({
     [destinos]
   );
   const itemsSucursal = useMemo(
-    () => Object.fromEntries((datos?.sucursales ?? []).map((s) => [s.id, `${s.nombre} · ${capitalizar(s.ciudad)}`])),
+    () => Object.fromEntries((datos?.sucursales ?? []).map((s) => [s.id, `${s.nombre} · ${formatCiudad(s.ciudad)}`])),
     [datos]
   );
 
@@ -493,40 +492,19 @@ function Contenido({
             onChange={(e) => cambiar("nombre", e.target.value)}
           />
         </Campo>
-        <Campo id={id(`${prefijo}-cedula`)} etiqueta="Cédula" error={errores.cedula}>
-          <Input
-            id={id(`${prefijo}-cedula`)}
-            autoComplete="off"
-            placeholder={CEDULA_PLACEHOLDER}
-            value={persona.cedula}
-            maxLength={16}
-            aria-invalid={errores.cedula ? true : undefined}
-            aria-describedby={errores.cedula ? id(`${prefijo}-cedula-error`) : undefined}
-            onChange={(e) => cambiar("cedula", e.target.value)}
-            onBlur={() => {
-              const n = cedulaParaGuardar(persona.cedula);
-              if (n) cambiar("cedula", n);
-            }}
-          />
-        </Campo>
-        <Campo id={id(`${prefijo}-telefono`)} etiqueta="Teléfono" error={errores.telefono}>
-          <Input
-            id={id(`${prefijo}-telefono`)}
-            type="tel"
-            inputMode="tel"
-            autoComplete="off"
-            placeholder={TELEFONO_PLACEHOLDER}
-            value={persona.telefono}
-            maxLength={20}
-            aria-invalid={errores.telefono ? true : undefined}
-            aria-describedby={errores.telefono ? id(`${prefijo}-telefono-error`) : undefined}
-            onChange={(e) => cambiar("telefono", e.target.value)}
-            onBlur={() => {
-              const n = telefonoParaGuardar(persona.telefono);
-              if (n) cambiar("telefono", n);
-            }}
-          />
-        </Campo>
+        <CedulaField
+          id={id(`${prefijo}-cedula`)}
+          value={persona.cedula}
+          letras={["V", "E", "J", "P"]}
+          error={errores.cedula}
+          onChange={(v) => cambiar("cedula", v)}
+        />
+        <TelefonoField
+          id={id(`${prefijo}-telefono`)}
+          value={persona.telefono}
+          error={errores.telefono}
+          onChange={(v) => cambiar("telefono", v)}
+        />
       </div>
     );
   };
@@ -621,7 +599,7 @@ function Contenido({
               <Campo id={id("destino")} etiqueta="Destino" error={errPaquete.destino} className="sm:col-span-2">
                 {sucursal && destinos.length === 0 ? (
                   <p className="rounded-lg border border-dashed p-3 text-sm text-muted-foreground">
-                    No hay rutas activas que salgan de {capitalizar(sucursal.ciudad)}.{" "}
+                    No hay rutas activas que salgan de {formatCiudad(sucursal.ciudad)}.{" "}
                     {esAdmin ? (
                       <Link href="/cooperativas/rutas" className="font-medium text-foreground underline underline-offset-4">
                         Crear ruta
@@ -716,12 +694,14 @@ function Contenido({
                   ).map(([valorRadio, titulo, ayuda]) => (
                     <label
                       key={valorRadio}
+                      htmlFor={id(`modalidad-${valorRadio}`)}
                       className={cn(
-                        "flex cursor-pointer items-start gap-3 rounded-xl border p-3 text-sm transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring",
+                        "grid cursor-pointer grid-cols-[auto_1fr] items-start gap-x-3 rounded-xl border p-3 text-sm transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring",
                         modalidad === valorRadio ? "border-foreground bg-muted/60" : "hover:bg-muted/40"
                       )}
                     >
                       <input
+                        id={id(`modalidad-${valorRadio}`)}
                         type="radio"
                         name={id("modalidad")}
                         value={valorRadio}
@@ -730,12 +710,10 @@ function Contenido({
                           setModalidad(valorRadio);
                           setErrPaquete((p) => ({ ...p, modalidad: undefined }));
                         }}
-                        className="mt-0.5 accent-foreground"
+                        className="row-span-2 mt-0.5 accent-foreground"
                       />
-                      <span>
-                        <span className="block font-medium">{titulo}</span>
-                        <span className="block text-xs text-muted-foreground">{ayuda}</span>
-                      </span>
+                      <span className="font-medium">{titulo}</span>
+                      <span className="text-xs text-muted-foreground">{ayuda}</span>
                     </label>
                   ))}
                 </div>
@@ -820,7 +798,7 @@ function Resultado({
   const pin = registro.pin_retiro;
   const destinatario = encomienda.receiver_nombre;
   const wa = telefonoWhatsApp(encomienda.receiver_telefono);
-  const ciudad = capitalizar(encomienda.ciudad_destino);
+  const ciudad = formatCiudad(encomienda.ciudad_destino);
   const mensaje =
     `Hola ${destinatario}, ${encomienda.remitente_nombre ? `${encomienda.remitente_nombre} te envió` : "te enviaron"} una encomienda` +
     `${cooperativa ? ` por ${cooperativa}` : ""} (${encomienda.tracking_id}) hacia ${ciudad}. ` +

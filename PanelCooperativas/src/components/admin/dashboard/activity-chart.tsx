@@ -1,6 +1,6 @@
 "use client";
 
-import { Line, LineChart, CartesianGrid, XAxis } from "recharts";
+import { Line, LineChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import {
   Card,
   CardContent,
@@ -46,8 +46,8 @@ export function ActivityChart({ data }: ActivityChartProps) {
   return (
     <Card className="col-span-1 lg:col-span-3">
       <CardHeader>
-        <CardTitle>Actividad Global</CardTitle>
-        <CardDescription>Encomiendas y boletos en los últimos 30 días</CardDescription>
+        <CardTitle>Actividad de los últimos 30 días</CardTitle>
+        <CardDescription>Encomiendas registradas y boletos pagados por día</CardDescription>
       </CardHeader>
       <CardContent>
         <ChartContainer config={chartConfig} className="min-h-[300px] w-full">
@@ -60,6 +60,7 @@ export function ActivityChart({ data }: ActivityChartProps) {
               axisLine={false}
               className="text-xs text-muted-foreground"
             />
+            <YAxis allowDecimals={false} tickLine={false} axisLine={false} width={32} className="text-xs text-muted-foreground" />
             <ChartTooltip content={<ChartTooltipContent />} />
             <ChartLegend content={<ChartLegendContent />} />
             <Line
