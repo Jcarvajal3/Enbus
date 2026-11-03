@@ -6,7 +6,7 @@ import { IncidenciasTable } from "@/components/admin/incidencias/incidencias-tab
 import { FILTROS_ESTADO_INCIDENCIA, type FiltroEstadoIncidencia } from "@/lib/types/admin-incidencias";
 
 interface PageProps {
-  searchParams: Promise<{ tipo?: string; estado?: string; q?: string }>;
+  searchParams: Promise<{ tipo?: string; estado?: string; q?: string; pagina?: string }>;
 }
 
 export default async function AdminIncidenciasPage({ searchParams }: PageProps) {
@@ -17,8 +17,11 @@ export default async function AdminIncidenciasPage({ searchParams }: PageProps) 
     ? (estadoParam as FiltroEstadoIncidencia)
     : "pendientes";
   const tipo = params.tipo && params.tipo !== "all" ? params.tipo : "all";
+  const q = (params.q ?? "").trim().slice(0, 80);
+  const pagina = Math.max(1, Number.parseInt(params.pagina ?? "1", 10) || 1);
 
-  const incidencias = await fetchIncidencias({ tipo, estado });
+  // Filtros, búsqueda, orden de atención y paginación se resuelven en el servidor.
+  const resultado = await fetchIncidencias({ tipo, estado, q, pagina });
 
   return (
     <div className="space-y-6">
@@ -28,12 +31,12 @@ export default async function AdminIncidenciasPage({ searchParams }: PageProps) 
       />
 
       <IncidenciasTable
-        // Al cambiar los filtros del servidor, la búsqueda local se reinicia desde la URL.
-        key={`${estado}-${tipo}`}
-        data={incidencias}
+        // Al cambiar los filtros, el campo de búsqueda se reinicia desde la URL.
+        key={`${estado}-${tipo}-${q}`}
+        resultado={resultado}
         estado={estado}
         tipo={tipo}
-        q={params.q ?? ""}
+        q={q}
         ahora={new Date().toISOString()}
       />
     </div>

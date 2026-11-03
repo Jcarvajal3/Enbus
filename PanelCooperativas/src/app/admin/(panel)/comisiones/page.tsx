@@ -8,7 +8,7 @@ import { obtenerTasaBCV } from "@/lib/tasa-bcv";
 
 export default async function AdminComisionesPage() {
   // Fetch data concurrently on the server side
-  const [ciclos, cooperativas, tasa] = await Promise.all([
+  const [{ ciclos, truncado }, cooperativas, tasa] = await Promise.all([
     fetchCiclosComisiones(),
     fetchCooperativasList(),
     obtenerTasaBCV(),
@@ -24,7 +24,7 @@ export default async function AdminComisionesPage() {
       </PageHeader>
 
       {/* Tabla e interfaz interactiva */}
-      <CiclosTable data={ciclos} cooperativas={cooperativas} tasa={tasa} />
+      <CiclosTable data={ciclos} truncado={truncado} cooperativas={cooperativas} tasa={tasa} />
     </div>
   );
 }

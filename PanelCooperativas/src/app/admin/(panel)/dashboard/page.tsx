@@ -109,7 +109,7 @@ export default async function AdminDashboardPage() {
           />
           <KPICard
             title="Cooperativas activas"
-            value={formatNumeroVE(kpis.cooperativas_activas, 0)}
+            value={kpis.error_cooperativas ? "—" : formatNumeroVE(kpis.cooperativas_activas, 0)}
             icon={Buildings}
             description="Pueden vender y recibir encomiendas"
             href="/admin/cooperativas?estado=ACTIVA"
@@ -117,7 +117,7 @@ export default async function AdminDashboardPage() {
           />
           <KPICard
             title="Solicitudes por revisar"
-            value={formatNumeroVE(kpis.solicitudes_pendientes, 0)}
+            value={kpis.error_solicitudes ? "—" : formatNumeroVE(kpis.solicitudes_pendientes, 0)}
             icon={ClipboardText}
             variant={kpis.solicitudes_pendientes > 0 ? "warning" : "default"}
             description={kpis.solicitudes_pendientes > 0 ? "Cooperativas esperando tu respuesta" : "No hay solicitudes en espera"}
@@ -125,7 +125,7 @@ export default async function AdminDashboardPage() {
           />
           <KPICard
             title="Encomiendas con más de 72 h en tránsito"
-            value={formatNumeroVE(kpis.alertas_amarillas_abiertas, 0)}
+            value={kpis.error_alertas ? "—" : formatNumeroVE(kpis.alertas_amarillas_abiertas, 0)}
             icon={Warning}
             variant={kpis.alertas_amarillas_abiertas > 0 ? "warning" : "default"}
             description={kpis.alertas_amarillas_abiertas > 0 ? "Sin resolver" : "Ninguna sin resolver"}

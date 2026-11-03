@@ -376,8 +376,11 @@ export function CooperativaDetailTabs({ cooperativa }: CooperativaDetailTabsProp
       <TabsContent value="calificaciones" className="mt-4">
         <Card className="bg-card border-border text-foreground">
           <CardHeader>
-            <CardTitle className="text-lg">Calificaciones y reseñas ({cooperativa.calificaciones.length})</CardTitle>
-            <CardDescription className="text-muted-foreground">Historial de comentarios y valoraciones recibidas de los pasajeros.</CardDescription>
+            <CardTitle className="text-lg">Calificaciones y reseñas ({Math.max(cooperativa.total_calificaciones ?? 0, cooperativa.calificaciones.length)})</CardTitle>
+            <CardDescription className="text-muted-foreground">
+              Historial de comentarios y valoraciones recibidas de los pasajeros
+              {cooperativa.calificaciones.length < (cooperativa.total_calificaciones ?? 0) ? ` (se muestran las ${cooperativa.calificaciones.length} más recientes)` : ""}.
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
             

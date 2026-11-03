@@ -1,7 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { requireSuperAdmin } from "@/lib/supabase/auth-guards";
+import { requireSuperAdmin, esUuid } from "@/lib/data/admin-auth";
 import { revalidatePath } from "next/cache";
 import { sendApprovalEmail, sendRejectionEmail } from "@/lib/email";
 import { humanizeError } from "@/lib/errores";
@@ -17,6 +17,12 @@ interface ResultadoSolicitud {
 
 const MINIMO_MOTIVO = 5;
 const SOLICITUD_YA_RESUELTA = "Esta solicitud ya no está en revisión: otra persona la resolvió. Actualiza la página.";
+const NO_ENCONTRADA = "No encontramos la solicitud. Actualiza la página e intenta de nuevo.";
+
+/** fn_cambiar_estado_cooperativa devuelve ya_procesado si la cooperativa ya estaba en ese estado. */
+function yaProcesado(data: unknown): boolean {
+  return Boolean((data as { ya_procesado?: boolean } | null)?.ya_procesado);
+}
 
 function revalidarSolicitudes(cooperativaId: string) {
   revalidatePath("/admin/cooperativas");
@@ -51,8 +57,10 @@ async function cambiarEstado(
 export async function aprobarSolicitud(cooperativaId: string, comisionPorcentaje: number): Promise<ResultadoSolicitud> {
   try {
     await requireSuperAdmin();
+    if (!esUuid(cooperativaId)) return { success: false, error: NO_ENCONTRADA };
     const supabase = await createClient();
 
+    comisionPorcentaje = Number(comisionPorcentaje);
     if (!Number.isFinite(comisionPorcentaje) || comisionPorcentaje < 0 || comisionPorcentaje > 100) {
       return { success: false, error: "La comisión debe ser un número entre 0 y 100." };
     }
@@ -61,43 +69,55 @@ export async function aprobarSolicitud(cooperativaId: string, comisionPorcentaje
       .from("cooperativas")
       .select("nombre, email, estado")
       .eq("id", cooperativaId)
-      .single();
+      .maybeSingle();
 
     if (fetchError || !cooperativa) {
       console.error("[aprobarSolicitud] cooperativa:", fetchError);
-      return { success: false, error: humanizeError(fetchError, "cargar la solicitud") };
+      return { success: false, error: fetchError ? humanizeError(fetchError, "cargar la solicitud") : NO_ENCONTRADA };
     }
     // Otra pestaña u otro admin ya la resolvió: no se toca la comisión ni se repite el correo.
     if (cooperativa.estado !== "PENDIENTE") {
       return { success: false, error: SOLICITUD_YA_RESUELTA };
     }
 
-    // 1. Comisión (mientras sigue en revisión no tiene efecto si el paso 2 falla).
+    // 1. Estado primero: la RPC bloquea la fila (FOR UPDATE) y, si dos admins aprueban a
+    // la vez, al segundo le responde ya_procesado. Así solo quien aprobó de verdad
+    // guarda su comisión y envía el correo (antes los dos escribían la comisión y los
+    // dos mandaban el correo, cada uno con su porcentaje).
+    const { data: estadoData, error: estadoError } = await cambiarEstado(supabase, cooperativaId, "ACTIVA");
+    if (estadoError) {
+      if (!rpcNoDisponible(estadoError)) {
+        console.error("[aprobarSolicitud] estado:", estadoError);
+        return { success: false, error: humanizeError(estadoError, "aprobar la solicitud") };
+      }
+      // Base sin la migración de la fase 3: activación directa y condicional.
+      const { data: activadas, error: directoError } = await supabase
+        .from("cooperativas")
+        .update({ estado: "ACTIVA", updated_at: new Date().toISOString() })
+        .eq("id", cooperativaId)
+        .eq("estado", "PENDIENTE")
+        .select("id");
+      if (directoError) {
+        console.error("[aprobarSolicitud] estado directo:", directoError);
+        return { success: false, error: humanizeError(directoError, "aprobar la solicitud") };
+      }
+      if (!activadas || activadas.length === 0) return { success: false, error: SOLICITUD_YA_RESUELTA };
+    } else if (yaProcesado(estadoData)) {
+      return { success: false, error: SOLICITUD_YA_RESUELTA };
+    }
+
+    // 2. Comisión acordada (los ciclos se calculan con el porcentaje vigente al generarlos).
     const { error: comisionError } = await supabase
       .from("cooperativas")
       .update({ comision_porcentaje: comisionPorcentaje, updated_at: new Date().toISOString() })
       .eq("id", cooperativaId);
     if (comisionError) {
       console.error("[aprobarSolicitud] comisión:", comisionError);
-      return { success: false, error: humanizeError(comisionError, "guardar la comisión") };
-    }
-
-    // 2. Estado: la RPC limpia motivo_estado y guarda estado_cambiado_at/por.
-    const { error: estadoError } = await cambiarEstado(supabase, cooperativaId, "ACTIVA");
-    if (estadoError) {
-      if (!rpcNoDisponible(estadoError)) {
-        console.error("[aprobarSolicitud] estado:", estadoError);
-        return { success: false, error: humanizeError(estadoError, "aprobar la solicitud") };
-      }
-      // Base sin la migración de la fase 3: activación directa (sin columnas nuevas).
-      const { error: directoError } = await supabase
-        .from("cooperativas")
-        .update({ estado: "ACTIVA", updated_at: new Date().toISOString() })
-        .eq("id", cooperativaId);
-      if (directoError) {
-        console.error("[aprobarSolicitud] estado directo:", directoError);
-        return { success: false, error: humanizeError(directoError, "aprobar la solicitud") };
-      }
+      revalidarSolicitudes(cooperativaId);
+      return {
+        success: false,
+        error: "Aprobamos la cooperativa, pero no pudimos guardar la comisión. Corrígela desde «Editar datos» antes de generar ciclos.",
+      };
     }
 
     // 3. Correo: emailEnviado = false si no hay correo o si el envío falló (la UI avisa al admin).
@@ -123,9 +143,10 @@ export async function aprobarSolicitud(cooperativaId: string, comisionPorcentaje
 export async function rechazarSolicitud(cooperativaId: string, motivo: string): Promise<ResultadoSolicitud> {
   try {
     await requireSuperAdmin();
+    if (!esUuid(cooperativaId)) return { success: false, error: NO_ENCONTRADA };
     const supabase = await createClient();
 
-    const motivoLimpio = (motivo ?? "").trim();
+    const motivoLimpio = String(motivo ?? "").trim().slice(0, 500);
     if (motivoLimpio.length < MINIMO_MOTIVO) {
       return { success: false, error: `Escribe el motivo del rechazo (mínimo ${MINIMO_MOTIVO} caracteres).` };
     }
@@ -134,21 +155,23 @@ export async function rechazarSolicitud(cooperativaId: string, motivo: string): 
       .from("cooperativas")
       .select("nombre, email, estado")
       .eq("id", cooperativaId)
-      .single();
+      .maybeSingle();
 
     if (fetchError || !cooperativa) {
       console.error("[rechazarSolicitud] cooperativa:", fetchError);
-      return { success: false, error: humanizeError(fetchError, "cargar la solicitud") };
+      return { success: false, error: fetchError ? humanizeError(fetchError, "cargar la solicitud") : NO_ENCONTRADA };
     }
     if (cooperativa.estado !== "PENDIENTE") {
       return { success: false, error: SOLICITUD_YA_RESUELTA };
     }
 
-    const { error: estadoError } = await cambiarEstado(supabase, cooperativaId, "RECHAZADA", motivoLimpio);
+    const { data: estadoData, error: estadoError } = await cambiarEstado(supabase, cooperativaId, "RECHAZADA", motivoLimpio);
     if (estadoError) {
       console.error("[rechazarSolicitud] estado:", estadoError);
       return { success: false, error: humanizeError(estadoError, "rechazar la solicitud") };
     }
+    // Otro admin la rechazó al mismo tiempo: no se repite el correo.
+    if (yaProcesado(estadoData)) return { success: false, error: SOLICITUD_YA_RESUELTA };
 
     let emailEnviado = false;
     if (cooperativa.email) {
@@ -172,6 +195,7 @@ export async function rechazarSolicitud(cooperativaId: string, motivo: string): 
 export async function reabrirSolicitud(cooperativaId: string): Promise<ResultadoSolicitud> {
   try {
     await requireSuperAdmin();
+    if (!esUuid(cooperativaId)) return { success: false, error: NO_ENCONTRADA };
     const supabase = await createClient();
     const { error } = await cambiarEstado(supabase, cooperativaId, "PENDIENTE");
     if (error) {
@@ -190,7 +214,8 @@ export async function reabrirSolicitud(cooperativaId: string): Promise<Resultado
 export async function descartarSolicitud(cooperativaId: string, motivo: string): Promise<ResultadoSolicitud> {
   try {
     await requireSuperAdmin();
-    const motivoLimpio = (motivo ?? "").trim();
+    if (!esUuid(cooperativaId)) return { success: false, error: NO_ENCONTRADA };
+    const motivoLimpio = String(motivo ?? "").trim().slice(0, 500);
     if (motivoLimpio.length < MINIMO_MOTIVO) {
       return { success: false, error: `Escribe el motivo (mínimo ${MINIMO_MOTIVO} caracteres).` };
     }

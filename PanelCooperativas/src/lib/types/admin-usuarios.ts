@@ -1,3 +1,6 @@
+/** Filas por lista en el detalle de un usuario (las más recientes). */
+export const MAX_FILAS_DETALLE_USUARIO = 100;
+
 export interface Usuario {
   id: string;
   role: "user" | "taquillero" | "admin_cooperativa" | "super_admin";
@@ -63,7 +66,8 @@ export interface EncomiendaUsuario {
   estado: string;
   peso_kg: number | null;
   costo_calculado: number;
-  pin_retiro: string | null;
+  /** Si ya tiene PIN de retiro. El PIN en sí no viaja al navegador (se reenvía desde el servidor). */
+  tiene_pin: boolean;
   pin_bloqueado: boolean;
   intentos_pin: number;
   cooperativa_nombre: string;
@@ -120,4 +124,16 @@ export interface UsuarioDetalle extends Usuario {
   boletos: BoletoUsuario[];
   pagos: PagoUsuario[];
   notificaciones: NotificacionUsuario[];
+  /**
+   * Total real de cada lista: el detalle carga solo las más recientes
+   * (MAX_FILAS_DETALLE_USUARIO), para que una cuenta con miles de movimientos no
+   * traiga todo de una vez.
+   */
+  totales: {
+    encomiendas_enviadas: number;
+    encomiendas_recibidas: number;
+    boletos: number;
+    pagos: number;
+    notificaciones: number;
+  };
 }

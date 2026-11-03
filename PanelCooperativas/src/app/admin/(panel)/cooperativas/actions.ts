@@ -1,7 +1,34 @@
 "use server";
 
 import { createClient, createAdminClient } from "@/lib/supabase/server";
-import { requireSuperAdmin } from "@/lib/supabase/auth-guards";
+import { requireSuperAdmin, esUuid } from "@/lib/data/admin-auth";
+
+const NO_ENCONTRADA = "No encontramos la cooperativa. Actualiza la página e intenta de nuevo.";
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const MAX_NOMBRE = 120;
+/** Extensión del logo según su tipo real (no el nombre del archivo, que lo elige quien lo sube). */
+const EXT_LOGO: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif" };
+const ESTADOS_VALIDOS: EstadoCooperativa[] = ["PENDIENTE", "RECHAZADA", "ACTIVA", "SUSPENDIDA", "DESACTIVADA"];
+
+/** Texto de un campo del formulario (un File u otro valor raro cuenta como vacío). */
+function campo(formData: FormData, nombre: string): string {
+  const v = formData.get(nombre);
+  return typeof v === "string" ? v.trim() : "";
+}
+
+/** ¿Ese correo ya tiene una invitación vigente (sin usar, sin revocar y sin vencer)? */
+async function tieneInvitacionVigente(adminSupabase: ReturnType<typeof createAdminClient>, email: string) {
+  const { data, error } = await adminSupabase
+    .from("invitaciones")
+    .select("id")
+    .eq("email", email)
+    .eq("usado", false)
+    .is("revocada_at", null)
+    .gt("expira_at", new Date().toISOString())
+    .limit(1);
+  if (error) throw error;
+  return (data ?? []).length > 0;
+}
 import { revalidatePath } from "next/cache";
 import { ESTADOS_CON_MOTIVO, type EstadoCooperativa } from "@/lib/types/admin-cooperativas";
 import { normalizeRif, RIF_ERROR } from "@/lib/rif";
@@ -13,14 +40,21 @@ export async function createCooperativa(formData: FormData) {
     const supabase = await createClient();
     const adminSupabase = createAdminClient();
 
-    const nombre = formData.get("nombre") as string;
-    const rifInput = formData.get("rif") as string;
-    const comisionStr = formData.get("comision_porcentaje") as string;
-    const emailAdmin = ((formData.get("email_admin") as string) || "").trim().toLowerCase();
-    const logoFile = formData.get("logo") as File | null;
+    const nombre = campo(formData, "nombre");
+    const rifInput = campo(formData, "rif");
+    const comisionStr = campo(formData, "comision_porcentaje");
+    const emailAdmin = campo(formData, "email_admin").toLowerCase();
+    const logo = formData.get("logo");
+    const logoFile = logo instanceof File ? logo : null;
 
     if (!nombre || !rifInput || !comisionStr) {
       return { success: false, error: "Completa el nombre, el RIF y la comisión." };
+    }
+    if (nombre.length > MAX_NOMBRE) {
+      return { success: false, error: `El nombre no puede pasar de ${MAX_NOMBRE} caracteres.` };
+    }
+    if (emailAdmin && !EMAIL_RE.test(emailAdmin)) {
+      return { success: false, error: "El correo del administrador no es válido. Revisa que esté bien escrito." };
     }
 
     // Acepta el RIF con o sin guiones (J, G, V, E, P o C) y lo guarda normalizado ("J-12345678-9")
@@ -29,8 +63,8 @@ export async function createCooperativa(formData: FormData) {
       return { success: false, error: RIF_ERROR, campo: "rif" as const };
     }
 
-    const comision = parseFloat(comisionStr);
-    if (isNaN(comision) || comision < 0 || comision > 100) {
+    const comision = Number(comisionStr.replace(",", "."));
+    if (!Number.isFinite(comision) || comision < 0 || comision > 100) {
       return { success: false, error: "La comisión debe ser un número entre 0 y 100." };
     }
 
@@ -71,7 +105,7 @@ export async function createCooperativa(formData: FormData) {
 
     let logo_url = null;
     if (logoFile && logoFile.size > 0) {
-      const ext = logoFile.name.split(".").pop() ?? "png";
+      const ext = EXT_LOGO[logoFile.type] ?? "png";
       const path = `${cooperativa.id}/logo.${ext}`;
 
       const { error: uploadError } = await adminSupabase.storage
@@ -97,7 +131,18 @@ export async function createCooperativa(formData: FormData) {
     }
 
     let invite_link = "";
+    let invitacionVigente = false;
     if (emailAdmin) {
+      try {
+        invitacionVigente = await tieneInvitacionVigente(adminSupabase, emailAdmin);
+      } catch (e) {
+        console.error("Error checking invitations:", e);
+      }
+      if (invitacionVigente) {
+        aviso = [aviso, "Ese correo ya tiene una invitación vigente: no creamos otra."].filter(Boolean).join(" ");
+      }
+    }
+    if (emailAdmin && !invitacionVigente) {
       // Create invitation in the invitaciones table to match EnBus onboarding structure
       const { data: invitacion, error: inviteError } = await adminSupabase
         .from("invitaciones")
@@ -132,22 +177,34 @@ export async function createCooperativa(formData: FormData) {
 export async function inviteCooperativaAdmin(cooperativaId: string, email: string) {
   try {
     const superAdmin = await requireSuperAdmin();
+    if (!esUuid(cooperativaId)) return { success: false, error: NO_ENCONTRADA };
     const adminSupabase = createAdminClient();
 
-    email = (email ?? "").trim().toLowerCase();
+    email = String(email ?? "").trim().toLowerCase();
     if (!email) {
       return { success: false, error: "Escribe el correo del administrador." };
     }
+    if (!EMAIL_RE.test(email) || email.length > 254) {
+      return { success: false, error: "El correo no es válido. Revisa que esté bien escrito (por ejemplo, nombre@correo.com)." };
+    }
 
-    // Check if there is an active invitation
-    const { data: activa } = await adminSupabase
-      .from("invitaciones")
-      .select("id")
-      .eq("email", email)
-      .eq("usado", false)
-      .gt("expira_at", new Date().toISOString());
+    // La cooperativa tiene que existir y poder operar (no se invita a una desactivada).
+    const { data: coop, error: coopError } = await adminSupabase
+      .from("cooperativas")
+      .select("id, estado")
+      .eq("id", cooperativaId)
+      .maybeSingle();
+    if (coopError) {
+      console.error("Error loading cooperativa for invitation:", coopError);
+      return { success: false, error: humanizeError(coopError, "crear la invitación") };
+    }
+    if (!coop) return { success: false, error: NO_ENCONTRADA };
+    if (coop.estado === "DESACTIVADA") {
+      return { success: false, error: "Esta cooperativa está desactivada: no se le pueden invitar administradores." };
+    }
 
-    if (activa && activa.length > 0) {
+    // Una invitación vigente por correo (las revocadas no cuentan).
+    if (await tieneInvitacionVigente(adminSupabase, email)) {
       return { success: false, error: "Ese correo ya tiene una invitación vigente. Espera a que la use o a que venza (48 horas)." };
     }
 
@@ -181,16 +238,21 @@ export async function inviteCooperativaAdmin(cooperativaId: string, email: strin
 export async function updateCooperativa(id: string, formData: FormData) {
   try {
     await requireSuperAdmin();
+    if (!esUuid(id)) return { success: false, error: NO_ENCONTRADA };
     const supabase = await createClient();
     const adminSupabase = createAdminClient();
 
-    const nombre = formData.get("nombre") as string;
-    const rifInput = ((formData.get("rif") as string) || "").trim();
-    const comisionStr = formData.get("comision_porcentaje") as string;
-    const logoFile = formData.get("logo") as File | null;
+    const nombre = campo(formData, "nombre");
+    const rifInput = campo(formData, "rif");
+    const comisionStr = campo(formData, "comision_porcentaje");
+    const logo = formData.get("logo");
+    const logoFile = logo instanceof File ? logo : null;
 
     if (!nombre || !rifInput || !comisionStr) {
       return { success: false, error: "Completa el nombre, el RIF y la comisión." };
+    }
+    if (nombre.length > MAX_NOMBRE) {
+      return { success: false, error: `El nombre no puede pasar de ${MAX_NOMBRE} caracteres.` };
     }
 
     // Normaliza el RIF ("J-12345678-9"). Si no se puede normalizar pero es el mismo RIF que ya
@@ -209,8 +271,8 @@ export async function updateCooperativa(id: string, formData: FormData) {
       }
     }
 
-    const comision = parseFloat(comisionStr);
-    if (isNaN(comision) || comision < 0 || comision > 100) {
+    const comision = Number(comisionStr.replace(",", "."));
+    if (!Number.isFinite(comision) || comision < 0 || comision > 100) {
       return { success: false, error: "La comisión debe ser un número entre 0 y 100." };
     }
 
@@ -238,7 +300,7 @@ export async function updateCooperativa(id: string, formData: FormData) {
         return { success: false, error: "El logo no puede superar los 2 MB. Usa una imagen más liviana." };
       }
 
-      const ext = logoFile.name.split(".").pop() ?? "png";
+      const ext = EXT_LOGO[logoFile.type] ?? "png";
       const path = `${id}/logo.${ext}`;
 
       const { error: uploadError } = await adminSupabase.storage
@@ -254,11 +316,15 @@ export async function updateCooperativa(id: string, formData: FormData) {
       }
     }
 
-    const { error: updateError } = await supabase
+    const { data: actualizadas, error: updateError } = await supabase
       .from("cooperativas")
       .update(updates)
-      .eq("id", id);
+      .eq("id", id)
+      .select("id");
 
+    if (!updateError && (!actualizadas || actualizadas.length === 0)) {
+      return { success: false, error: NO_ENCONTRADA };
+    }
     if (updateError) {
       console.error("Error updating cooperativa:", updateError);
       return { success: false, error: humanizeError(updateError, "guardar los cambios de la cooperativa") };
@@ -281,7 +347,11 @@ export async function updateCooperativa(id: string, formData: FormData) {
 export async function changeCooperativaEstado(id: string, nuevoEstado: EstadoCooperativa, motivo?: string) {
   try {
     await requireSuperAdmin();
-    const motivoLimpio = (motivo ?? "").trim();
+    if (!esUuid(id)) return { success: false, error: NO_ENCONTRADA };
+    if (!ESTADOS_VALIDOS.includes(nuevoEstado)) {
+      return { success: false, error: "Ese estado no existe. Actualiza la página e intenta de nuevo." };
+    }
+    const motivoLimpio = String(motivo ?? "").trim().slice(0, 500);
     if (ESTADOS_CON_MOTIVO.includes(nuevoEstado) && motivoLimpio.length < 5) {
       return { success: false, error: "Escribe el motivo (mínimo 5 caracteres): la cooperativa lo verá en su panel." };
     }

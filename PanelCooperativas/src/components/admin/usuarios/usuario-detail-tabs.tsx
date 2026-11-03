@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Bell, CreditCard, Envelope, IdentificationCard, Package, Phone, Ticket, User } from "@phosphor-icons/react";
-import type { PagoUsuario, UsuarioDetalle } from "@/lib/types/admin-usuarios";
+import { MAX_FILAS_DETALLE_USUARIO, type PagoUsuario, type UsuarioDetalle } from "@/lib/types/admin-usuarios";
 import { Monto } from "@/components/monto";
 import { StatusBadge } from "@/components/status-badge";
 import { formatFechaHoraVE, formatFechaVE } from "@/lib/fechas";
@@ -83,7 +83,15 @@ function FilaVacia({ columnas, texto }: { columnas: number; texto: string }) {
 export function UsuarioDetailTabs({ usuario }: UsuarioDetailTabsProps) {
   // Montos en USD de referencia, con el equivalente en Bs a la tasa BCV de hoy.
   const tasa = useTasaBCVAdmin();
-  const totalEncomiendas = usuario.encomiendas_enviadas.length + usuario.encomiendas_recibidas.length;
+  const { totales } = usuario;
+  const totalEncomiendas = totales.encomiendas_enviadas + totales.encomiendas_recibidas;
+  // Cada lista trae solo los movimientos más recientes: se avisa si hay más.
+  const recortada =
+    totales.encomiendas_enviadas > usuario.encomiendas_enviadas.length ||
+    totales.encomiendas_recibidas > usuario.encomiendas_recibidas.length ||
+    totales.boletos > usuario.boletos.length ||
+    totales.pagos > usuario.pagos.length ||
+    totales.notificaciones > usuario.notificaciones.length;
   const [tab, setTab] = useTabEnUrl(PESTANAS, "perfil");
 
   return (
@@ -96,15 +104,18 @@ export function UsuarioDetailTabs({ usuario }: UsuarioDetailTabsProps) {
           <Package className="mr-2 h-4 w-4" aria-hidden /> Encomiendas ({totalEncomiendas})
         </TabsTrigger>
         <TabsTrigger value="boletos">
-          <Ticket className="mr-2 h-4 w-4" aria-hidden /> Boletos ({usuario.boletos.length})
+          <Ticket className="mr-2 h-4 w-4" aria-hidden /> Boletos ({totales.boletos})
         </TabsTrigger>
         <TabsTrigger value="pagos">
-          <CreditCard className="mr-2 h-4 w-4" aria-hidden /> Pagos ({usuario.pagos.length})
+          <CreditCard className="mr-2 h-4 w-4" aria-hidden /> Pagos ({totales.pagos})
         </TabsTrigger>
         <TabsTrigger value="notificaciones">
-          <Bell className="mr-2 h-4 w-4" aria-hidden /> Notificaciones ({usuario.notificaciones.length})
+          <Bell className="mr-2 h-4 w-4" aria-hidden /> Notificaciones ({totales.notificaciones})
         </TabsTrigger>
       </TabsList>
+      {recortada && (
+        <p className="text-sm text-muted-foreground">Cada lista muestra los {MAX_FILAS_DETALLE_USUARIO} movimientos más recientes.</p>
+      )}
 
       {/* 1. Perfil */}
       <TabsContent value="perfil">

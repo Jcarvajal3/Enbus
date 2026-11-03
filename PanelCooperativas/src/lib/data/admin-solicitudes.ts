@@ -1,5 +1,7 @@
 import { createClient, createAdminClient } from "@/lib/supabase/server";
 import { humanizeError } from "@/lib/errores";
+import { requireSuperAdmin } from "./admin-auth";
+import { enLotes } from "./admin-consultas";
 import type { Cooperativa } from "@/lib/types/admin-cooperativas";
 import type { CuentaSolicitud, SolicitudesAdmin, SolicitudPendiente } from "@/lib/types/admin-solicitudes";
 
@@ -31,6 +33,8 @@ type FilaInvitacion = {
  * pendiente" / "Sin cuenta"). Lanza un error legible si la consulta falla.
  */
 export async function fetchSolicitudes(): Promise<SolicitudesAdmin> {
+  // Antes de usar la service role (invitaciones y perfiles de todas las cooperativas).
+  await requireSuperAdmin();
   const supabase = await createClient();
 
   let resultado = await supabase
@@ -58,19 +62,36 @@ export async function fetchSolicitudes(): Promise<SolicitudesAdmin> {
 
   const ids = cooperativas.map((c) => c.id);
   // Service role: el super admin necesita ver todas las invitaciones y perfiles de la cooperativa.
+  // En grupos de 100 ids: con cientos de solicitudes rechazadas, un solo `.in()`
+  // supera el largo máximo de la URL y la consulta falla entera.
   const admin = createAdminClient();
-  const [perfilesRes, invitacionesRes] = await Promise.all([
-    admin.from("profiles").select("id, cooperativa_id").in("cooperativa_id", ids).eq("role", "admin_cooperativa"),
-    admin.from("invitaciones").select("*").in("cooperativa_id", ids).eq("usado", false),
-  ]);
-  // Si falla, la columna "Cuenta" sale como "Sin cuenta" y la lista se muestra igual.
-  if (perfilesRes.error) console.error("[fetchSolicitudes] profiles:", perfilesRes.error);
-  if (invitacionesRes.error) console.error("[fetchSolicitudes] invitaciones:", invitacionesRes.error);
+  const grupos: string[][] = [];
+  for (let i = 0; i < ids.length; i += 100) grupos.push(ids.slice(i, i + 100));
+  const resultados = await enLotes(grupos, 4, (grupo) =>
+    Promise.all([
+      admin.from("profiles").select("id, cooperativa_id").in("cooperativa_id", grupo).eq("role", "admin_cooperativa"),
+      admin
+        .from("invitaciones")
+        .select("cooperativa_id, email, usado, expira_at, revocada_at")
+        .in("cooperativa_id", grupo)
+        .eq("usado", false)
+        .gt("expira_at", new Date().toISOString()),
+    ])
+  );
+  const perfiles: { cooperativa_id: string | null }[] = [];
+  const invitaciones: FilaInvitacion[] = [];
+  for (const [perfilesRes, invitacionesRes] of resultados) {
+    // Si falla, la columna "Cuenta" sale como "Sin cuenta" y la lista se muestra igual.
+    if (perfilesRes.error) console.error("[fetchSolicitudes] profiles:", perfilesRes.error);
+    if (invitacionesRes.error) console.error("[fetchSolicitudes] invitaciones:", invitacionesRes.error);
+    perfiles.push(...((perfilesRes.data ?? []) as { cooperativa_id: string | null }[]));
+    invitaciones.push(...((invitacionesRes.data ?? []) as FilaInvitacion[]));
+  }
 
-  const conCuenta = new Set((perfilesRes.data ?? []).map((p) => p.cooperativa_id as string));
+  const conCuenta = new Set(perfiles.map((p) => p.cooperativa_id as string));
   const ahora = Date.now();
   const invitacionPendiente = new Map<string, string>();
-  for (const inv of (invitacionesRes.data ?? []) as FilaInvitacion[]) {
+  for (const inv of invitaciones) {
     if (inv.usado || inv.revocada_at || new Date(inv.expira_at).getTime() <= ahora) continue;
     if (!invitacionPendiente.has(inv.cooperativa_id)) invitacionPendiente.set(inv.cooperativa_id, inv.email);
   }
@@ -103,6 +124,7 @@ export async function fetchSolicitudesPendientes(): Promise<SolicitudPendiente[]
 }
 
 export async function countSolicitudesPendientes(): Promise<number> {
+  await requireSuperAdmin();
   const supabase = await createClient();
 
   const { count, error } = await supabase

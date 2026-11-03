@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { StatusBadge } from "@/components/status-badge";
 import { DesbloquearPinButton } from "@/components/admin/encomiendas/desbloquear-pin-button";
-import { requireSuperAdmin } from "@/lib/supabase/auth-guards";
+import { requireSuperAdmin } from "@/lib/data/admin-auth";
 import { formatFechaHoraVE } from "@/lib/fechas";
 import { formatCedula, formatTelefono } from "@/lib/ve";
 import { MODALIDAD_PAGO, estadoInfo } from "@/lib/estados";

@@ -20,6 +20,7 @@ import { ComisionCiclo } from "@/lib/types/admin-comisiones";
 import { ExportCSVButton } from "./export-csv-button";
 import { Monto } from "@/components/monto";
 import { formatFechaVE } from "@/lib/fechas";
+import { formatNumeroVE } from "@/lib/dinero";
 import type { TasaBCV } from "@/lib/types/pagos";
 import { useTasaBCVAdmin } from "@/components/admin/dashboard/use-tasa-bcv-admin";
 
@@ -34,12 +35,14 @@ export function detallePago(c: Pick<ComisionCiclo, "pagado" | "pagado_at" | "pag
 
 interface CiclosTableProps {
   data: ComisionCiclo[];
+  /** true si hay más ciclos que el tope cargado (MAX_CICLOS, los más recientes). */
+  truncado?: boolean;
   cooperativas: { id: string; nombre: string }[];
   /** Tasa BCV de hoy (del servidor). Si no se pasa, se consulta en el navegador. */
   tasa?: TasaBCV | null;
 }
 
-export function CiclosTable({ data, cooperativas, tasa: tasaServidor }: CiclosTableProps) {
+export function CiclosTable({ data, truncado = false, cooperativas, tasa: tasaServidor }: CiclosTableProps) {
   const tasa = useTasaBCVAdmin(tasaServidor);
   const [aPagar, setAPagar] = useState<ComisionCiclo | null>(null);
 
@@ -81,21 +84,34 @@ export function CiclosTable({ data, cooperativas, tasa: tasaServidor }: CiclosTa
   };
 
   // Totales de la selección filtrada
+  // Sumas en centavos enteros: miles de floats acumulan error de redondeo.
   const totals = useMemo(() => {
-    return filteredData.reduce(
+    const c = (n: number) => Math.round((Number(n) || 0) * 100);
+    const enCentavos = filteredData.reduce(
       (acc, curr) => {
-        acc.encomiendas += curr.total_encomiendas;
-        acc.boletos += curr.total_boletos;
-        acc.comisiones += curr.monto_comision;
-        if (!curr.pagado) acc.pendiente += curr.monto_comision;
+        acc.encomiendas += c(curr.total_encomiendas);
+        acc.boletos += c(curr.total_boletos);
+        acc.comisiones += c(curr.monto_comision);
+        if (!curr.pagado) acc.pendiente += c(curr.monto_comision);
         return acc;
       },
       { encomiendas: 0, boletos: 0, comisiones: 0, pendiente: 0 }
     );
+    return {
+      encomiendas: enCentavos.encomiendas / 100,
+      boletos: enCentavos.boletos / 100,
+      comisiones: enCentavos.comisiones / 100,
+      pendiente: enCentavos.pendiente / 100,
+    };
   }, [filteredData]);
 
   return (
     <div className="space-y-6">
+      {truncado && (
+        <p role="status" className="rounded-xl border border-warning/40 bg-warning-light p-3 text-sm text-warning-deep">
+          Se muestran los {formatNumeroVE(data.length, 0)} ciclos más recientes: los totales no incluyen los más antiguos.
+        </p>
+      )}
       {/* Tarjetas de Resumen Rápido (Basadas en los filtros) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-card border p-4 rounded-xl flex flex-col justify-between">

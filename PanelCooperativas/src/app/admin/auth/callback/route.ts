@@ -8,8 +8,11 @@ import { NextResponse } from "next/server";
  */
 function sanitizeNext(raw: string | null, fallback: string): string {
   if (!raw) return fallback;
-  // Block protocol-relative URLs (//evil.com) and anything that isn't a path
-  if (raw.startsWith("/") && !raw.startsWith("//")) return raw;
+  // Solo rutas internas del panel de administración: nada de //evil.com, /\evil.com
+  // ni saltos a otras secciones (el login de admin siempre vuelve a /admin).
+  if (/^\/admin(\/|$|\?)/.test(raw) && !raw.includes("\\") && !raw.startsWith("/admin/login") && !raw.startsWith("/admin/auth")) {
+    return raw;
+  }
   return fallback;
 }
 
@@ -45,13 +48,20 @@ export async function GET(request: Request) {
     const { error, data } = await supabase.auth.exchangeCodeForSession(code);
     if (!error && data.session) {
       // Role verification — only super_admin may access /admin/*
-      const { data: profile } = await supabase
+      const { data: profile, error: profileError } = await supabase
         .from("profiles")
-        .select("role")
+        .select("role, eliminada_at")
         .eq("id", data.session.user.id)
-        .single();
+        .maybeSingle();
 
-      if (profile?.role !== "super_admin") {
+      if (profileError) {
+        // Fallo técnico al leer el perfil: no se deja la sesión abierta a medias.
+        console.error("[admin/auth/callback] perfil:", profileError);
+        await supabase.auth.signOut();
+        return NextResponse.redirect(`${origin}/admin/login?error=auth-callback-failed`);
+      }
+
+      if (profile?.role !== "super_admin" || profile.eliminada_at) {
         // Sign out the non-admin user and reject access
         await supabase.auth.signOut();
         return NextResponse.redirect(`${origin}/admin/login?error=access-denied`);

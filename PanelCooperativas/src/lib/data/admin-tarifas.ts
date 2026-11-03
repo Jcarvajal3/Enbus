@@ -1,6 +1,10 @@
 import { createClient } from "@/lib/supabase/server";
 import { estadoDeTarifa, type Tarifa, type RouteOption } from "@/lib/types/admin-tarifas";
 import { humanizeError } from "@/lib/errores";
+import { requireSuperAdmin } from "./admin-auth";
+
+/** Tarifas del historial que se muestran (las más recientes). */
+export const MAX_HISTORIAL_TARIFAS = 200;
 
 type FilaTarifa = Record<string, unknown> & {
   id: string;
@@ -38,6 +42,7 @@ function aTarifa(row: FilaTarifa): Tarifa {
 }
 
 export async function fetchTarifaVigente(): Promise<Tarifa | null> {
+  await requireSuperAdmin();
   try {
     const supabase = await createClient();
     
@@ -68,6 +73,7 @@ export async function fetchTarifaVigente(): Promise<Tarifa | null> {
  * fn_publicar_tarifa deja como mucho una: cada programación nueva reemplaza a la anterior.
  */
 export async function fetchTarifaProgramada(): Promise<Tarifa | null> {
+  await requireSuperAdmin();
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("tarifas")
@@ -87,6 +93,7 @@ export async function fetchTarifaProgramada(): Promise<Tarifa | null> {
 }
 
 export async function fetchHistorialTarifas(): Promise<Tarifa[]> {
+  await requireSuperAdmin();
   try {
     const supabase = await createClient();
 
@@ -94,7 +101,8 @@ export async function fetchHistorialTarifas(): Promise<Tarifa[]> {
     const { data, error } = await supabase
       .from("tarifas")
       .select("*, profiles:creada_por(nombre_completo)")
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .limit(MAX_HISTORIAL_TARIFAS);
 
     if (error) {
       console.error("Error fetching tariff history:", error);
@@ -109,6 +117,7 @@ export async function fetchHistorialTarifas(): Promise<Tarifa[]> {
 }
 
 export async function fetchRutasParaSimulador(): Promise<RouteOption[]> {
+  await requireSuperAdmin();
   try {
     const supabase = await createClient();
 
@@ -116,7 +125,10 @@ export async function fetchRutasParaSimulador(): Promise<RouteOption[]> {
     const { data, error } = await supabase
       .from("rutas")
       .select("id, estado_origen, ciudad_origen, estado_destino, ciudad_destino, duracion_estimada_min, cooperativas(nombre)")
-      .eq("activa", true);
+      .eq("activa", true)
+      .order("ciudad_origen", { ascending: true })
+      .order("ciudad_destino", { ascending: true })
+      .order("id", { ascending: true });
 
     if (error) {
       console.error("Error fetching routes for simulator:", error);

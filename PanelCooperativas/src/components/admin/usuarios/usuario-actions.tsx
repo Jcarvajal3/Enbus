@@ -56,7 +56,7 @@ export function UsuarioActions({
   ).filter((e) => !ESTADOS_CERRADOS.includes(e.estado));
 
   const bloqueables = activas.filter((e) => e.pin_bloqueado || e.intentos_pin > 0);
-  const conPin = activas.filter((e) => e.pin_retiro);
+  const conPin = activas.filter((e) => e.tiene_pin);
   const esAdmin = role === "admin_cooperativa" || role === "super_admin";
 
   const reenviar = async (e: EncomiendaUsuario) => {
