@@ -145,12 +145,13 @@ Lo comprobé contra la base real con consultas de solo lectura a `pg_proc`, `inf
 
 - `generar-guia-pdf`: solo vi que verifica el JWT. Que el agente de edge functions confirme que exige que la encomienda sea de la cooperativa del usuario, porque la guía lleva el PIN.
 
-## 5. Verificación
+## 5. Verificación (final, sobre todo el proyecto, incluido el admin, con next 16.4.2)
 
-- `npm ci`: OK.
-- `npx tsc --noEmit`: 0 errores (verificación final).
+- `npm ci` / `npm install`: OK.
+- `npm audit --omit=dev`: **0 vulnerabilidades** (antes 23: 1 crítica, 12 altas).
+- `npx tsc --noEmit`: 0 errores.
 - `npx eslint`: 0 errores, 0 avisos.
-- `npm run build`: OK (todas las rutas compiladas; el proxy aparece como Middleware).
+- `npm run build`: OK (todas las rutas `/admin/*` y `/cooperativas/*`; el proxy aparece como Middleware).
 - Playwright: no ejecutado (motivo en la sección 3).
 
 ## 6. Pendiente del usuario

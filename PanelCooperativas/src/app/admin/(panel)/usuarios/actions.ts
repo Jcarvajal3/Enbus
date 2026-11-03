@@ -111,8 +111,9 @@ export async function reenviarPIN(encomiendaId: string) {
     // NOTA DE SEGURIDAD: El mensaje Push NO incluye el PIN en texto claro porque la
     // notificación se persiste en la tabla notificaciones_usuario. El PIN real ya fue
     // enviado por WhatsApp. El push sólo notifica que deben revisar su WhatsApp.
+    // Solo se avisa por push si el WhatsApp salió: el texto dice que se envió por WhatsApp.
     let pushEnviado = false;
-    if (e.receiver_user_id) {
+    if (e.receiver_user_id && waEnviado) {
       try {
         const { data: pushData, error: pushError } = await adminSupabase.functions.invoke("enviar-push", {
           body: {
