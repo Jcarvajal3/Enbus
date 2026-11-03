@@ -51,7 +51,7 @@ export async function fetchIncidencias(filters: FetchIncidenciasFilters = {}): P
   const supabase = await createClient();
 
   const consultar = (select: string) => {
-    let query = supabase.from("incidencias").select(select).order("created_at", { ascending: true }).limit(500);
+    let query = supabase.from("incidencias").select(select).order("created_at", { ascending: false }).limit(500); // las 500 más recientes
     if (filters.tipo && filters.tipo !== "all") query = query.eq("tipo", filters.tipo);
     const estado = filters.estado ?? "pendientes";
     if (estado === "pendientes") query = query.in("estado", ["ABIERTA", "EN_PROCESO"]);
