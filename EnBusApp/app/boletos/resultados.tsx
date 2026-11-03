@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { LoadingState, Screen } from '@/src/components/ui';
+import { Screen } from '@/src/components/ui';
+import { ScreenSkeleton } from '@/src/components/SkeletonLoader';
 
 /**
  * Legacy deep-link target. Search results now live inside the `buscar` wizard,
@@ -16,7 +17,7 @@ export default function ResultadosRedirect() {
 
   return (
     <Screen>
-      <LoadingState label="Abriendo resultados…" />
+      <ScreenSkeleton variante="lista" />
     </Screen>
   );
 }

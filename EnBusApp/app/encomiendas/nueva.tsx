@@ -735,34 +735,36 @@ export default function NuevaEncomiendaWizard() {
           <>
             <SectionLabel>Datos de quien recibe</SectionLabel>
             {/* El último campo ya deja su margen: el pie de la tarjeta no lo duplica. */}
-            <Card tone="sunken" style={s.cardCampos}>
-              <Field
-                label="Nombre y apellido"
-                value={nombre}
-                onChangeText={(v) => setNombre(v.slice(0, 80))}
-                error={errors.nombre}
-                autoCapitalize="words"
-                autoComplete="off"
-                returnKeyType="next"
-                submitBehavior="submit"
-                onSubmitEditing={() => cedulaRef.current?.focus()}
-              />
-              <CedulaField
-                ref={cedulaRef}
-                value={cedula}
-                onChangeText={setCedula}
-                error={errors.cedula}
-                letras={['V', 'E', 'J', 'P']}
-                returnKeyType="next"
-                onSubmitEditing={() => telefonoRef.current?.focus()}
-              />
-              <TelefonoField
-                ref={telefonoRef}
-                value={telefono}
-                onChangeText={setTelefono}
-                error={errors.telefono}
-                returnKeyType="done"
-              />
+            <Card tone="sunken" padding="none">
+              <View style={s.cardCampos}>
+                <Field
+                  label="Nombre y apellido"
+                  value={nombre}
+                  onChangeText={(v) => setNombre(v.slice(0, 80))}
+                  error={errors.nombre}
+                  autoCapitalize="words"
+                  autoComplete="off"
+                  returnKeyType="next"
+                  submitBehavior="submit"
+                  onSubmitEditing={() => cedulaRef.current?.focus()}
+                />
+                <CedulaField
+                  ref={cedulaRef}
+                  value={cedula}
+                  onChangeText={setCedula}
+                  error={errors.cedula}
+                  letras={['V', 'E', 'J', 'P']}
+                  returnKeyType="next"
+                  onSubmitEditing={() => telefonoRef.current?.focus()}
+                />
+                <TelefonoField
+                  ref={telefonoRef}
+                  value={telefono}
+                  onChangeText={setTelefono}
+                  error={errors.telefono}
+                  returnKeyType="done"
+                />
+              </View>
             </Card>
 
             <View style={s.section}>
@@ -1162,8 +1164,9 @@ const s = StyleSheet.create({
   section: {
     marginTop: Spacing['2xl'],
   },
+  /** Tras una lista de tarjetas (que ya dejan `md` debajo): 24 en total. */
   sectionTight: {
-    marginTop: Spacing.lg,
+    marginTop: Spacing.md,
   },
   sucursal: {
     gap: Spacing.xs,
@@ -1174,6 +1177,8 @@ const s = StyleSheet.create({
     gap: Spacing.xs,
   },
   cardCampos: {
+    paddingTop: Spacing.xl,
+    paddingHorizontal: Spacing.xl,
     paddingBottom: Spacing.xs,
   },
   campoConEnlace: {
@@ -1282,10 +1287,12 @@ const s = StyleSheet.create({
   bloque: {
     gap: Spacing.xs,
   },
+  // El enlace conserva sus 44 pt de toque sin separar la etiqueta de su valor.
   bloqueHead: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.sm,
+    marginVertical: -Spacing.md,
   },
   prohibido: {
     flexDirection: 'row',

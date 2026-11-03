@@ -39,7 +39,7 @@ import { urlFotoEncomienda } from '@/src/utils/fotos';
 import { qrEncomienda } from '@/src/utils/codigos';
 import { abrirWhatsApp } from '@/src/utils/soporte';
 import { telefonoValido } from '@/src/utils/validation';
-import { formatCity } from '@/src/utils/formatters';
+import { capitalizarInicio, formatCity } from '@/src/utils/formatters';
 import {
   MODALIDAD_PAGO,
   getCobroEncomienda,
@@ -390,7 +390,7 @@ export default function DetalleEnvioScreen() {
                 <Text variant="caption" color="muted">
                   Dónde entregarla
                 </Text>
-                <Text variant="bodyStrong">{puntoEntrega.completo}</Text>
+                <Text variant="bodyStrong">{capitalizarInicio(puntoEntrega.completo)}</Text>
                 {puntoEntrega.detalle ? (
                   <Text variant="caption" color="muted">
                     {puntoEntrega.detalle}
@@ -582,7 +582,7 @@ export default function DetalleEnvioScreen() {
 
           <InfoRow label="Quien recibe" value={encomienda.receiver_nombre || 'Sin nombre'} />
           <Divider spacing={Spacing.xs} />
-          <InfoRow label="Dónde la retira" value={puntoRetiro.completo} />
+          <InfoRow label="Dónde la retira" value={capitalizarInicio(puntoRetiro.completo)} />
           {puntoRetiro.detalle ? (
             <Text variant="caption" color="muted" style={s.puntoDetalle}>
               {puntoRetiro.detalle}
@@ -642,7 +642,9 @@ export default function DetalleEnvioScreen() {
           <Text variant="caption" color="muted" align="center">
             ¿Problemas con esta encomienda?
           </Text>
-          <TextLink onPress={reportar}>Reportar un problema</TextLink>
+          <View style={s.reportarEnlace}>
+            <TextLink onPress={reportar}>Reportar un problema</TextLink>
+          </View>
         </View>
       </ScrollView>
 
@@ -779,6 +781,10 @@ const s = StyleSheet.create({
   reportar: {
     alignItems: 'center',
     marginTop: Spacing['2xl'],
+  },
+  /** `TextLink` se alinea al inicio: este envoltorio lo centra. */
+  reportarEnlace: {
+    alignSelf: 'center',
   },
   sheetFooter: {
     gap: Spacing.sm,

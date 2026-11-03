@@ -30,14 +30,16 @@ export default function RestablecerPage() {
 
   useEffect(() => {
     let vivo = true;
-    supabase.auth
-      .getUser()
-      .then(({ data: { user } }) => {
-        if (vivo) setEstado(user ? "formulario" : "vencido");
-      })
-      .catch(() => {
+    const revisar = async () => {
+      try {
+        const { data } = await supabase.auth.getUser();
+        if (vivo) setEstado(data.user ? "formulario" : "vencido");
+      } catch {
+        // Sin sesión de recuperación legible: el enlace no sirve.
         if (vivo) setEstado("vencido");
-      });
+      }
+    };
+    void revisar();
     return () => {
       vivo = false;
     };

@@ -7,14 +7,10 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Bus } from 'phosphor-react-native';
-import {
-  EmptyState,
-  ErrorState,
-  LoadingState,
-  Screen,
-  ScreenHeader,
-} from '@/src/components/ui';
+import { Bus, Ticket } from 'phosphor-react-native';
+import { EmptyState, ErrorState, Screen, ScreenHeader } from '@/src/components/ui';
+import { ScreenSkeleton } from '@/src/components/SkeletonLoader';
+import { useVolver } from '@/src/hooks/useVolver';
 import { supabase } from '@/src/utils/supabase';
 import { formatCity, toDateKey } from '@/src/utils/formatters';
 import { humanizeError } from '@/src/utils/errores';
@@ -41,10 +37,7 @@ export default function ViajeEnlaceScreen() {
     };
   }, []);
 
-  const volver = useCallback(() => {
-    if (router.canGoBack()) router.back();
-    else router.replace('/(tabs)');
-  }, [router]);
+  const volver = useVolver('/(tabs)/boletos');
 
   const abrir = useCallback(async () => {
     if (!id) {
@@ -105,10 +98,10 @@ export default function ViajeEnlaceScreen() {
         <EmptyState
           icon={Bus}
           title="Esta salida ya no está disponible"
-          description="Puede que se haya cancelado o que el enlace esté incompleto. Busca otra salida para tu ruta."
+          description="Pudo cancelarse. Busca otra salida para tu ruta."
           action={{
             children: 'Buscar viaje',
-            variant: 'accent',
+            icon: Ticket,
             onPress: () => router.replace('/boletos/buscar'),
           }}
         />
@@ -118,7 +111,8 @@ export default function ViajeEnlaceScreen() {
 
   return (
     <Screen>
-      <LoadingState label="Abriendo la salida…" />
+      <ScreenHeader variant="compact" title="Salida" onBack={volver} />
+      <ScreenSkeleton variante="detalle" />
     </Screen>
   );
 }
