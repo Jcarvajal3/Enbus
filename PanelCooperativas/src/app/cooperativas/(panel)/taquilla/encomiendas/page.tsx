@@ -356,8 +356,8 @@ function TaquillaEncomiendas() {
                           >
                             {encomienda.tracking_id}
                           </CeldaEnlace>
-                          <TableCell className="hidden max-w-40 truncate xl:table-cell 2xl:max-w-48">{remitenteDe(encomienda).nombre}</TableCell>
-                          <TableCell className="max-w-40 truncate 2xl:max-w-48">{encomienda.receiver_nombre}</TableCell>
+                          <TableCell className="hidden max-w-40 truncate xl:table-cell 2xl:max-w-48" title={remitenteDe(encomienda).nombre ?? undefined}>{remitenteDe(encomienda).nombre}</TableCell>
+                          <TableCell className="max-w-40 truncate 2xl:max-w-48" title={encomienda.receiver_nombre ?? undefined}>{encomienda.receiver_nombre}</TableCell>
                           <TableCell>
                             <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
                               <span className="max-w-28 truncate" title={formatCiudad(encomienda.ciudad_origen)}>

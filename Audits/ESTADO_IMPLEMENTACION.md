@@ -2,7 +2,9 @@
 
 Actualizado el 03/11/2026. Rama `ux/mejoras-auditoria`.
 
-**Las cuatro fases están implementadas: 60 de 60 mejoras.** Las migraciones de las fases 2, 3 y 4 están **aplicadas en el proyecto de Supabase** (`tydpnvajwfzcsxsowctp`, el único, todavía sin usuarios reales) y las edge functions están desplegadas. Nada se ha probado todavía en un dispositivo ni en un navegador contra la base real: eso es lo siguiente (ver «Qué falta»).
+**Fase 5 (coherencia y pulido UX/UI) implementada:** 6 auditorías nuevas con capturas reales (240 hallazgos), 239 implementados; detalle, verificación y pasos manuales en `Audits/fase5/pendientes_fase5.md`.
+
+**Las cuatro fases del plan original están implementadas: 60 de 60 mejoras.** Las migraciones de las fases 2, 3 y 4 están **aplicadas en el proyecto de Supabase** (`tydpnvajwfzcsxsowctp`, el único, todavía sin usuarios reales) y las edge functions están desplegadas. Nada se ha probado todavía en un dispositivo ni en un navegador contra la base real: eso es lo siguiente (ver «Qué falta»).
 
 ## Documentos de referencia
 
@@ -12,6 +14,7 @@ Actualizado el 03/11/2026. Rama `ux/mejoras-auditoria`.
 | `Audits/audit_ux_usuario_novato.md` | Hallazgos M-, P-, A-, L- con `archivo:línea` |
 | `Audits/audit_ux_experto_uxui.md` | Propuestas APP-, PC-, AD-, LP-, DS- con la ley UX aplicada |
 | `Audits/fase2_spec.md` … `fase4_spec.md` | Especificación de cada fase |
+| `Audits/fase5/` | Fase 5: auditorías, especificación (`fase5_spec.md`) y pendientes (`pendientes_fase5.md`) |
 | `Audits/pendientes_fase1.md` … `pendientes_fase4.md` | Lo que quedó abierto en cada fase y los pasos manuales |
 | `shared/README.md` | Fuente única de tokens, formatos venezolanos y artefactos (`node shared/generar.mjs [--check]`) |
 | `Specs/00_General/Glosario.md`, `Artefactos_Compartidos.md` | Vocabulario, estados, códigos, QR y PIN |
@@ -31,6 +34,7 @@ Actualizado el 03/11/2026. Rama `ux/mejoras-auditoria`.
 | 2 · Resto de P0 | #1, #2, #3, #5, #6, #14, #15, #16 | Hecho | `20260719000001`–`06` aplicadas (la 06 con `enbus.aplicar_cierre_fase2='si'`) |
 | 3 · Confianza (P1) | #19–#28, #31–#42 | Hecho | `20260720000001`–`05` aplicadas |
 | 4 · Pulido y base (P2, P3) | #43–#60 | Hecho | `20260721000001`–`04` aplicadas |
+| 5 · Coherencia y pulido UX/UI | 239 hallazgos de `Audits/fase5/` | Hecho | Sin migraciones (solo `config.toml` local: contraseña mínima 8) |
 
 ### Fase 4 en resumen
 

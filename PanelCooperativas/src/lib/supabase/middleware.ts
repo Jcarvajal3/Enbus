@@ -18,6 +18,8 @@ const COOPERATIVAS_PUBLICAS = [
   "/cooperativas/auth/callback",
 ];
 const ADMIN_PUBLICAS = ["/admin/login", "/admin/auth/callback"];
+/** Mismas secciones que `exigirRolPanel(["admin_cooperativa"])` protege en sus páginas. */
+const SOLO_ADMIN_COOPERATIVA = ["/cooperativas/rutas", "/cooperativas/empleados", "/cooperativas/configuracion"];
 
 /** Redirige sin arrastrar la query y conservando las cookies que getSession() haya renovado. */
 function redirigir(request: NextRequest, pathname: string, respuesta: NextResponse) {
@@ -73,6 +75,21 @@ export async function updateSession(request: NextRequest) {
     // Con sesión, el login lleva al inicio; si el rol no es de cooperativa, el layout lo
     // devuelve con `?motivo=sin-acceso` (o al admin) y esa vuelta ya no se redirige.
     if (session && pathname === "/cooperativas/login" && !conMotivo) return redirigir(request, INICIO, supabaseResponse);
+    // Secciones solo del administrador de la cooperativa: el taquillero que llega por URL
+    // vuelve al inicio antes de renderizar (redirigir durante el render con el shell ya
+    // montado daba "Rendered more hooks" en desarrollo). Solo para estas rutas se lee el rol.
+    if (
+      session &&
+      !pathname.startsWith("/cooperativas/configuracion/hardware") && // redirige a Impresora y lector (ambos roles)
+      SOLO_ADMIN_COOPERATIVA.some((p) => pathname === p || pathname.startsWith(`${p}/`))
+    ) {
+      const { data: perfil } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", session.user.id)
+        .maybeSingle();
+      if (perfil?.role === "taquillero") return redirigir(request, INICIO, supabaseResponse);
+    }
   }
 
   return supabaseResponse;
