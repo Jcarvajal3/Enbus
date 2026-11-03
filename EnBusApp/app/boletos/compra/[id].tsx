@@ -12,17 +12,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { CaretRight, CheckCircle, Info, Receipt, Storefront, Ticket } from 'phosphor-react-native';
-import { PageTransition } from '@/src/components/PageTransition';
-import { PressableScale } from '@/src/components/PressableScale';
+import { CheckCircle, Receipt, Storefront, Ticket } from 'phosphor-react-native';
+import { ScreenSkeleton } from '@/src/components/SkeletonLoader';
+import { useVolver } from '@/src/hooks/useVolver';
 import {
   Card,
   Divider,
   EmptyState,
+  EntityCard,
   ErrorState,
   FloatingBar,
   Button,
-  LoadingState,
   Monto,
   RouteSummary,
   Screen,
@@ -47,7 +47,7 @@ import {
   unirAsientos,
 } from '@/src/hooks/useCheckoutBoletos';
 import type { EstadoBoleto, PagoBoletoEmbed } from '@/src/types';
-import { Colors, Motion, Radius, Sizes, Spacing, alpha } from '@/src/theme';
+import { Colors, Radius, Sizes, Spacing } from '@/src/theme';
 
 const SELECT_COMPRA = `id, codigo_boleto, asiento, estado, precio, reserva_expira_at, compra_id,
   pasajero_nombre, pasajero_cedula, monto_reembolso, reembolso_procesado, created_at,
@@ -149,10 +149,7 @@ export default function CompraScreen() {
     };
   }, [compraId, cargar]);
 
-  const volver = useCallback(() => {
-    if (router.canGoBack()) router.back();
-    else router.dismissTo('/(tabs)/boletos');
-  }, [router]);
+  const volver = useVolver('/(tabs)/boletos');
 
   /**
    * Boletos a mostrar: los vivos de la compra (los asientos que se cambiaron
@@ -178,7 +175,8 @@ export default function CompraScreen() {
   if (loading) {
     return (
       <Screen>
-        <LoadingState label="Cargando tu compra…" />
+        <ScreenHeader variant="compact" title="Tu compra" onBack={volver} />
+        <ScreenSkeleton variante="detalle" />
       </Screen>
     );
   }
@@ -196,7 +194,7 @@ export default function CompraScreen() {
             description="Revisa tus boletos en Mis boletos."
             action={{
               children: 'Ir a Mis boletos',
-              variant: 'accent',
+              icon: Ticket,
               onPress: () => router.dismissTo('/(tabs)/boletos'),
             }}
           />
@@ -229,8 +227,7 @@ export default function CompraScreen() {
           icono: CheckCircle,
           tono: 'success' as const,
           titulo: '¡Listo! Registramos tu pago',
-          texto:
-            'La cooperativa lo revisará y te avisaremos cuando tus boletos queden confirmados.',
+          texto: 'Te avisaremos cuando la cooperativa lo confirme.',
         }
       : recien === 'reserva' && reservados.length > 0
         ? {
@@ -238,150 +235,141 @@ export default function CompraScreen() {
             tono: 'info' as const,
             titulo: reservados.length === 1 ? 'Tu asiento está apartado' : 'Tus asientos están apartados',
             texto: expiraMin
-              ? `Paga en la taquilla de ${cooperativa} antes de las ${formatHora(expiraMin)} o se liberarán.`
-              : `Paga en la taquilla de ${cooperativa} antes de que venza la reserva o se liberarán.`,
+              ? `Paga en la taquilla de ${cooperativa} antes de las ${formatHora(expiraMin)}.`
+              : `Paga en la taquilla de ${cooperativa} antes de que venza la reserva.`,
           }
         : null;
 
   const unSoloBoleto = n === 1 && !!primero.codigo_boleto;
+  /** "Pase de abordaje" solo si está pagado (AN-09). */
+  const primeroPagado = getEstadoBoletoUi(primero) === 'PAGADO';
 
   return (
     <Screen>
-      <PageTransition>
-        <ScreenHeader variant="compact" title="Tu compra" onBack={volver} />
+      <ScreenHeader variant="compact" title="Tu compra" onBack={volver} />
 
-        <ScrollView
-          contentContainerStyle={scrollContent({ floatingAction: true, top: Spacing.lg })}
-          showsVerticalScrollIndicator={false}
-        >
-          {error ? <StaleBanner onRetry={() => void cargar()} /> : null}
+      <ScrollView
+        contentContainerStyle={scrollContent({ floatingAction: true, top: Spacing.lg })}
+        showsVerticalScrollIndicator={false}
+      >
+        {error ? <StaleBanner onRetry={() => void cargar()} /> : null}
 
-          {encabezado ? (
-            <View
-              style={[s.banner, encabezado.tono === 'success' ? s.bannerSuccess : s.bannerInfo]}
-              accessibilityRole="alert"
-              accessibilityLiveRegion="polite"
-            >
-              <encabezado.icono
-                size={Sizes.icon.lg}
-                color={encabezado.tono === 'success' ? Colors.successText : Colors.infoText}
-                weight="fill"
-              />
-              <View style={s.bannerBody}>
-                <Text variant="bodyStrong" color={encabezado.tono === 'success' ? 'successText' : 'infoText'}>
-                  {encabezado.titulo}
-                </Text>
-                <Text variant="secondary" color="foreground">
-                  {encabezado.texto}
-                </Text>
-              </View>
+        {encabezado ? (
+          <View
+            style={[s.banner, encabezado.tono === 'success' ? s.bannerSuccess : s.bannerInfo]}
+            accessibilityRole="alert"
+            accessibilityLiveRegion="polite"
+          >
+            <encabezado.icono
+              size={Sizes.icon.lg}
+              color={encabezado.tono === 'success' ? Colors.successText : Colors.infoText}
+              weight="fill"
+            />
+            <View style={s.bannerBody}>
+              <Text variant="label">{encabezado.titulo}</Text>
+              <Text variant="secondary" color="muted">
+                {encabezado.texto}
+              </Text>
             </View>
-          ) : null}
+          </View>
+        ) : null}
 
-          {/* ── Resumen ─────────────────────────────────────────────────── */}
-          <Card padding="md">
-            <Text variant="subheading" numberOfLines={1}>
-              {primero.cooperativas?.nombre ?? 'Cooperativa'}
+        {/* ── Resumen ─────────────────────────────────────────────────── */}
+        <Card tone="sunken" padding="md">
+          <Text variant="subheading" numberOfLines={1}>
+            {primero.cooperativas?.nombre ?? 'Cooperativa'}
+          </Text>
+          <Divider spacing={Spacing.lg} />
+          <RouteSummary
+            origen={ruta?.ciudad_origen}
+            destino={ruta?.ciudad_destino}
+            duration={minutos > 0 ? formatDuracion(minutos) : undefined}
+          />
+          <Divider spacing={Spacing.lg} />
+          <View style={s.resumenFila}>
+            <Text variant="secondary" color="muted">
+              Salida
             </Text>
-            <Divider spacing={Spacing.lg} />
-            <RouteSummary
-              origen={ruta?.ciudad_origen}
-              destino={ruta?.ciudad_destino}
-              duration={minutos > 0 ? formatDuracion(minutos) : undefined}
-            />
-            <Divider spacing={Spacing.lg} />
-            <View style={s.resumenFila}>
-              <Text variant="secondary" color="muted">
-                Salida
-              </Text>
-              <Text variant="bodyStrong" align="right" style={s.resumenValor}>
-                {formatSalidaCorta(viaje?.fecha_hora_salida)}
-              </Text>
-            </View>
-            <View style={s.resumenFila}>
-              <Text variant="secondary" color="muted">
-                Boletos
-              </Text>
-              <Text variant="bodyStrong" align="right" style={s.resumenValor}>
-                {`${n === 1 ? '1 boleto' : `${n} boletos`} · ${
-                  n === 1 ? `Asiento ${asientos[0]}` : `Asientos ${unirAsientos(asientos)}`
-                }`}
-              </Text>
-            </View>
-            <View style={[s.resumenFila, s.resumenTotal]}>
-              <Text variant="bodyStrong">Total</Text>
-              {pago && pago.monto_bs != null ? (
-                <Monto
-                  usd={Number(pago.monto) || totalUsd}
-                  bs={Number(pago.monto_bs)}
-                  tasa={tasaPago}
-                  moneda={pago.moneda}
-                  align="right"
-                />
-              ) : (
-                <Monto usd={totalUsd} align="right" />
-              )}
-            </View>
-          </Card>
-
-          {/* ── Boletos ─────────────────────────────────────────────────── */}
-          <SectionLabel style={s.seccion}>
-            {n === 1 ? 'Tu boleto' : `Tus ${n} boletos`}
-          </SectionLabel>
-          {visibles.map((b) => (
-            <FilaBoleto
-              key={b.id}
-              boleto={b}
-              onPress={() =>
-                router.push({
-                  pathname: '/boletos/[id]',
-                  params: { id: b.codigo_boleto || b.id },
-                })
-              }
-            />
-          ))}
-
-          <View style={s.nota}>
-            <Info size={Sizes.icon.sm} color={Colors.mutedForeground} weight="bold" />
-            <Text variant="caption" color="muted" style={s.notaTexto}>
-              Cada pasajero necesita su propio pase de abordaje y su cédula para subir al bus.
+            <Text variant="bodyStrong" align="right" style={s.resumenValor}>
+              {formatSalidaCorta(viaje?.fecha_hora_salida)}
             </Text>
           </View>
-        </ScrollView>
+          <View style={s.resumenFila}>
+            <Text variant="secondary" color="muted">
+              {n === 1 ? 'Asiento' : 'Asientos'}
+            </Text>
+            <Text variant="bodyStrong" align="right" style={s.resumenValor}>
+              {unirAsientos(asientos)}
+            </Text>
+          </View>
+          <Divider spacing={Spacing.md} />
+          <View style={s.resumenTotal}>
+            <Text variant="bodyStrong">Total</Text>
+            {pago && pago.monto_bs != null ? (
+              <Monto
+                usd={Number(pago.monto) || totalUsd}
+                bs={Number(pago.monto_bs)}
+                tasa={tasaPago}
+                moneda={pago.moneda}
+                align="right"
+              />
+            ) : (
+              <Monto usd={totalUsd} align="right" />
+            )}
+          </View>
+        </Card>
 
-        <FloatingBar>
-          {unSoloBoleto ? (
-            <Button
-              variant="accent"
-              icon={Ticket}
-              fullWidth
-              onPress={() =>
-                router.push({
-                  pathname: '/boletos/[id]',
-                  params: { id: primero.codigo_boleto ?? primero.id },
-                })
-              }
-            >
-              Ver pase de abordaje
-            </Button>
-          ) : (
-            <Button
-              variant="accent"
-              icon={Ticket}
-              fullWidth
-              onPress={() => router.dismissTo('/(tabs)/boletos')}
-            >
-              Ir a Mis boletos
-            </Button>
-          )}
-        </FloatingBar>
-      </PageTransition>
+        {/* ── Boletos ─────────────────────────────────────────────────── */}
+        <SectionLabel style={s.seccion}>
+          {n === 1 ? 'Tu boleto' : `Tus ${n} boletos`}
+        </SectionLabel>
+        {visibles.map((b) => (
+          <FilaBoleto
+            key={b.id}
+            boleto={b}
+            onPress={() =>
+              router.push({
+                pathname: '/boletos/[id]',
+                params: { id: b.codigo_boleto || b.id },
+              })
+            }
+          />
+        ))}
+
+        {n > 1 ? (
+          <Text variant="caption" color="muted" style={s.nota}>
+            Cada pasajero sube al bus con su propio pase y su cédula.
+          </Text>
+        ) : null}
+      </ScrollView>
+
+      <FloatingBar>
+        {unSoloBoleto ? (
+          <Button
+            icon={Ticket}
+            fullWidth
+            onPress={() =>
+              router.push({
+                pathname: '/boletos/[id]',
+                params: { id: primero.codigo_boleto ?? primero.id },
+              })
+            }
+          >
+            {primeroPagado ? 'Ver pase de abordaje' : 'Ver boleto'}
+          </Button>
+        ) : (
+          <Button icon={Ticket} fullWidth onPress={() => router.dismissTo('/(tabs)/boletos')}>
+            Ir a Mis boletos
+          </Button>
+        )}
+      </FloatingBar>
     </Screen>
   );
 }
 
 // ─── Fila de boleto ──────────────────────────────────────────────────────────
 
+/** Misma fila que Mis boletos (AU-21): estado + código, pasajero, asiento y cédula. */
 function FilaBoleto({ boleto, onPress }: { boleto: BoletoDeCompra; onPress: () => void }) {
   const reembolso = getEstadoReembolso(boleto);
   const estadoUi = getEstadoBoletoUi(boleto);
@@ -391,60 +379,38 @@ function FilaBoleto({ boleto, onPress }: { boleto: BoletoDeCompra; onPress: () =
   const codigo = formatCodigoBoleto(boleto.codigo_boleto);
 
   return (
-    <PressableScale
+    <EntityCard
+      badge={
+        reembolso ? (
+          <StatusBadge dominio="reembolso" estado={reembolso} />
+        ) : (
+          <StatusBadge dominio="boleto" estado={estadoUi} />
+        )
+      }
+      meta={codigo || undefined}
+      title={nombre}
+      subtitle={`Asiento ${boleto.asiento} · ${cedula}`}
       onPress={onPress}
-      haptic
-      hapticType="selection"
-      scaleValue={Motion.press.card}
-      style={s.fila}
-      accessibilityRole="button"
       accessibilityLabel={`Asiento ${boleto.asiento}, ${nombre}, cédula ${cedula}. ${visual.label}. Ver boleto ${codigo}`}
-    >
-      <View style={s.filaAsiento}>
-        <Text variant="overline" color="muted" uppercase compact>
-          Asiento
-        </Text>
-        <Text variant="heading" weight="heavy" compact>
-          {boleto.asiento}
-        </Text>
-      </View>
-      <View style={s.filaCuerpo}>
-        <Text variant="bodyStrong" numberOfLines={1}>
-          {nombre}
-        </Text>
-        <Text variant="caption" color="muted" numberOfLines={1}>
-          {`${cedula} · ${codigo || 'Sin código'}`}
-        </Text>
-        <View style={s.filaBadge}>
-          {reembolso ? (
-            <StatusBadge dominio="reembolso" estado={reembolso} />
-          ) : (
-            <StatusBadge dominio="boleto" estado={estadoUi} />
-          )}
-        </View>
-      </View>
-      <CaretRight size={Sizes.icon.md} color={Colors.mutedForeground} weight="bold" />
-    </PressableScale>
+    />
   );
 }
 
 const s = StyleSheet.create({
   banner: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     gap: Spacing.md,
-    padding: Spacing.lg,
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.lg,
     borderRadius: Radius.lg,
     marginBottom: Spacing.lg,
-    borderWidth: Sizes.hairline,
   },
   bannerSuccess: {
     backgroundColor: Colors.successLight,
-    borderColor: alpha(Colors.success, 0.25),
   },
   bannerInfo: {
     backgroundColor: Colors.infoLight,
-    borderColor: alpha(Colors.info, 0.25),
   },
   bannerBody: {
     flex: 1,
@@ -455,45 +421,21 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: Spacing.md,
-    marginBottom: Spacing.sm,
+    paddingVertical: Spacing.xs,
   },
   resumenValor: {
     flexShrink: 1,
   },
   resumenTotal: {
-    marginTop: Spacing.sm,
-    marginBottom: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.md,
   },
   seccion: {
-    marginTop: Spacing.xl,
-  },
-  fila: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.lg,
-    padding: Spacing.lg,
-    borderRadius: Radius.xl,
-    backgroundColor: Colors.surface,
-    marginBottom: Spacing.md,
-  },
-  filaAsiento: {
-    alignItems: 'center',
-    minWidth: Sizes.iconBox.xl,
-  },
-  filaCuerpo: {
-    flex: 1,
-    gap: Spacing.xs / 2,
-  },
-  filaBadge: {
-    marginTop: Spacing.xs,
+    marginTop: Spacing['2xl'],
   },
   nota: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
-    marginTop: Spacing.sm,
-  },
-  notaTexto: {
-    flex: 1,
+    marginTop: Spacing.xs,
   },
 });

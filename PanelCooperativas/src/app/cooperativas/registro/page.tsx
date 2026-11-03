@@ -3,21 +3,22 @@
 import { useActionState, useEffect, useRef, useState, type FormEvent } from "react";
 import { registrarCooperativa, verificarCorreoRegistro, type ActionState, type CampoRegistro } from "./actions";
 import { normalizeRif, RIF_AYUDA, RIF_PLACEHOLDER } from "@/lib/rif";
-import { telefonoValido, TELEFONO_ERROR } from "@/lib/ve";
+import { CLAVE_AYUDA, CLAVE_ERROR, CLAVE_MINIMO, telefonoValido, TELEFONO_ERROR } from "@/lib/ve";
 import { TelefonoField } from "@/components/ve-fields";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
+import { AuthLayout } from "@/components/auth-layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { FieldGroup, Field, FieldLabel, FieldDescription, FieldError } from "@/components/ui/field";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Spinner } from "@/components/ui/spinner";
-import { Bus, WarningCircle, CheckCircle, ArrowRight, ArrowLeft } from "@phosphor-icons/react";
+import { WarningCircle, ArrowRight, ArrowLeft } from "@phosphor-icons/react";
 import Link from "next/link";
 
 // Campos del paso 1: si el servidor rechaza alguno, se vuelve a ese paso para corregirlo.
 const CAMPOS_PASO_1: CampoRegistro[] = ["nombre", "email", "password", "confirmPassword"];
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const ENLACE = "font-medium text-info-text underline-offset-4 hover:underline focus-visible:underline";
 const MSG_EMAIL_USADO = "Ya existe una cuenta con este correo. Inicia sesión o usa otro correo.";
 
 type Errores = Partial<Record<CampoRegistro, string>>;
@@ -34,8 +35,8 @@ function enfocarCampo(el: HTMLInputElement | HTMLTextAreaElement | null | undefi
 function validarPaso1(d: { nombre: string; email: string; password: string; confirmPassword: string }): Errores {
   const e: Errores = {};
   if (d.nombre.trim().length < 3) e.nombre = "Escribe el nombre de tu cooperativa (mínimo 3 caracteres).";
-  if (!EMAIL_RE.test(d.email.trim())) e.email = "Escribe un correo válido, por ejemplo contacto@tucooperativa.com.";
-  if (d.password.length < 8) e.password = "La contraseña debe tener al menos 8 caracteres.";
+  if (!EMAIL_RE.test(d.email.trim())) e.email = "Escribe un correo válido, por ejemplo tu@correo.com.";
+  if (d.password.length < CLAVE_MINIMO) e.password = CLAVE_ERROR;
   else if (d.password !== d.confirmPassword) e.confirmPassword = "Las contraseñas no coinciden.";
   return e;
 }
@@ -143,321 +144,244 @@ export default function RegistroCooperativaPage() {
 
   const ayuda = (campo: CampoRegistro) => (errores[campo] ? `${campo}-error` : undefined);
 
+
   return (
-    <div className="flex min-h-screen">
-      {/* Panel izquierdo decorativo (siempre oscuro) */}
-      <div className="hidden w-3/5 flex-col justify-between dark bg-background p-12 text-foreground lg:flex">
-        <div className="flex items-center gap-2">
-          <div className="flex size-10 items-center justify-center rounded-lg bg-primary">
-            <Bus weight="fill" className="size-6 text-primary-foreground" aria-hidden />
-          </div>
-          <span className="text-xl font-bold tracking-tight">EnBus</span>
-        </div>
+    <AuthLayout
+      zona="cooperativas"
+      titulo="Registrar cooperativa"
+      descripcion={step === 1 ? "Paso 1 de 2 · Tu cuenta de administrador" : "Paso 2 de 2 · Datos de la cooperativa"}
+      pie={
+        <>
+          ¿Ya tienes cuenta?{" "}
+          <Link href="/cooperativas/login" className={ENLACE}>
+            Inicia sesión
+          </Link>
+        </>
+      }
+    >
+      {errorGeneral && (
+        <Alert variant="destructive">
+          <WarningCircle weight="fill" aria-hidden />
+          <AlertTitle>{state?.success ? "Falta iniciar sesión" : "No pudimos completar el registro"}</AlertTitle>
+          <AlertDescription>
+            {errorGeneral}
+            {state?.success && (
+              <Link href="/cooperativas/login" className="font-medium underline underline-offset-4">
+                Ir a iniciar sesión
+              </Link>
+            )}
+          </AlertDescription>
+        </Alert>
+      )}
 
-        <div className="flex flex-col gap-4">
-          <h1 className="text-5xl font-bold leading-tight">
-            Registra tu <br />
-            <span className="text-primary">cooperativa</span>
-          </h1>
-          <p className="text-xl text-muted-foreground">
-            Configura tu panel mientras revisamos tu solicitud (24 a 48 horas hábiles).
-          </p>
-          <ul className="mt-6 space-y-3 text-muted-foreground">
-            <li className="flex items-start gap-3">
-              <CheckCircle className="size-5 text-primary shrink-0 mt-0.5" weight="fill" aria-hidden />
-              <span>Entras al panel apenas creas tu cuenta</span>
-            </li>
-            <li className="flex items-start gap-3">
-              <CheckCircle className="size-5 text-primary shrink-0 mt-0.5" weight="fill" aria-hidden />
-              <span>Carga tus sucursales, rutas, métodos de pago y taquilleros</span>
-            </li>
-            <li className="flex items-start gap-3">
-              <CheckCircle className="size-5 text-primary shrink-0 mt-0.5" weight="fill" aria-hidden />
-              <span>Tus viajes aparecen en la app cuando aprobemos tu solicitud</span>
-            </li>
-          </ul>
-        </div>
+      {/* Paso 1: cuenta (Enter avanza) */}
+      {step === 1 && (
+        <form onSubmit={continuar} noValidate className="flex flex-col gap-6">
+          <FieldGroup>
+            <Field data-invalid={errores.nombre ? true : undefined}>
+              <FieldLabel htmlFor="nombre">Nombre de la cooperativa</FieldLabel>
+              <Input
+                id="nombre"
+                ref={(el) => { refs.current.nombre = el; }}
+                type="text"
+                placeholder="Ej.: Expresos Los Andes"
+                autoComplete="organization"
+                aria-invalid={errores.nombre ? true : undefined}
+                aria-describedby={ayuda("nombre")}
+                value={nombre}
+                onChange={(e) => { setNombre(e.target.value); limpiar("nombre"); }}
+                disabled={verificandoCorreo}
+              />
+              <FieldError id="nombre-error">{errores.nombre}</FieldError>
+            </Field>
 
-        <p className="text-sm text-muted-foreground">
-          &copy; {new Date().getFullYear()} EnBus. Todos los derechos reservados.
-        </p>
-      </div>
-
-      {/* Panel derecho con el formulario */}
-      <div className="flex w-full items-center justify-center p-6 lg:w-2/5 overflow-y-auto">
-        <Card className="w-full max-w-md">
-          <CardHeader>
-            <div className="mb-4 flex justify-center lg:hidden">
-              <div className="flex size-12 items-center justify-center rounded-lg bg-primary">
-                <Bus weight="fill" className="size-8 text-primary-foreground" aria-hidden />
-              </div>
-            </div>
-            <CardTitle className="text-2xl">Registro de cooperativa</CardTitle>
-            <CardDescription>
-              {step === 1
-                ? "Paso 1 de 2 · Crea tu cuenta de administrador"
-                : "Paso 2 de 2 · Datos de tu cooperativa"}
-            </CardDescription>
-            <p className="text-sm text-muted-foreground lg:hidden">
-              Configura tu panel mientras revisamos tu solicitud (24 a 48 horas hábiles).
-            </p>
-            {/* Indicador de pasos */}
-            <div className="flex items-center gap-2 pt-2" aria-hidden>
-              <div className={`h-1.5 flex-1 rounded-full transition-colors ${step >= 1 ? "bg-primary" : "bg-muted"}`} />
-              <div className={`h-1.5 flex-1 rounded-full transition-colors ${step >= 2 ? "bg-primary" : "bg-muted"}`} />
-            </div>
-          </CardHeader>
-          <CardContent>
-            {errorGeneral && (
-              <Alert variant="destructive" className="mb-6">
-                <WarningCircle className="size-4" data-icon="inline-start" aria-hidden />
-                <AlertTitle>{state?.success ? "Falta iniciar sesión" : "No pudimos completar el registro"}</AlertTitle>
-                <AlertDescription>
-                  {errorGeneral}
-                  {state?.success && (
+            <Field data-invalid={errores.email ? true : undefined}>
+              <FieldLabel htmlFor="email">Correo</FieldLabel>
+              <Input
+                id="email"
+                ref={(el) => { refs.current.email = el; }}
+                type="email"
+                placeholder="tu@correo.com"
+                autoComplete="email"
+                aria-invalid={errores.email ? true : undefined}
+                aria-describedby={ayuda("email")}
+                value={email}
+                onChange={(e) => { setEmail(e.target.value); limpiar("email"); }}
+                disabled={verificandoCorreo}
+              />
+              {/* Condicional: con varios hijos FieldError se pinta aunque no haya error (alerta vacía). */}
+              {errores.email && (
+                <FieldError id="email-error">
+                  {errores.email}
+                  {errores.email === MSG_EMAIL_USADO && (
                     <>
                       {" "}
-                      <Link href="/cooperativas/login" className="font-medium text-primary-text underline underline-offset-4">
-                        Ir a iniciar sesión
+                      <Link href="/cooperativas/login" className="font-medium underline underline-offset-4">
+                        Iniciar sesión
                       </Link>
                     </>
                   )}
-                </AlertDescription>
-              </Alert>
-            )}
+                </FieldError>
+              )}
+            </Field>
 
-            {/* Paso 1: cuenta (Enter avanza) */}
-            {step === 1 && (
-              <form onSubmit={continuar} noValidate className="flex flex-col gap-6">
-                <FieldGroup>
-                  <Field data-invalid={errores.nombre ? true : undefined}>
-                    <FieldLabel htmlFor="nombre">Nombre de la cooperativa</FieldLabel>
-                    <Input
-                      id="nombre"
-                      ref={(el) => { refs.current.nombre = el; }}
-                      type="text"
-                      placeholder="Ej.: Cooperativa de Transporte Los Andes"
-                      autoComplete="organization"
-                      aria-invalid={errores.nombre ? true : undefined}
-                      aria-describedby={ayuda("nombre")}
-                      value={nombre}
-                      onChange={(e) => { setNombre(e.target.value); limpiar("nombre"); }}
-                      disabled={verificandoCorreo}
-                    />
-                    <FieldError id="nombre-error" className="text-destructive-text">{errores.nombre}</FieldError>
-                  </Field>
+            <Field data-invalid={errores.password ? true : undefined}>
+              <FieldLabel htmlFor="password">Contraseña</FieldLabel>
+              <Input
+                id="password"
+                ref={(el) => { refs.current.password = el; }}
+                type="password"
+                autoComplete="new-password"
+                aria-invalid={errores.password ? true : undefined}
+                aria-describedby={errores.password ? "password-error" : "password-ayuda"}
+                value={password}
+                onChange={(e) => { setPassword(e.target.value); limpiar("password"); }}
+                disabled={verificandoCorreo}
+              />
+              {errores.password ? (
+                <FieldError id="password-error">{errores.password}</FieldError>
+              ) : (
+                <FieldDescription id="password-ayuda">{CLAVE_AYUDA}</FieldDescription>
+              )}
+            </Field>
 
-                  <Field data-invalid={errores.email ? true : undefined}>
-                    <FieldLabel htmlFor="email">Correo electrónico</FieldLabel>
-                    <Input
-                      id="email"
-                      ref={(el) => { refs.current.email = el; }}
-                      type="email"
-                      placeholder="contacto@tucooperativa.com"
-                      autoComplete="email"
-                      aria-invalid={errores.email ? true : undefined}
-                      aria-describedby={ayuda("email")}
-                      value={email}
-                      onChange={(e) => { setEmail(e.target.value); limpiar("email"); }}
-                      disabled={verificandoCorreo}
-                    />
-                    {/* Condicional: con varios hijos FieldError se pinta aunque no haya error (alerta vacía). */}
-                    {errores.email && (
-                      <FieldError id="email-error" className="text-destructive-text">
-                        {errores.email}
-                        {errores.email === MSG_EMAIL_USADO && (
-                          <>
-                            {" "}
-                            <Link href="/cooperativas/login" className="font-medium underline underline-offset-4">
-                              Iniciar sesión
-                            </Link>
-                          </>
-                        )}
-                      </FieldError>
-                    )}
-                  </Field>
+            <Field data-invalid={errores.confirmPassword ? true : undefined}>
+              <FieldLabel htmlFor="confirmPassword">Repite la contraseña</FieldLabel>
+              <Input
+                id="confirmPassword"
+                ref={(el) => { refs.current.confirmPassword = el; }}
+                type="password"
+                autoComplete="new-password"
+                aria-invalid={errores.confirmPassword ? true : undefined}
+                aria-describedby={ayuda("confirmPassword")}
+                value={confirmPassword}
+                onChange={(e) => { setConfirmPassword(e.target.value); limpiar("confirmPassword"); }}
+                disabled={verificandoCorreo}
+              />
+              <FieldError id="confirmPassword-error">{errores.confirmPassword}</FieldError>
+            </Field>
+          </FieldGroup>
 
-                  <Field data-invalid={errores.password ? true : undefined}>
-                    <FieldLabel htmlFor="password">Contraseña</FieldLabel>
-                    <Input
-                      id="password"
-                      ref={(el) => { refs.current.password = el; }}
-                      type="password"
-                      placeholder="Mínimo 8 caracteres"
-                      autoComplete="new-password"
-                      aria-invalid={errores.password ? true : undefined}
-                      aria-describedby={ayuda("password")}
-                      value={password}
-                      onChange={(e) => { setPassword(e.target.value); limpiar("password"); }}
-                      disabled={verificandoCorreo}
-                    />
-                    <FieldError id="password-error" className="text-destructive-text">{errores.password}</FieldError>
-                  </Field>
+          <Button type="submit" className="w-full" disabled={verificandoCorreo} aria-busy={verificandoCorreo || undefined}>
+            {verificandoCorreo && <Spinner size="sm" data-icon="inline-start" />}
+            {verificandoCorreo ? "Verificando el correo…" : "Continuar"}
+            {!verificandoCorreo && <ArrowRight aria-hidden />}
+          </Button>
+        </form>
+      )}
 
-                  <Field data-invalid={errores.confirmPassword ? true : undefined}>
-                    <FieldLabel htmlFor="confirmPassword">Repite la contraseña</FieldLabel>
-                    <Input
-                      id="confirmPassword"
-                      ref={(el) => { refs.current.confirmPassword = el; }}
-                      type="password"
-                      autoComplete="new-password"
-                      aria-invalid={errores.confirmPassword ? true : undefined}
-                      aria-describedby={ayuda("confirmPassword")}
-                      value={confirmPassword}
-                      onChange={(e) => { setConfirmPassword(e.target.value); limpiar("confirmPassword"); }}
-                      disabled={verificandoCorreo}
-                    />
-                    <FieldError id="confirmPassword-error" className="text-destructive-text">{errores.confirmPassword}</FieldError>
-                  </Field>
-                </FieldGroup>
+      {/* Paso 2: datos de la cooperativa */}
+      {step === 2 && (
+        <form action={formAction} onSubmit={enviarPaso2} noValidate className="flex flex-col gap-6">
+          {/* Datos del paso 1 */}
+          <input type="hidden" name="nombre" value={nombre} />
+          <input type="hidden" name="email" value={email} />
+          <input type="hidden" name="password" value={password} />
+          <input type="hidden" name="confirmPassword" value={confirmPassword} />
 
-                <Button type="submit" className="w-full" disabled={verificandoCorreo} aria-busy={verificandoCorreo || undefined}>
-                  {verificandoCorreo ? <Spinner data-icon="inline-start" /> : null}
-                  {verificandoCorreo ? "Verificando el correo…" : "Continuar"}
-                  {!verificandoCorreo && <ArrowRight className="size-4" weight="bold" aria-hidden />}
-                </Button>
+          <FieldGroup>
+            <Field data-invalid={errores.rif ? true : undefined}>
+              <FieldLabel htmlFor="rif">RIF de la cooperativa</FieldLabel>
+              <Input
+                id="rif"
+                ref={(el) => { refs.current.rif = el; }}
+                name="rif"
+                type="text"
+                placeholder={RIF_PLACEHOLDER}
+                autoCapitalize="characters"
+                aria-invalid={errores.rif ? true : undefined}
+                aria-describedby={errores.rif ? "rif-error" : "rif-ayuda"}
+                value={rif}
+                onChange={(e) => { setRif(e.target.value); limpiar("rif"); }}
+                onBlur={() => setRif((actual) => normalizeRif(actual) ?? actual)}
+                disabled={isPending}
+              />
+              {errores.rif ? (
+                <FieldError id="rif-error">{errores.rif}</FieldError>
+              ) : (
+                <FieldDescription id="rif-ayuda">{RIF_AYUDA}</FieldDescription>
+              )}
+            </Field>
 
-                <p className="text-center text-sm text-muted-foreground">
-                  ¿Ya tienes cuenta?{" "}
-                  <Link href="/cooperativas/login" className="font-medium text-primary-text underline-offset-4 hover:underline">
-                    Inicia sesión
-                  </Link>
-                </p>
-              </form>
-            )}
+            <TelefonoField
+              id="telefono"
+              name="telefono"
+              label="Teléfono de contacto"
+              value={telefono}
+              onChange={(v) => { setTelefono(v); limpiar("telefono"); }}
+              error={errores.telefono}
+              required
+              disabled={isPending}
+            />
 
-            {/* Paso 2: datos de la cooperativa */}
-            {step === 2 && (
-              <form action={formAction} onSubmit={enviarPaso2} noValidate className="flex flex-col gap-6">
-                {/* Datos del paso 1 */}
-                <input type="hidden" name="nombre" value={nombre} />
-                <input type="hidden" name="email" value={email} />
-                <input type="hidden" name="password" value={password} />
-                <input type="hidden" name="confirmPassword" value={confirmPassword} />
+            <Field data-invalid={errores.representante ? true : undefined}>
+              <FieldLabel htmlFor="representante">Representante legal</FieldLabel>
+              <Input
+                id="representante"
+                ref={(el) => { refs.current.representante = el; }}
+                name="representante"
+                type="text"
+                placeholder="Ej.: Carlos Mendoza"
+                autoComplete="name"
+                aria-invalid={errores.representante ? true : undefined}
+                aria-describedby={ayuda("representante")}
+                value={representante}
+                onChange={(e) => { setRepresentante(e.target.value); limpiar("representante"); }}
+                disabled={isPending}
+              />
+              <FieldError id="representante-error">{errores.representante}</FieldError>
+            </Field>
 
-                <FieldGroup>
-                  <Field data-invalid={errores.rif ? true : undefined}>
-                    <FieldLabel htmlFor="rif">RIF de la cooperativa</FieldLabel>
-                    <Input
-                      id="rif"
-                      ref={(el) => { refs.current.rif = el; }}
-                      name="rif"
-                      type="text"
-                      placeholder={RIF_PLACEHOLDER}
-                      autoCapitalize="characters"
-                      aria-invalid={errores.rif ? true : undefined}
-                      aria-describedby={errores.rif ? "rif-error" : "rif-ayuda"}
-                      value={rif}
-                      onChange={(e) => { setRif(e.target.value); limpiar("rif"); }}
-                      onBlur={() => setRif((actual) => normalizeRif(actual) ?? actual)}
-                      disabled={isPending}
-                    />
-                    {errores.rif ? (
-                      <FieldError id="rif-error" className="text-destructive-text">{errores.rif}</FieldError>
-                    ) : (
-                      <FieldDescription id="rif-ayuda" className="text-xs">{RIF_AYUDA}</FieldDescription>
-                    )}
-                  </Field>
+            <Field>
+              <FieldLabel htmlFor="mensaje">Rutas de interés (opcional)</FieldLabel>
+              <Textarea
+                id="mensaje"
+                ref={(el) => { refs.current.mensaje = el; }}
+                name="mensaje"
+                rows={3}
+                maxLength={1000}
+                placeholder="Ej.: Caracas – Valencia"
+                value={mensaje}
+                onChange={(e) => setMensaje(e.target.value)}
+                disabled={isPending}
+              />
+            </Field>
+          </FieldGroup>
 
-                  <TelefonoField
-                    id="telefono"
-                    name="telefono"
-                    label="Teléfono de contacto"
-                    value={telefono}
-                    onChange={(v) => { setTelefono(v); limpiar("telefono"); }}
-                    error={errores.telefono}
-                    required
-                    disabled={isPending}
-                  />
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setErrores({});
+                setStep(1);
+              }}
+              disabled={isPending}
+            >
+              <ArrowLeft aria-hidden />
+              Atrás
+            </Button>
+            <Button type="submit" className="flex-1" disabled={isPending} aria-busy={isPending || undefined}>
+              {isPending && <Spinner size="sm" data-icon="inline-start" />}
+              {isPending ? "Creando tu cuenta…" : "Crear cuenta"}
+            </Button>
+          </div>
 
-                  <Field data-invalid={errores.representante ? true : undefined}>
-                    <FieldLabel htmlFor="representante">Representante legal</FieldLabel>
-                    <Input
-                      id="representante"
-                      ref={(el) => { refs.current.representante = el; }}
-                      name="representante"
-                      type="text"
-                      placeholder="Ej.: Carlos Mendoza"
-                      autoComplete="name"
-                      aria-invalid={errores.representante ? true : undefined}
-                      aria-describedby={ayuda("representante")}
-                      value={representante}
-                      onChange={(e) => { setRepresentante(e.target.value); limpiar("representante"); }}
-                      disabled={isPending}
-                    />
-                    <FieldError id="representante-error" className="text-destructive-text">{errores.representante}</FieldError>
-                  </Field>
-
-                  <Field>
-                    <FieldLabel htmlFor="mensaje">Mensaje o rutas de interés (opcional)</FieldLabel>
-                    <Textarea
-                      id="mensaje"
-                      ref={(el) => { refs.current.mensaje = el; }}
-                      name="mensaje"
-                      rows={3}
-                      maxLength={1000}
-                      placeholder="Ej.: Cubrimos Caracas – Valencia y Caracas – Maracay."
-                      value={mensaje}
-                      onChange={(e) => setMensaje(e.target.value)}
-                      disabled={isPending}
-                    />
-                  </Field>
-                </FieldGroup>
-
-                <div className="flex gap-3">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => {
-                      setErrores({});
-                      setStep(1);
-                    }}
-                    disabled={isPending}
-                  >
-                    <ArrowLeft className="size-4" weight="bold" aria-hidden />
-                    Atrás
-                  </Button>
-                  <Button type="submit" className="flex-1" disabled={isPending} aria-busy={isPending || undefined}>
-                    {isPending ? <Spinner data-icon="inline-start" /> : null}
-                    {isPending ? "Creando tu cuenta…" : "Crear cuenta y registrar"}
-                  </Button>
-                </div>
-
-                {SITIO_URL && (
-                  <p className="text-center text-xs text-muted-foreground">
-                    Al registrarte aceptas los{" "}
-                    <a
-                      href={`${SITIO_URL}/terminos`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="font-medium text-foreground underline underline-offset-4"
-                    >
-                      Términos y condiciones
-                    </a>{" "}
-                    y la{" "}
-                    <a
-                      href={`${SITIO_URL}/privacidad`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="font-medium text-foreground underline underline-offset-4"
-                    >
-                      Política de privacidad
-                    </a>{" "}
-                    de EnBus.
-                  </p>
-                )}
-
-                <p className="text-center text-sm text-muted-foreground">
-                  ¿Ya tienes cuenta?{" "}
-                  <Link href="/cooperativas/login" className="font-medium text-primary-text underline-offset-4 hover:underline">
-                    Inicia sesión
-                  </Link>
-                </p>
-              </form>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-    </div>
+          {SITIO_URL && (
+            <p className="text-center text-xs text-muted-foreground">
+              Al registrarte aceptas los{" "}
+              <a href={`${SITIO_URL}/terminos`} target="_blank" rel="noopener noreferrer" className={ENLACE}>
+                Términos y condiciones
+              </a>{" "}
+              y la{" "}
+              <a href={`${SITIO_URL}/privacidad`} target="_blank" rel="noopener noreferrer" className={ENLACE}>
+                Política de privacidad
+              </a>{" "}
+              de EnBus.
+            </p>
+          )}
+        </form>
+      )}
+    </AuthLayout>
   );
 }

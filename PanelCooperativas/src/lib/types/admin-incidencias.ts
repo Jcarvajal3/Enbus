@@ -82,3 +82,8 @@ export function ordenarPorPrioridad<T extends Pick<Incidencia, "tipo" | "categor
       a.created_at.localeCompare(b.created_at)
   );
 }
+
+/** Mismo código que devuelve fn_reportar_problema al usuario ("INC-1A2B3C"). */
+export function codigoIncidencia(id: string): string {
+  return `INC-${id.replace(/-/g, "").slice(0, 6).toUpperCase()}`;
+}

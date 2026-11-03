@@ -9,9 +9,10 @@ import { createAdminClient } from "@/lib/supabase/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { INICIO } from "@/lib/navigation";
 import { normalizeRif, RIF_ERROR } from "@/lib/rif";
 import { humanizeError, textoDemasiadosIntentos } from "@/lib/errores";
-import { telefonoParaGuardar, TELEFONO_ERROR } from "@/lib/ve";
+import { CLAVE_ERROR, CLAVE_MINIMO, telefonoParaGuardar, TELEFONO_ERROR } from "@/lib/ve";
 import { consumirLimitePorIp, LIMITE_REGISTRO, LIMITE_VERIFICAR_CORREO } from "./limite";
 
 export type CampoRegistro =
@@ -42,8 +43,8 @@ const MSG_EMAIL_USADO = "Ya existe una cuenta con este correo. Inicia sesión o 
 function validarCuenta(d: { nombre: string; email: string; password: string; confirmPassword: string }) {
   const errores: Partial<Record<CampoRegistro, string>> = {};
   if (d.nombre.trim().length < 3) errores.nombre = "Escribe el nombre de tu cooperativa (mínimo 3 caracteres).";
-  if (!EMAIL_RE.test(d.email.trim())) errores.email = "Escribe un correo válido, por ejemplo contacto@tucooperativa.com.";
-  if (d.password.length < 8) errores.password = "La contraseña debe tener al menos 8 caracteres.";
+  if (!EMAIL_RE.test(d.email.trim())) errores.email = "Escribe un correo válido, por ejemplo tu@correo.com.";
+  if (d.password.length < CLAVE_MINIMO) errores.password = CLAVE_ERROR;
   else if (d.password !== d.confirmPassword) errores.confirmPassword = "Las contraseñas no coinciden.";
   return errores;
 }
@@ -268,5 +269,5 @@ export async function registrarCooperativa(
   }
 
   // redirect() lanza una excepción interna: va fuera del try (docs de Next.js 16).
-  redirect("/cooperativas/dashboard");
+  redirect(INICIO);
 }

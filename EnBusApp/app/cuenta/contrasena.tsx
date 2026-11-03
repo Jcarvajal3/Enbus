@@ -16,15 +16,15 @@ import {
   View,
   type TextInput,
 } from 'react-native';
-import { useRouter } from 'expo-router';
 import { GoogleLogo } from 'phosphor-react-native';
 import * as Haptics from 'expo-haptics';
 import { supabase } from '@/src/utils/supabase';
 import { useAuth } from '@/src/contexts/AuthContext';
 import { tieneContrasena } from '@/src/hooks/usePerfil';
-import { humanizeError } from '@/src/utils/errores';
+import { MSG, humanizeError } from '@/src/utils/errores';
+import { CLAVE_AYUDA, CLAVE_ERROR, CLAVE_MINIMO } from '@/src/utils/formatters';
+import { useVolver } from '@/src/hooks/useVolver';
 import { useToast } from '@/src/components/Toast';
-import { PageTransition } from '@/src/components/PageTransition';
 import {
   Button,
   Card,
@@ -35,8 +35,6 @@ import {
   scrollContent,
 } from '@/src/components/ui';
 import { Colors, Sizes, Spacing } from '@/src/theme';
-
-const MINIMO = 6;
 
 type Campo = 'actual' | 'nueva' | 'repetir';
 type Errores = Partial<Record<Campo, string>>;
@@ -54,7 +52,7 @@ function esCredencialIncorrecta(err: unknown): boolean {
 }
 
 export default function ContrasenaScreen() {
-  const router = useRouter();
+  const atras = useVolver('/perfil');
   const toast = useToast();
   const { user } = useAuth();
 
@@ -78,7 +76,7 @@ export default function ContrasenaScreen() {
     const next: Errores = {};
     if (conContrasena && !actual) next.actual = 'Escribe tu contraseña actual.';
     if (!nueva) next.nueva = 'Escribe la contraseña nueva.';
-    else if (nueva.length < MINIMO) next.nueva = `Usa al menos ${MINIMO} caracteres.`;
+    else if (nueva.length < CLAVE_MINIMO) next.nueva = CLAVE_ERROR;
     if (nueva && repetir !== nueva) next.repetir = 'Las contraseñas no coinciden.';
     setErrores(next);
     return Object.keys(next).length === 0;
@@ -91,7 +89,7 @@ export default function ContrasenaScreen() {
       return;
     }
     if (!correo) {
-      toast.show('error', 'Tu sesión expiró. Inicia sesión de nuevo.');
+      toast.show('error', MSG.sesionVencida);
       return;
     }
 
@@ -135,7 +133,7 @@ export default function ContrasenaScreen() {
           ? 'Listo. Tu contraseña cambió.'
           : 'Listo. Ya puedes entrar también con tu correo y tu contraseña.'
       );
-      router.back();
+      atras();
     } catch (err) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       toast.show('error', `No pudimos guardar la contraseña. ${humanizeError(err, 'contrasena')}`);
@@ -146,108 +144,96 @@ export default function ContrasenaScreen() {
 
   return (
     <Screen>
-      <PageTransition>
-        <ScreenHeader variant="compact" title={titulo} onBack={() => router.back()} />
+      <ScreenHeader variant="compact" title={titulo} onBack={atras} />
 
-        <KeyboardAvoidingView
-          style={s.flex}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      <KeyboardAvoidingView
+        style={s.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <ScrollView
+          contentContainerStyle={scrollContent({ top: Spacing['2xl'] })}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
         >
-          <ScrollView
-            contentContainerStyle={scrollContent()}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-          >
-            {!conContrasena ? (
-              <Card tone="outline" padding="md" style={s.intro}>
-                <View style={s.introRow}>
-                  <GoogleLogo size={Sizes.icon.lg} color={Colors.foreground} weight="bold" />
-                  <Text variant="secondary" style={s.introText}>
-                    {`Entras con Google. Si creas una contraseña, también podrás entrar con tu correo ${correo}.`}
-                  </Text>
-                </View>
-              </Card>
-            ) : null}
+          {!conContrasena ? (
+            <Card tone="outline" padding="md" style={s.intro}>
+              <View style={s.introRow}>
+                <GoogleLogo size={Sizes.icon.lg} color={Colors.foreground} weight="bold" />
+                <Text variant="secondary" style={s.introText}>
+                  {`Entras con Google. Con una contraseña también podrás entrar con ${correo}.`}
+                </Text>
+              </View>
+            </Card>
+          ) : null}
 
-            <Card tone="sunken" padding="md" elevated={false}>
-              {conContrasena ? (
-                <Field
-                  label="Contraseña actual"
-                  placeholder="••••••••"
-                  secureTextEntry
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  autoComplete="current-password"
-                  textContentType="password"
-                  value={actual}
-                  onChangeText={(v) => {
-                    setActual(v);
-                    limpiar('actual');
-                  }}
-                  error={errores.actual}
-                  returnKeyType="next"
-                  submitBehavior="submit"
-                  onSubmitEditing={() => nuevaRef.current?.focus()}
-                  editable={!guardando}
-                />
-              ) : null}
-
+          <Card tone="sunken" padding="md">
+            {conContrasena ? (
               <Field
-                ref={nuevaRef}
-                label="Contraseña nueva"
-                placeholder="••••••••"
+                label="Contraseña actual"
                 secureTextEntry
                 autoCapitalize="none"
                 autoCorrect={false}
-                autoComplete="new-password"
-                textContentType="newPassword"
-                value={nueva}
+                autoComplete="current-password"
+                textContentType="password"
+                value={actual}
                 onChangeText={(v) => {
-                  setNueva(v);
-                  limpiar('nueva');
+                  setActual(v);
+                  limpiar('actual');
                 }}
-                error={errores.nueva}
-                helper={errores.nueva ? undefined : `Mínimo ${MINIMO} caracteres.`}
+                error={errores.actual}
                 returnKeyType="next"
                 submitBehavior="submit"
-                onSubmitEditing={() => repetirRef.current?.focus()}
+                onSubmitEditing={() => nuevaRef.current?.focus()}
                 editable={!guardando}
               />
+            ) : null}
 
-              <Field
-                ref={repetirRef}
-                label="Repite la contraseña nueva"
-                placeholder="••••••••"
-                secureTextEntry
-                autoCapitalize="none"
-                autoCorrect={false}
-                autoComplete="new-password"
-                textContentType="newPassword"
-                value={repetir}
-                onChangeText={(v) => {
-                  setRepetir(v);
-                  limpiar('repetir');
-                }}
-                error={errores.repetir}
-                returnKeyType="go"
-                onSubmitEditing={guardar}
-                editable={!guardando}
-                containerStyle={s.lastField}
-              />
-            </Card>
+            <Field
+              ref={nuevaRef}
+              label="Contraseña nueva"
+              secureTextEntry
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoComplete="new-password"
+              textContentType="newPassword"
+              value={nueva}
+              onChangeText={(v) => {
+                setNueva(v);
+                limpiar('nueva');
+              }}
+              error={errores.nueva}
+              helper={CLAVE_AYUDA}
+              returnKeyType="next"
+              submitBehavior="submit"
+              onSubmitEditing={() => repetirRef.current?.focus()}
+              editable={!guardando}
+            />
 
-            <Button
-              variant="accent"
-              fullWidth
-              disabled={guardando}
-              onPress={guardar}
-              style={s.boton}
-            >
-              {guardando ? 'Guardando…' : 'Guardar contraseña'}
+            <Field
+              ref={repetirRef}
+              label="Repite la contraseña nueva"
+              secureTextEntry
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoComplete="new-password"
+              textContentType="newPassword"
+              value={repetir}
+              onChangeText={(v) => {
+                setRepetir(v);
+                limpiar('repetir');
+              }}
+              error={errores.repetir}
+              returnKeyType="go"
+              onSubmitEditing={guardar}
+              editable={!guardando}
+            />
+
+            <Button fullWidth loading={guardando} onPress={guardar}>
+              Guardar contraseña
             </Button>
-          </ScrollView>
-        </KeyboardAvoidingView>
-      </PageTransition>
+          </Card>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </Screen>
   );
 }
@@ -264,11 +250,5 @@ const s = StyleSheet.create({
   },
   introText: {
     flex: 1,
-  },
-  lastField: {
-    marginBottom: 0,
-  },
-  boton: {
-    marginTop: Spacing['2xl'],
   },
 });

@@ -6,7 +6,7 @@ import { IncidenciasTable } from "@/components/admin/incidencias/incidencias-tab
 import { FILTROS_ESTADO_INCIDENCIA, type FiltroEstadoIncidencia } from "@/lib/types/admin-incidencias";
 
 interface PageProps {
-  searchParams: Promise<{ tipo?: string; estado?: string; q?: string }>;
+  searchParams: Promise<{ tipo?: string; estado?: string }>;
 }
 
 export default async function AdminIncidenciasPage({ searchParams }: PageProps) {
@@ -21,19 +21,12 @@ export default async function AdminIncidenciasPage({ searchParams }: PageProps) 
   const incidencias = await fetchIncidencias({ tipo, estado });
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Incidencias"
-        description="Reportes de usuarios y alertas automáticas, ordenados por prioridad y antigüedad. Toma un caso para atenderlo y regístralo como resuelto al terminar."
-      />
+    <div className="flex flex-col gap-6">
+      <PageHeader title="Incidencias" description="Primero las de prioridad alta." />
 
       <IncidenciasTable
-        // Al cambiar los filtros del servidor, la búsqueda local se reinicia desde la URL.
         key={`${estado}-${tipo}`}
         data={incidencias}
-        estado={estado}
-        tipo={tipo}
-        q={params.q ?? ""}
         ahora={new Date().toISOString()}
       />
     </div>

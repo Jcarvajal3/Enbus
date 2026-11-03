@@ -3,7 +3,7 @@
 import { useId, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import {
-  Card, CardContent, CardDescription, CardHeader, CardTitle,
+  Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,10 +11,11 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import {
-  CreditCard, Plus, PencilSimple, Trash, Check, X, WarningCircle, Eye,
-} from "@phosphor-icons/react";
-import { toast } from "sonner";
+import { CreditCard, Plus, PencilSimple, Trash, Eye } from "@phosphor-icons/react";
+import { AvisoError } from "@/components/aviso-error";
+import { EmptyState } from "@/components/empty-state";
+import { Spinner } from "@/components/ui/spinner";
+import { avisarError, avisarExito } from "@/lib/avisos";
 import {
   crearMetodoPago,
   actualizarMetodoPago,
@@ -29,7 +30,7 @@ import { ErrorState } from "@/components/error-state";
 import { humanizeError } from "@/lib/errores";
 import { METODO_PAGO } from "@/lib/estados";
 import { buscarBanco, mostrarBanco, OPCIONES_BANCO, OTRO_BANCO } from "@/lib/bancos";
-import { cedulaValida, formatCedula, formatTelefono, telefonoValido } from "@/lib/ve";
+import { cedulaValida, formatCedula, formatTelefono, telefonoValido, TELEFONO_ERROR } from "@/lib/ve";
 import { CedulaField, TelefonoField } from "@/components/ve-fields";
 import { normalizeRif } from "@/lib/rif";
 import { cn } from "@/lib/utils";
@@ -94,7 +95,7 @@ function validar(form: FormState): Errores {
     if (titular.length < 3) e.titular = "Escribe el nombre del titular.";
   }
   if (form.tipo === "PAGO_MOVIL" && !telefonoValido(form.numero_cuenta)) {
-    e.numero_cuenta = "Escribe el teléfono del Pago Móvil, por ejemplo 0414-1234567.";
+    e.numero_cuenta = TELEFONO_ERROR;
   }
   if (form.tipo === "TRANSFERENCIA_BANCARIA" && form.numero_cuenta.replace(/\D/g, "").length !== 20) {
     e.numero_cuenta = "El número de cuenta debe tener 20 dígitos.";
@@ -257,7 +258,7 @@ export function MetodosPagoTab({ metodos: initialMetodos, errorCarga = null }: M
           return;
         }
         setMetodos((prev) => prev.map((m) => (m.id === editingId ? { ...m, ...res.data } : m)));
-        toast.success("Método de pago actualizado.");
+        avisarExito("Método de pago actualizado.");
       } else {
         const res = await requireOnline(() => crearMetodoPago(input))();
         if (!res.ok) {
@@ -266,7 +267,7 @@ export function MetodosPagoTab({ metodos: initialMetodos, errorCarga = null }: M
           return;
         }
         setMetodos((prev) => [...prev, res.data]);
-        toast.success("Método de pago agregado. Los pasajeros ya lo ven al pagar.");
+        avisarExito("Método de pago agregado. Los pasajeros ya lo ven.");
       }
       closeForm();
       router.refresh();
@@ -282,14 +283,14 @@ export function MetodosPagoTab({ metodos: initialMetodos, errorCarga = null }: M
     try {
       const res = await requireOnline(() => cambiarActivoMetodoPago(m.id, activo))();
       if (!res.ok) {
-        toast.error(res.error);
+        avisarError(res.error);
         return false;
       }
       setMetodos((prev) => prev.map((x) => (x.id === m.id ? { ...x, activo } : x)));
-      toast.success(activo ? `${nombreMetodo(m)} activado.` : `${nombreMetodo(m)} desactivado. Los pasajeros ya no lo ven.`);
+      avisarExito(activo ? `${nombreMetodo(m)} activado.` : `${nombreMetodo(m)} desactivado. Los pasajeros ya no lo ven.`);
       return true;
     } catch (err: unknown) {
-      toast.error(humanizeError(err, activo ? "activar el método de pago" : "desactivar el método de pago"));
+      avisarError(humanizeError(err, activo ? "activar el método de pago" : "desactivar el método de pago"));
       return false;
     } finally {
       setCambiandoId(null);
@@ -314,7 +315,7 @@ export function MetodosPagoTab({ metodos: initialMetodos, errorCarga = null }: M
       return { ok: false, error: humanizeError(err, "eliminar el método de pago") };
     }
     setMetodos((prev) => prev.filter((m) => m.id !== aEliminar.id));
-    toast.success(`${nombreMetodo(aEliminar)} eliminado.`);
+    avisarExito(`${nombreMetodo(aEliminar)} eliminado.`);
     if (editingId === aEliminar.id) closeForm();
     return { ok: true };
   }
@@ -326,25 +327,18 @@ export function MetodosPagoTab({ metodos: initialMetodos, errorCarga = null }: M
   return (
     <Card>
       <CardHeader>
-        <div className="flex items-center justify-between gap-4 flex-wrap">
-          <div>
-            <CardTitle className="flex items-center gap-2">
-              <CreditCard size={20} weight="duotone" aria-hidden />
-              Métodos de pago
-            </CardTitle>
-            <CardDescription>
-              Las cuentas donde los pasajeros te pagan desde la app. Solo ven las activas.
-            </CardDescription>
-          </div>
-          {!showForm && (
-            <Button onClick={openCreate} size="sm">
-              <Plus size={16} className="mr-2" aria-hidden />
+        <CardTitle>Métodos de pago</CardTitle>
+        <CardDescription>Los pasajeros solo ven los activos.</CardDescription>
+        {!showForm && metodos.length > 0 && (
+          <CardAction>
+            <Button onClick={openCreate}>
+              <Plus aria-hidden />
               Agregar método
             </Button>
-          )}
-        </div>
+          </CardAction>
+        )}
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="flex flex-col gap-4">
         {errorCarga && (
           <ErrorState
             compacto
@@ -356,14 +350,14 @@ export function MetodosPagoTab({ metodos: initialMetodos, errorCarga = null }: M
 
         {/* Formulario */}
         {showForm && (
-          <form onSubmit={handleSubmit} noValidate className="border rounded-lg p-4 space-y-4 bg-muted/30">
-            <p className="font-medium text-sm">
+          <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4 rounded-md border border-border p-4">
+            <h3 className="text-sm font-semibold text-foreground">
               {editingId ? "Editar método de pago" : "Nuevo método de pago"}
-            </p>
+            </h3>
 
             <div className="grid gap-4 lg:grid-cols-[1fr_18rem]">
-              <div className="grid gap-3 sm:grid-cols-2 content-start">
-                <div className="space-y-1.5 sm:col-span-2">
+              <div className="grid content-start gap-4 sm:grid-cols-2">
+                <div className="flex flex-col gap-2 sm:col-span-2">
                   <Label htmlFor={id("tipo")}>Tipo</Label>
                   <Select
                     value={form.tipo}
@@ -380,11 +374,11 @@ export function MetodosPagoTab({ metodos: initialMetodos, errorCarga = null }: M
                       ))}
                     </SelectContent>
                   </Select>
-                  <p className="text-xs text-muted-foreground">{AYUDA_TIPO[form.tipo]}</p>
+                  <p className="text-sm text-muted-foreground">{AYUDA_TIPO[form.tipo]}</p>
                 </div>
 
                 {pideBanco && (
-                  <div className="space-y-1.5 sm:col-span-2">
+                  <div className="flex flex-col gap-2 sm:col-span-2">
                     <Label htmlFor={id("banco")}>Banco</Label>
                     <Select
                       value={form.bancoOpcion}
@@ -437,7 +431,7 @@ export function MetodosPagoTab({ metodos: initialMetodos, errorCarga = null }: M
                     value={form.numero_cuenta}
                     onChange={(v) => setField("numero_cuenta", v)}
                     inputMode="numeric"
-                    placeholder="01340000000000000000"
+                    placeholder="Ej.: 01340000000000000000"
                     ayuda={
                       form.numero_cuenta.replace(/\D/g, "").length > 0
                         ? `${form.numero_cuenta.replace(/\D/g, "").length} de 20 dígitos`
@@ -457,7 +451,7 @@ export function MetodosPagoTab({ metodos: initialMetodos, errorCarga = null }: M
                     onChange={(v) => setField("email_zelle", v)}
                     type="email"
                     inputMode="email"
-                    placeholder="pagos@tucooperativa.com"
+                    placeholder="Ej.: pagos@tucooperativa.com"
                     error={errores.email_zelle}
                     disabled={guardando}
                   />
@@ -481,14 +475,14 @@ export function MetodosPagoTab({ metodos: initialMetodos, errorCarga = null }: M
                     label="Titular"
                     value={form.titular}
                     onChange={(v) => setField("titular", v)}
-                    placeholder="Nombre como aparece en el banco"
+                    placeholder="Ej.: Transporte Los Andes C.A."
                     error={errores.titular}
                     disabled={guardando}
                     className={form.tipo === "ZELLE" ? "" : "sm:col-span-2"}
                   />
                 )}
 
-                <div className="sm:col-span-2 space-y-1.5">
+                <div className="flex flex-col gap-2 sm:col-span-2">
                   <Label htmlFor={id("instrucciones")}>
                     {form.tipo === "EFECTIVO" ? "Instrucciones (opcional)" : "Instrucciones para el pasajero (opcional)"}
                   </Label>
@@ -509,48 +503,43 @@ export function MetodosPagoTab({ metodos: initialMetodos, errorCarga = null }: M
               </div>
 
               {/* Vista previa */}
-              <section aria-label="Así lo verá el pasajero" className="rounded-xl border bg-card p-4 text-sm self-start">
-                <p className="mb-3 flex items-center gap-2 font-medium">
-                  <Eye size={16} aria-hidden />
+              <section
+                aria-label="Así lo verá el pasajero"
+                className="flex flex-col gap-2 self-start rounded-md border border-border bg-muted/50 p-4 text-sm"
+              >
+                <p className="flex items-center gap-2 font-medium text-foreground">
+                  <Eye className="size-4" aria-hidden />
                   Así lo verá el pasajero
                 </p>
-                <p className="text-xs text-muted-foreground mb-2">{METODO_PAGO[form.tipo]}</p>
+                <p className="text-xs text-muted-foreground">{METODO_PAGO[form.tipo]}</p>
                 {form.tipo === "EFECTIVO" ? (
                   <p className="text-muted-foreground">Paga en efectivo en la taquilla.</p>
                 ) : filasPrevia.length === 0 ? (
                   <p className="text-muted-foreground">Completa los datos para ver la vista previa.</p>
                 ) : (
-                  <dl className="space-y-2">
+                  <dl className="flex flex-col gap-2">
                     {filasPrevia.map((f) => (
                       <div key={f.etiqueta} className="flex justify-between gap-3">
                         <dt className="text-muted-foreground">{f.etiqueta}</dt>
-                        <dd className="text-right font-medium break-all">{f.valor}</dd>
+                        <dd className="text-right font-medium break-all text-foreground">{f.valor}</dd>
                       </div>
                     ))}
                   </dl>
                 )}
                 {form.instrucciones.trim() && (
-                  <p className="mt-3 text-xs text-muted-foreground">{form.instrucciones.trim()}</p>
+                  <p className="text-xs text-muted-foreground">{form.instrucciones.trim()}</p>
                 )}
               </section>
             </div>
 
-            {errorGeneral && (
-              <div
-                role="alert"
-                className="flex items-start gap-2 rounded-xl border border-destructive/40 bg-destructive-light p-3 text-sm text-destructive-deep"
-              >
-                <WarningCircle className="mt-0.5 size-4 shrink-0" weight="fill" aria-hidden />
-                <p>{errorGeneral}</p>
-              </div>
-            )}
+            {errorGeneral && <AvisoError>{errorGeneral}</AvisoError>}
 
-            <div className="flex gap-2 justify-end">
-              <Button type="button" variant="outline" size="sm" onClick={closeForm} disabled={guardando}>
-                <X size={14} className="mr-1" aria-hidden /> Cancelar
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <Button type="button" variant="outline" onClick={closeForm} disabled={guardando}>
+                Cancelar
               </Button>
-              <Button type="submit" size="sm" disabled={guardando}>
-                <Check size={14} className="mr-1" aria-hidden />
+              <Button type="submit" disabled={guardando} aria-busy={guardando || undefined}>
+                {guardando && <Spinner size="sm" aria-hidden />}
                 {guardando ? "Guardando…" : editingId ? "Guardar cambios" : "Agregar método"}
               </Button>
             </div>
@@ -559,17 +548,20 @@ export function MetodosPagoTab({ metodos: initialMetodos, errorCarga = null }: M
 
         {/* Lista */}
         {metodos.length === 0 && !showForm && !errorCarga && (
-          <div className="text-center py-8 space-y-3">
-            <p className="text-sm text-muted-foreground">
-              Aún no tienes métodos de pago. Agrega al menos uno digital (Pago Móvil, transferencia o Zelle) para vender en la app.
-            </p>
-            <Button size="sm" onClick={openCreate}>
-              <Plus size={16} className="mr-2" aria-hidden />
-              Agregar método
-            </Button>
-          </div>
+          <EmptyState
+            compacto
+            icon={CreditCard}
+            title="Todavía no tienes métodos de pago"
+            description="Agrega uno digital para vender en la app."
+            action={
+              <Button onClick={openCreate}>
+                <Plus aria-hidden />
+                Agregar método
+              </Button>
+            }
+          />
         )}
-        <ul className="space-y-2">
+        <ul className="flex flex-col gap-2">
           {metodos.map((m) => {
             const nombre = nombreMetodo(m);
             const detalle = filasPasajero(m)
@@ -580,15 +572,15 @@ export function MetodosPagoTab({ metodos: initialMetodos, errorCarga = null }: M
             return (
               <li
                 key={m.id}
-                className="flex flex-col gap-3 p-3 rounded-lg border bg-card sm:flex-row sm:items-center sm:justify-between"
+                className="flex flex-col gap-3 rounded-md border border-border bg-card p-4 sm:flex-row sm:items-center sm:justify-between"
               >
-                <div className="min-w-0">
-                  <p className={cn("font-medium text-sm truncate", !m.activo && "text-muted-foreground")}>{nombre}</p>
+                <div className="flex min-w-0 flex-col gap-0.5">
+                  <p className={cn("truncate text-sm font-medium", m.activo ? "text-foreground" : "text-muted-foreground")}>{nombre}</p>
                   <p className="text-xs text-muted-foreground truncate">
                     {m.tipo === "EFECTIVO" ? m.instrucciones || "Pago en la taquilla" : detalle}
                   </p>
                 </div>
-                <div className="flex items-center gap-3 shrink-0">
+                <div className="flex shrink-0 items-center gap-2">
                   <div className="flex items-center gap-2">
                     <Switch
                       id={switchId}
@@ -596,7 +588,7 @@ export function MetodosPagoTab({ metodos: initialMetodos, errorCarga = null }: M
                       disabled={cambiandoId === m.id}
                       onCheckedChange={(v) => void cambiarActivo(m, v)}
                     />
-                    <Label htmlFor={switchId} className="text-sm font-normal">
+                    <Label htmlFor={switchId} className="w-14 text-sm font-normal">
                       {m.activo ? "Activo" : "Inactivo"}
                     </Label>
                   </div>
@@ -606,7 +598,7 @@ export function MetodosPagoTab({ metodos: initialMetodos, errorCarga = null }: M
                     aria-label={`Editar ${nombre}`}
                     onClick={() => openEdit(m)}
                   >
-                    <PencilSimple size={16} aria-hidden />
+                    <PencilSimple aria-hidden />
                   </Button>
                   <Button
                     variant="ghost"
@@ -615,7 +607,7 @@ export function MetodosPagoTab({ metodos: initialMetodos, errorCarga = null }: M
                     aria-label={`Eliminar ${nombre}`}
                     onClick={() => pedirEliminar(m)}
                   >
-                    <Trash size={16} aria-hidden />
+                    <Trash aria-hidden />
                   </Button>
                 </div>
               </li>
@@ -631,7 +623,7 @@ export function MetodosPagoTab({ metodos: initialMetodos, errorCarga = null }: M
         titulo={aEliminar ? `¿Eliminar ${nombreMetodo(aEliminar)}?` : "¿Eliminar el método de pago?"}
         descripcion={
           conPagos && aEliminar ? (
-            <div className="space-y-3">
+            <div className="flex flex-col items-start gap-3">
               <p>Si lo desactivas, los pasajeros dejarán de verlo y conservarás sus pagos.</p>
               {aEliminar.activo ? (
                 <Button
@@ -651,10 +643,10 @@ export function MetodosPagoTab({ metodos: initialMetodos, errorCarga = null }: M
               )}
             </div>
           ) : (
-            "Los pasajeros dejarán de verlo al pagar. Esta acción no se puede deshacer."
+            "Los pasajeros dejarán de verlo. No se puede deshacer."
           )
         }
-        verbo="Eliminar"
+        verbo="Eliminar método"
         verboCargando="Eliminando…"
         onConfirm={confirmarEliminar}
       />
@@ -667,7 +659,7 @@ export function MetodosPagoTab({ metodos: initialMetodos, errorCarga = null }: M
 function ErrorCampo({ id, texto }: { id: string; texto?: string }) {
   if (!texto) return null;
   return (
-    <p id={id} className="text-xs text-destructive-text">
+    <p id={id} className="text-sm text-destructive-text">
       {texto}
     </p>
   );
@@ -690,7 +682,7 @@ function Campo({
 }) {
   const descrito = error ? `${id}-error` : ayuda ? `${id}-ayuda` : undefined;
   return (
-    <div className={cn("space-y-1.5", className)}>
+    <div className={cn("flex flex-col gap-2", className)}>
       <Label htmlFor={id}>{label}</Label>
       <Input
         id={id}
@@ -706,7 +698,7 @@ function Campo({
       {error ? (
         <ErrorCampo id={`${id}-error`} texto={error} />
       ) : ayuda ? (
-        <p id={`${id}-ayuda`} className="text-xs text-muted-foreground">{ayuda}</p>
+        <p id={`${id}-ayuda`} className="text-sm text-muted-foreground">{ayuda}</p>
       ) : null}
     </div>
   );

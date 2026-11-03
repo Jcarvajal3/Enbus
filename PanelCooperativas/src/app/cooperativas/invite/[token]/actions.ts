@@ -3,6 +3,8 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { INICIO } from "@/lib/navigation";
+import { CLAVE_ERROR, CLAVE_MINIMO } from "@/lib/ve";
 import { humanizeError } from "@/lib/errores";
 
 // Supabase client con service_role para operaciones de administración
@@ -96,8 +98,8 @@ export async function completeOnboarding(
     return { error: "Las contraseñas no coinciden." };
   }
 
-  if (password.length < 8) {
-    return { error: "La contraseña debe tener al menos 8 caracteres." };
+  if (password.length < CLAVE_MINIMO) {
+    return { error: CLAVE_ERROR };
   }
 
   const validacion = await validateInviteToken(token);
@@ -188,9 +190,6 @@ export async function completeOnboarding(
     password: password,
   });
 
-  if (validacion.role === "taquillero") {
-    redirect("/cooperativas/taquilla/encomiendas");
-  } else {
-    redirect("/cooperativas/dashboard");
-  }
+  // Mismo inicio para ambos roles (PN-04).
+  redirect(INICIO);
 }

@@ -6,8 +6,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Upload, Buildings, Lock, WhatsappLogo, WarningCircle } from "@phosphor-icons/react";
-import { toast } from "sonner";
+import { Upload, Buildings, Lock, WhatsappLogo } from "@phosphor-icons/react";
+import { AvisoError } from "@/components/aviso-error";
+import { Spinner } from "@/components/ui/spinner";
+import { avisarError, avisarExito } from "@/lib/avisos";
 import Image from "next/image";
 import { actualizarDatosCooperativa, uploadLogo } from "@/app/cooperativas/(panel)/configuracion/actions";
 import type { CooperativaData } from "@/lib/types/configuracion";
@@ -60,7 +62,7 @@ export function DatosCooperativaTab({ cooperativa, estado }: DatosCooperativaTab
     e.target.value = ""; // permite volver a elegir el mismo archivo
     if (!file) return;
     if (file.size > LOGO_MAX_BYTES) {
-      toast.error("La imagen pesa más de 2 MB. Usa una más liviana.");
+      avisarError("La imagen pesa más de 2 MB. Usa una más liviana.");
       return;
     }
 
@@ -77,13 +79,13 @@ export function DatosCooperativaTab({ cooperativa, estado }: DatosCooperativaTab
         const res = await requireOnline(() => uploadLogo(formData))();
         if (res.ok) {
           setLogoUrl(res.data.url);
-          toast.success("Logo actualizado.");
+          avisarExito("Logo actualizado.");
         } else {
-          toast.error(res.error);
+          avisarError(res.error);
           setLogoUrl(cooperativa.logo_url); // se revierte
         }
       } catch (err: unknown) {
-        toast.error(humanizeError(err, "subir el logo"));
+        avisarError(humanizeError(err, "subir el logo"));
         setLogoUrl(cooperativa.logo_url);
       } finally {
         if (previewUrlRef.current) {
@@ -115,7 +117,7 @@ export function DatosCooperativaTab({ cooperativa, estado }: DatosCooperativaTab
       }
       setNombre(res.data.nombre);
       setRif(res.data.rif);
-      toast.success("Datos guardados.");
+      avisarExito("Datos guardados.");
       router.refresh();
     } catch (err) {
       setErrorCampo({ mensaje: humanizeError(err, "guardar los datos de la cooperativa") });
@@ -132,43 +134,42 @@ export function DatosCooperativaTab({ cooperativa, estado }: DatosCooperativaTab
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Buildings size={20} weight="duotone" aria-hidden />
-          Datos de la cooperativa
-        </CardTitle>
+        <CardTitle>Datos de la cooperativa</CardTitle>
         <CardDescription>
-          {editable
-            ? "Mientras revisamos tu solicitud puedes corregir el nombre y el RIF."
-            : "Estos datos los ven los pasajeros en la app y en sus boletos."}
+          {editable ? "Puedes corregir el nombre y el RIF mientras te revisamos." : "Los pasajeros los ven en la app y en sus boletos."}
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-6">
+      <CardContent className="flex flex-col gap-6">
         {/* Logo */}
         <div className="flex items-center gap-6">
-          <div className="w-24 h-24 rounded-xl border bg-muted flex items-center justify-center overflow-hidden shrink-0">
+          <div className="flex size-24 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border bg-muted">
             {logoUrl ? (
               <Image
                 src={logoUrl}
                 alt={`Logo de ${cooperativa.nombre}`}
                 width={96}
                 height={96}
-                className="object-contain w-full h-full"
+                className="size-full object-contain"
                 unoptimized
               />
             ) : (
-              <Buildings size={40} className="text-muted-foreground" weight="duotone" aria-hidden />
+              <Buildings className="size-10 text-muted-foreground" aria-hidden />
             )}
           </div>
-          <div className="space-y-2">
-            <p className="text-sm font-medium">Logo de la cooperativa</p>
-            <p className="text-xs text-muted-foreground">PNG, JPG o WebP de hasta 2 MB.</p>
+          <div className="flex flex-col items-start gap-2">
+            <div className="flex flex-col gap-0.5">
+              <p className="text-sm font-medium text-foreground">Logo</p>
+              <p className="text-xs text-muted-foreground">PNG, JPG o WebP de hasta 2 MB.</p>
+            </div>
             <Button
+              type="button"
               variant="outline"
               size="sm"
               onClick={() => fileInputRef.current?.click()}
               disabled={isPending}
+              aria-busy={isPending || undefined}
             >
-              <Upload size={14} className="mr-2" aria-hidden />
+              {isPending ? <Spinner size="sm" aria-hidden /> : <Upload aria-hidden />}
               {isPending ? "Subiendo…" : "Cambiar logo"}
             </Button>
             <input
@@ -183,9 +184,9 @@ export function DatosCooperativaTab({ cooperativa, estado }: DatosCooperativaTab
         </div>
 
         {editable ? (
-          <form onSubmit={guardarDatos} noValidate className="space-y-4">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="grid gap-1.5">
+          <form onSubmit={guardarDatos} noValidate className="flex flex-col items-start gap-4">
+            <div className="grid w-full gap-4 sm:grid-cols-2">
+              <div className="grid gap-2">
                 <Label htmlFor={`${uid}-nombre`}>Nombre de la cooperativa</Label>
                 <Input
                   id={`${uid}-nombre`}
@@ -196,7 +197,7 @@ export function DatosCooperativaTab({ cooperativa, estado }: DatosCooperativaTab
                   onChange={(e) => setNombre(e.target.value)}
                 />
               </div>
-              <div className="grid gap-1.5">
+              <div className="grid gap-2">
                 <Label htmlFor={`${uid}-rif`}>RIF</Label>
                 <Input
                   id={`${uid}-rif`}
@@ -209,41 +210,34 @@ export function DatosCooperativaTab({ cooperativa, estado }: DatosCooperativaTab
                   onChange={(e) => setRif(e.target.value)}
                   onBlur={() => setRif((actual) => normalizeRif(actual) ?? actual)}
                 />
-                <p id={`${uid}-rif-ayuda`} className="text-xs text-muted-foreground">
-                  Ejemplo: {RIF_PLACEHOLDER}
+                <p id={`${uid}-rif-ayuda`} className="text-sm text-muted-foreground">
+                  {RIF_AYUDA}
                 </p>
               </div>
             </div>
-            {errorCampo && (
-              <div
-                role="alert"
-                className="flex items-start gap-2 rounded-xl border border-destructive/40 bg-destructive-light p-3 text-sm text-destructive-deep"
-              >
-                <WarningCircle className="mt-0.5 size-4 shrink-0" weight="fill" aria-hidden />
-                <p>{errorCampo.mensaje}</p>
-              </div>
-            )}
-            <Button type="submit" disabled={guardando || !cambiado}>
+            {errorCampo && <AvisoError className="w-full">{errorCampo.mensaje}</AvisoError>}
+            <Button type="submit" disabled={guardando || !cambiado} aria-busy={guardando || undefined}>
+              {guardando && <Spinner size="sm" aria-hidden />}
               {guardando ? "Guardando…" : "Guardar cambios"}
             </Button>
           </form>
         ) : (
-          <div className="space-y-3">
-            <div className="grid gap-4 sm:grid-cols-2">
+          <div className="flex flex-col gap-3">
+            <dl className="grid gap-4 sm:grid-cols-2">
               <ReadOnlyField label="Nombre de la cooperativa" value={cooperativa.nombre} />
               <ReadOnlyField label="RIF" value={cooperativa.rif ?? "—"} />
-            </div>
+            </dl>
             <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
-              <Lock size={14} aria-hidden />
+              <Lock className="size-4" aria-hidden />
               Para cambiar el nombre o el RIF, escríbenos.
               {soporte && (
                 <a
                   href={soporte}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 font-medium text-foreground underline decoration-primary underline-offset-4"
+                  className="inline-flex items-center gap-1 font-medium text-info-text underline-offset-4 hover:underline focus-visible:underline"
                 >
-                  <WhatsappLogo size={14} weight="fill" aria-hidden />
+                  <WhatsappLogo className="size-4" aria-hidden />
                   Escribir por WhatsApp
                 </a>
               )}
@@ -251,7 +245,7 @@ export function DatosCooperativaTab({ cooperativa, estado }: DatosCooperativaTab
           </div>
         )}
 
-        <div className="grid gap-4 sm:grid-cols-2">
+        <dl className="grid gap-4 sm:grid-cols-2">
           <ReadOnlyField
             label="Comisión de EnBus"
             value={
@@ -259,9 +253,8 @@ export function DatosCooperativaTab({ cooperativa, estado }: DatosCooperativaTab
                 ? "La define EnBus al aprobar tu solicitud"
                 : `${formatNumeroVE(Number(cooperativa.comision_porcentaje))} % por venta`
             }
-            ayuda="La define el equipo de EnBus."
           />
-        </div>
+        </dl>
       </CardContent>
     </Card>
   );
@@ -269,12 +262,11 @@ export function DatosCooperativaTab({ cooperativa, estado }: DatosCooperativaTab
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-function ReadOnlyField({ label, value, ayuda }: { label: string; value: string; ayuda?: string }) {
+function ReadOnlyField({ label, value }: { label: string; value: string }) {
   return (
-    <div className="space-y-1.5">
-      <p className="text-sm font-medium">{label}</p>
-      <p className="text-sm bg-muted px-3 py-2 rounded-md border">{value}</p>
-      {ayuda && <p className="text-xs text-muted-foreground">{ayuda}</p>}
+    <div className="flex flex-col gap-1">
+      <dt className="text-sm text-muted-foreground">{label}</dt>
+      <dd className="text-sm font-medium text-foreground">{value}</dd>
     </div>
   );
 }

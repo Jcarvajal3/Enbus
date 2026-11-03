@@ -9,7 +9,8 @@ import { useId, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Clock, Prohibit, SpinnerIcon, WarningCircle, WhatsappLogo, XCircle, type Icon } from "@phosphor-icons/react";
-import { toast } from "sonner";
+import { AvisoError } from "@/components/aviso-error";
+import { avisarExito } from "@/lib/avisos";
 import { useUser } from "@/hooks/use-user";
 import { requireOnline } from "@/components/connectivity-banner";
 import { buttonVariants, Button } from "@/components/ui/button";
@@ -141,7 +142,7 @@ export function EstadoCooperativaBanner() {
           rel="noopener noreferrer"
           className={cn(buttonVariants({ variant: "outline", size: "sm" }), ESTILOS.peligro.boton)}
         >
-          <WhatsappLogo weight="fill" aria-hidden />
+          <WhatsappLogo aria-hidden />
           Escribir por WhatsApp
         </a>
       ) : null;
@@ -176,7 +177,7 @@ export function EstadoCooperativaBanner() {
         )}
       >
         <div className="flex items-start gap-2">
-          <Icono className="mt-0.5 size-4 shrink-0" weight="bold" aria-hidden />
+          <Icono className="mt-0.5 size-4 shrink-0" weight="fill" aria-hidden />
           <p>{mensaje}</p>
         </div>
         {acciones && <div className="flex shrink-0 flex-wrap gap-2 pl-6 sm:pl-0">{acciones}</div>}
@@ -229,7 +230,7 @@ function FormularioRevision({
         setError(res.error);
         return;
       }
-      toast.success(
+      avisarExito(
         res.data.ya_procesado
           ? "Tu solicitud ya está en revisión. Te avisaremos por correo."
           : "Enviamos tu solicitud a revisión. Te avisaremos por correo."
@@ -246,13 +247,10 @@ function FormularioRevision({
 
   return (
     <DialogContent showCloseButton={!enviando}>
-      <form onSubmit={enviar} noValidate className="grid gap-5">
+      <form onSubmit={enviar} noValidate className="grid gap-4">
         <DialogHeader>
           <DialogTitle>¿Pedir una nueva revisión?</DialogTitle>
-          <DialogDescription>
-            Antes, corrige en Configuración lo que indicaba el motivo del rechazo. Revisaremos tu solicitud otra vez en
-            24 a 48 horas hábiles.
-          </DialogDescription>
+          <DialogDescription>Corrige antes lo que indicaba el motivo. Respondemos en 24 a 48 horas hábiles.</DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-2">
@@ -268,15 +266,7 @@ function FormularioRevision({
           />
         </div>
 
-        {error && (
-          <div
-            role="alert"
-            className="flex items-start gap-2 rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive-text"
-          >
-            <WarningCircle className="mt-0.5 size-4 shrink-0" weight="fill" aria-hidden />
-            <p>{error}</p>
-          </div>
-        )}
+        {error && <AvisoError>{error}</AvisoError>}
 
         <DialogFooter>
           <Button type="button" variant="outline" onClick={onCerrar} disabled={enviando}>

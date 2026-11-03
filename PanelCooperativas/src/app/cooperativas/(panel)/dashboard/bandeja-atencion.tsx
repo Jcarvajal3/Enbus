@@ -5,23 +5,16 @@
 // tarjetas con algo por hacer; los datos llegan del servidor en el primer render
 // y "Reintentar" los vuelve a pedir con la server action.
 
-import { useState, type ComponentType, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import Link from "next/link";
-import {
-  ArrowCounterClockwise,
-  ArrowRight,
-  Bus,
-  CheckCircle,
-  DownloadSimple,
-  HourglassMedium,
-  Receipt,
-  TruckTrailer,
-  type IconProps,
-} from "@phosphor-icons/react";
+import { ArrowRight, CheckCircle } from "@phosphor-icons/react";
+import type { Icon } from "@phosphor-icons/react";
 import { ErrorState } from "@/components/error-state";
+import { MSG } from "@/lib/errores";
 import { Monto } from "@/components/monto";
 import { fechaVE, formatFechaVE, formatHoraVE, hoyVE, sumarDiasVE } from "@/lib/fechas";
 import { formatCiudad } from "@/lib/ciudades";
+import { ICONO_SECCION } from "@/lib/navigation";
 import type { BandejaCooperativa, ProximaSalida } from "@/lib/types/operacion";
 import { cn } from "@/lib/utils";
 import { cargarBandeja, type ResultadoBandeja } from "./actions";
@@ -47,7 +40,7 @@ export function cuandoSale(p: Pick<ProximaSalida, "salida" | "minutos_para_salir
 type Tarjeta = {
   clave: string;
   href: string;
-  icono: ComponentType<IconProps>;
+  icono: Icon;
   titulo: string;
   detalle: ReactNode;
   /** Tono de aviso (algo vence pronto). */
@@ -60,16 +53,16 @@ function tarjetas(b: BandejaCooperativa): Tarjeta[] {
     lista.push({
       clave: "pagos",
       href: "/cooperativas/pagos",
-      icono: Receipt,
+      icono: ICONO_SECCION.pagos,
       titulo: plural(b.pagos_por_verificar, "1 pago por verificar", "{n} pagos por verificar"),
-      detalle: "Confírmalos para emitir los boletos y despachar los envíos.",
+      detalle: "Compáralos con tu banco y verifícalos.",
     });
   }
   if (b.reembolsos_por_devolver > 0) {
     lista.push({
       clave: "reembolsos",
       href: "/cooperativas/reembolsos",
-      icono: ArrowCounterClockwise,
+      icono: ICONO_SECCION.reembolsos,
       titulo: plural(b.reembolsos_por_devolver, "1 reembolso por devolver", "{n} reembolsos por devolver"),
       detalle: <Monto usd={b.reembolsos_usd} size="sm" />,
     });
@@ -79,7 +72,7 @@ function tarjetas(b: BandejaCooperativa): Tarjeta[] {
     lista.push({
       clave: "vencer",
       href: "/cooperativas/entrega",
-      icono: HourglassMedium,
+      icono: ICONO_SECCION.entrega,
       titulo: plural(
         b.encomiendas_por_vencer,
         "1 encomienda con 3 o más días en tu oficina",
@@ -95,21 +88,22 @@ function tarjetas(b: BandejaCooperativa): Tarjeta[] {
   if (b.encomiendas_por_despachar > 0) {
     lista.push({
       clave: "despachar",
-      href: "/cooperativas/despacho",
-      icono: TruckTrailer,
+      // PN-15: la lista de lo que está pagado y por despachar vive en Taquilla de encomiendas.
+      href: "/cooperativas/taquilla/encomiendas?estado=PAGADA",
+      icono: ICONO_SECCION.taquillaEncomiendas,
       titulo: plural(
         b.encomiendas_por_despachar,
         "1 encomienda lista para despachar",
         "{n} encomiendas listas para despachar"
       ),
-      detalle: "Agrégalas al próximo bus de su ruta.",
+      detalle: "Súbelas al próximo bus de su ruta.",
     });
   }
   if (b.encomiendas_en_camino > 0) {
     lista.push({
       clave: "camino",
       href: "/cooperativas/recepcion-destino",
-      icono: DownloadSimple,
+      icono: ICONO_SECCION.recepcion,
       titulo: plural(
         b.encomiendas_en_camino,
         "1 encomienda en camino a tu oficina",
@@ -123,7 +117,7 @@ function tarjetas(b: BandejaCooperativa): Tarjeta[] {
     lista.push({
       clave: "salida",
       href: `/cooperativas/despacho?viaje=${encodeURIComponent(p.viaje_id)}`,
-      icono: Bus,
+      icono: ICONO_SECCION.despacho,
       titulo: `Próxima salida: ${formatCiudad(p.ciudad_origen)} → ${formatCiudad(p.ciudad_destino)} ${cuandoSale(p)}`,
       detalle: [
         plural(p.boletos_vendidos, "1 boleto vendido", "{n} boletos vendidos"),
@@ -142,13 +136,13 @@ export function BandejaAtencion({ inicial }: { inicial: ResultadoBandeja }) {
     try {
       setResultado(await cargarBandeja());
     } catch {
-      setResultado({ ok: false, error: "No pudimos conectarnos. Revisa tu conexión a internet e intenta de nuevo." });
+      setResultado({ ok: false, error: MSG.sinRed });
     }
   };
 
   return (
     <section aria-labelledby="bandeja-titulo" className="flex flex-col gap-3">
-      <h2 id="bandeja-titulo" className="text-lg font-semibold tracking-tight">
+      <h2 id="bandeja-titulo" className="text-lg font-semibold">
         Requiere tu atención
       </h2>
       {!resultado.ok ? (
@@ -169,38 +163,36 @@ function ListaTarjetas({ bandeja }: { bandeja: BandejaCooperativa }) {
   const lista = tarjetas(bandeja);
   if (lista.length === 0) {
     return (
-      <p className="flex items-center gap-2 rounded-xl border bg-card p-4 text-sm font-medium text-success-text">
+      <p className="flex items-center gap-2 rounded-md border border-border bg-card p-4 text-sm font-medium text-success-text">
         <CheckCircle className="size-5 shrink-0" weight="fill" aria-hidden />
-        Todo al día. No tienes nada pendiente por ahora.
+        Todo al día. Nada pendiente por ahora.
       </p>
     );
   }
   return (
-    <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+    <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
       {lista.map(({ clave, href, icono: Icono, titulo, detalle, urgente }) => (
         <li key={clave}>
           <Link
             href={href}
             className={cn(
-              "group flex h-full items-start gap-3 rounded-xl border p-4 transition-colors",
-              "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
-              urgente
-                ? "border-warning/40 bg-warning-light text-warning-deep hover:bg-warning-light/80"
-                : "bg-card hover:bg-muted/60"
+              "group flex h-full items-start gap-3 rounded-md border bg-card p-4 outline-none motion-safe:transition-colors",
+              "focus-visible:ring-[3px] focus-visible:ring-ring/50",
+              urgente ? "border-warning/50 hover:border-warning" : "border-border hover:border-input-border"
             )}
           >
             <Icono
-              className={cn("mt-0.5 size-5 shrink-0", urgente ? "text-warning-deep" : "text-muted-foreground")}
-              weight="duotone"
+              className={cn("mt-0.5 size-5 shrink-0", urgente ? "text-warning-text" : "text-muted-foreground")}
               aria-hidden
             />
             <span className="flex min-w-0 flex-1 flex-col gap-1">
-              <span className="font-medium leading-snug">{titulo}</span>
-              <span className={cn("text-sm", urgente ? "text-warning-deep" : "text-muted-foreground")}>{detalle}</span>
+              <span className={cn("text-sm font-medium leading-snug", urgente ? "text-warning-text" : "text-foreground")}>
+                {titulo}
+              </span>
+              <span className="text-sm text-muted-foreground">{detalle}</span>
             </span>
             <ArrowRight
-              className="mt-0.5 size-4 shrink-0 transition-transform motion-safe:group-hover:translate-x-0.5"
-              weight="bold"
+              className="mt-0.5 size-4 shrink-0 text-muted-foreground motion-safe:transition-transform motion-safe:group-hover:translate-x-0.5"
               aria-hidden
             />
           </Link>

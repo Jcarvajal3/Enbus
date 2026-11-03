@@ -13,7 +13,18 @@
  *   pantalla ya manejó el error (p. ej. `EB_TASA_CAMBIO` con su propio aviso),
  *   debe resolver sin lanzar.
  * - Efectivo: boletos → "Apartar y pagar en taquilla" (`onEfectivo`, sin pago);
- *   encomiendas → solo una tarjeta informativa.
+ *   encomiendas → solo un aviso.
+ *
+ * Tocar una forma de pago la elige; el botón ("Continuar") la abre (§2.1
+ * regla 6). Tres modos:
+ * - Por defecto (encomiendas): tarjeta propia con su título, sus botones y el
+ *   enlace para volver a las formas de pago.
+ * - Controlado (`metodo` + `onMetodo`): la pantalla guarda el subpaso y su ←
+ *   lo cierra primero (AN-12); el título va en la cabecera de la pantalla.
+ * - `embebido`: sin tarjeta, dentro de una hoja (el título y la ← van en la
+ *   hoja, AU-20).
+ * Con `onAccion`, el botón del subpaso no se dibuja: se entrega a la pantalla
+ * para su `FloatingBar` o el pie de la hoja.
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AccessibilityInfo, ScrollView, StyleSheet, View } from 'react-native';
@@ -22,18 +33,22 @@ import {
   Bank,
   CalendarBlank,
   Check,
+  CheckCircle,
   Copy,
-  CreditCard,
+  CurrencyDollar,
+  DeviceMobile,
   Info,
   MagnifyingGlass,
   Money,
   Storefront,
   WarningCircle,
+  type IconProps,
 } from 'phosphor-react-native';
 import * as Haptics from 'expo-haptics';
 import * as Clipboard from 'expo-clipboard';
 import { PressableScale } from './PressableScale';
 import { CalendarModal } from './CalendarModal';
+import { SkeletonLoader } from './SkeletonLoader';
 import {
   BottomSheet,
   Button,
@@ -41,7 +56,7 @@ import {
   Chip,
   ErrorState,
   Field,
-  LoadingState,
+  IconButton,
   SectionLabel,
   SelectField,
   Text,
@@ -49,7 +64,7 @@ import {
 import { supabase } from '@/src/utils/supabase';
 import { useToast } from '@/src/components/Toast';
 import { humanizeError, parseDetalleEB } from '@/src/utils/errores';
-import { formatDateKey, toDateKey } from '@/src/utils/formatters';
+import { formatDiaVE, toDateKey } from '@/src/utils/formatters';
 import {
   formatBs,
   formatMoney,
@@ -59,7 +74,8 @@ import {
   type MonedaPago,
 } from '@/src/utils/dinero';
 import type { CotizacionPago, MetodoPago, PagoDeclarado } from '@/src/types';
-import { Colors, Motion, Radius, Sizes, Spacing } from '@/src/theme';
+import type { TasaCambiada } from '@/src/hooks/useCheckoutBoletos';
+import { Colors, Layout, Motion, Radius, Sizes, Spacing } from '@/src/theme';
 
 export type { CotizacionPago, PagoDeclarado } from '@/src/types';
 
@@ -139,13 +155,39 @@ function bancoConCodigo(texto: string): string {
   return banco ? `${banco.codigo} · ${texto}` : texto;
 }
 
-const METODO_INFO: Record<string, { label: string; desc: string }> = {
-  PAGO_MOVIL: { label: 'Pago Móvil', desc: 'Transferencia instantánea en bolívares' },
-  TRANSFERENCIA_BANCARIA: { label: 'Transferencia bancaria', desc: 'Desde tu cuenta nacional' },
-  ZELLE: { label: 'Zelle / Divisas', desc: 'Pago electrónico en dólares' },
+// ─── Formas de pago ──────────────────────────────────────────────────────────
+
+/** Un icono por método (AU-31): no se repite el mismo en todas las filas. */
+const METODO_INFO: Record<string, { label: string; desc: string; icono: React.ComponentType<IconProps> }> = {
+  PAGO_MOVIL: { label: 'Pago Móvil', desc: 'En bolívares, al instante', icono: DeviceMobile },
+  TRANSFERENCIA_BANCARIA: { label: 'Transferencia', desc: 'Desde tu cuenta en Venezuela', icono: Bank },
+  ZELLE: { label: 'Zelle', desc: 'En dólares', icono: CurrencyDollar },
 };
 
-type FlowStep = 'metodos' | 'formulario' | 'efectivo';
+const TAQUILLA = {
+  label: 'Apartar y pagar en taquilla',
+  desc: 'En efectivo, en la taquilla de la cooperativa',
+  icono: Money,
+};
+
+/** Subpaso abierto: una cuenta de la cooperativa o la taquilla. */
+export type MetodoElegido = MetodoPago | 'efectivo';
+
+/** Título del subpaso para la cabecera o la hoja: "Pago Móvil", "Pagar en taquilla". */
+export function tituloMetodo(metodo: MetodoElegido | null | undefined): string | null {
+  if (!metodo) return null;
+  if (metodo === 'efectivo') return 'Pagar en taquilla';
+  return METODO_INFO[metodo.tipo]?.label ?? 'Registrar pago';
+}
+
+/** El botón del subpaso, para la `FloatingBar` o el pie de una hoja. */
+export interface AccionPago {
+  etiqueta: string;
+  icon?: React.ComponentType<IconProps>;
+  onPress: () => void;
+  disabled: boolean;
+  cargando: boolean;
+}
 
 /** APP-26 / M-20: the payment date is picked, never typed. */
 type FechaOpcion = 'hoy' | 'ayer' | 'otra';
@@ -158,7 +200,7 @@ type CampoFormulario = 'referencia' | 'banco' | 'fecha' | 'monto';
 const CAMPOS_FORMULARIO: readonly string[] = ['referencia', 'banco', 'fecha', 'monto'];
 
 const AVISO_SIN_TASA =
-  'No pudimos obtener la tasa BCV de hoy, así que aún no podemos calcular el monto en bolívares. Intenta en unos minutos o paga en la taquilla.';
+  'Aún no tenemos la tasa BCV de hoy para calcular el monto en bolívares. Intenta en unos minutos o paga en la taquilla.';
 
 export interface PaymentFlowProps {
   /** Cooperativa dueña de las cuentas donde se paga */
@@ -174,6 +216,17 @@ export interface PaymentFlowProps {
   onEfectivo?: () => void;
   /** Deshabilita todo (p. ej. la reserva venció o la pantalla está ocupada) */
   bloqueado?: boolean;
+  /**
+   * Subpaso controlado por la pantalla: `null` = elegir la forma de pago. Si
+   * se pasa, la ← de la pantalla lo cierra (`onMetodo(null)`) y no hay enlace
+   * interno para volver.
+   */
+  metodo?: MetodoElegido | null;
+  onMetodo?: (metodo: MetodoElegido | null) => void;
+  /** Dentro de una hoja: sin tarjeta ni título propio */
+  embebido?: boolean;
+  /** Recibe el botón del subpaso (o `null`) en vez de dibujarlo */
+  onAccion?: (accion: AccionPago | null) => void;
 }
 
 /** "1250,00" — what a Venezuelan banking app accepts when pasted. */
@@ -214,6 +267,9 @@ const diasAtras = (dias: number) => {
   return new Date(caracas.getUTCFullYear(), caracas.getUTCMonth(), caracas.getUTCDate() - dias);
 };
 
+/** Clave de una opción de la lista: el id de la cuenta o 'efectivo'. */
+const claveDe = (m: MetodoElegido) => (m === 'efectivo' ? 'efectivo' : m.id);
+
 export function PaymentFlow({
   cooperativaId,
   concepto,
@@ -222,15 +278,29 @@ export function PaymentFlow({
   onRegistrar,
   onEfectivo,
   bloqueado = false,
+  metodo: metodoControlado,
+  onMetodo,
+  embebido = false,
+  onAccion,
 }: PaymentFlowProps) {
   const toast = useToast();
+  const controlado = metodoControlado !== undefined;
+  /** Con tarjeta propia (sin pantalla que lo controle ni hoja que lo contenga). */
+  const enTarjeta = !controlado && !embebido;
 
-  const [step, setStep] = useState<FlowStep>('metodos');
+  const [metodoLocal, setMetodoLocal] = useState<MetodoElegido | null>(null);
+  const abierto = controlado ? metodoControlado : metodoLocal;
+  const abrir = (m: MetodoElegido | null) => {
+    if (controlado) onMetodo?.(m);
+    else setMetodoLocal(m);
+  };
+
   const [metodos, setMetodos] = useState<MetodoPago[]>([]);
   const [loadingMetodos, setLoadingMetodos] = useState(true);
   const [errorMetodos, setErrorMetodos] = useState<string | null>(null);
   const [reintento, setReintento] = useState(0);
-  const [metodo, setMetodo] = useState<MetodoPago | null>(null);
+  /** Opción marcada en la lista (aún sin abrir) */
+  const [candidato, setCandidato] = useState<string | null>(null);
 
   const [referencia, setReferencia] = useState('');
   const [fechaOpcion, setFechaOpcion] = useState<FechaOpcion>('hoy');
@@ -293,14 +363,28 @@ export function PaymentFlow({
   }, [cooperativaId, reintento]);
 
   const esBoleto = tipoRecurso === 'boleto';
+  const metodo = abierto && abierto !== 'efectivo' ? abierto : null;
   const isZelle = metodo?.tipo === 'ZELLE';
   const moneda: MonedaPago = isZelle ? 'USD' : 'VES';
+  const efectivoNavegable = esBoleto && !!onEfectivo;
 
   /** Sin tasa no hay monto en Bs: el servidor rechazaría el cobro (EB_TASA_NO_DISPONIBLE). */
   const sinTasa = !(Number(cotizacion.tasa) > 0) || cotizacion.totalBs == null;
   /** Lo que debería aparecer en la cuenta de la cooperativa, en la moneda del método. */
   const esperado = isZelle ? cotizacion.totalUsd : cotizacion.totalBs;
   const ocupado = submitting || bloqueado;
+
+  // Otra cuenta abierta: el formulario empieza limpio, con el monto exacto.
+  const metodoId = metodo?.id ?? null;
+  useEffect(() => {
+    setErrors({});
+    setMontoEditado(false);
+  }, [metodoId]);
+
+  // Al volver a la lista, la opción que estaba abierta sigue marcada.
+  useEffect(() => {
+    if (abierto) setCandidato(claveDe(abierto));
+  }, [abierto]);
 
   // "Monto que pagaste" precargado con el monto exacto, salvo que el usuario lo cambie.
   useEffect(() => {
@@ -324,13 +408,6 @@ export function PaymentFlow({
 
   const limpiarError = (campo: CampoFormulario) =>
     setErrors((prev) => (prev[campo] ? { ...prev, [campo]: undefined } : prev));
-
-  const elegirMetodo = (option: MetodoPago) => {
-    setMetodo(option);
-    setErrors({});
-    setMontoEditado(false);
-    setStep('formulario');
-  };
 
   const validate = (): boolean => {
     const next: Partial<Record<CampoFormulario, string>> = {};
@@ -391,85 +468,150 @@ export function PaymentFlow({
     }
   };
 
-  if (loadingMetodos) {
-    return (
-      <Card padding="lg">
-        <LoadingState label="Cargando formas de pago…" compact />
+  // ── El botón del subpaso ─────────────────────────────────────────────────
+  const opcionCandidata: MetodoElegido | null =
+    candidato === 'efectivo' && efectivoNavegable
+      ? 'efectivo'
+      : (metodos.find((m) => m.id === candidato) ?? null);
+
+  let accion: AccionPago | null = null;
+  if (!loadingMetodos && !errorMetodos) {
+    if (abierto === 'efectivo' && efectivoNavegable) {
+      accion = {
+        etiqueta: 'Apartar y pagar en taquilla',
+        icon: Storefront,
+        onPress: () => onEfectivo?.(),
+        disabled: bloqueado,
+        cargando: false,
+      };
+    } else if (metodo) {
+      accion = {
+        etiqueta: 'Registrar pago',
+        onPress: () => void handleSubmit(),
+        disabled: ocupado || sinTasa,
+        cargando: submitting,
+      };
+    } else if (metodos.length > 0 || efectivoNavegable) {
+      accion = {
+        etiqueta: 'Continuar',
+        onPress: () => {
+          if (opcionCandidata) abrir(opcionCandidata);
+        },
+        disabled: !opcionCandidata || bloqueado,
+        cargando: false,
+      };
+    }
+  }
+
+  // La pantalla recibe un `onPress` estable que llama siempre al último.
+  const accionRef = useRef(accion);
+  accionRef.current = accion;
+  const onAccionRef = useRef(onAccion);
+  onAccionRef.current = onAccion;
+  const firma = accion
+    ? `${accion.etiqueta}|${accion.disabled}|${accion.cargando}|${accion.icon ? 1 : 0}`
+    : '';
+  useEffect(() => {
+    const actual = accionRef.current;
+    onAccionRef.current?.(
+      actual ? { ...actual, onPress: () => accionRef.current?.onPress() } : null
+    );
+  }, [firma]);
+  useEffect(() => () => onAccionRef.current?.(null), []);
+
+  const botonPropio = accion && !onAccion ? (
+    <Button
+      fullWidth
+      icon={accion.icon}
+      disabled={accion.disabled}
+      loading={accion.cargando}
+      onPress={accion.onPress}
+      style={s.submit}
+      accessibilityLabel={accion.cargando ? 'Registrando tu pago' : accion.etiqueta}
+    >
+      {accion.etiqueta}
+    </Button>
+  ) : null;
+
+  /** Cajas internas: `surface` sobre fondo blanco; blancas dentro de la tarjeta beige. */
+  const caja = enTarjeta ? s.cajaEnTarjeta : s.cajaEnFondo;
+  const tonoCampo = enTarjeta ? 'light' : 'sunken';
+
+  // Una función (no un componente): así el contenido no se vuelve a montar en cada render.
+  const envolver = (contenido: React.ReactNode) =>
+    enTarjeta ? (
+      <Card tone="sunken" padding="md">
+        {contenido}
       </Card>
+    ) : (
+      <View>{contenido}</View>
+    );
+
+  // ─── Cargando / error ──────────────────────────────────────────────────────
+  if (loadingMetodos) {
+    return envolver(
+      <>
+        <View style={s.esqueleto} accessibilityRole="progressbar" accessibilityLabel="Cargando formas de pago">
+          <SkeletonLoader height={Sizes.iconBox['2xl']} borderRadius={Radius.lg} />
+          {[0, 1, 2].map((i) => (
+            <SkeletonLoader key={i} height={Sizes.control.xl} borderRadius={Radius.lg} index={i + 1} />
+          ))}
+        </View>
+      </>
     );
   }
 
-  // ─── Error al cargar los métodos (APP-30) ──────────────────────────────────
+  // APP-30
   if (errorMetodos) {
-    return (
-      <Card padding="md">
+    return envolver(
+      <>
         <ErrorState
           compact
           title="No pudimos cargar las formas de pago"
           description={errorMetodos}
           onRetry={() => setReintento((n) => n + 1)}
         />
-      </Card>
+      </>
     );
   }
 
-  const volver = (
+  /** Enlace para volver a la lista: solo con tarjeta propia (si no, es la ← de la pantalla o la hoja). */
+  const volver = enTarjeta ? (
     <PressableScale
-      onPress={() => setStep('metodos')}
+      onPress={() => abrir(null)}
       disabled={submitting}
       scaleValue={Motion.press.button}
       style={s.back}
       accessibilityRole="button"
       accessibilityLabel="Volver a las formas de pago"
     >
-      <ArrowLeft color={Colors.mutedForeground} size={Sizes.icon.sm} weight="bold" />
-      <Text variant="caption" color="muted">
-        Volver a las formas de pago
-      </Text>
+      <ArrowLeft color={Colors.foreground} size={Sizes.icon.md} weight="bold" />
+      <Text variant="label">Formas de pago</Text>
     </PressableScale>
-  );
+  ) : null;
 
   // ─── Pagar en taquilla (solo boletos) ──────────────────────────────────────
-  if (step === 'efectivo' && esBoleto && onEfectivo) {
-    return (
-      <Card padding="md">
+  if (abierto === 'efectivo' && efectivoNavegable) {
+    return envolver(
+      <>
         {volver}
-
-        <Text variant="heading">Pagar en taquilla</Text>
-        <Text variant="secondary" color="muted" style={s.subtitle}>
-          Efectivo en la taquilla de la cooperativa
-        </Text>
+        {enTarjeta ? <Text variant="heading" style={s.titulo}>Pagar en taquilla</Text> : null}
 
         <AmountBadge label="Monto a pagar en taquilla" cotizacion={cotizacion} moneda="VES" />
 
-        <View style={[s.receipt, s.receiptHighlight, s.efectivoNote]}>
-          <View style={s.efectivoTitle}>
-            <Storefront color={Colors.primaryText} size={Sizes.icon.md} weight="fill" />
-            <Text variant="bodyStrong">Cómo pagar en taquilla</Text>
-          </View>
-          <Text variant="secondary" color="muted">
-            Tu asiento queda apartado 30 minutos. Paga en efectivo en la taquilla de la cooperativa
-            antes de que venza la reserva; si no, el asiento se libera.
-          </Text>
-        </View>
+        <Aviso
+          tono="info"
+          texto="Tu asiento queda apartado 30 minutos. Paga en efectivo en la taquilla antes de que venza la reserva."
+        />
 
-        <Button
-          variant="accent"
-          fullWidth
-          icon={Storefront}
-          disabled={bloqueado}
-          onPress={onEfectivo}
-          style={s.submit}
-        >
-          Apartar y pagar en taquilla
-        </Button>
-      </Card>
+        {botonPropio}
+      </>
     );
   }
 
-  // ─── Paso 2: formulario ────────────────────────────────────────────────────
-  if (step === 'formulario' && metodo) {
-    const info = METODO_INFO[metodo.tipo] ?? { label: 'Pago', desc: '' };
+  // ─── Formulario ────────────────────────────────────────────────────────────
+  if (metodo) {
+    const info = METODO_INFO[metodo.tipo] ?? { label: 'Pago', desc: '', icono: Bank };
     const isPagoMovil = metodo.tipo === 'PAGO_MOVIL';
     const bancoCuenta = metodo.banco ? bancoConCodigo(metodo.banco) : null;
 
@@ -491,14 +633,12 @@ export function PaymentFlow({
           .join('\n')
       : null;
 
-    return (
-      <Card padding="md">
-        {volver}
+    const fondoCopiar = enTarjeta ? 'surface' : 'inverse';
 
-        <Text variant="heading">Registrar pago</Text>
-        <Text variant="secondary" color="muted" style={s.subtitle}>
-          {info.label}
-        </Text>
+    return envolver(
+      <>
+        {volver}
+        {enTarjeta ? <Text variant="heading" style={s.titulo}>{info.label}</Text> : null}
 
         <AmountBadge
           label={isZelle ? 'Monto a enviar por Zelle' : 'Monto a transferir'}
@@ -509,30 +649,39 @@ export function PaymentFlow({
 
         {sinTasa ? <Aviso tono="warning" texto={AVISO_SIN_TASA} /> : null}
 
-        <View style={s.accountBox}>
-          <SectionLabel>Datos de la cuenta</SectionLabel>
-          {bancoCuenta ? <AccountRow label="Banco" value={bancoCuenta} /> : null}
-          {metodo.titular ? <AccountRow label="Titular" value={metodo.titular} /> : null}
+        <SectionLabel>Datos de la cuenta</SectionLabel>
+        <View style={[s.cuenta, caja]}>
+          {bancoCuenta ? <AccountRow label="Banco" value={bancoCuenta} fondo={fondoCopiar} /> : null}
+          {metodo.titular ? <AccountRow label="Titular" value={metodo.titular} fondo={fondoCopiar} /> : null}
           {isPagoMovil && metodo.numero_cuenta ? (
             <AccountRow
               label="Teléfono"
               value={metodo.numero_cuenta}
               copyValue={sinSeparadores(metodo.numero_cuenta)}
+              fondo={fondoCopiar}
             />
           ) : null}
           {metodo.tipo === 'TRANSFERENCIA_BANCARIA' && metodo.numero_cuenta ? (
             <AccountRow
-              label="Nro. de cuenta"
+              label="Número de cuenta"
               value={metodo.numero_cuenta}
               copyValue={sinSeparadores(metodo.numero_cuenta)}
+              fondo={fondoCopiar}
             />
           ) : null}
           {isZelle && metodo.email_zelle ? (
-            <AccountRow label="Correo Zelle" value={metodo.email_zelle} />
+            <AccountRow label="Correo Zelle" value={metodo.email_zelle} fondo={fondoCopiar} />
           ) : null}
-          {metodo.cedula_rif ? <AccountRow label="C.I. / RIF" value={metodo.cedula_rif} /> : null}
+          {metodo.cedula_rif ? (
+            <AccountRow label="C.I. / RIF" value={metodo.cedula_rif} fondo={fondoCopiar} />
+          ) : null}
           {filaMonto ? (
-            <AccountRow label="Monto" value={filaMonto.value} copyValue={filaMonto.copy} />
+            <AccountRow
+              label="Monto"
+              value={filaMonto.value}
+              copyValue={filaMonto.copy}
+              fondo={fondoCopiar}
+            />
           ) : null}
 
           {copiarTodo ? <CopyAllButton value={copiarTodo} /> : null}
@@ -547,15 +696,11 @@ export function PaymentFlow({
         <Field
           label={isZelle ? 'Código de confirmación de Zelle' : 'Número de referencia'}
           placeholder={isZelle ? 'Ej. ABC123XYZ' : 'Ej. 012345678901'}
-          helper={
-            isZelle
-              ? 'Aparece en el comprobante de Zelle. Escríbelo completo.'
-              : 'Aparece en el comprobante de tu banco. Escríbelo completo, no solo los últimos dígitos.'
-          }
+          helper="Complétalo, no solo los últimos dígitos."
           keyboardType={isZelle ? 'default' : 'number-pad'}
           autoCapitalize={isZelle ? 'characters' : 'none'}
           autoCorrect={false}
-          tone="sunken"
+          tone={tonoCampo}
           editable={!submitting}
           value={referencia}
           onChangeText={(v) => {
@@ -567,11 +712,12 @@ export function PaymentFlow({
 
         <View style={s.fechaGroup}>
           <Text variant="label" style={s.fechaLabel}>
-            ¿Cuándo hiciste el pago?
+            Fecha del pago
           </Text>
           <View style={s.fechaChips} accessibilityRole="radiogroup">
             <Chip
               label="Hoy"
+              sobre={enTarjeta ? 'surface' : 'background'}
               selected={fechaOpcion === 'hoy'}
               onPress={() => {
                 setFechaOpcion('hoy');
@@ -580,6 +726,7 @@ export function PaymentFlow({
             />
             <Chip
               label="Ayer"
+              sobre={enTarjeta ? 'surface' : 'background'}
               selected={fechaOpcion === 'ayer'}
               onPress={() => {
                 setFechaOpcion('ayer');
@@ -587,12 +734,9 @@ export function PaymentFlow({
               }}
             />
             <Chip
-              label={
-                fechaOpcion === 'otra' && fechaOtra
-                  ? formatDateKey(toDateKey(fechaOtra))
-                  : 'Otra fecha'
-              }
+              label={fechaOpcion === 'otra' && fechaOtra ? formatDiaVE(fechaOtra) : 'Otra fecha'}
               icon={CalendarBlank}
+              sobre={enTarjeta ? 'surface' : 'background'}
               selected={fechaOpcion === 'otra'}
               onPress={() => setCalendarVisible(true)}
             />
@@ -601,19 +745,15 @@ export function PaymentFlow({
             <Text variant="caption" color="dangerText" style={s.fechaHelper} accessibilityLiveRegion="polite">
               {errors.fecha}
             </Text>
-          ) : (
-            <Text variant="caption" color="muted" style={s.fechaHelper}>
-              {`Fecha del pago: ${formatDateKey(toDateKey(fechaPago))}`}
-            </Text>
-          )}
+          ) : null}
         </View>
 
         {!isZelle && (
           <SelectField
             label="Banco desde el que pagaste"
-            placeholder="Selecciona tu banco"
+            placeholder="Elige tu banco"
             icon={Bank}
-            tone="sunken"
+            tone={tonoCampo}
             value={banco}
             onPress={() => {
               if (submitting) return;
@@ -627,10 +767,10 @@ export function PaymentFlow({
         <Field
           label={`Monto que pagaste (${isZelle ? 'USD' : 'Bs'})`}
           placeholder={isZelle ? 'Ej. 12,40' : 'Ej. 1250,00'}
-          helper="Ya está escrito el monto exacto. Cámbialo solo si pagaste otra cantidad."
+          helper="Cámbialo solo si pagaste otro monto."
           keyboardType="decimal-pad"
           autoCorrect={false}
-          tone="sunken"
+          tone={tonoCampo}
           editable={!submitting}
           value={montoTexto}
           onChangeText={(v) => {
@@ -639,26 +779,15 @@ export function PaymentFlow({
             limpiarError('monto');
           }}
           error={errors.monto}
+          containerStyle={s.ultimoCampo}
         />
 
-        <Button
-          variant="accent"
-          fullWidth
-          disabled={ocupado || sinTasa}
-          onPress={handleSubmit}
-          style={s.submit}
-          accessibilityLabel={submitting ? 'Registrando tu pago' : 'Registrar pago'}
-        >
-          {submitting ? 'Registrando tu pago…' : 'Registrar pago'}
-        </Button>
-        <Text variant="caption" color="muted" align="center" style={s.submitHint}>
-          La cooperativa revisará tu pago con su banco y te avisaremos cuando lo confirme.
-        </Text>
+        {botonPropio}
 
         <CalendarModal
           visible={calendarVisible}
           onClose={() => setCalendarVisible(false)}
-          title="¿Cuándo hiciste el pago?"
+          title="Fecha del pago"
           value={fechaOtra ?? fechaPago}
           minimumDate={diasAtras(DIAS_ATRAS_MAX)}
           maximumDate={diasAtras(0)}
@@ -681,13 +810,14 @@ export function PaymentFlow({
             keyboardShouldPersistTaps="handled"
           >
             <Field
-              placeholder="Busca por nombre o código"
+              placeholder="Ej. Banesco o 0134"
               icon={MagnifyingGlass}
               tone="sunken"
               value={bancoQuery}
               onChangeText={setBancoQuery}
               autoCorrect={false}
               returnKeyType="search"
+              accessibilityLabel="Buscar banco"
             />
 
             {bancosFiltrados.length === 0 ? (
@@ -718,13 +848,10 @@ export function PaymentFlow({
                   hapticType="selection"
                   scaleValue={Motion.press.card}
                   style={s.bancoRow}
-                  accessibilityRole="button"
+                  accessibilityRole="radio"
                   accessibilityState={{ selected }}
                   accessibilityLabel={codigo ? `${nombre}, código ${codigo}` : nombre}
                 >
-                  <View style={s.bancoIcon}>
-                    <Bank color={Colors.primaryText} weight="fill" size={Sizes.icon.md} />
-                  </View>
                   <View style={s.bancoBody}>
                     <Text variant="bodyStrong" weight={selected ? 'bold' : 'medium'}>
                       {nombre}
@@ -736,28 +863,47 @@ export function PaymentFlow({
                     ) : null}
                   </View>
                   {selected ? (
-                    <Check color={Colors.successText} size={Sizes.icon.md} weight="bold" />
+                    <CheckCircle color={Colors.accentStrong} size={Sizes.icon.lg} weight="fill" />
                   ) : null}
                 </PressableScale>
               );
             })}
           </ScrollView>
         </BottomSheet>
-      </Card>
+      </>
     );
   }
 
-  // ─── Paso 1: elegir método ─────────────────────────────────────────────────
+  // ─── Elegir la forma de pago ───────────────────────────────────────────────
   const soloTaquilla = metodos.length === 0;
-  const efectivoNavegable = esBoleto && !!onEfectivo;
 
-  return (
-    <Card padding="md">
-      <Text variant="heading">¿Cómo vas a pagar?</Text>
-      {concepto ? (
-        <Text variant="secondary" color="muted" style={s.subtitle} numberOfLines={2}>
-          {concepto}
-        </Text>
+  const opciones: { clave: string; label: string; desc: string; icono: React.ComponentType<IconProps>; deshabilitada: boolean }[] = [
+    ...metodos.map((m) => {
+      const info = METODO_INFO[m.tipo] ?? { label: m.tipo, desc: 'Cuenta de la cooperativa', icono: Bank };
+      return {
+        clave: m.id,
+        label: info.label,
+        desc: m.banco ? `${m.banco} · ${info.desc}` : info.desc,
+        icono: info.icono,
+        deshabilitada: sinTasa || bloqueado,
+      };
+    }),
+    ...(efectivoNavegable
+      ? [{ clave: 'efectivo', label: TAQUILLA.label, desc: TAQUILLA.desc, icono: TAQUILLA.icono, deshabilitada: bloqueado }]
+      : []),
+  ];
+
+  return envolver(
+    <>
+      {enTarjeta ? (
+        <>
+          <Text variant="heading">¿Cómo vas a pagar?</Text>
+          {concepto ? (
+            <Text variant="secondary" color="muted" style={s.concepto} numberOfLines={2}>
+              {concepto}
+            </Text>
+          ) : null}
+        </>
       ) : null}
 
       <AmountBadge label="Total a pagar" cotizacion={cotizacion} moneda="VES" />
@@ -768,92 +914,144 @@ export function PaymentFlow({
         <Aviso tono="warning" texto={AVISO_SIN_TASA} />
       ) : null}
 
-      <View style={s.metodos}>
-        {metodos.map((option) => {
-          const info = METODO_INFO[option.tipo] ?? {
-            label: option.tipo,
-            desc: 'Cuenta de la cooperativa',
-          };
-          const deshabilitado = sinTasa || bloqueado;
-
+      <View style={s.metodos} accessibilityRole="radiogroup" accessibilityLabel="Forma de pago">
+        {opciones.map((o) => {
+          const elegida = candidato === o.clave;
           return (
             <PressableScale
-              key={option.id}
-              onPress={() => elegirMetodo(option)}
-              disabled={deshabilitado}
+              key={o.clave}
+              onPress={() => setCandidato(o.clave)}
+              disabled={o.deshabilitada}
+              dimWhenDisabled={false}
               haptic
               hapticType="selection"
               scaleValue={Motion.press.card}
-              style={s.metodoCard}
-              accessibilityRole="button"
-              accessibilityState={{ disabled: deshabilitado }}
-              accessibilityLabel={`${info.label}. ${info.desc}`}
+              style={[s.metodo, caja, elegida && s.metodoElegido]}
+              accessibilityRole="radio"
+              accessibilityState={{ selected: elegida, disabled: o.deshabilitada }}
+              accessibilityLabel={`${o.label}. ${o.desc}`}
             >
-              <View style={s.metodoIcon}>
-                <CreditCard color={Colors.primaryText} weight="fill" size={Sizes.icon.lg} />
+              <View style={[s.metodoIcono, enTarjeta ? s.metodoIconoEnTarjeta : s.metodoIconoEnFondo]}>
+                <o.icono
+                  color={o.deshabilitada ? Colors.mutedForeground : Colors.foreground}
+                  weight="bold"
+                  size={Sizes.icon.md}
+                />
               </View>
               <View style={s.metodoBody}>
-                <Text variant="bodyStrong">{info.label}</Text>
-                <Text variant="caption" color="muted" numberOfLines={1}>
-                  {option.banco ? `${option.banco} · ${info.desc}` : info.desc}
+                <Text variant="bodyStrong" color={o.deshabilitada ? 'muted' : 'foreground'}>
+                  {o.label}
+                </Text>
+                <Text variant="caption" color="muted" numberOfLines={2}>
+                  {o.desc}
                 </Text>
               </View>
+              {elegida ? (
+                <CheckCircle size={Sizes.icon.lg} color={Colors.accentStrong} weight="fill" />
+              ) : null}
             </PressableScale>
           );
         })}
 
-        {efectivoNavegable ? (
-          <PressableScale
-            onPress={() => setStep('efectivo')}
-            disabled={bloqueado}
-            haptic
-            hapticType="selection"
-            scaleValue={Motion.press.card}
-            style={s.metodoCard}
-            accessibilityRole="button"
-            accessibilityState={{ disabled: bloqueado }}
-            accessibilityLabel="Apartar y pagar en taquilla. Pagas en efectivo en la taquilla de la cooperativa."
-          >
-            <View style={s.metodoIcon}>
-              <Money color={Colors.primaryText} weight="fill" size={Sizes.icon.lg} />
-            </View>
-            <View style={s.metodoBody}>
-              <Text variant="bodyStrong">Apartar y pagar en taquilla</Text>
-              <Text variant="caption" color="muted" numberOfLines={2}>
-                Pagas en efectivo en la taquilla de la cooperativa
-              </Text>
-            </View>
-          </PressableScale>
-        ) : (
-          <View style={[s.receipt, s.efectivoInfo]}>
-            <View style={s.efectivoTitle}>
-              <Storefront color={Colors.primaryText} size={Sizes.icon.md} weight="fill" />
-              <Text variant="bodyStrong">¿Prefieres pagar en efectivo?</Text>
-            </View>
-            <Text variant="secondary" color="muted">
-              {esBoleto
-                ? 'Acércate a la taquilla de la cooperativa antes de que venza tu reserva. El taquillero registra el pago en el momento.'
-                : 'Paga en la taquilla de la cooperativa. El taquillero registra el pago en el momento y el envío continúa.'}
-            </Text>
-          </View>
-        )}
+        {!efectivoNavegable ? (
+          <Aviso
+            tono="info"
+            icono={Storefront}
+            texto={
+              esBoleto
+                ? 'También puedes pagar en efectivo en la taquilla antes de que venza tu reserva.'
+                : 'También puedes pagar en efectivo en la taquilla de la cooperativa.'
+            }
+          />
+        ) : null}
       </View>
-    </Card>
+
+      {botonPropio}
+    </>
+  );
+}
+
+// ─── La tasa BCV cambió ──────────────────────────────────────────────────────
+
+/** Texto del aviso `EB_TASA_CAMBIO` (hoja en la compra y en el detalle). */
+export function textoTasaCambiada(cambio: TasaCambiada): string {
+  const antes = cambio.anteriorBs != null ? ` (antes ${formatBs(cambio.anteriorBs)})` : '';
+  return `El total ahora es ${formatBs(cambio.nuevoBs)}${antes}. Si ya pagaste el monto anterior, regístralo igual: la cooperativa verá la diferencia.`;
+}
+
+/**
+ * `EB_TASA_CAMBIO`: la tasa BCV cambió entre la cotización y el registro.
+ * "Registrar con el nuevo total" reintenta con lo que el usuario declaró;
+ * "Revisar" vuelve al formulario, que ya muestra el total nuevo.
+ */
+export function TasaCambiadaSheet({
+  cambio,
+  enviando,
+  onConfirmar,
+  onRevisar,
+}: {
+  cambio: TasaCambiada | null;
+  enviando: boolean;
+  onConfirmar: () => void;
+  onRevisar: () => void;
+}) {
+  return (
+    <BottomSheet
+      visible={cambio !== null}
+      onClose={() => {
+        if (!enviando) onRevisar();
+      }}
+      title="La tasa BCV cambió"
+      footer={<BotonesTasaCambiada enviando={enviando} onConfirmar={onConfirmar} onRevisar={onRevisar} />}
+    >
+      <View style={s.sheetBody}>
+        <Text variant="body">{cambio ? textoTasaCambiada(cambio) : ''}</Text>
+      </View>
+    </BottomSheet>
+  );
+}
+
+export function BotonesTasaCambiada({
+  enviando,
+  onConfirmar,
+  onRevisar,
+}: {
+  enviando: boolean;
+  onConfirmar: () => void;
+  onRevisar: () => void;
+}) {
+  return (
+    <View style={s.sheetButtons}>
+      <Button fullWidth loading={enviando} onPress={onConfirmar}>
+        Registrar con el nuevo total
+      </Button>
+      <Button variant="ghost" fullWidth disabled={enviando} onPress={onRevisar}>
+        Revisar
+      </Button>
+    </View>
   );
 }
 
 // ─── Avisos ──────────────────────────────────────────────────────────────────
 
-function Aviso({ tono, texto }: { tono: 'info' | 'warning'; texto: string }) {
+function Aviso({
+  tono,
+  texto,
+  icono,
+}: {
+  tono: 'info' | 'warning';
+  texto: string;
+  icono?: React.ComponentType<IconProps>;
+}) {
   const warning = tono === 'warning';
-  const Icon = warning ? WarningCircle : Info;
+  const Icon = icono ?? (warning ? WarningCircle : Info);
   return (
     <View
       style={[s.notice, warning && s.noticeWarning]}
-      accessibilityRole="alert"
-      accessibilityLiveRegion="polite"
+      accessibilityRole={warning ? 'alert' : undefined}
+      accessibilityLiveRegion={warning ? 'polite' : undefined}
     >
-      <Icon size={Sizes.icon.md} color={warning ? Colors.warningText : Colors.infoText} weight="fill" />
+      <Icon size={Sizes.icon.lg} color={warning ? Colors.warningText : Colors.infoText} weight="fill" />
       <Text variant="secondary" style={s.noticeText}>
         {texto}
       </Text>
@@ -861,7 +1059,7 @@ function Aviso({ tono, texto }: { tono: 'info' | 'warning'; texto: string }) {
   );
 }
 
-// ─── Amount badge ────────────────────────────────────────────────────────────
+// ─── Monto ───────────────────────────────────────────────────────────────────
 
 /**
  * APP-24 / APP-28: el monto va en `foreground` (nunca amarillo sobre amarillo)
@@ -884,28 +1082,22 @@ function AmountBadge({
 
   return (
     <View style={s.amount} accessible accessibilityLabel={`${label}: ${monto.accesible}`}>
-      <Text variant="overline" color="muted" uppercase>
+      <Text variant="caption" color="muted">
         {label}
       </Text>
       <Text variant="display" size="3xl" color="foreground" compact style={s.amountValue}>
         {monto.principal}
       </Text>
-
       {monto.secundario ? (
-        <Text variant="subheading" color="muted" compact align="center">
+        <Text variant="secondary" color="muted" align="center">
           {monto.secundario}
         </Text>
       ) : null}
-
       {tasa ? (
-        <View style={s.amountHint}>
-          <Info size={Sizes.icon.xs} color={Colors.mutedForeground} weight="fill" />
-          <Text variant="caption" size="xs" color="muted" align="center" style={s.amountHintText}>
-            {`Tasa BCV del ${formatDateKey(tasa.fecha)}: ${formatNumeroVE(tasa.tasa)} Bs/USD`}
-          </Text>
-        </View>
+        <Text variant="caption" color="muted" align="center">
+          {`Tasa BCV ${formatNumeroVE(tasa.tasa)} Bs/USD · ${formatDiaVE(tasa.fecha)}`}
+        </Text>
       ) : null}
-
       {concepto ? (
         <Text variant="caption" color="muted" align="center" numberOfLines={2}>
           {concepto}
@@ -917,17 +1109,20 @@ function AmountBadge({
 
 // ─── Datos de la cuenta ──────────────────────────────────────────────────────
 
-/** APP-25 / M-24: el valor admite 2 líneas y cada dato se copia con un toque. */
+/** APP-25 / M-24: el valor admite 2 líneas y cada dato se copia con un toque (AU-32: icono). */
 function AccountRow({
   label,
   value,
   copyValue,
+  fondo,
 }: {
   label: string;
   value: string;
   /** What goes to the clipboard when it differs from what is shown */
   copyValue?: string;
+  fondo: 'surface' | 'inverse';
 }) {
+  const { copiado, copiar } = useCopiar(`${label} copiado`);
   return (
     <View style={s.accountRow}>
       <View style={s.accountBody}>
@@ -938,7 +1133,13 @@ function AccountRow({
           {value}
         </Text>
       </View>
-      <CopyButton value={copyValue ?? value} label={label} />
+      <IconButton
+        icon={copiado ? Check : Copy}
+        variant={fondo}
+        color={copiado ? Colors.successText : Colors.foreground}
+        label={copiado ? `${label} copiado` : `Copiar ${label}`}
+        onPress={() => void copiar(copyValue ?? value)}
+      />
     </View>
   );
 }
@@ -969,29 +1170,6 @@ function useCopiar(anuncio: string) {
   return { copiado, copiar };
 }
 
-function CopyButton({ value, label }: { value: string; label: string }) {
-  const { copiado, copiar } = useCopiar(`${label} copiado`);
-
-  return (
-    <PressableScale
-      onPress={() => copiar(value)}
-      scaleValue={Motion.press.button}
-      style={[s.copy, copiado && s.copyDone]}
-      accessibilityRole="button"
-      accessibilityLabel={copiado ? `${label} copiado` : `Copiar ${label}`}
-    >
-      {copiado ? (
-        <Check color={Colors.successText} size={Sizes.icon.sm} weight="bold" />
-      ) : (
-        <Copy color={Colors.infoText} size={Sizes.icon.sm} weight="bold" />
-      )}
-      <Text variant="caption" weight="bold" color={copiado ? 'successText' : 'infoText'} compact>
-        {copiado ? 'Copiado' : 'Copiar'}
-      </Text>
-    </PressableScale>
-  );
-}
-
 function CopyAllButton({ value }: { value: string }) {
   const { copiado, copiar } = useCopiar('Datos del Pago Móvil copiados');
 
@@ -1001,7 +1179,7 @@ function CopyAllButton({ value }: { value: string }) {
       size="md"
       fullWidth
       icon={copiado ? Check : Copy}
-      onPress={() => copiar(value)}
+      onPress={() => void copiar(value)}
       style={s.copyAll}
       accessibilityLabel={copiado ? 'Datos del Pago Móvil copiados' : 'Copiar todos los datos del Pago Móvil'}
     >
@@ -1011,7 +1189,10 @@ function CopyAllButton({ value }: { value: string }) {
 }
 
 const s = StyleSheet.create({
-  subtitle: {
+  titulo: {
+    marginBottom: Spacing.lg,
+  },
+  concepto: {
     marginTop: Spacing.xs,
     marginBottom: Spacing.lg,
   },
@@ -1021,32 +1202,30 @@ const s = StyleSheet.create({
     gap: Spacing.sm,
     alignSelf: 'flex-start',
     minHeight: Sizes.touchTarget,
-    paddingVertical: Spacing.sm,
-    marginBottom: Spacing.md,
+    marginBottom: Spacing.xs,
+  },
+  esqueleto: {
+    gap: Spacing.md,
+  },
+
+  cajaEnFondo: {
+    backgroundColor: Colors.surface,
+  },
+  cajaEnTarjeta: {
+    backgroundColor: Colors.background,
   },
 
   amount: {
     alignItems: 'center',
     gap: Spacing.xs,
     backgroundColor: Colors.primaryLight,
-    borderWidth: Sizes.hairline,
-    borderColor: Colors.primaryBorder,
     borderRadius: Radius.lg,
     paddingHorizontal: Spacing.lg,
     paddingVertical: Spacing.lg,
-    marginBottom: Spacing.xl,
+    marginBottom: Spacing.lg,
   },
   amountValue: {
     marginVertical: Spacing.xs,
-  },
-  amountHint: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.xs,
-    marginTop: Spacing.xs,
-  },
-  amountHintText: {
-    flexShrink: 1,
   },
 
   notice: {
@@ -1055,7 +1234,8 @@ const s = StyleSheet.create({
     gap: Spacing.md,
     backgroundColor: Colors.infoLight,
     borderRadius: Radius.lg,
-    padding: Spacing.md,
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.lg,
     marginBottom: Spacing.lg,
   },
   noticeWarning: {
@@ -1065,10 +1245,10 @@ const s = StyleSheet.create({
     flex: 1,
   },
 
-  accountBox: {
-    backgroundColor: Colors.surface,
+  cuenta: {
     borderRadius: Radius.lg,
-    padding: Spacing.lg,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.lg,
     marginBottom: Spacing.xl,
   },
   accountRow: {
@@ -1080,34 +1260,18 @@ const s = StyleSheet.create({
   },
   accountBody: {
     flex: 1,
-    gap: Spacing.xs / 2,
-  },
-  copy: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
     gap: Spacing.xs,
-    minWidth: Sizes.touchTarget,
-    minHeight: Sizes.touchTarget,
-    paddingHorizontal: Spacing.md,
-    borderRadius: Radius.full,
-    backgroundColor: Colors.white,
-    borderWidth: Sizes.hairline,
-    borderColor: Colors.border,
-  },
-  copyDone: {
-    backgroundColor: Colors.successLight,
-    borderColor: Colors.successLight,
   },
   copyAll: {
-    marginTop: Spacing.md,
+    marginTop: Spacing.sm,
+    marginBottom: Spacing.sm,
   },
   instructions: {
-    marginTop: Spacing.md,
+    marginTop: Spacing.sm,
     paddingTop: Spacing.md,
+    paddingBottom: Spacing.sm,
     borderTopWidth: Sizes.hairline,
     borderTopColor: Colors.border,
-    fontStyle: 'italic',
   },
 
   fechaGroup: {
@@ -1115,7 +1279,7 @@ const s = StyleSheet.create({
   },
   fechaLabel: {
     marginBottom: Spacing.sm,
-    marginLeft: Spacing.xs,
+    marginLeft: Spacing.xl,
   },
   fechaChips: {
     flexDirection: 'row',
@@ -1124,68 +1288,53 @@ const s = StyleSheet.create({
   },
   fechaHelper: {
     marginTop: Spacing.sm,
-    marginLeft: Spacing.xs,
+    marginLeft: Spacing.xl,
   },
-
-  receipt: {
-    width: '100%',
-    gap: Spacing.xs,
-    backgroundColor: Colors.surface,
-    borderRadius: Radius.lg,
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
-    marginBottom: Spacing.xl,
-  },
-  receiptHighlight: {
-    backgroundColor: Colors.primaryLight,
-    borderWidth: Sizes.hairline,
-    borderColor: Colors.primaryBorder,
-  },
-  efectivoNote: {
-    marginBottom: Spacing.lg,
-  },
-  efectivoInfo: {
+  ultimoCampo: {
     marginBottom: 0,
-  },
-  efectivoTitle: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
   },
 
   submit: {
-    marginTop: Spacing.md,
-  },
-  submitHint: {
-    marginTop: Spacing.sm,
+    marginTop: Spacing.xl,
   },
 
   metodos: {
     gap: Spacing.md,
   },
-  metodoCard: {
+  metodo: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.lg,
     padding: Spacing.lg,
-    backgroundColor: Colors.surface,
     borderRadius: Radius.lg,
+    // El borde existe siempre (transparente) para que elegir no mueva nada.
+    borderWidth: Sizes.borderSelected,
+    borderColor: Colors.transparent,
   },
-  metodoIcon: {
+  metodoElegido: {
+    backgroundColor: Colors.background,
+    borderColor: Colors.accentStrong,
+  },
+  metodoIcono: {
     width: Sizes.iconBox.lg,
     height: Sizes.iconBox.lg,
     borderRadius: Radius.full,
-    backgroundColor: Colors.primaryLight,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  metodoIconoEnFondo: {
+    backgroundColor: Colors.background,
+  },
+  metodoIconoEnTarjeta: {
+    backgroundColor: Colors.surface,
+  },
   metodoBody: {
     flex: 1,
-    gap: Spacing.xs / 2,
+    gap: Spacing.xs,
   },
 
   bancoList: {
-    paddingHorizontal: Spacing['2xl'],
+    paddingHorizontal: Layout.screenPadding,
     paddingVertical: Spacing.lg,
   },
   bancoEmpty: {
@@ -1195,17 +1344,20 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.lg,
-    minHeight: Sizes.touchTarget + Spacing.md,
-  },
-  bancoIcon: {
-    width: Sizes.iconBox.lg - Spacing.sm,
-    height: Sizes.iconBox.lg - Spacing.sm,
-    borderRadius: Radius.full,
-    backgroundColor: Colors.primaryLight,
-    alignItems: 'center',
-    justifyContent: 'center',
+    minHeight: Sizes.control.xl,
+    borderBottomWidth: Sizes.hairline,
+    borderBottomColor: Colors.borderLight,
   },
   bancoBody: {
     flex: 1,
+  },
+
+  sheetBody: {
+    paddingHorizontal: Layout.screenPadding,
+    paddingTop: Spacing.sm,
+    paddingBottom: Spacing.sm,
+  },
+  sheetButtons: {
+    gap: Spacing.sm,
   },
 });

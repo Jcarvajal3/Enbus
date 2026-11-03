@@ -7,7 +7,9 @@
  * entrega los datos ya normalizados ("V-12345678", "0414-1234567") a
  * `onSubmit`, que llama a `fn_asignar_pasajeros`.
  *
+ *   const form = useRef<PasajerosFormHandle>(null);
  *   <PasajerosForm
+ *     ref={form}
  *     asientos={['14', '15']}
  *     perfil={perfil}
  *     inicial={guardados}
@@ -15,16 +17,20 @@
  *     guardando={checkout.enCurso}
  *     onSubmit={guardarPasajeros}
  *   />
+ *   <FloatingBar><Button onPress={() => form.current?.enviar()}>Continuar</Button></FloatingBar>
+ *
+ * El formulario no dibuja su botón: la acción del paso va en la `FloatingBar`
+ * de la pantalla o en el pie de la hoja (§2.1 regla 6), y llama a `enviar()`.
  *
  * Los asientos que el servidor rechazó (`EB_DATOS_PASAJERO`, `detail.asientos`)
  * llegan en `asientosConError` y su tarjeta se marca hasta que se corrija.
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } from 'react';
 import { StyleSheet, TextInput, View } from 'react-native';
 import { UserCircle, WarningCircle } from 'phosphor-react-native';
 import * as Haptics from 'expo-haptics';
-import { Button, Card, Chip, Field, Text } from '@/src/components/ui';
+import { Card, Chip, Field, Text } from '@/src/components/ui';
 import { CedulaField } from '@/src/components/CedulaField';
 import {
   MENSAJE_CEDULA,
@@ -68,13 +74,16 @@ export interface PasajerosFormProps {
   mensajeError?: string | null;
   /** Se está guardando (`fn_asignar_pasajeros` en curso) */
   guardando: boolean;
-  /** Texto del botón; por defecto "Continuar al pago" */
-  textoBoton?: string;
   onSubmit: (pasajeros: PasajeroAsiento[]) => void | Promise<void>;
+  /** `enviar()` valida y llama a `onSubmit` (lo usa el botón de la pantalla) */
+  ref?: Ref<PasajerosFormHandle>;
 }
 
-const AYUDA_CEDULA =
-  'Si viaja un menor sin cédula, usa la de su representante y escribe el nombre del menor.';
+export interface PasajerosFormHandle {
+  enviar(): void;
+}
+
+const AYUDA_CEDULA = 'Un menor sin cédula usa la de su representante.';
 
 /** V y E, más P para quien viaja con pasaporte (antes se podía escribir a mano). */
 const LETRAS_PASAJERO: ('V' | 'E' | 'P')[] = ['V', 'E', 'P'];
@@ -119,8 +128,8 @@ export function PasajerosForm({
   asientosConError = SIN_ERRORES,
   mensajeError,
   guardando,
-  textoBoton = 'Continuar al pago',
   onSubmit,
+  ref,
 }: PasajerosFormProps) {
   const lista = useMemo(() => ordenarAsientos(asientos), [asientos]);
   const perfilTieneDatos = !!perfil && (nombreValido(perfil.nombre_completo) || cedulaValida(perfil.cedula_rif ?? ''));
@@ -285,19 +294,15 @@ export function PasajerosForm({
     }
   };
 
-  const plural = lista.length > 1;
+  const enviarRef = useRef(handleSubmit);
+  enviarRef.current = handleSubmit;
+  useImperativeHandle(ref, () => ({ enviar: () => void enviarRef.current() }), []);
 
   return (
     <View>
-      <Text variant="secondary" color="muted" style={s.intro}>
-        {plural
-          ? 'Escribe los datos de cada persona que viaja. La taquilla revisará la cédula al subir al bus.'
-          : 'Escribe los datos de quien viaja. La taquilla revisará la cédula al subir al bus.'}
-      </Text>
-
       {mensajeError ? (
         <View style={s.errorGeneral} accessibilityRole="alert" accessibilityLiveRegion="polite">
-          <WarningCircle size={Sizes.icon.md} color={Colors.dangerText} weight="fill" />
+          <WarningCircle size={Sizes.icon.lg} color={Colors.dangerText} weight="fill" />
           <Text variant="secondary" color="dangerText" style={s.flex}>
             {mensajeError}
           </Text>
@@ -314,6 +319,7 @@ export function PasajerosForm({
         return (
           <Card
             key={asiento}
+            tone="sunken"
             padding="md"
             style={[s.tarjeta, marcado ? s.tarjetaError : null]}
           >
@@ -325,6 +331,7 @@ export function PasajerosForm({
               {perfilTieneDatos ? (
                 <Chip
                   label="Soy yo"
+                  sobre="surface"
                   selected={esYo}
                   onPress={() => elegirSoyYo(asiento)}
                   accessibilityLabel={`Asiento ${asiento}, Soy yo`}
@@ -341,11 +348,10 @@ export function PasajerosForm({
             <Field
               ref={registrar(`${asiento}:nombre`)}
               label="Nombre y apellido"
-              placeholder="Ana Pérez"
               value={d.nombre}
               onChangeText={(v) => actualizar(asiento, 'nombre', v)}
               error={e.nombre}
-              tone="sunken"
+              tone="light"
               autoCapitalize="words"
               autoComplete={esYo ? 'name' : 'off'}
               returnKeyType="next"
@@ -360,7 +366,8 @@ export function PasajerosForm({
               value={d.cedula}
               onChangeText={(v) => actualizar(asiento, 'cedula', v)}
               error={e.cedula}
-              helper={AYUDA_CEDULA}
+              helper={index === 0 ? AYUDA_CEDULA : undefined}
+              tone="light"
               letras={LETRAS_PASAJERO}
               returnKeyType="next"
               onSubmitEditing={() => enfocar(`${asiento}:telefono`)}
@@ -370,11 +377,11 @@ export function PasajerosForm({
             <Field
               ref={registrar(`${asiento}:telefono`)}
               label="Teléfono (opcional)"
-              placeholder="0414-1234567"
+              placeholder="Ej. 0414-1234567"
               value={d.telefono}
               onChangeText={(v) => actualizar(asiento, 'telefono', v)}
               error={e.telefono}
-              tone="sunken"
+              tone="light"
               keyboardType="phone-pad"
               autoComplete={esYo ? 'tel' : 'off'}
               returnKeyType={siguiente ? 'next' : 'done'}
@@ -386,33 +393,19 @@ export function PasajerosForm({
           </Card>
         );
       })}
-
-      <Button
-        variant="accent"
-        fullWidth
-        disabled={guardando || lista.length === 0}
-        onPress={() => void handleSubmit()}
-        accessibilityLabel={guardando ? 'Guardando los datos de los pasajeros' : textoBoton}
-      >
-        {guardando ? 'Guardando…' : textoBoton}
-      </Button>
     </View>
   );
 }
 
 const s = StyleSheet.create({
-  intro: {
-    marginBottom: Spacing.lg,
-  },
   errorGeneral: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     gap: Spacing.md,
-    padding: Spacing.lg,
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.lg,
     borderRadius: Radius.lg,
-    backgroundColor: Colors.destructiveSoft,
-    borderWidth: Sizes.hairline,
-    borderColor: Colors.destructiveBorder,
+    backgroundColor: Colors.destructiveLight,
     marginBottom: Spacing.lg,
   },
   flex: {
@@ -420,18 +413,18 @@ const s = StyleSheet.create({
   },
   tarjeta: {
     marginBottom: Spacing.lg,
-    borderWidth: Sizes.borderStrong,
+    borderWidth: Sizes.borderSelected,
     borderColor: Colors.transparent,
   },
   tarjetaError: {
-    borderColor: Colors.destructive,
+    borderColor: Colors.dangerText,
   },
   cabecera: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: Spacing.md,
-    marginBottom: Spacing.lg,
+    marginBottom: Spacing.md,
   },
   titulo: {
     flexDirection: 'row',
@@ -440,7 +433,6 @@ const s = StyleSheet.create({
     flexShrink: 1,
   },
   marcado: {
-    marginTop: -Spacing.sm,
     marginBottom: Spacing.md,
   },
   ultimoCampo: {

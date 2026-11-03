@@ -1,24 +1,20 @@
+/**
+ * SearchForm — el buscador de Inicio: "Viajar | Enviar encomienda", la ruta
+ * (`RouteField`, el mismo del paso 1 de la compra y del envío), la fecha y el
+ * botón del dominio ("Buscar viaje" con `Ticket`, "Enviar encomienda" con
+ * `Package`, SY-16).
+ *
+ * Un motivo se dice una vez (AN-26, AU-14): sin ruta o mientras se buscan las
+ * fechas, lo dice el campo de fecha; con una ruta sin salidas, el campo de
+ * fecha desaparece y queda solo el bloque con otros destinos.
+ */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import {
-  ArrowRight,
-  ArrowsDownUp,
-  Bus,
-  CalendarBlank,
-  MapPin,
-  Package,
-} from 'phosphor-react-native';
-import * as Haptics from 'expo-haptics';
-import Animated, {
-  useAnimatedStyle,
-  useReducedMotion,
-  useSharedValue,
-  withTiming,
-} from 'react-native-reanimated';
-import { LocationSelector } from './LocationSelector';
+import { CalendarBlank, Package, Ticket } from 'phosphor-react-native';
+import { RouteField } from './RouteField';
 import { CalendarModal } from './CalendarModal';
 import { PressableScale } from './PressableScale';
-import { Button, Chip, SegmentedControl, Text } from '@/src/components/ui';
+import { Button, Chip, SegmentedControl, Text, TextLink } from '@/src/components/ui';
 import {
   CIUDADES_POPULARES,
   Localidad,
@@ -26,9 +22,9 @@ import {
   normalizeCityForDb,
 } from '../utils/venezuela';
 import { ciudadesRecientes, guardarBusquedaReciente } from '../utils/busquedasRecientes';
-import { formatCity } from '../utils/formatters';
+import { formatCity, formatDiaVE, toDateKey } from '../utils/formatters';
 import { supabase } from '../utils/supabase';
-import { Colors, Motion, Opacity, Radius, Sizes, Spacing } from '@/src/theme';
+import { Colors, Motion, Radius, Sizes, Spacing } from '@/src/theme';
 
 type SearchMode = 'boletos' | 'encomiendas';
 
@@ -45,39 +41,11 @@ interface SearchFormProps {
   }) => void;
 }
 
-function formatShortDate(date: Date): string {
-  return date.toLocaleDateString('es-VE', {
-    weekday: 'short',
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  });
-}
-
-const DIAS_CORTOS = ['dom.', 'lun.', 'mar.', 'mié.', 'jue.', 'vie.', 'sáb.'];
-const MESES_CORTOS = [
-  'ene.', 'feb.', 'mar.', 'abr.', 'may.', 'jun.',
-  'jul.', 'ago.', 'sept.', 'oct.', 'nov.', 'dic.',
-];
-
-/** "vie. 9 oct." (día local, el mismo que usa el calendario). */
-function formatDiaCorto(date: Date): string {
-  return `${DIAS_CORTOS[date.getDay()]} ${date.getDate()} ${MESES_CORTOS[date.getMonth()]}`;
-}
-
 /** Nombre legible de una ciudad elegida ("Mérida", "Puerto La Cruz"). */
 const nombreCiudad = (l: Localidad | null | undefined) => {
   const t = formatCity(l?.ciudad);
   return t === '—' ? (l?.ciudad ?? '') : t;
 };
-
-/** `YYYY-MM-DD` in local time — the key format used to match available dates. */
-function toDateKey(date: Date): string {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, '0');
-  const d = String(date.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
-}
 
 export function SearchForm({
   mode: initialMode = 'boletos',
@@ -123,22 +91,7 @@ export function SearchForm({
     abrirDestinoRef.current = abrir;
   }, []);
 
-  // ── Swap animation ─────────────────────────────────────────────────────────
-  const reduceMotion = useReducedMotion();
-  const rotation = useSharedValue(0);
-  const swapStyle = useAnimatedStyle(() => ({
-    transform: [{ rotate: `${rotation.value}deg` }],
-  }));
-
-  const swapLocations = () => {
-    Haptics.selectionAsync();
-    // Con "reducir movimiento" la flecha no gira: solo se intercambian las ciudades.
-    if (!reduceMotion) {
-      rotation.value = withTiming(rotation.value + 180, {
-        duration: Motion.duration.base,
-        easing: Motion.easing.out,
-      });
-    }
+  const intercambiar = () => {
     setOrigen(destino);
     setDestino(origen);
   };
@@ -207,12 +160,12 @@ export function SearchForm({
   const calendarEnabled =
     hasRoute && !mismaCiudad && !loadingDates && (errorDates || (!!activeDates && activeDates.length > 0));
 
-  const dateLabel = (() => {
-    if (!hasRoute) return 'Elige origen y destino';
-    if (loadingDates) return 'Buscando fechas con salidas…';
-    if (sinSalidas) return 'Sin salidas en esta ruta';
-    return formatShortDate(fecha);
-  })();
+  /** El campo de fecha dice qué falta mientras no hay fecha que elegir. */
+  const fechaTexto = !hasRoute
+    ? 'Elige origen y destino'
+    : loadingDates
+      ? 'Buscando fechas…'
+      : formatDiaVE(toDateKey(fecha));
 
   /** Por qué el botón está deshabilitado. `null` = se puede continuar. */
   const motivoBloqueo = (() => {
@@ -221,13 +174,14 @@ export function SearchForm({
     if (!destino) return 'Elige el destino';
     if (mismaCiudad) return 'El origen y el destino deben ser ciudades distintas';
     if (!isBoleto) return null;
-    if (loadingDates) return 'Buscando fechas con salidas…';
-    // Corto: el bloque de arriba ya ofrece otros destinos (M-09).
+    if (loadingDates) return 'Buscando fechas con salidas';
     if (sinSalidas) return 'No hay salidas en esta ruta';
     return null;
   })();
 
   const canSubmit = motivoBloqueo === null;
+  /** En boletos el motivo ya lo dicen el campo de fecha o el bloque sin salidas. */
+  const motivoVisible = isBoleto ? (mismaCiudad ? motivoBloqueo : null) : motivoBloqueo;
 
   const handleSubmit = () => {
     if (!origen || !destino || !canSubmit) return;
@@ -245,70 +199,34 @@ export function SearchForm({
     });
   };
 
+  const verSinSalidas = isBoleto && sinSalidas && !loadingDates && !!origen && !!destino && !mismaCiudad;
+
   return (
-    <View>
+    <View style={s.form}>
       {showModeToggle && (
         <SegmentedControl<SearchMode>
           value={currentMode}
           onChange={setCurrentMode}
           options={[
-            { value: 'boletos', label: 'Viajar', icon: Bus },
+            { value: 'boletos', label: 'Viajar', icon: Ticket },
             { value: 'encomiendas', label: 'Enviar encomienda', icon: Package },
           ]}
-          style={s.modeToggle}
         />
       )}
 
-      {/* ── Origen ⇅ Destino (APP-14): apilados, a ancho completo ─────────── */}
-      <View style={s.locationStack}>
-        <LocationSelector
-          label="Origen"
-          value={origen}
-          onChange={setOrigen}
-          excluir={destino}
-          excluirAyuda="Ya es tu destino"
-          recientes={recientes}
-          populares={CIUDADES_POPULARES}
-          customTrigger={(open) => (
-            <LocationTrigger label="Desde" value={origen?.ciudad} onPress={open} />
-          )}
-        />
-
-        <LocationSelector
-          label="Destino"
-          value={destino}
-          onChange={setDestino}
-          excluir={origen}
-          excluirAyuda="Ya es tu origen"
-          recientes={recientes}
-          populares={CIUDADES_POPULARES}
-          customTrigger={(open) => (
-            <LocationTrigger
-              label="Hacia"
-              value={destino?.ciudad}
-              onPress={open}
-              registrarAbrir={registrarAbrirDestino}
-            />
-          )}
-        />
-
-        {/* 44 × 44 pt, a la derecha y entre ambos campos. */}
-        <PressableScale
-          onPress={swapLocations}
-          scaleValue={0.9}
-          duration={Motion.duration.instant}
-          style={s.swap}
-          accessibilityRole="button"
-          accessibilityLabel="Intercambiar origen y destino"
-        >
-          <Animated.View style={swapStyle}>
-            <ArrowsDownUp size={Sizes.icon.md} color={Colors.foreground} weight="bold" />
-          </Animated.View>
-        </PressableScale>
-      </View>
+      <RouteField
+        origen={origen}
+        destino={destino}
+        onOrigen={setOrigen}
+        onDestino={setDestino}
+        onIntercambiar={intercambiar}
+        recientes={recientes}
+        populares={CIUDADES_POPULARES}
+        registrarAbrirDestino={registrarAbrirDestino}
+      />
 
       {/* ── Ruta sin salidas: otros destinos desde el mismo origen (M-09) ─── */}
-      {isBoleto && sinSalidas && !loadingDates && origen && destino && !mismaCiudad ? (
+      {verSinSalidas && origen && destino ? (
         <SinSalidasRuta
           origen={origen}
           destino={destino}
@@ -317,81 +235,54 @@ export function SearchForm({
         />
       ) : null}
 
-      {/* ── Fecha (solo boletos) ──────────────────────────────────────────── */}
-      {isBoleto && (
-        <PressableScale
-          onPress={() => calendarEnabled && setShowDatePicker(true)}
-          disabled={!calendarEnabled}
-          scaleValue={Motion.press.button}
-          style={[s.dateRow, !calendarEnabled && s.dateRowDisabled]}
-          accessibilityRole="button"
-          accessibilityLabel={`Fecha de viaje: ${dateLabel}`}
-          accessibilityState={{ disabled: !calendarEnabled }}
-        >
-          <CalendarBlank
-            size={Sizes.icon.md}
-            color={calendarEnabled ? Colors.primary : Colors.mutedForeground}
-            weight="bold"
+      {/* ── Fecha (solo boletos y con salidas posibles) ──────────────────── */}
+      {isBoleto && !verSinSalidas ? (
+        <View>
+          <CampoFecha
+            valor={fechaTexto}
+            pendiente={!calendarEnabled}
+            onPress={() => setShowDatePicker(true)}
           />
-          <Text
-            variant="bodyStrong"
-            size="sm"
-            color={calendarEnabled ? 'foreground' : 'muted'}
-            numberOfLines={1}
-            compact
-            style={s.dateText}
-          >
-            {dateLabel}
-          </Text>
-        </PressableScale>
-      )}
-
-      {isBoleto && errorDates && hasRoute ? (
-        <View style={s.dateHelp} accessibilityRole="alert" accessibilityLiveRegion="polite">
-          <Text variant="caption" color="warningText" style={s.dateHelpText}>
-            No pudimos verificar las fechas con salidas. Puedes buscar igual.
-          </Text>
-          <PressableScale
-            onPress={() => setReintentoDates((n) => n + 1)}
-            haptic
-            hapticType="selection"
-            style={s.linkBox}
-            accessibilityRole="button"
-            accessibilityLabel="Reintentar la carga de fechas"
-          >
-            <Text variant="caption" weight="bold" color="warningText" style={s.link}>
-              Reintentar
+          {errorDates && hasRoute ? (
+            <View style={s.ayudaFecha} accessibilityRole="alert" accessibilityLiveRegion="polite">
+              <Text variant="caption" color="warningText" style={s.ayudaTexto}>
+                No pudimos ver qué días tienen salidas. Puedes buscar igual.
+              </Text>
+              <TextLink onPress={() => setReintentoDates((n) => n + 1)} accessibilityLabel="Reintentar la carga de fechas">
+                Reintentar
+              </TextLink>
+            </View>
+          ) : fechaAjustada && !loadingDates ? (
+            <Text variant="caption" color="muted" style={s.ayudaFecha}>
+              Es la próxima fecha con salidas.
             </Text>
-          </PressableScale>
+          ) : null}
         </View>
-      ) : isBoleto && fechaAjustada && !loadingDates ? (
-        <Text variant="caption" color="muted" style={s.dateHelp}>
-          {`Próxima salida disponible: ${formatDiaCorto(fecha)}`}
-        </Text>
       ) : null}
 
-      <Button
-        variant="accent"
-        size="lg"
-        fullWidth
-        iconRight={ArrowRight}
-        disabled={!canSubmit}
-        onPress={handleSubmit}
-        accessibilityLabel={
-          motivoBloqueo
-            ? `${isBoleto ? 'Buscar viaje' : 'Enviar encomienda'}. ${motivoBloqueo}`
-            : undefined
-        }
-      >
-        {isBoleto ? 'Buscar viaje' : 'Enviar encomienda'}
-      </Button>
+      <View>
+        <Button
+          size="lg"
+          fullWidth
+          icon={isBoleto ? Ticket : Package}
+          disabled={!canSubmit}
+          onPress={handleSubmit}
+          accessibilityLabel={
+            motivoBloqueo
+              ? `${isBoleto ? 'Buscar viaje' : 'Enviar encomienda'}. ${motivoBloqueo}`
+              : undefined
+          }
+        >
+          {isBoleto ? 'Buscar viaje' : 'Enviar encomienda'}
+        </Button>
 
-      {/* Un botón deshabilitado siempre dice qué falta (APP-12, APP-13). */}
-      {motivoBloqueo ? (
-        <Text variant="caption" color="muted" align="center" style={s.blockReason}>
-          {motivoBloqueo}
-        </Text>
-      ) : null}
+        {/* Un botón deshabilitado dice qué falta, una sola vez (APP-12, AN-26). */}
+        {motivoVisible ? (
+          <Text variant="caption" color="muted" align="center" style={s.motivo}>
+            {motivoVisible}
+          </Text>
+        ) : null}
+      </View>
 
       {/* Kept outside the pressable so its state survives re-renders of the row */}
       <CalendarModal
@@ -407,6 +298,55 @@ export function SearchForm({
         activeDates={errorDates ? undefined : (activeDates ?? undefined)}
       />
     </View>
+  );
+}
+
+// ─── Campo de fecha ──────────────────────────────────────────────────────────
+
+/**
+ * La fecha del viaje con la misma forma que las tarjetas de `RouteField`
+ * ("Fecha" + "mar. 3 nov."). Lo usan Inicio y el paso 1 de la compra.
+ * `pendiente`: aún no se puede elegir (falta la ruta o se buscan las fechas);
+ * el valor dice por qué.
+ */
+export function CampoFecha({
+  valor,
+  pendiente = false,
+  onPress,
+}: {
+  valor: string;
+  pendiente?: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <PressableScale
+      onPress={onPress}
+      disabled={pendiente}
+      dimWhenDisabled={false}
+      haptic
+      hapticType="selection"
+      scaleValue={Motion.press.button}
+      style={s.campoFecha}
+      accessibilityRole="button"
+      accessibilityLabel={`Fecha: ${valor}`}
+      accessibilityState={{ disabled: pendiente }}
+    >
+      <View style={s.campoIcono}>
+        <CalendarBlank
+          size={Sizes.icon.sm}
+          color={pendiente ? Colors.mutedForeground : Colors.foreground}
+          weight="bold"
+        />
+      </View>
+      <View style={s.campoTextos}>
+        <Text variant="caption" color="muted" compact>
+          Fecha
+        </Text>
+        <Text variant="bodyStrong" color={pendiente ? 'muted' : 'foreground'} numberOfLines={1}>
+          {valor}
+        </Text>
+      </View>
+    </PressableScale>
   );
 }
 
@@ -436,7 +376,8 @@ type EstadoAlternativas =
  * hasta seis destinos que sí tienen salidas desde el mismo origen. Tocar uno lo
  * fija como destino; "Cambiar destino" abre el selector.
  *
- * Lo usan el buscador de Inicio y el paso 1 de `boletos/buscar`.
+ * Lo usan el buscador de Inicio y el paso 1 de `boletos/buscar` (pantallas
+ * blancas: el bloque es `surface`).
  */
 export function SinSalidasRuta({
   origen,
@@ -502,14 +443,12 @@ export function SinSalidasRuta({
   return (
     <View style={s.sinSalidas} accessibilityLiveRegion="polite">
       {sinNinguna ? (
-        <Text variant="secondary" color="foreground">
+        <Text variant="secondary">
           {`Por ahora no hay salidas desde ${deOrigen}. Prueba con otra ciudad de origen.`}
         </Text>
       ) : (
         <>
-          <Text variant="bodyStrong" size="sm">
-            {`No hay salidas programadas de ${deOrigen} a ${aDestino}.`}
-          </Text>
+          <Text variant="bodyStrong">{`No hay salidas de ${deOrigen} a ${aDestino}`}</Text>
           {estado.tipo === 'cargando' ? (
             <Text variant="caption" color="muted">
               Buscando otros destinos…
@@ -518,13 +457,14 @@ export function SinSalidasRuta({
           {estado.tipo === 'listo' ? (
             <>
               <Text variant="caption" color="muted">
-                {`Destinos con salidas desde ${deOrigen}:`}
+                {`Con salidas desde ${deOrigen}:`}
               </Text>
               <View style={s.alternativas}>
                 {estado.destinos.map((l) => (
                   <Chip
                     key={normalizeCityForDb(l.ciudad)}
                     label={nombreCiudad(l)}
+                    sobre="surface"
                     onPress={() => onElegirDestino(l)}
                     accessibilityLabel={`Viajar a ${nombreCiudad(l)}`}
                   />
@@ -533,18 +473,9 @@ export function SinSalidasRuta({
             </>
           ) : null}
           {onCambiarDestino ? (
-            <PressableScale
-              onPress={onCambiarDestino}
-              haptic
-              hapticType="selection"
-              style={[s.linkBox, s.cambiarDestino]}
-              accessibilityRole="button"
-              accessibilityLabel="Cambiar destino"
-            >
-              <Text variant="caption" weight="bold" color="foreground" style={s.link}>
-                Cambiar destino
-              </Text>
-            </PressableScale>
+            <View style={s.cambiarDestino}>
+              <TextLink onPress={onCambiarDestino}>Cambiar destino</TextLink>
+            </View>
           ) : null}
         </>
       )}
@@ -552,162 +483,60 @@ export function SinSalidasRuta({
   );
 }
 
-// ─── Location trigger ────────────────────────────────────────────────────────
-
-function LocationTrigger({
-  label,
-  value,
-  onPress,
-  registrarAbrir,
-}: {
-  label: string;
-  value?: string;
-  onPress: () => void;
-  /** Recibe la función que abre el selector (para abrirlo desde otro lugar). */
-  registrarAbrir?: (abrir: () => void) => void;
-}) {
-  useEffect(() => {
-    registrarAbrir?.(onPress);
-  }, [registrarAbrir, onPress]);
-
-  return (
-    <PressableScale
-      onPress={onPress}
-      scaleValue={Motion.press.button}
-      style={s.locationBtn}
-      accessibilityRole="button"
-      accessibilityLabel={`${label}: ${value ?? 'sin seleccionar'}`}
-    >
-      <View style={s.locationIcon}>
-        <MapPin size={Sizes.icon.sm} color={Colors.primary} weight="fill" />
-      </View>
-      <View style={s.locationInfo}>
-        <Text variant="overline" color="muted" uppercase compact>
-          {label}
-        </Text>
-        <Text
-          variant="bodyStrong"
-          size="sm"
-          color={value ? 'foreground' : 'muted'}
-          numberOfLines={2}
-          compact
-          style={s.locationValue}
-        >
-          {value ?? 'Seleccionar'}
-        </Text>
-      </View>
-    </PressableScale>
-  );
-}
-
-/** Botón de intercambio: 44 × 44 pt (APP-14). */
-const SWAP_SIZE = Sizes.control.md;
-
 const s = StyleSheet.create({
-  modeToggle: {
-    marginBottom: Spacing.md,
+  form: {
+    gap: Spacing.md,
   },
-  locationStack: {
-    gap: Spacing.sm,
-    marginBottom: Spacing.md,
-    justifyContent: 'center',
-  },
-  locationBtn: {
+  campoFecha: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.sm + 1,
-    backgroundColor: Colors.white,
-    borderRadius: Radius.xl,
-    paddingLeft: Spacing.lg,
-    // Deja libre el botón de intercambio, que flota a la derecha.
-    paddingRight: SWAP_SIZE + Spacing.lg + Spacing.sm,
-    paddingVertical: Spacing.sm,
+    gap: Spacing.md,
     minHeight: Sizes.control.xl,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
+    borderRadius: Radius.lg,
+    backgroundColor: Colors.background,
+    borderWidth: Sizes.hairline,
+    borderColor: Colors.border,
   },
-  locationIcon: {
+  campoIcono: {
     width: Sizes.iconBox.sm,
     height: Sizes.iconBox.sm,
     borderRadius: Radius.full,
-    backgroundColor: Colors.primaryLight,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  locationInfo: {
-    flex: 1,
-    gap: Spacing.xs / 2,
-  },
-  locationValue: {
-    marginTop: Spacing.xs / 2,
-  },
-  swap: {
-    position: 'absolute',
-    right: Spacing.lg,
-    top: '50%',
-    marginTop: -SWAP_SIZE / 2,
-    width: SWAP_SIZE,
-    height: SWAP_SIZE,
-    borderRadius: Radius.full,
     backgroundColor: Colors.surface,
-    borderWidth: Sizes.hairline,
-    borderColor: Colors.border,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  campoTextos: {
+    flex: 1,
+  },
+  ayudaFecha: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    columnGap: Spacing.xs,
+    marginTop: Spacing.sm,
+    paddingHorizontal: Spacing.lg,
+  },
+  ayudaTexto: {
+    flexShrink: 1,
+  },
+  motivo: {
+    marginTop: Spacing.sm,
   },
   sinSalidas: {
     gap: Spacing.sm,
     padding: Spacing.lg,
-    marginBottom: Spacing.md,
     borderRadius: Radius.lg,
-    backgroundColor: Colors.white,
+    backgroundColor: Colors.surface,
   },
   cambiarDestino: {
     alignSelf: 'flex-start',
-    marginLeft: -Spacing.xs,
   },
   alternativas: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: Spacing.sm,
-  },
-  dateRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.md,
-    height: Sizes.control.lg,
-    paddingHorizontal: Spacing.lg,
-    marginBottom: Spacing.md,
-    backgroundColor: Colors.white,
-    borderRadius: Radius.full,
-  },
-  dateRowDisabled: {
-    backgroundColor: Colors.surface,
-    opacity: Opacity.dimmed,
-  },
-  dateText: {
-    flex: 1,
-    textTransform: 'capitalize',
-  },
-  dateHelp: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: Spacing.xs,
-    marginTop: -Spacing.xs,
-    marginBottom: Spacing.md,
-    paddingHorizontal: Spacing.sm,
-  },
-  dateHelpText: {
-    flexShrink: 1,
-  },
-  link: {
-    textDecorationLine: 'underline',
-  },
-  /** Área táctil cómoda alrededor de un enlace de texto pequeño */
-  linkBox: {
-    paddingVertical: Spacing.xs,
-    paddingHorizontal: Spacing.xs,
-  },
-  blockReason: {
-    marginTop: Spacing.sm,
+    marginTop: Spacing.xs,
   },
 });

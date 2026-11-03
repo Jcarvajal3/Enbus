@@ -17,7 +17,7 @@ export default async function IncidenciaDetailPage({ params }: PageProps) {
   if (!UUID_REGEX.test(id)) {
     notFound();
   }
-  
+
   const [incidencia, user] = await Promise.all([
     fetchIncidenciaById(id),
     getUserProfile()
@@ -33,11 +33,6 @@ export default async function IncidenciaDetailPage({ params }: PageProps) {
   };
 
   return (
-    <div className="space-y-6">
-      <IncidenciaDetail 
-        incidencia={incidencia} 
-        currentUser={currentUser} 
-      />
-    </div>
+    <IncidenciaDetail incidencia={incidencia} currentUser={currentUser} />
   );
 }

@@ -32,6 +32,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '@/src/utils/supabase';
 import { nuevaClaveIdempotencia, uuidv4 } from '@/src/utils/ids';
 import { AppError, codigoEB, humanizeError, parseDetalleEB } from '@/src/utils/errores';
+import { formatDiaHoraVE, formatDiaVE, formatHoraVE } from '@/src/utils/formatters';
 import type {
   CotizacionPago,
   PagoDeclarado,
@@ -101,32 +102,21 @@ export function mensajeAsientosTomados(asientos: readonly string[]): string {
     : `Los asientos ${unirAsientos(asientos)} acaban de ser tomados. Elige otros.`;
 }
 
-const DIAS_CORTOS = ['dom.', 'lun.', 'mar.', 'mié.', 'jue.', 'vie.', 'sáb.'];
+// Fechas del pasajero (D4): siempre en hora de Venezuela y con `shared/ve.ts`.
 
-/**
- * "8:30 a. m." en la hora del teléfono. Hecho a mano (sin `Intl`) para que
- * Hermes y cualquier configuración regional muestren lo mismo. `''` si no es fecha.
- */
+/** "8:30 a. m." (hora de Venezuela). `''` si no es fecha. */
 export function formatHora(iso: string | null | undefined): string {
-  const d = iso ? new Date(iso) : null;
-  if (!d || Number.isNaN(d.getTime())) return '';
-  const h = d.getHours();
-  const h12 = h % 12 === 0 ? 12 : h % 12;
-  return `${h12}:${String(d.getMinutes()).padStart(2, '0')} ${h < 12 ? 'a. m.' : 'p. m.'}`;
+  return iso ? formatHoraVE(iso) : '';
 }
 
-/** "04/10" (día y mes en la hora del teléfono). `''` si no es fecha. */
+/** "mar. 3 nov." (día de Venezuela). `''` si no es fecha. */
 export function formatDiaMes(iso: string | null | undefined): string {
-  const d = iso ? new Date(iso) : null;
-  if (!d || Number.isNaN(d.getTime())) return '';
-  return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`;
+  return iso ? formatDiaVE(iso) : '';
 }
 
-/** "vie. 04/10 · 8:30 a. m." (salida de un viaje). `'—'` si no es fecha. */
+/** "mar. 3 nov. · 8:30 a. m." (salida de un viaje). `'—'` si no es fecha. */
 export function formatSalidaCorta(iso: string | null | undefined): string {
-  const d = iso ? new Date(iso) : null;
-  if (!d || Number.isNaN(d.getTime())) return '—';
-  return `${DIAS_CORTOS[d.getDay()]} ${formatDiaMes(iso)} · ${formatHora(iso)}`;
+  return (iso ? formatDiaHoraVE(iso) : '') || '—';
 }
 
 /** true si la salida ya ocurrió (sin fecha válida se considera que no). */

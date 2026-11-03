@@ -1,536 +1,384 @@
 "use client";
 
-import Link from "next/link";
+// ─── Ficha de una cooperativa (AD5-15, AD5-18, AD5-19, AD5-34, AD5-35, SY-29) ─
+// Pestañas en `?tab=` con el contador en la pestaña. Cada pestaña es su propia
+// tarjeta o tabla (sin título que repita la pestaña). Estados con `StatusBadge`.
+
+import { Coins, CreditCard, Receipt, Star } from "@phosphor-icons/react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { 
-  Info, 
-  MapPin, 
-  CreditCard, 
-  MapTrifold, 
-  Users, 
-  Star, 
-  Coins,
-  ShieldCheck,
-  Warning,
-  Circle
-} from "@phosphor-icons/react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import type { CooperativaDetalle } from "@/lib/types/admin-cooperativas";
 import { Monto } from "@/components/monto";
-import { formatFechaHoraVE, formatFechaVE } from "@/lib/fechas";
-import { formatTelefono } from "@/lib/ve";
-import { estadoInfo, etiquetaMetodoPago, etiquetaRol } from "@/lib/estados";
+import { KpiCard } from "@/components/kpi-card";
+import { EmptyState } from "@/components/empty-state";
+import { FilaVacia } from "@/components/fila-vacia";
 import { StatusBadge } from "@/components/status-badge";
+import { useParamUrl } from "@/hooks/use-param-url";
 import { useTasaBCVAdmin } from "@/components/admin/dashboard/use-tasa-bcv-admin";
-import { Calificacion, RifIncompletoBadge, formatPorcentaje } from "./cooperativas-table";
-import { useTabEnUrl } from "@/components/admin/use-tab-url";
+import { CLASE_PESTANA, ConteoPestana, Dato, Vacio } from "@/components/admin/detalle";
+import { formatDuracion, formatFechaVE } from "@/lib/fechas";
+import { formatCedula, formatTelefono } from "@/lib/ve";
+import { isValidRif, normalizeRif } from "@/lib/rif";
+import { claveReputacion, etiquetaMetodoPago, etiquetaRol } from "@/lib/estados";
 import { formatCiudad } from "@/lib/ciudades";
-import { formatDuracion } from "@/lib/fechas";
 import { formatNumeroVE } from "@/lib/dinero";
+import { Calificacion, RifIncompletoBadge, formatPorcentaje } from "./cooperativas-table";
 
 const PESTANAS = ["general", "sucursales", "metodos", "rutas", "empleados", "calificaciones", "balance"] as const;
-const CLASE_ACTIVA = "bg-success-light text-success-deep";
+type Pestana = (typeof PESTANAS)[number];
 
 interface CooperativaDetailTabsProps {
   cooperativa: CooperativaDetalle;
 }
 
+/** Teléfono legible o "—" (SY-29). */
+export function telefonoOVacio(v: string | null | undefined) {
+  const f = v ? formatTelefono(v) : "—";
+  return f === "—" ? <Vacio /> : <span className="tabular-nums">{f}</span>;
+}
+
+/** Cédula ("V-30.000.001") o RIF ("J-12345678-9") legibles; si no se reconocen, el texto guardado. */
+export function documentoLegible(v: string | null | undefined): string {
+  if (!v || v.toUpperCase().startsWith("PENDIENTE")) return "—";
+  if (/^[JGC]/i.test(v.trim()) && isValidRif(v)) return normalizeRif(v) ?? v;
+  const c = formatCedula(v);
+  return c === "—" ? v : c;
+}
+
+function Estrellas({ n, className }: { n: number; className?: string }) {
+  return (
+    <span className="flex gap-0.5" aria-hidden>
+      {Array.from({ length: 5 }).map((_, i) => (
+        <Star
+          key={i}
+          weight={i < n ? "fill" : "regular"}
+          className={i < n ? `text-primary-text ${className ?? ""}` : `text-muted-foreground ${className ?? ""}`}
+        />
+      ))}
+    </span>
+  );
+}
+
 export function CooperativaDetailTabs({ cooperativa }: CooperativaDetailTabsProps) {
-  
   // Montos en USD de referencia, con el equivalente en Bs a la tasa BCV de hoy.
   const tasa = useTasaBCVAdmin();
-  const [tab, setTab] = useTabEnUrl(PESTANAS, "general");
+  const [valorTab, setTab] = useParamUrl("tab", "general");
+  const tab: Pestana = (PESTANAS as readonly string[]).includes(valorTab) ? (valorTab as Pestana) : "general";
+  const pendiente = Number(cooperativa.comisiones_pendientes ?? 0);
+  const promedio = Number(cooperativa.calificacion_promedio);
 
   return (
-    <Tabs value={tab} onValueChange={(v) => setTab(String(v))} className="w-full">
-      <TabsList className="flex h-auto max-w-full flex-wrap gap-1 rounded-xl border p-1">
-        <TabsTrigger value="general" className="flex items-center gap-2 px-3 py-2 text-sm">
-          <Info className="h-4 w-4" aria-hidden /> General
+    <Tabs value={tab} onValueChange={(v) => setTab(String(v))} className="gap-4">
+      <TabsList aria-label="Secciones de la cooperativa">
+        <TabsTrigger value="general" className={CLASE_PESTANA}>General</TabsTrigger>
+        <TabsTrigger value="sucursales" className={CLASE_PESTANA}>
+          Sucursales <ConteoPestana n={cooperativa.sucursales.length} />
         </TabsTrigger>
-        <TabsTrigger value="sucursales" className="flex items-center gap-2 px-3 py-2 text-sm">
-          <MapPin className="h-4 w-4" aria-hidden /> Sucursales
+        <TabsTrigger value="metodos" className={CLASE_PESTANA}>
+          Métodos de pago <ConteoPestana n={cooperativa.metodos_pago.length} />
         </TabsTrigger>
-        <TabsTrigger value="metodos" className="flex items-center gap-2 px-3 py-2 text-sm">
-          <CreditCard className="h-4 w-4" aria-hidden /> Métodos de pago
+        <TabsTrigger value="rutas" className={CLASE_PESTANA}>
+          Rutas <ConteoPestana n={cooperativa.rutas.length} />
         </TabsTrigger>
-        <TabsTrigger value="rutas" className="flex items-center gap-2 px-3 py-2 text-sm">
-          <MapTrifold className="h-4 w-4" aria-hidden /> Rutas
+        <TabsTrigger value="empleados" className={CLASE_PESTANA}>
+          Empleados <ConteoPestana n={cooperativa.empleados.length} />
         </TabsTrigger>
-        <TabsTrigger value="empleados" className="flex items-center gap-2 px-3 py-2 text-sm">
-          <Users className="h-4 w-4" aria-hidden /> Empleados
+        <TabsTrigger value="calificaciones" className={CLASE_PESTANA}>
+          Calificaciones <ConteoPestana n={cooperativa.calificaciones.length} />
         </TabsTrigger>
-        <TabsTrigger value="calificaciones" className="flex items-center gap-2 px-3 py-2 text-sm">
-          <Star className="h-4 w-4" aria-hidden /> Calificaciones
-        </TabsTrigger>
-        <TabsTrigger value="balance" className="flex items-center gap-2 px-3 py-2 text-sm">
-          <Coins className="h-4 w-4" aria-hidden /> Balance
-        </TabsTrigger>
+        <TabsTrigger value="balance" className={CLASE_PESTANA}>Balance</TabsTrigger>
       </TabsList>
 
-      {/* Tab: General */}
-      <TabsContent value="general" className="mt-4">
-        <Card className="bg-card border-border text-foreground">
-          <CardHeader>
-            <CardTitle className="text-lg">Datos básicos</CardTitle>
-            <CardDescription className="text-muted-foreground">Información administrativa de la cooperativa.</CardDescription>
+      {/* General */}
+      <TabsContent value="general">
+        <Card>
+          <CardHeader className="flex flex-row items-center gap-3">
+            <Avatar className="size-10 border border-border">
+              <AvatarImage src={cooperativa.logo_url || ""} alt="" />
+              <AvatarFallback className="bg-muted text-xs font-semibold text-muted-foreground">
+                {cooperativa.nombre.substring(0, 2).toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+            <CardTitle>Datos de la cooperativa</CardTitle>
           </CardHeader>
-          <CardContent className="grid gap-6 md:grid-cols-2">
-            <div className="space-y-4">
-              <div>
-                <span className="text-sm text-muted-foreground block mb-1">Nombre comercial</span>
-                <span className="text-foreground font-medium text-base">{cooperativa.nombre}</span>
-              </div>
-              <div>
-                <span className="text-sm text-muted-foreground block mb-1">RIF</span>
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-foreground font-mono text-base">{cooperativa.rif}</span>
+          <CardContent>
+            <dl className="grid gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
+              <Dato etiqueta="Nombre comercial">{cooperativa.nombre}</Dato>
+              <Dato etiqueta="RIF">
+                <span className="flex flex-wrap items-center gap-2">
+                  <span className="font-mono">{cooperativa.rif}</span>
                   <RifIncompletoBadge rif={cooperativa.rif} />
-                </div>
-              </div>
-              <div>
-                <span className="text-sm text-muted-foreground block mb-1">Comisión de EnBus</span>
-                <span className="text-base font-semibold text-foreground">{formatPorcentaje(cooperativa.comision_porcentaje)}</span>
-              </div>
-              <div>
-                <span className="text-sm text-muted-foreground block mb-1">Representante legal</span>
-                <span className="text-foreground text-sm">{cooperativa.representante || "Sin dato"}</span>
-              </div>
-              <div>
-                <span className="text-sm text-muted-foreground block mb-1">Contacto</span>
-                <span className="text-foreground text-sm block">{cooperativa.email || "Sin correo"}</span>
-                {cooperativa.telefono && (
-                  <span className="text-muted-foreground text-sm block">
-                    {formatTelefono(cooperativa.telefono) === "—" ? cooperativa.telefono : formatTelefono(cooperativa.telefono)}
-                  </span>
-                )}
-              </div>
-            </div>
-            <div className="space-y-4">
-              <div>
-                <span className="text-sm text-muted-foreground block mb-1">Estado</span>
-                <div className="mt-1 space-y-1">
-                  <StatusBadge status={cooperativa.estado} dominio="cooperativa" />
-                  <p className="text-xs text-muted-foreground">{estadoInfo("cooperativa", cooperativa.estado).ayuda}</p>
-                  {cooperativa.motivo_estado && (
-                    <p className="text-sm text-foreground">
-                      <span className="text-muted-foreground">Motivo: </span>
-                      {cooperativa.motivo_estado}
-                    </p>
-                  )}
-                  {cooperativa.estado_cambiado_at && (
-                    <p className="text-xs text-muted-foreground">
-                      Desde el {formatFechaHoraVE(cooperativa.estado_cambiado_at)}
-                    </p>
-                  )}
-                </div>
-              </div>
-              <div>
-                <span className="text-sm text-muted-foreground block mb-1">Calificación promedio</span>
-                <div className="mt-1">
-                  <Calificacion promedio={cooperativa.calificacion_promedio} total={cooperativa.total_calificaciones} />
-                </div>
-              </div>
-              <div>
-                <span className="text-sm text-muted-foreground block mb-1">Fecha de registro</span>
-                <span className="text-foreground text-sm">
-                  {formatFechaVE(cooperativa.created_at, { dateStyle: "long" })}
                 </span>
-              </div>
-            </div>
-            {cooperativa.mensaje_registro && (
-              <div className="md:col-span-2">
-                <span className="text-sm text-muted-foreground block mb-1">Mensaje al registrarse</span>
-                <p className="whitespace-pre-line rounded-lg border bg-muted/30 p-3 text-sm text-foreground">
-                  {cooperativa.mensaje_registro}
-                </p>
-              </div>
-            )}
+              </Dato>
+              <Dato etiqueta="Comisión de EnBus">
+                <span className="tabular-nums">{formatPorcentaje(cooperativa.comision_porcentaje)}</span>
+              </Dato>
+              <Dato etiqueta="Representante legal">{cooperativa.representante || <Vacio />}</Dato>
+              <Dato etiqueta="Correo">{cooperativa.email || <Vacio texto="Sin correo" />}</Dato>
+              <Dato etiqueta="Teléfono">{telefonoOVacio(cooperativa.telefono)}</Dato>
+              <Dato etiqueta="Calificación promedio">
+                <Calificacion promedio={cooperativa.calificacion_promedio} total={cooperativa.total_calificaciones} />
+              </Dato>
+              <Dato etiqueta="Fecha de registro">
+                <span className="tabular-nums">{formatFechaVE(cooperativa.created_at)}</span>
+              </Dato>
+              {cooperativa.mensaje_registro && (
+                <Dato etiqueta="Mensaje al registrarse" className="sm:col-span-2 lg:col-span-3">
+                  <span className="whitespace-pre-line">{cooperativa.mensaje_registro}</span>
+                </Dato>
+              )}
+            </dl>
           </CardContent>
         </Card>
       </TabsContent>
 
-      {/* Tab: Sucursales */}
-      <TabsContent value="sucursales" className="mt-4">
-        <Card className="bg-card border-border text-foreground">
-          <CardHeader>
-            <CardTitle className="text-lg">Sucursales ({cooperativa.sucursales.length})</CardTitle>
-            <CardDescription className="text-muted-foreground">Puntos de carga, recepción y taquillas habilitadas.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {cooperativa.sucursales.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-6">La cooperativa aún no tiene sucursales registradas.</p>
-            ) : (
-              <div className="overflow-x-auto rounded-lg border border-border">
-                <Table>
-                  <TableHeader className="bg-muted/40 border-border">
-                    <TableRow className="border-border hover:bg-transparent">
-                      <TableHead className="text-muted-foreground">Nombre</TableHead>
-                      <TableHead className="text-muted-foreground">Ubicación</TableHead>
-                      <TableHead className="text-muted-foreground">Dirección</TableHead>
-                      <TableHead className="text-muted-foreground">Teléfono</TableHead>
-                      <TableHead className="text-muted-foreground text-right">Estado</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {cooperativa.sucursales.map((suc) => (
-                      <TableRow key={suc.id} className="border-border hover:bg-muted/10">
-                        <TableCell className="font-medium text-foreground">{suc.nombre}</TableCell>
-                        <TableCell className="text-muted-foreground">{formatCiudad(suc.ciudad)}, {suc.estado_geografico}</TableCell>
-                        <TableCell className="text-muted-foreground text-sm max-w-xs truncate">{suc.direccion}</TableCell>
-                        <TableCell className="text-muted-foreground">{suc.telefono || "-"}</TableCell>
-                        <TableCell className="text-right">
-                          {suc.activa ? (
-                            <Badge variant="secondary" className={CLASE_ACTIVA}>Activa</Badge>
-                          ) : (
-                            <Badge variant="secondary" className="bg-muted text-muted-foreground border-border">Inactiva</Badge>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-          </CardContent>
+      {/* Sucursales */}
+      <TabsContent value="sucursales">
+        <Card className="gap-0 overflow-hidden p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Nombre</TableHead>
+                <TableHead>Ubicación</TableHead>
+                <TableHead className="hidden lg:table-cell">Dirección</TableHead>
+                <TableHead className="hidden md:table-cell">Teléfono</TableHead>
+                <TableHead>Estado</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {cooperativa.sucursales.length === 0 ? (
+                <FilaVacia colSpan={5} titulo="Todavía no tiene sucursales" />
+              ) : (
+                cooperativa.sucursales.map((suc) => (
+                  <TableRow key={suc.id}>
+                    <TableCell className="font-medium">{suc.nombre}</TableCell>
+                    <TableCell>
+                      {formatCiudad(suc.ciudad)}
+                      <span className="text-muted-foreground"> · {formatCiudad(suc.estado_geografico) || suc.estado_geografico}</span>
+                    </TableCell>
+                    <TableCell className="hidden max-w-xs truncate text-muted-foreground lg:table-cell">
+                      {suc.direccion || <Vacio />}
+                    </TableCell>
+                    <TableCell className="hidden md:table-cell">{telefonoOVacio(suc.telefono)}</TableCell>
+                    <TableCell>
+                      <StatusBadge status={String(suc.activa)} dominio="recurso" />
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
         </Card>
       </TabsContent>
 
-      {/* Tab: Métodos de Pago */}
-      <TabsContent value="metodos" className="mt-4">
-        <Card className="bg-card border-border text-foreground">
-          <CardHeader>
-            <CardTitle className="text-lg">Cuentas y métodos de pago ({cooperativa.metodos_pago.length})</CardTitle>
-            <CardDescription className="text-muted-foreground">Métodos habilitados para compras digitales y recepción de transferencias.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {cooperativa.metodos_pago.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-6">No hay métodos de pago registrados para esta cooperativa.</p>
-            ) : (
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {cooperativa.metodos_pago.map((metodo) => (
-                  <Card key={metodo.id} className="bg-muted/40 border-border text-foreground flex flex-col justify-between">
-                    <CardHeader className="pb-2">
-                      <div className="flex items-center justify-between">
-                        <Badge className="bg-muted border-border text-muted-foreground font-medium">
-                          {etiquetaMetodoPago(metodo.tipo)}
-                        </Badge>
-                        <span className="flex items-center gap-1 text-xs text-muted-foreground"><Circle weight="fill" aria-hidden className={`h-2 w-2 ${metodo.activo ? "text-success-text" : "text-muted-foreground"}`} />{metodo.activo ? "Activo" : "Inactivo"}</span>
-                      </div>
-                    </CardHeader>
-                    <CardContent className="space-y-2 text-sm text-muted-foreground pb-4">
-                      {metodo.banco && (
-                        <div>
-                          <span className="text-xs text-muted-foreground block">Banco</span>
-                          <span className="font-medium text-foreground">{metodo.banco}</span>
-                        </div>
+      {/* Métodos de pago */}
+      <TabsContent value="metodos">
+        {cooperativa.metodos_pago.length === 0 ? (
+          <Card>
+            <EmptyState compacto icon={CreditCard} title="Todavía no tiene métodos de pago" />
+          </Card>
+        ) : (
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {cooperativa.metodos_pago.map((metodo) => (
+              <Card key={metodo.id} size="sm">
+                <CardHeader className="flex flex-row items-center justify-between gap-2">
+                  <CardTitle>{etiquetaMetodoPago(metodo.tipo)}</CardTitle>
+                  <StatusBadge status={String(metodo.activo)} dominio="recurso" />
+                </CardHeader>
+                <CardContent>
+                  <dl className="flex flex-col gap-3">
+                    {metodo.banco && <Dato etiqueta="Banco">{metodo.banco}</Dato>}
+                    <Dato etiqueta="Titular">{metodo.titular}</Dato>
+                    {metodo.numero_cuenta && (
+                      <Dato etiqueta="Número de cuenta">
+                        <span className="font-mono">{metodo.numero_cuenta}</span>
+                      </Dato>
+                    )}
+                    {metodo.cedula_rif && (
+                      <Dato etiqueta="Cédula o RIF">
+                        <span className="font-mono">{documentoLegible(metodo.cedula_rif)}</span>
+                      </Dato>
+                    )}
+                    {metodo.email_zelle && <Dato etiqueta="Correo Zelle">{metodo.email_zelle}</Dato>}
+                    {metodo.instrucciones && <Dato etiqueta="Instrucciones">{metodo.instrucciones}</Dato>}
+                  </dl>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+      </TabsContent>
+
+      {/* Rutas */}
+      <TabsContent value="rutas">
+        <Card className="gap-0 overflow-hidden p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Origen</TableHead>
+                <TableHead>Destino</TableHead>
+                <TableHead className="hidden text-right md:table-cell">Duración</TableHead>
+                <TableHead className="text-right">Pasaje</TableHead>
+                <TableHead>Estado</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {cooperativa.rutas.length === 0 ? (
+                <FilaVacia colSpan={5} titulo="Todavía no tiene rutas" />
+              ) : (
+                cooperativa.rutas.map((ruta) => (
+                  <TableRow key={ruta.id}>
+                    <TableCell>
+                      <span className="font-medium">{formatCiudad(ruta.ciudad_origen)}</span>
+                      <span className="block text-xs text-muted-foreground">{formatCiudad(ruta.estado_origen) || ruta.estado_origen}</span>
+                    </TableCell>
+                    <TableCell>
+                      <span className="font-medium">{formatCiudad(ruta.ciudad_destino)}</span>
+                      <span className="block text-xs text-muted-foreground">{formatCiudad(ruta.estado_destino) || ruta.estado_destino}</span>
+                    </TableCell>
+                    <TableCell className="hidden text-right tabular-nums md:table-cell">
+                      {formatDuracion(ruta.duracion_estimada_min)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {ruta.precio_pasaje === null || ruta.precio_pasaje === undefined ? (
+                        <Vacio />
+                      ) : (
+                        <Monto usd={Number(ruta.precio_pasaje)} tasa={tasa} moneda="USD" size="sm" align="right" />
                       )}
-                      <div>
-                        <span className="text-xs text-muted-foreground block">Titular</span>
-                        <span className="font-medium text-foreground">{metodo.titular}</span>
-                      </div>
-                      {metodo.numero_cuenta && (
-                        <div>
-                          <span className="text-xs text-muted-foreground block">Número de cuenta</span>
-                          <span className="font-mono text-muted-foreground">{metodo.numero_cuenta}</span>
-                        </div>
-                      )}
-                      {metodo.cedula_rif && (
-                        <div>
-                          <span className="text-xs text-muted-foreground block">Cédula / RIF</span>
-                          <span className="font-mono text-muted-foreground">{metodo.cedula_rif}</span>
-                        </div>
-                      )}
-                      {metodo.email_zelle && (
-                        <div>
-                          <span className="text-xs text-muted-foreground block">Correo Zelle</span>
-                          <span className="text-foreground">{metodo.email_zelle}</span>
-                        </div>
-                      )}
-                      {metodo.instrucciones && (
-                        <div className="mt-2 text-xs text-muted-foreground bg-background p-2 rounded border border-border">
-                          <span className="text-muted-foreground block font-semibold mb-1">Instrucciones:</span>
-                          {metodo.instrucciones}
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            )}
-          </CardContent>
+                    </TableCell>
+                    <TableCell>
+                      <StatusBadge status={String(ruta.activa)} dominio="recurso" />
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
         </Card>
       </TabsContent>
 
-      {/* Tab: Rutas */}
-      <TabsContent value="rutas" className="mt-4">
-        <Card className="bg-card border-border text-foreground">
-          <CardHeader>
-            <CardTitle className="text-lg">Rutas registradas ({cooperativa.rutas.length})</CardTitle>
-            <CardDescription className="text-muted-foreground">Destinos y tarifas configurados para viajes y encomiendas.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {cooperativa.rutas.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-6">La cooperativa no cuenta con rutas creadas.</p>
-            ) : (
-              <div className="overflow-x-auto rounded-lg border border-border">
-                <Table>
-                  <TableHeader className="bg-muted/40 border-border">
-                    <TableRow className="border-border hover:bg-transparent">
-                      <TableHead className="text-muted-foreground">Origen</TableHead>
-                      <TableHead className="text-muted-foreground">Destino</TableHead>
-                      <TableHead className="text-muted-foreground text-right">Duración estimada</TableHead>
-                      <TableHead className="text-muted-foreground text-right">Precio del pasaje (USD)</TableHead>
-                      <TableHead className="text-muted-foreground text-right">Estado</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {cooperativa.rutas.map((ruta) => (
-                      <TableRow key={ruta.id} className="border-border hover:bg-muted/10">
-                        <TableCell className="font-medium text-foreground">
-                          {formatCiudad(ruta.ciudad_origen)} <span className="text-xs text-muted-foreground font-normal">({ruta.estado_origen})</span>
-                        </TableCell>
-                        <TableCell className="font-medium text-foreground">
-                          {formatCiudad(ruta.ciudad_destino)} <span className="text-xs text-muted-foreground font-normal">({ruta.estado_destino})</span>
-                        </TableCell>
-                        <TableCell className="text-right text-muted-foreground">
-                          {formatDuracion(ruta.duracion_estimada_min)}
-                        </TableCell>
-                        <TableCell className="text-right font-semibold">
-                          {ruta.precio_pasaje === null || ruta.precio_pasaje === undefined ? "—" : <Monto usd={Number(ruta.precio_pasaje)} tasa={tasa} moneda="USD" size="sm" align="right" />}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {ruta.activa ? (
-                            <Badge variant="secondary" className={CLASE_ACTIVA}>Activa</Badge>
-                          ) : (
-                            <Badge variant="secondary" className="bg-muted text-muted-foreground border-border">Inactiva</Badge>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-          </CardContent>
+      {/* Empleados */}
+      <TabsContent value="empleados">
+        <Card className="gap-0 overflow-hidden p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Nombre</TableHead>
+                <TableHead className="hidden lg:table-cell">Cédula</TableHead>
+                <TableHead className="hidden md:table-cell">Teléfono</TableHead>
+                <TableHead>Rol</TableHead>
+                <TableHead>Estado</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {cooperativa.empleados.length === 0 ? (
+                <FilaVacia colSpan={5} titulo="Todavía no tiene empleados" />
+              ) : (
+                cooperativa.empleados.map((emp) => (
+                  <TableRow key={emp.id}>
+                    <TableCell>
+                      <span className="block font-medium">{emp.nombre_completo}</span>
+                      <span className="block text-xs text-muted-foreground">{emp.email || "Sin correo"}</span>
+                    </TableCell>
+                    <TableCell className="hidden font-mono text-sm lg:table-cell">{documentoLegible(emp.cedula_rif)}</TableCell>
+                    <TableCell className="hidden md:table-cell">{telefonoOVacio(emp.telefono)}</TableCell>
+                    <TableCell>
+                      <Badge variant="secondary">{etiquetaRol(emp.role)}</Badge>
+                    </TableCell>
+                    <TableCell>
+                      <StatusBadge status={emp.isBanned ? "SUSPENDIDA" : "ACTIVA"} dominio="cuenta" />
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
         </Card>
       </TabsContent>
 
-      {/* Tab: Empleados */}
-      <TabsContent value="empleados" className="mt-4">
-        <Card className="bg-card border-border text-foreground">
-          <CardHeader>
-            <CardTitle className="text-lg">Empleados ({cooperativa.empleados.length})</CardTitle>
-            <CardDescription className="text-muted-foreground">Administradores y taquilleros con acceso al sistema.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {cooperativa.empleados.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-6">No hay empleados vinculados a esta cooperativa.</p>
-            ) : (
-              <div className="overflow-x-auto rounded-lg border border-border">
-                <Table>
-                  <TableHeader className="bg-muted/40 border-border">
-                    <TableRow className="border-border hover:bg-transparent">
-                      <TableHead className="text-muted-foreground">Nombre</TableHead>
-                      <TableHead className="text-muted-foreground">Correo</TableHead>
-                      <TableHead className="text-muted-foreground">Cédula / RIF</TableHead>
-                      <TableHead className="text-muted-foreground">Teléfono</TableHead>
-                      <TableHead className="text-muted-foreground">Rol</TableHead>
-                      <TableHead className="text-muted-foreground text-right">Estado</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {cooperativa.empleados.map((emp) => (
-                      <TableRow key={emp.id} className="border-border hover:bg-muted/10">
-                        <TableCell className="font-medium text-foreground">{emp.nombre_completo}</TableCell>
-                        <TableCell className="text-muted-foreground">{emp.email || "Sin email registrado"}</TableCell>
-                        <TableCell className="text-muted-foreground font-mono text-sm">{emp.cedula_rif}</TableCell>
-                        <TableCell className="text-muted-foreground">{emp.telefono}</TableCell>
-                        <TableCell className="py-2">
-                          {emp.role === "admin_cooperativa" ? (
-                            <Badge variant="secondary" className="bg-primary/15 text-foreground font-medium">{etiquetaRol(emp.role)}</Badge>
-                          ) : (
-                            <Badge variant="secondary" className="bg-info-light text-info-deep font-medium">{etiquetaRol(emp.role)}</Badge>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {emp.isBanned ? (
-                            <Badge variant="secondary" className="bg-destructive-light text-destructive-deep">Bloqueado</Badge>
-                          ) : (
-                            <Badge variant="secondary" className={CLASE_ACTIVA}>Activo</Badge>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </TabsContent>
-
-      {/* Tab: Calificaciones */}
-      <TabsContent value="calificaciones" className="mt-4">
-        <Card className="bg-card border-border text-foreground">
-          <CardHeader>
-            <CardTitle className="text-lg">Calificaciones y reseñas ({cooperativa.calificaciones.length})</CardTitle>
-            <CardDescription className="text-muted-foreground">Historial de comentarios y valoraciones recibidas de los pasajeros.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            
-            {/* Rating Summary Card */}
-            <div className="bg-muted/30 border border-border rounded-xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
-              <div className="text-center sm:text-left">
-                <span className="text-xs text-muted-foreground uppercase tracking-wider block font-semibold">Calificación General</span>
-                <div className="flex items-center justify-center sm:justify-start gap-2 mt-1">
-                  <span className="text-4xl font-extrabold text-foreground">
-                    {cooperativa.total_calificaciones > 0 ? formatNumeroVE(Number(cooperativa.calificacion_promedio), 1) : "—"}
+      {/* Calificaciones */}
+      <TabsContent value="calificaciones" className="flex flex-col gap-4">
+        <Card>
+          <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-1">
+              <span className="text-xs text-muted-foreground">Calificación general</span>
+              <div className="flex items-center gap-3">
+                <span className="text-2xl font-semibold tracking-tight tabular-nums">
+                  {cooperativa.total_calificaciones > 0 ? formatNumeroVE(promedio, 1) : "—"}
+                </span>
+                <div className="flex flex-col gap-0.5">
+                  <Estrellas n={Math.round(promedio)} className="size-4" />
+                  <span className="text-xs text-muted-foreground">
+                    {cooperativa.total_calificaciones === 1
+                      ? "1 opinión"
+                      : `${formatNumeroVE(cooperativa.total_calificaciones, 0)} opiniones`}
                   </span>
-                  <div className="flex flex-col items-start">
-                    <div className="flex gap-0.5">
-                      {Array.from({ length: 5 }).map((_, i) => (
-                        <Star 
-                          key={i} 
-                          weight={i < Math.round(Number(cooperativa.calificacion_promedio)) ? "fill" : "regular"}
-                          aria-hidden
-                          className={`h-4 w-4 ${i < Math.round(Number(cooperativa.calificacion_promedio)) ? "text-primary-text" : "text-muted-foreground"}`} 
-                        />
-                      ))}
-                    </div>
-                    <span className="text-xs text-muted-foreground mt-0.5">{cooperativa.total_calificaciones > 0 ? `${cooperativa.total_calificaciones} opiniones en total` : "Sin calificaciones"}</span>
-                  </div>
                 </div>
               </div>
-
-              {/* Graphical distribution mockup or indicator */}
-              <div className="text-sm text-muted-foreground bg-background px-4 py-2 rounded-lg border border-border text-center sm:text-right">
-                {cooperativa.total_calificaciones === 0 ? (
-                  <div className="font-medium text-foreground">Todavía no la califican</div>
-                ) : cooperativa.calificacion_promedio >= 4.0 ? (
-                  <div className="flex items-center gap-2 text-success-text font-medium">
-                    <ShieldCheck className="h-5 w-5" /> Reputación excelente
-                  </div>
-                ) : cooperativa.calificacion_promedio >= 3.0 ? (
-                  <div className="flex items-center gap-2 text-warning-text font-medium">
-                    <Warning className="h-5 w-5" /> Reputación regular
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2 text-destructive-text font-medium">
-                    <Warning className="h-5 w-5" /> Requiere revisión
-                  </div>
-                )}
-                <span className="text-xs text-muted-foreground">Según el promedio de calificaciones</span>
-              </div>
             </div>
+            <StatusBadge
+              status={claveReputacion(promedio, cooperativa.total_calificaciones)}
+              dominio="reputacion"
+            />
+          </CardContent>
+        </Card>
 
-            {/* Individual Reviews */}
-            {cooperativa.calificaciones.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-6">Aún no se han recibido reseñas de esta cooperativa.</p>
-            ) : (
-              <div className="space-y-4">
-                {cooperativa.calificaciones.map((cal) => (
-                  <div key={cal.id} className="border border-border/80 rounded-xl p-4 bg-muted/10 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Avatar className="h-8 w-8 border border-border bg-muted">
-                          <AvatarFallback className="text-xs font-semibold text-muted-foreground bg-muted">
-                            {cal.usuario_nombre?.substring(0, 2).toUpperCase() || "US"}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div>
-                          <span className="text-sm font-semibold text-foreground block leading-tight">{cal.usuario_nombre}</span>
-                          <span className="text-xs text-muted-foreground">
-                            {formatFechaVE(cal.created_at)}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="flex gap-0.5">
-                        {Array.from({ length: 5 }).map((_, i) => (
-                          <Star 
-                            key={i} 
-                            weight={i < cal.estrellas ? "fill" : "regular"}
-                            aria-hidden
-                            className={`h-3.5 w-3.5 ${i < cal.estrellas ? "text-primary-text" : "text-muted-foreground"}`} 
-                          />
-                        ))}
+        {cooperativa.calificaciones.length === 0 ? (
+          <Card>
+            <EmptyState compacto icon={Star} title="Todavía no tiene reseñas" />
+          </Card>
+        ) : (
+          <Card className="gap-0 py-0">
+            <ul className="divide-y divide-border">
+              {cooperativa.calificaciones.map((cal) => (
+                <li key={cal.id} className="flex flex-col gap-2 px-6 py-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <Avatar className="size-8 border border-border">
+                        <AvatarFallback className="bg-muted text-xs font-semibold text-muted-foreground">
+                          {cal.usuario_nombre?.substring(0, 2).toUpperCase() || "US"}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium">{cal.usuario_nombre || "Pasajero"}</p>
+                        <p className="text-xs text-muted-foreground tabular-nums">{formatFechaVE(cal.created_at)}</p>
                       </div>
                     </div>
-                    {cal.comentario ? (
-                      <p className="text-sm text-muted-foreground pl-10 italic">&quot;{cal.comentario}&quot;</p>
-                    ) : (
-                      <p className="text-sm text-muted-foreground pl-10 italic">Sin comentarios adicionales</p>
-                    )}
+                    <span className="flex items-center gap-2">
+                      <Estrellas n={cal.estrellas} className="size-3.5" />
+                      <span className="sr-only">{cal.estrellas} de 5 estrellas</span>
+                    </span>
                   </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                  <p className="pl-11 text-sm">{cal.comentario || <Vacio texto="Sin comentario" />}</p>
+                </li>
+              ))}
+            </ul>
+          </Card>
+        )}
       </TabsContent>
 
-      {/* Tab: Balance */}
-      <TabsContent value="balance" className="mt-4">
-        <Card className="bg-card border-border text-foreground">
-          <CardHeader>
-            <CardTitle className="text-lg">Balance de comisiones</CardTitle>
-            <CardDescription className="text-muted-foreground">Estado de cuentas y liquidaciones pendientes de la cooperativa.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            
-            <div className="grid gap-4 md:grid-cols-2">
-              {/* Card 1: Comisión pendiente */}
-              <Card className="bg-muted/30 border-border text-foreground">
-                <CardContent className="pt-6">
-                  <span className="text-sm text-muted-foreground block font-medium">Comisiones pendientes</span>
-                  <div className="mt-2">
-                    <Monto
-                      usd={Number(cooperativa.comisiones_pendientes ?? 0)}
-                      tasa={tasa}
-                      moneda="USD"
-                      size="lg"
-                      className={cooperativa.comisiones_pendientes > 0 ? "text-warning-text" : "text-success-text"}
-                    />
-                  </div>
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    Suma de las comisiones calculadas y no pagadas hasta la fecha, en USD de referencia. La cooperativa
-                    las paga en bolívares a la tasa BCV del día del pago.
-                  </p>
-                </CardContent>
-              </Card>
-
-              {/* Card 2: Estatus solvencia */}
-              <Card className="bg-muted/30 border-border text-foreground flex flex-col justify-center">
-                <CardContent className="pt-6 space-y-2">
-                  <span className="text-sm text-muted-foreground block font-medium">Estado de pago</span>
-                  <div className="mt-1">
-                    {cooperativa.comisiones_pendientes > 0 ? (
-                      <div className="space-y-1">
-                        <Badge variant="secondary" className="bg-warning-light text-warning-deep text-sm font-medium">
-                          Con comisiones pendientes
-                        </Badge>
-                        <p className="text-xs text-muted-foreground">Tiene ciclos de comisiones sin pagar. Regístralos en Comisiones cuando pague.</p>
-                      </div>
-                    ) : (
-                      <div className="space-y-1">
-                        <Badge variant="secondary" className="bg-success-light text-success-deep text-sm font-medium">
-                          Al día
-                        </Badge>
-                        <p className="text-xs text-muted-foreground">Todos sus ciclos de comisiones están pagados.</p>
-                      </div>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-            
-            <p className="text-xs text-muted-foreground">
-              Para registrar el pago de un ciclo, ve a <Link href="/admin/comisiones" className="text-foreground underline decoration-primary underline-offset-4">Comisiones</Link>.
-            </p>
-          </CardContent>
-        </Card>
+      {/* Balance */}
+      <TabsContent value="balance">
+        <div className="grid gap-4 md:grid-cols-2">
+          <KpiCard
+            title="Comisiones pendientes"
+            value={<Monto usd={pendiente} tasa={tasa} moneda="USD" size="lg" />}
+            icon={Coins}
+            variant={pendiente > 0 ? "warning" : "default"}
+            href={`/admin/comisiones?cooperativa=${cooperativa.id}&estado=pendiente`}
+            accion="Ver ciclos pendientes"
+          />
+          <KpiCard
+            title="Ciclos sin pagar"
+            value={formatNumeroVE(cooperativa.ciclos_sin_pagar, 0)}
+            icon={Receipt}
+            variant={cooperativa.ciclos_sin_pagar >= 2 ? "warning" : "default"}
+            description={cooperativa.ciclos_sin_pagar === 0 ? "Al día con EnBus" : undefined}
+          />
+        </div>
       </TabsContent>
     </Tabs>
   );

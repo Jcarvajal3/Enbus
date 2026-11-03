@@ -6,22 +6,26 @@
 // único de verificación (aprobar o rechazar con motivo).
 
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { ArrowClockwise, CheckCircle, Info, Receipt, Warning } from "@phosphor-icons/react";
+import { ArrowClockwise, CheckCircle, Info, Warning } from "@phosphor-icons/react";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
+import { ErrorState } from "@/components/error-state";
 import { CeldaEnlace } from "@/components/celda-enlace";
 import { Monto } from "@/components/monto";
+import { TonoBadge } from "@/components/status-badge";
+import { TabsUrl } from "@/components/barra-filtros";
+import { TablaSkeleton } from "@/components/tabla-skeleton";
+import { PaginacionTabla, usePaginacion } from "@/components/paginacion-tabla";
 import { VerificarPagoDialog } from "@/components/pagos/verificar-pago-dialog";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
+import { Card } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useParamUrl } from "@/hooks/use-param-url";
 import { formatBs, formatUsd, type TasaRef } from "@/lib/dinero";
-import { formatFechaVE } from "@/lib/fechas";
+import { formatFechaHoraCortaVE, formatHaceTiempo } from "@/lib/fechas";
 import { humanizeError } from "@/lib/errores";
 import { formatCedula } from "@/lib/ve";
+import { ICONO_SECCION } from "@/lib/navigation";
 import { conceptoDePago, type PagadorRol, type PagoPorVerificar } from "@/lib/types/pagos";
 import { cn } from "@/lib/utils";
 import { listarPagosPorVerificar } from "./actions";
@@ -33,6 +37,8 @@ const PESTANAS: { id: Pestana; titulo: string }[] = [
   { id: "boleto", titulo: "Boletos" },
   { id: "encomienda", titulo: "Encomiendas" },
 ];
+
+const COLUMNAS = 8;
 
 const METODO: Record<string, string> = {
   PAGO_MOVIL: "Pago Móvil",
@@ -54,17 +60,6 @@ function leerPestana(valor: string | null): Pestana {
   return valor === "boleto" || valor === "encomienda" ? valor : "todos";
 }
 
-/** "hace 5 min", "hace 2 h", "ayer", "hace 3 días". */
-function haceTiempo(iso: string, ahora: number) {
-  const minutos = Math.max(0, Math.floor((ahora - new Date(iso).getTime()) / 60000));
-  if (minutos < 1) return "hace un momento";
-  if (minutos < 60) return `hace ${minutos} min`;
-  const horas = Math.floor(minutos / 60);
-  if (horas < 24) return `hace ${horas} h`;
-  const dias = Math.floor(horas / 24);
-  return dias === 1 ? "ayer" : `hace ${dias} días`;
-}
-
 function formatEnMoneda(monto: number, moneda: "VES" | "USD") {
   return moneda === "USD" ? formatUsd(monto) : formatBs(monto);
 }
@@ -73,7 +68,7 @@ function Diferencia({ pago }: { pago: PagoPorVerificar }) {
   if (pago.esperado == null || pago.declarado == null) {
     return (
       <span className="text-sm text-muted-foreground">
-        {pago.declarado == null ? "Sin monto declarado" : "Sin monto en Bs para comparar"}
+        {pago.declarado == null ? "Sin monto declarado" : "Sin monto en Bs"}
       </span>
     );
   }
@@ -90,7 +85,7 @@ function Diferencia({ pago }: { pago: PagoPorVerificar }) {
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 text-sm font-medium whitespace-nowrap",
+        "inline-flex items-center gap-1 text-sm font-medium whitespace-nowrap tabular-nums",
         falta ? "text-warning-text" : "text-info-text"
       )}
     >
@@ -105,17 +100,16 @@ function Diferencia({ pago }: { pago: PagoPorVerificar }) {
 }
 
 function BandejaPagos() {
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const pestana = leerPestana(searchParams.get("tipo"));
+  const [tipo] = useParamUrl("tipo", "todos");
+  const pestana = leerPestana(tipo);
+  // El pago abierto vive en la URL (?id=): se comparte y "Atrás" lo cierra.
+  const [pagoAbierto, setPagoAbierto] = useParamUrl("id");
 
   const [pagos, setPagos] = useState<PagoPorVerificar[]>([]);
   const [cargando, setCargando] = useState(true);
   const [errorCarga, setErrorCarga] = useState<string | null>(null);
   // Momento de la última carga: "hace X min" y "el viaje ya salió" sin leer el reloj al renderizar.
   const [ahora, setAhora] = useState(0);
-  const [pagoAbierto, setPagoAbierto] = useState<string | null>(null);
   const peticionRef = useRef(0);
 
   const cargar = useCallback(async (silencioso = false) => {
@@ -133,7 +127,7 @@ function BandejaPagos() {
       setAhora(Date.now());
     } catch (err) {
       if (n !== peticionRef.current) return;
-      console.error(err);
+      // En la recarga silenciosa se conserva la lista que ya se ve.
       if (!silencioso) setErrorCarga(humanizeError(err, "cargar los pagos por verificar"));
     } finally {
       if (n === peticionRef.current) setCargando(false);
@@ -150,78 +144,58 @@ function BandejaPagos() {
     return () => window.clearInterval(id);
   }, [cargar]);
 
-  const cambiarPestana = (valor: unknown) => {
-    const nueva = leerPestana(typeof valor === "string" ? valor : null);
-    const params = new URLSearchParams(searchParams.toString());
-    if (nueva === "todos") params.delete("tipo");
-    else params.set("tipo", nueva);
-    const query = params.toString();
-    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
-  };
-
   const cuenta = (p: Pestana) => (p === "todos" ? pagos.length : pagos.filter((x) => x.tipo_recurso === p).length);
-  const visibles = pestana === "todos" ? pagos : pagos.filter((p) => p.tipo_recurso === pestana);
+  const filtrados = pestana === "todos" ? pagos : pagos.filter((p) => p.tipo_recurso === pestana);
+  const { visibles, pagina, paginas, ir } = usePaginacion(filtrados);
+  const primeraCarga = cargando && pagos.length === 0 && !errorCarga;
 
   return (
-    <div className="space-y-6 flex flex-col h-full animate-in fade-in duration-300">
-      <PageHeader
-        title="Pagos por verificar"
-        description="Pagos que los clientes registraron desde la app. Compáralos con tu banco antes de aprobar."
-      >
-        <Button variant="outline" onClick={() => void cargar()} disabled={cargando}>
-          <ArrowClockwise className={cn("mr-2", cargando && "animate-spin")} aria-hidden />
+    <div className="flex flex-col gap-6">
+      <PageHeader title="Pagos por verificar">
+        <Button variant="outline" onClick={() => void cargar()} disabled={cargando} aria-busy={cargando || undefined}>
+          <ArrowClockwise className={cn(cargando && "motion-safe:animate-spin")} aria-hidden />
           Actualizar
         </Button>
       </PageHeader>
 
-      <Tabs value={pestana} onValueChange={cambiarPestana}>
-        <TabsList aria-label="Tipo de pago">
-          {PESTANAS.map((p) => (
-            <TabsTrigger key={p.id} value={p.id}>
-              {p.titulo}
-              {!cargando && cuenta(p.id) > 0 && (
-                <Badge variant="secondary" className="ml-1 tabular-nums">
-                  {cuenta(p.id)}
-                </Badge>
-              )}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-      </Tabs>
+      <TabsUrl
+        param="tipo"
+        defecto="todos"
+        opciones={PESTANAS.map((p) => ({ valor: p.id, etiqueta: p.titulo, conteo: cargando ? undefined : cuenta(p.id) }))}
+      />
 
-      <div className="rounded-md border bg-card">
-        {cargando && pagos.length === 0 ? (
-          <div className="flex h-40 items-center justify-center gap-3 text-muted-foreground">
-            <Spinner size="md" />
-            <span className="font-medium">Cargando pagos…</span>
-          </div>
-        ) : errorCarga && pagos.length === 0 ? (
-          <div className="flex h-40 flex-col items-center justify-center gap-3 p-4 text-center">
-            <p className="text-sm text-destructive-text">{errorCarga}</p>
-            <Button variant="outline" size="sm" onClick={() => void cargar()}>
-              <ArrowClockwise className="mr-2" aria-hidden />
-              Reintentar
-            </Button>
-          </div>
-        ) : visibles.length === 0 ? (
+      {primeraCarga ? (
+        <TablaSkeleton columnas={COLUMNAS} />
+      ) : errorCarga && pagos.length === 0 ? (
+        <Card className="p-0">
+          <ErrorState titulo="No pudimos cargar los pagos" descripcion={errorCarga} onReintentar={() => cargar()} />
+        </Card>
+      ) : filtrados.length === 0 ? (
+        <Card className="p-0">
           <EmptyState
-            icon={Receipt}
+            icon={ICONO_SECCION.pagos}
             title="Todo al día"
-            description="No hay pagos por verificar. Cuando un cliente registre un pago desde la app, aparecerá aquí."
+            description={
+              pestana === "todos"
+                ? "Aquí llegan los pagos que registran tus clientes en la app."
+                : `No hay pagos de ${pestana === "boleto" ? "boletos" : "encomiendas"} por verificar.`
+            }
           />
-        ) : (
+        </Card>
+      ) : (
+        <Card className="gap-0 overflow-hidden p-0">
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Cliente</TableHead>
                 <TableHead>Registrado</TableHead>
                 <TableHead>Concepto</TableHead>
-                <TableHead>Método</TableHead>
+                <TableHead className="hidden lg:table-cell">Método</TableHead>
                 <TableHead>Referencia</TableHead>
                 <TableHead className="text-right">Monto</TableHead>
-                <TableHead>Diferencia</TableHead>
+                <TableHead className="hidden text-right lg:table-cell">Diferencia</TableHead>
                 <TableHead className="text-right">
-                  <span className="sr-only">Acción</span>
+                  <span className="sr-only">Acciones</span>
                 </TableHead>
               </TableRow>
             </TableHeader>
@@ -231,13 +205,11 @@ function BandejaPagos() {
                   p.tasa_bcv && p.tasa_bcv_fecha ? { tasa: Number(p.tasa_bcv), fecha: p.tasa_bcv_fecha } : null;
                 const viajeSalio =
                   p.tipo_recurso === "boleto" && !!p.viaje_salida && ahora > 0 && new Date(p.viaje_salida).getTime() < ahora;
+                const cliente = p.cliente_nombre || "Sin nombre";
                 return (
-                  <TableRow key={p.pago_id} className="relative hover:bg-muted/50 transition-colors">
-                    <CeldaEnlace
-                      onAbrir={() => setPagoAbierto(p.pago_id)}
-                      etiqueta={`Verificar el pago de ${p.cliente_nombre || "Sin nombre"}`}
-                    >
-                      <span className="block">{p.cliente_nombre || "Sin nombre"}</span>
+                  <TableRow key={p.pago_id} className="relative">
+                    <CeldaEnlace onAbrir={() => setPagoAbierto(p.pago_id)} etiqueta={`Verificar el pago de ${cliente}`}>
+                      <span className="block">{cliente}</span>
                       <span className="block text-xs font-normal text-muted-foreground">
                         {[p.cliente_cedula ? formatCedula(p.cliente_cedula) : null, ROL[p.pagador_rol] ?? null]
                           .filter(Boolean)
@@ -245,62 +217,54 @@ function BandejaPagos() {
                       </span>
                     </CeldaEnlace>
                     <TableCell className="whitespace-nowrap">
-                      <span className="block text-sm">{ahora > 0 ? haceTiempo(p.creado_at, ahora) : ""}</span>
-                      <span className="block text-xs text-muted-foreground">
-                        {formatFechaVE(p.creado_at, { day: "2-digit", month: "2-digit", hour: "numeric", minute: "2-digit", hour12: true })}
+                      <span className="block text-sm">{ahora > 0 ? formatHaceTiempo(p.creado_at, new Date(ahora)) : ""}</span>
+                      <span className="block text-xs text-muted-foreground tabular-nums">
+                        {formatFechaHoraCortaVE(p.creado_at)}
                       </span>
                     </TableCell>
                     <TableCell className="max-w-[18rem]">
-                      <span className="block text-sm">{conceptoDePago(p)}</span>
-                      <span className="mt-1 flex flex-wrap gap-1">
-                        {viajeSalio && (
-                          <Badge variant="outline" className="border-warning/40 text-warning-text">
-                            El viaje ya salió
-                          </Badge>
-                        )}
-                        {p.recurso_vencido && (
-                          <Badge variant="destructive">
-                            {p.tipo_recurso === "encomienda" ? "Envío cerrado" : "Boletos vencidos"}
-                          </Badge>
-                        )}
-                      </span>
+                      <span className="block text-sm whitespace-normal">{conceptoDePago(p)}</span>
+                      {(viajeSalio || p.recurso_vencido) && (
+                        <span className="mt-1 flex flex-wrap gap-1">
+                          {viajeSalio && <TonoBadge tono="pendiente">El viaje ya salió</TonoBadge>}
+                          {p.recurso_vencido && (
+                            <TonoBadge tono="peligro">
+                              {p.tipo_recurso === "encomienda" ? "Envío cerrado" : "Boletos vencidos"}
+                            </TonoBadge>
+                          )}
+                        </span>
+                      )}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="hidden lg:table-cell">
                       <span className="block text-sm">{(p.metodo_tipo && METODO[p.metodo_tipo]) || "Pago digital"}</span>
                       {p.metodo_tipo !== "ZELLE" && p.banco_emisor && (
                         <span className="block text-xs text-muted-foreground">Desde {p.banco_emisor}</span>
                       )}
                     </TableCell>
                     <TableCell>
-                      <span className="font-mono text-sm">{p.numero_referencia || "—"}</span>
+                      <span className="font-mono text-sm text-foreground">{p.numero_referencia || "—"}</span>
                       {p.referencia_repetida && (
-                        <span className="mt-1 flex items-center gap-1 text-xs text-warning-text">
-                          <Warning weight="fill" className="size-3" aria-hidden />
+                        <span className="mt-1 flex items-center gap-1 text-xs font-medium text-warning-text">
+                          <Warning weight="fill" className="size-3.5 shrink-0" aria-hidden />
                           Repetida
                         </span>
                       )}
                     </TableCell>
                     <TableCell className="text-right">
-                      <Monto
-                        usd={p.monto_usd}
-                        bs={p.monto_bs}
-                        tasa={tasa}
-                        moneda={p.moneda}
-                        size="sm"
-                        align="right"
-                      />
+                      <Monto usd={p.monto_usd} bs={p.monto_bs} tasa={tasa} moneda={p.moneda} size="sm" align="right" />
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="hidden text-right lg:table-cell">
                       <Diferencia pago={p} />
                     </TableCell>
                     <TableCell className="text-right">
                       <Button
                         size="sm"
+                        variant="outline"
                         className="relative z-10"
                         onClick={() => setPagoAbierto(p.pago_id)}
-                        aria-label={`Verificar el pago de ${p.cliente_nombre || "Sin nombre"}`}
+                        aria-label={`Verificar el pago de ${cliente}`}
                       >
-                        Verificar
+                        Verificar pago
                       </Button>
                     </TableCell>
                   </TableRow>
@@ -308,8 +272,9 @@ function BandejaPagos() {
               })}
             </TableBody>
           </Table>
-        )}
-      </div>
+          <PaginacionTabla pagina={pagina} paginas={paginas} onCambio={ir} />
+        </Card>
+      )}
 
       {pagoAbierto && (
         <VerificarPagoDialog
@@ -332,9 +297,9 @@ export default function PagosPorVerificarPage() {
   return (
     <Suspense
       fallback={
-        <div className="flex h-40 items-center justify-center gap-3 text-muted-foreground">
-          <Spinner size="md" />
-          <span className="font-medium">Cargando pagos…</span>
+        <div className="flex flex-col gap-6">
+          <PageHeader title="Pagos por verificar" />
+          <TablaSkeleton columnas={COLUMNAS} />
         </div>
       }
     >

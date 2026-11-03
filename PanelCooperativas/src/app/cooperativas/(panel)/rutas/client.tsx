@@ -1,18 +1,23 @@
 "use client";
 
 import { useId, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { DotsThree, PencilSimple, Plus, Prohibit, ArrowCounterClockwise } from "@phosphor-icons/react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Badge } from "@/components/ui/badge";
+import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { ConfirmDialog } from "@/components/confirm-dialog";
-import { Plus, DotsThree, PencilSimple, MapTrifold, WarningCircle } from "@phosphor-icons/react";
+import { AvisoError } from "@/components/aviso-error";
+import { ErrorState } from "@/components/error-state";
+import { StatusBadge } from "@/components/status-badge";
+import { PaginacionTabla, usePaginacion } from "@/components/paginacion-tabla";
 import { ESTADOS_VENEZUELA, CIUDADES_POR_ESTADO } from "@/lib/data/venezuela";
 import { guardarRuta, toggleActivaRuta, checkDesactivarRuta } from "./actions";
 import { PageHeader } from "@/components/page-header";
@@ -21,12 +26,25 @@ import { requireOnline } from "@/components/connectivity-banner";
 import { Monto } from "@/components/monto";
 import { useTasaBCV } from "@/components/tasa-bcv-provider";
 import { formatBs, formatUsd, usdABs } from "@/lib/dinero";
-import { toast } from "sonner";
+import { avisarError, avisarExito } from "@/lib/avisos";
 import { humanizeError } from "@/lib/errores";
 import { formatDuracion } from "@/lib/fechas";
 import { formatCiudad, mismaCiudad } from "@/lib/ciudades";
+import { ICONO_SECCION } from "@/lib/navigation";
 import { cn } from "@/lib/utils";
 import { CeldaEnlace } from "@/components/celda-enlace";
+
+/** Fila de `rutas` que usa esta pantalla. */
+export type Ruta = {
+  id: string;
+  estado_origen: string;
+  ciudad_origen: string;
+  estado_destino: string;
+  ciudad_destino: string;
+  precio_pasaje: number | string | null;
+  duracion_estimada_min: number | null;
+  activa: boolean;
+};
 
 const MSG_MISMA_CIUDAD = "El origen y el destino deben ser ciudades distintas.";
 
@@ -60,30 +78,26 @@ function leerPrecio(texto: string): number {
   return /^\d+(\.\d+)?$/.test(normalizado) ? Number(normalizado) : NaN;
 }
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
-function NombreRuta({ ruta }: { ruta: any }) {
+function NombreRuta({ ruta }: { ruta: Ruta }) {
   return (
-    <span className="flex items-center gap-2">
-      <MapTrifold className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-      <span>{formatCiudad(ruta.ciudad_origen)}, {formatCiudad(ruta.estado_origen)}</span>
-      <span className="text-muted-foreground">→</span>
-      <span>{formatCiudad(ruta.ciudad_destino)}, {formatCiudad(ruta.estado_destino)}</span>
+    <span className="flex flex-col">
+      <span>
+        {formatCiudad(ruta.ciudad_origen)} → {formatCiudad(ruta.ciudad_destino)}
+      </span>
+      <span className="text-xs font-normal text-muted-foreground">
+        {formatCiudad(ruta.estado_origen)} → {formatCiudad(ruta.estado_destino)}
+      </span>
     </span>
   );
 }
 
-export function RutasClient({
-  rutas,
-  userRole,
-}: {
-  rutas: any[];
-  userRole: string;
-}) {
-  const isAdmin = userRole === "admin_cooperativa";
+export function RutasClient({ rutas, errorCarga }: { rutas: Ruta[]; errorCarga: string | null }) {
+  const router = useRouter();
   const uid = useId();
+  const { visibles, pagina, paginas, ir } = usePaginacion(rutas);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingRuta, setEditingRuta] = useState<any | null>(null);
+  const [editingRuta, setEditingRuta] = useState<Ruta | null>(null);
   const [isPending, startTransition] = useTransition();
   const [activaSwitch, setActivaSwitch] = useState(true);
 
@@ -126,7 +140,7 @@ export function RutasClient({
     setIsModalOpen(true);
   }
 
-  function openEditModal(ruta: any) {
+  function openEditModal(ruta: Ruta) {
     setEditingRuta(ruta);
     setEstadoOrigen(ruta.estado_origen);
     setCiudadOrigen(ruta.ciudad_origen);
@@ -142,14 +156,14 @@ export function RutasClient({
     setIsModalOpen(true);
   }
 
-  async function handleToggleRuta(ruta: any) {
+  async function handleToggleRuta(ruta: Ruta) {
     if (ruta.activa) {
       // Intento de desactivar
       startTransition(async () => {
         try {
           const check = await checkDesactivarRuta(ruta.id);
           if (check.error) {
-            toast.error(check.error);
+            avisarError(check.error);
             return;
           }
           if (check.hasViajes) {
@@ -162,11 +176,11 @@ export function RutasClient({
           } else {
             // desactivar seguro
             const res = await requireOnline(() => toggleActivaRuta(ruta.id, false))();
-            if (res.error) toast.error(res.error);
-            else toast.success(`Ruta ${formatCity(ruta.ciudad_origen)} → ${formatCity(ruta.ciudad_destino)} desactivada.`);
+            if (res.error) avisarError(res.error);
+            else avisarExito(`Ruta ${formatCity(ruta.ciudad_origen)} → ${formatCity(ruta.ciudad_destino)} desactivada.`);
           }
-        } catch (err: any) {
-          toast.error(humanizeError(err, "desactivar la ruta"));
+        } catch (err) {
+          avisarError(humanizeError(err, "desactivar la ruta"));
         }
       });
     } else {
@@ -174,9 +188,10 @@ export function RutasClient({
       startTransition(async () => {
         try {
           const res = await requireOnline(() => toggleActivaRuta(ruta.id, true))();
-          if (res.error) toast.error(res.error);
-        } catch (err: any) {
-          toast.error(humanizeError(err, "reactivar la ruta"));
+          if (res.error) avisarError(res.error);
+          else avisarExito(`Ruta ${formatCity(ruta.ciudad_origen)} → ${formatCity(ruta.ciudad_destino)} reactivada.`);
+        } catch (err) {
+          avisarError(humanizeError(err, "reactivar la ruta"));
         }
       });
     }
@@ -187,10 +202,10 @@ export function RutasClient({
     try {
       const res = await requireOnline(() => toggleActivaRuta(alertData.id, false))();
       if (res.error) return { ok: false, error: res.error };
-    } catch (err: any) {
+    } catch (err) {
       return { ok: false, error: humanizeError(err, "desactivar la ruta") };
     }
-    toast.success(`Ruta ${alertData.nombre} desactivada.`);
+    avisarExito(`Ruta ${alertData.nombre} desactivada.`);
     return { ok: true };
   }
 
@@ -204,10 +219,10 @@ export function RutasClient({
           setFormError(res.error);
           setErrorCampo("campo" in res && res.campo ? res.campo : null);
         } else {
-          toast.success(editingRuta ? "Ruta actualizada." : "Ruta creada.");
+          avisarExito(editingRuta ? "Ruta actualizada." : "Ruta creada.");
           setIsModalOpen(false);
         }
-      } catch (err: any) {
+      } catch (err) {
         setFormError(humanizeError(err, "guardar la ruta"));
       }
     });
@@ -237,142 +252,125 @@ export function RutasClient({
     guardar(formData);
   }
 
-  function confirmarPrecioAlto() {
+  async function confirmarPrecioAlto() {
     const formData = precioAltoPendiente;
     setPrecioAltoPendiente(null);
     if (formData) guardar(formData);
+    return { ok: true };
   }
 
   const formatCity = (val: string | undefined) => formatCiudad(val);
-  const nombreRuta = (ruta: any) => `${formatCity(ruta.ciudad_origen)} → ${formatCity(ruta.ciudad_destino)}`;
+  const nombreRuta = (ruta: Ruta) => `${formatCity(ruta.ciudad_origen)} → ${formatCity(ruta.ciudad_destino)}`;
   const mismaSeleccion = Boolean(ciudadOrigen && ciudadDestino && mismaCiudad(ciudadOrigen, ciudadDestino));
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader title="Rutas" description="Tus rutas con su duración y el precio del pasaje en USD.">
-        {isAdmin && (
+      <PageHeader title="Rutas" description="Duración y precio del pasaje en USD.">
+        {rutas.length > 0 && (
           <Button onClick={openCreateModal}>
-            <Plus className="mr-2 h-4 w-4" weight="bold" aria-hidden />
+            <Plus aria-hidden />
             Crear ruta
           </Button>
         )}
       </PageHeader>
 
-      <div className="rounded-md border bg-card">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Origen → Destino</TableHead>
-              <TableHead>Duración</TableHead>
-              <TableHead>Precio del pasaje</TableHead>
-              <TableHead>Estado</TableHead>
-              {isAdmin && <TableHead className="text-right">Acciones</TableHead>}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {rutas.map((ruta) => (
-              <TableRow key={ruta.id} className={cn(isAdmin && "relative", !ruta.activa && "text-muted-foreground")}>
-                {isAdmin ? (
+      {errorCarga ? (
+        <Card className="p-0">
+          <ErrorState titulo="No pudimos cargar las rutas" descripcion={errorCarga} onReintentar={() => router.refresh()} />
+        </Card>
+      ) : rutas.length === 0 ? (
+        <Card className="p-0">
+          <EmptyState
+            icon={ICONO_SECCION.rutas}
+            title="Todavía no tienes rutas"
+            description="Crea una con su duración y su precio para programar viajes."
+            action={
+              <Button onClick={openCreateModal}>
+                <Plus aria-hidden />
+                Crear ruta
+              </Button>
+            }
+          />
+        </Card>
+      ) : (
+        <Card className="gap-0 overflow-hidden p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Ruta</TableHead>
+                <TableHead>Duración</TableHead>
+                <TableHead className="text-right">Precio del pasaje</TableHead>
+                <TableHead>Estado</TableHead>
+                <TableHead className="text-right">
+                  <span className="sr-only">Acciones</span>
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {visibles.map((ruta) => (
+                <TableRow key={ruta.id} className={cn("relative", !ruta.activa && "text-muted-foreground")}>
                   <CeldaEnlace onAbrir={() => openEditModal(ruta)} etiqueta={`Editar ruta ${nombreRuta(ruta)}`}>
                     <NombreRuta ruta={ruta} />
                   </CeldaEnlace>
-                ) : (
-                  <TableCell className="font-medium">
-                    <NombreRuta ruta={ruta} />
+                  <TableCell className="tabular-nums">{formatDuracion(Number(ruta.duracion_estimada_min) || 0)}</TableCell>
+                  <TableCell className="text-right">
+                    <Monto usd={Number(ruta.precio_pasaje)} size="sm" align="right" />
                   </TableCell>
-                )}
-                <TableCell>{formatDuracion(Number(ruta.duracion_estimada_min) || 0)}</TableCell>
-                <TableCell>
-                  <Monto usd={Number(ruta.precio_pasaje)} size="sm" />
-                </TableCell>
-                <TableCell>
-                  {ruta.activa ? (
-                    <Badge variant="secondary" className="bg-success-light text-success-deep">Activa</Badge>
-                  ) : (
-                    <Badge variant="secondary" className="bg-muted text-muted-foreground">Inactiva</Badge>
-                  )}
-                </TableCell>
-                
-                {isAdmin && (
+                  <TableCell>
+                    <StatusBadge status={ruta.activa ? "ACTIVO" : "INACTIVO"} dominio="recurso" />
+                  </TableCell>
                   <TableCell className="text-right">
                     <DropdownMenu>
-                      <DropdownMenuTrigger className="relative z-10 inline-flex h-8 w-8 items-center justify-center rounded-md p-0 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50">
-                        <span className="sr-only">Más acciones de la ruta {nombreRuta(ruta)}</span>
-                        <DotsThree className="h-4 w-4" weight="bold" aria-hidden />
+                      <DropdownMenuTrigger
+                        className={cn(buttonVariants({ variant: "ghost", size: "icon-sm" }), "relative z-10")}
+                        aria-label={`Más acciones de la ruta ${nombreRuta(ruta)}`}
+                      >
+                        <DotsThree aria-hidden />
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem onClick={() => openEditModal(ruta)}>
-                          <PencilSimple className="mr-2 h-4 w-4" aria-hidden />
+                          <PencilSimple aria-hidden />
                           Editar
                         </DropdownMenuItem>
-                        <DropdownMenuItem 
+                        <DropdownMenuItem
                           onClick={() => handleToggleRuta(ruta)}
-                          className={ruta.activa ? "text-destructive-text focus:text-destructive-text" : ""}
+                          className={ruta.activa ? "text-destructive-text focus:text-destructive-text" : undefined}
                         >
-                          {ruta.activa ? "Desactivar" : "Reactivar"}
+                          {ruta.activa ? <Prohibit aria-hidden /> : <ArrowCounterClockwise aria-hidden />}
+                          {ruta.activa ? "Desactivar ruta" : "Reactivar ruta"}
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </TableCell>
-                )}
-              </TableRow>
-            ))}
-            
-            {rutas.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={isAdmin ? 5 : 4} className="h-48 text-center text-muted-foreground p-0">
-                  <EmptyState
-                    icon={MapTrifold}
-                    title="Todavía no tienes rutas."
-                    description={
-                      isAdmin
-                        ? "Crea tu primera ruta con su duración y su precio en USD para poder programar viajes."
-                        : "Cuando el administrador cree rutas, aparecerán aquí."
-                    }
-                    action={
-                      isAdmin ? (
-                        <Button onClick={openCreateModal}>
-                          <Plus className="h-4 w-4" weight="bold" aria-hidden />
-                          Crear tu primera ruta
-                        </Button>
-                      ) : undefined
-                    }
-                  />
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </div>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+          <PaginacionTabla pagina={pagina} paginas={paginas} onCambio={ir} />
+        </Card>
+      )}
 
       <Dialog open={isModalOpen} onOpenChange={(abierto) => !isPending && setIsModalOpen(abierto)}>
-        <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-xl">
+        <DialogContent>
           <DialogHeader>
             <DialogTitle>{editingRuta ? "Editar ruta" : "Crear ruta"}</DialogTitle>
           </DialogHeader>
-          
+
           {/* onSubmit (no `action`): React no reinicia el formulario si hay error o se pide confirmar el precio. */}
           <form
             onSubmit={(e) => {
               e.preventDefault();
               handleSubmit(new FormData(e.currentTarget));
             }}
+            className="flex flex-col gap-6"
           >
-            <div className="grid gap-6 py-4">
-              {formError && (
-                <div
-                  role="alert"
-                  className="flex items-start gap-2 rounded-xl border border-destructive/40 bg-destructive-light p-3 text-sm text-destructive-deep"
-                >
-                  <WarningCircle className="mt-0.5 size-4 shrink-0" weight="fill" aria-hidden />
-                  <p>{formError}</p>
-                </div>
-              )}
+            <div className="grid gap-4">
+              {formError && <AvisoError>{formError}</AvisoError>}
               <div className="grid grid-cols-2 gap-4">
                 <div className="grid gap-2">
                   <Label htmlFor={`${uid}-estado-origen`}>Estado de origen</Label>
                   <Select name="estado_origen" value={estadoOrigen} onValueChange={(val) => { setEstadoOrigen(val ?? ""); setCiudadOrigen(""); }} required>
-                    <SelectTrigger id={`${uid}-estado-origen`}><SelectValue placeholder="Elige el estado" /></SelectTrigger>
+                    <SelectTrigger id={`${uid}-estado-origen`} className="w-full"><SelectValue placeholder="Elige el estado" /></SelectTrigger>
                     <SelectContent>
                       {ESTADOS_VENEZUELA.map(e => <SelectItem key={e.value} value={e.value}>{e.label}</SelectItem>)}
                     </SelectContent>
@@ -381,7 +379,7 @@ export function RutasClient({
                 <div className="grid gap-2">
                   <Label htmlFor={`${uid}-ciudad-origen`}>Ciudad de origen</Label>
                   <Select name="ciudad_origen" value={ciudadOrigen} onValueChange={(val) => { setCiudadOrigen(val ?? ""); if (errorCampo === "destino") { setFormError(null); setErrorCampo(null); } }} disabled={!estadoOrigen} required>
-                    <SelectTrigger id={`${uid}-ciudad-origen`}><SelectValue placeholder="Elige la ciudad" /></SelectTrigger>
+                    <SelectTrigger id={`${uid}-ciudad-origen`} className="w-full"><SelectValue placeholder="Elige la ciudad" /></SelectTrigger>
                     <SelectContent>
                       {estadoOrigen && CIUDADES_POR_ESTADO[estadoOrigen]?.map(c => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}
                     </SelectContent>
@@ -393,7 +391,7 @@ export function RutasClient({
                 <div className="grid gap-2">
                   <Label htmlFor={`${uid}-estado-destino`}>Estado de destino</Label>
                   <Select name="estado_destino" value={estadoDestino} onValueChange={(val) => { setEstadoDestino(val ?? ""); setCiudadDestino(""); }} required>
-                    <SelectTrigger id={`${uid}-estado-destino`}><SelectValue placeholder="Elige el estado" /></SelectTrigger>
+                    <SelectTrigger id={`${uid}-estado-destino`} className="w-full"><SelectValue placeholder="Elige el estado" /></SelectTrigger>
                     <SelectContent>
                       {ESTADOS_VENEZUELA.map(e => <SelectItem key={e.value} value={e.value}>{e.label}</SelectItem>)}
                     </SelectContent>
@@ -404,6 +402,7 @@ export function RutasClient({
                   <Select name="ciudad_destino" value={ciudadDestino} onValueChange={(val) => { setCiudadDestino(val ?? ""); if (errorCampo === "destino") { setFormError(null); setErrorCampo(null); } }} disabled={!estadoDestino} required>
                     <SelectTrigger
                       id={`${uid}-ciudad-destino`}
+                      className="w-full"
                       aria-invalid={mismaSeleccion || errorCampo === "destino" ? true : undefined}
                       aria-describedby={mismaSeleccion ? `${uid}-misma-ciudad` : undefined}
                     >
@@ -415,17 +414,17 @@ export function RutasClient({
                   </Select>
                 </div>
                 {mismaSeleccion && (
-                  <p id={`${uid}-misma-ciudad`} className="col-span-2 -mt-2 text-sm text-destructive-text">
+                  <p id={`${uid}-misma-ciudad`} className="col-span-2 text-sm text-destructive-text">
                     {MSG_MISMA_CIUDAD}
                   </p>
                 )}
               </div>
 
               <fieldset className="grid gap-2">
-                <legend className="mb-2 text-sm font-medium">Duración del viaje</legend>
+                <legend className="mb-2 text-sm font-medium text-foreground">Duración del viaje</legend>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="grid gap-2">
-                    <Label htmlFor={`${uid}-horas`} className="text-xs text-muted-foreground">Horas</Label>
+                    <Label htmlFor={`${uid}-horas`}>Horas</Label>
                     <Input
                       id={`${uid}-horas`}
                       type="number"
@@ -433,14 +432,14 @@ export function RutasClient({
                       name="duracion_horas"
                       min={0}
                       max={48}
+                      placeholder="Ej.: 8"
                       value={horas}
                       onChange={(e) => { setHoras(e.target.value); if (errorCampo === "duracion") { setFormError(null); setErrorCampo(null); } }}
                       aria-invalid={errorCampo === "duracion" ? true : undefined}
-                      aria-describedby={`${uid}-duracion-ayuda`}
                     />
                   </div>
                   <div className="grid gap-2">
-                    <Label htmlFor={`${uid}-minutos`} className="text-xs text-muted-foreground">Minutos</Label>
+                    <Label htmlFor={`${uid}-minutos`}>Minutos</Label>
                     <Input
                       id={`${uid}-minutos`}
                       type="number"
@@ -448,46 +447,43 @@ export function RutasClient({
                       name="duracion_minutos"
                       min={0}
                       max={59}
+                      placeholder="Ej.: 30"
                       value={minutos}
                       onChange={(e) => { setMinutos(e.target.value); if (errorCampo === "duracion") { setFormError(null); setErrorCampo(null); } }}
                       aria-invalid={errorCampo === "duracion" ? true : undefined}
-                      aria-describedby={`${uid}-duracion-ayuda`}
                     />
                   </div>
                 </div>
-                <p id={`${uid}-duracion-ayuda`} className="text-xs text-muted-foreground">Ejemplo: 8 h 30 min</p>
               </fieldset>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="grid gap-2 col-span-2">
-                  <Label htmlFor="precio_pasaje">Precio del pasaje (USD)</Label>
-                  <Input
-                    id="precio_pasaje"
-                    type="text"
-                    inputMode="decimal"
-                    autoComplete="off"
-                    name="precio_pasaje"
-                    placeholder="Ej.: 15,00"
-                    value={precioTexto}
-                    onChange={(e) => setPrecioTexto(e.target.value)}
-                    aria-describedby="precio_pasaje_ayuda"
-                    required
-                  />
-                </div>
-                <p id="precio_pasaje_ayuda" className="col-span-2 -mt-2 text-xs text-muted-foreground">
-                  Es el precio de referencia. El pasajero paga en bolívares a la tasa BCV del día
+              <div className="grid gap-2">
+                <Label htmlFor={`${uid}-precio`}>Precio del pasaje (USD)</Label>
+                <Input
+                  id={`${uid}-precio`}
+                  type="text"
+                  inputMode="decimal"
+                  autoComplete="off"
+                  name="precio_pasaje"
+                  placeholder="Ej.: 15,00"
+                  value={precioTexto}
+                  onChange={(e) => setPrecioTexto(e.target.value)}
+                  aria-describedby={`${uid}-precio-ayuda`}
+                  required
+                />
+                <p id={`${uid}-precio-ayuda`} className="text-sm text-muted-foreground">
+                  El pasajero paga en Bs a la tasa BCV del día
                   {tasa && precioValido
                     ? ` (hoy ≈ ${formatBs(usdABs(precioUsd, tasa.tasa))}).`
                     : tasa
                       ? "."
-                      : " (hoy no hay tasa BCV registrada)."}
+                      : " (hoy no hay tasa registrada)."}
                 </p>
               </div>
 
-              <div className="flex items-center justify-between rounded-lg border p-4">
-                <div className="space-y-0.5">
-                  <Label htmlFor={`${uid}-activa`} className="text-base">Ruta activa</Label>
-                  <p className="text-sm text-muted-foreground">Las rutas activas pueden ser programadas para viajes.</p>
+              <div className="flex items-center justify-between gap-4 rounded-md border border-border p-4">
+                <div className="flex flex-col gap-0.5">
+                  <Label htmlFor={`${uid}-activa`}>Ruta activa</Label>
+                  <p className="text-sm text-muted-foreground">Solo las activas se pueden programar.</p>
                 </div>
                 <Switch
                   id={`${uid}-activa`}
@@ -503,6 +499,7 @@ export function RutasClient({
                 Cancelar
               </Button>
               <Button type="submit" disabled={isPending || mismaSeleccion} aria-busy={isPending || undefined}>
+                {isPending && <Spinner size="sm" aria-hidden />}
                 {isPending ? "Guardando…" : "Guardar ruta"}
               </Button>
             </DialogFooter>
@@ -530,30 +527,25 @@ export function RutasClient({
         onConfirm={forceDesactivar}
       />
 
-      <AlertDialog
+      <ConfirmDialog
         open={precioAltoPendiente !== null}
         onOpenChange={(abierto) => {
           if (!abierto) setPrecioAltoPendiente(null);
         }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>¿Seguro que el precio está en dólares?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Escribiste <strong>{Number.isFinite(precioAltoUsd) ? formatUsd(precioAltoUsd) : ""}</strong> como precio del
-              pasaje.
-              {tasa && Number.isFinite(precioAltoUsd)
-                ? ` A la tasa BCV de hoy, el pasajero pagaría ${formatBs(usdABs(precioAltoUsd, tasa.tasa))}.`
-                : ""}{" "}
-              Si ese monto está en bolívares, conviértelo a dólares antes de guardar.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel autoFocus>Corregir precio</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmarPrecioAlto}>Sí, está en dólares</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        titulo="¿El precio está en dólares?"
+        descripcion={
+          <>
+            Escribiste <strong className="font-semibold text-foreground">{Number.isFinite(precioAltoUsd) ? formatUsd(precioAltoUsd) : ""}</strong>
+            {tasa && Number.isFinite(precioAltoUsd)
+              ? `: a la tasa de hoy, el pasajero pagaría ${formatBs(usdABs(precioAltoUsd, tasa.tasa))}.`
+              : "."}{" "}
+            Si está en bolívares, conviértelo antes de guardar.
+          </>
+        }
+        verbo="Guardar en dólares"
+        textoCancelar="Corregir precio"
+        onConfirm={confirmarPrecioAlto}
+      />
     </div>
   );
 }

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FlatList, ListRenderItem, RefreshControl } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
-import { Bus, CheckCircle, ClockCountdown } from 'phosphor-react-native';
+import { ClockCounterClockwise, Ticket } from 'phosphor-react-native';
 import { useAuth } from '@/src/contexts/AuthContext';
 import { useRealtime } from '@/src/hooks/useRealtime';
 import { TransactionCard } from '@/src/components/TransactionCard';
@@ -64,7 +64,7 @@ const SELECT_BOLETOS = `id, codigo_boleto, asiento, estado, created_at, compra_i
     numero_referencia, banco_emisor, monto, monto_bs, moneda, monto_declarado,
     tasa_bcv, tasa_bcv_fecha, created_at )`;
 
-/** "Asiento 14 · Sale vie. 04/10 · 8:30 a. m." (la salida, no la fecha de compra). */
+/** "Asiento 14 · Sale vie. 4 oct. · 8:30 a. m." (la salida, no la fecha de compra). */
 function subtituloBoleto(b: BoletoRow): string {
   const salida = b.viajes?.fecha_hora_salida;
   const partes: string[] = [];
@@ -220,21 +220,20 @@ export default function BoletosScreen() {
         />
       ) : activeTab === 'activos' ? (
         <EmptyState
-          icon={CheckCircle}
+          icon={Ticket}
           title="Sin boletos activos"
-          description="Aquí verás tus asientos apartados y tus boletos pagados. Empieza por buscar un viaje."
+          description="Busca un viaje y aparta tu asiento."
           action={{
             children: 'Buscar viaje',
-            icon: Bus,
-            variant: 'accent',
+            icon: Ticket,
             onPress: () => router.push('/boletos/buscar'),
           }}
         />
       ) : (
         <EmptyState
-          icon={ClockCountdown}
-          title="Sin historial aún"
-          description="Tus viajes realizados, cancelados y vencidos aparecerán aquí."
+          icon={ClockCounterClockwise}
+          title="Sin historial todavía"
+          description="Aquí quedan tus viajes realizados y cancelados."
         />
       ),
     [activeTab, router, errorSinDatos, errorTexto, refetch]
@@ -242,19 +241,15 @@ export default function BoletosScreen() {
 
   return (
     <Screen>
-      <ScreenHeader
-        title="Mis boletos"
-        subtitle="Tus pasajes, reservas y pases de abordaje"
-        right={<HeaderActions />}
-      />
+      <ScreenHeader title="Mis boletos" right={<HeaderActions />} />
 
       <Gutter style={{ paddingBottom: Spacing.lg }}>
         <SegmentedControl<TabType>
           value={activeTab}
           onChange={setActiveTab}
           options={[
-            { value: 'activos', label: 'Activos', icon: CheckCircle, badge: counts.activos },
-            { value: 'historial', label: 'Historial', icon: ClockCountdown },
+            { value: 'activos', label: 'Activos', icon: Ticket, badge: counts.activos },
+            { value: 'historial', label: 'Historial', icon: ClockCounterClockwise },
           ]}
         />
       </Gutter>
@@ -282,8 +277,8 @@ export default function BoletosScreen() {
             <RefreshControl
               refreshing={refreshing}
               onRefresh={onRefresh}
-              colors={[Colors.accent]}
-              tintColor={Colors.accent}
+              colors={[Colors.accentStrong]}
+              tintColor={Colors.accentStrong}
             />
           }
           removeClippedSubviews
@@ -296,13 +291,7 @@ export default function BoletosScreen() {
       {/* Oculto en el estado vacío: el estado vacío ya ofrece la acción. */}
       {filteredData.length > 0 && (
         <FloatingBar tabbed>
-          <Button
-            variant="gradient"
-            icon={Bus}
-            glow
-            fullWidth
-            onPress={() => router.push('/boletos/buscar')}
-          >
+          <Button icon={Ticket} fullWidth onPress={() => router.push('/boletos/buscar')}>
             Buscar viaje
           </Button>
         </FloatingBar>

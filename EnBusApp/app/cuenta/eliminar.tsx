@@ -18,8 +18,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '@/src/utils/supabase';
 import { useAuth } from '@/src/contexts/AuthContext';
 import { esErrorEB, humanizeError, parseDetalleEB } from '@/src/utils/errores';
+import { useVolver } from '@/src/hooks/useVolver';
 import { useToast } from '@/src/components/Toast';
-import { PageTransition } from '@/src/components/PageTransition';
 import {
   Button,
   Card,
@@ -61,6 +61,7 @@ function leerActividad(err: unknown): Actividad {
 
 export default function EliminarCuentaScreen() {
   const router = useRouter();
+  const atras = useVolver('/perfil');
   const toast = useToast();
   const { user, limpiarAvisoSesion } = useAuth();
   const correo = user?.email ?? 'tu correo';
@@ -129,119 +130,116 @@ export default function EliminarCuentaScreen() {
 
   return (
     <Screen>
-      <PageTransition>
-        <ScreenHeader
-          variant="compact"
-          title="Eliminar mi cuenta"
-          onBack={() => router.back()}
-        />
+      <ScreenHeader variant="compact" title="Eliminar mi cuenta" onBack={atras} />
 
-        <ScrollView
-          contentContainerStyle={scrollContent()}
-          showsVerticalScrollIndicator={false}
-        >
-          {actividad ? (
-            <View
-              style={[s.actividad, { backgroundColor: avisoPaleta.bg, borderColor: avisoPaleta.border }]}
-              accessibilityRole="alert"
-              accessibilityLiveRegion="assertive"
-            >
-              <View style={s.actividadHead}>
-                <WarningCircle color={avisoPaleta.text} weight="fill" size={Sizes.icon.lg} />
-                <Text variant="secondary" color={avisoPaleta.text} style={s.flex}>
-                  {actividad.mensaje}
-                </Text>
-              </View>
-              <View style={s.actividadLinks}>
-                {actividad.verBoletos ? (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    icon={Ticket}
-                    onPress={() => router.dismissTo('/(tabs)/boletos')}
-                  >
-                    Ver mis boletos
-                  </Button>
-                ) : null}
-                {actividad.verEncomiendas ? (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    icon={Package}
-                    onPress={() => router.dismissTo('/(tabs)/encomiendas')}
-                  >
-                    Ver mis encomiendas
-                  </Button>
-                ) : null}
-              </View>
+      <ScrollView
+        contentContainerStyle={scrollContent({ top: Spacing['2xl'] })}
+        showsVerticalScrollIndicator={false}
+      >
+        {actividad ? (
+          <View
+            style={[s.actividad, { backgroundColor: avisoPaleta.bg, borderColor: avisoPaleta.border }]}
+            accessibilityRole="alert"
+            accessibilityLiveRegion="assertive"
+          >
+            <View style={s.actividadHead}>
+              <WarningCircle color={avisoPaleta.text} weight="fill" size={Sizes.icon.lg} />
+              <Text variant="secondary" color={avisoPaleta.text} style={s.flex}>
+                {actividad.mensaje}
+              </Text>
             </View>
-          ) : null}
-
-          <Card tone="sunken" padding="md" elevated={false}>
-            <Text variant="bodyStrong" style={s.lead}>
-              Esto es lo que pasa:
-            </Text>
-            {puntos.map((p) => (
-              <View key={p} style={s.punto}>
-                <Text variant="secondary" importantForAccessibility="no" accessibilityElementsHidden>
-                  •
-                </Text>
-                <Text variant="secondary" style={s.flex}>
-                  {p}
-                </Text>
-              </View>
-            ))}
-          </Card>
-
-          <View style={s.section}>
-            <SectionLabel>¿Por qué te vas? (opcional)</SectionLabel>
-            <View style={s.chips} accessibilityRole="radiogroup" accessibilityLabel="¿Por qué te vas? (opcional)">
-              {MOTIVOS.map((m) => (
-                <Chip
-                  key={m}
-                  label={m}
-                  selected={motivo === m}
-                  onPress={() => setMotivo((prev) => (prev === m ? null : m))}
-                />
-              ))}
+            <View style={s.actividadLinks}>
+              {actividad.verBoletos ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  icon={Ticket}
+                  onPress={() => router.dismissTo('/(tabs)/boletos')}
+                >
+                  Ir a Mis boletos
+                </Button>
+              ) : null}
+              {actividad.verEncomiendas ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  icon={Package}
+                  onPress={() => router.dismissTo('/(tabs)/encomiendas')}
+                >
+                  Ir a Mis encomiendas
+                </Button>
+              ) : null}
             </View>
           </View>
+        ) : null}
 
-          <Pressable
-            onPress={() => {
-              Haptics.selectionAsync();
-              setEntiendo((v) => !v);
-            }}
-            disabled={eliminando}
-            style={({ pressed }) => [s.casilla, pressed && s.presionada]}
-            accessibilityRole="checkbox"
-            accessibilityState={{ checked: entiendo, disabled: eliminando }}
-            accessibilityLabel="Entiendo que no se puede deshacer"
-          >
-            <View style={[s.caja, entiendo && s.cajaMarcada]}>
-              {entiendo ? <Check size={Sizes.icon.sm} color={Colors.white} weight="bold" /> : null}
+        <Card tone="sunken" padding="md">
+          <Text variant="bodyStrong" style={s.lead}>
+            Esto es lo que pasa:
+          </Text>
+          {puntos.map((p) => (
+            <View key={p} style={s.punto}>
+              <Text variant="secondary" importantForAccessibility="no" accessibilityElementsHidden>
+                •
+              </Text>
+              <Text variant="secondary" style={s.flex}>
+                {p}
+              </Text>
             </View>
-            <Text variant="body" style={s.flex}>
-              Entiendo que no se puede deshacer
-            </Text>
-          </Pressable>
+          ))}
+        </Card>
 
-          <Button
-            variant="danger"
-            fullWidth
-            disabled={!entiendo || eliminando}
-            onPress={eliminar}
-            style={s.boton}
-          >
-            {eliminando ? 'Eliminando…' : 'Eliminar mi cuenta'}
-          </Button>
-          {!entiendo ? (
-            <Text variant="caption" color="muted" align="center" style={s.ayudaBoton}>
-              Marca la casilla para continuar.
-            </Text>
-          ) : null}
-        </ScrollView>
-      </PageTransition>
+        <View style={s.section}>
+          <SectionLabel>Motivo (opcional)</SectionLabel>
+          <View style={s.chips} accessibilityRole="radiogroup" accessibilityLabel="Motivo (opcional)">
+            {MOTIVOS.map((m) => (
+              <Chip
+                key={m}
+                label={m}
+                selected={motivo === m}
+                onPress={() => setMotivo((prev) => (prev === m ? null : m))}
+              />
+            ))}
+          </View>
+        </View>
+
+        <Pressable
+          onPress={() => {
+            Haptics.selectionAsync();
+            setEntiendo((v) => !v);
+          }}
+          disabled={eliminando}
+          style={({ pressed }) => [s.casilla, pressed && s.presionada]}
+          accessibilityRole="checkbox"
+          accessibilityState={{ checked: entiendo, disabled: eliminando }}
+          accessibilityLabel="Entiendo que no se puede deshacer"
+        >
+          <View style={[s.caja, entiendo && s.cajaMarcada]}>
+            {entiendo ? (
+              <Check size={Sizes.icon.sm} color={Colors.accentStrongForeground} weight="bold" />
+            ) : null}
+          </View>
+          <Text variant="body" style={s.flex}>
+            Entiendo que no se puede deshacer
+          </Text>
+        </Pressable>
+
+        <Button
+          variant="danger"
+          fullWidth
+          disabled={!entiendo}
+          loading={eliminando}
+          onPress={eliminar}
+          style={s.boton}
+        >
+          Eliminar mi cuenta
+        </Button>
+        {!entiendo ? (
+          <Text variant="caption" color="muted" align="center" style={s.ayudaBoton}>
+            Marca la casilla para continuar.
+          </Text>
+        ) : null}
+      </ScrollView>
     </Screen>
   );
 }
@@ -303,8 +301,8 @@ const s = StyleSheet.create({
     justifyContent: 'center',
   },
   cajaMarcada: {
-    backgroundColor: Colors.destructive,
-    borderColor: Colors.destructive,
+    backgroundColor: Colors.accentStrong,
+    borderColor: Colors.accentStrong,
   },
   boton: {
     marginTop: Spacing.xl,

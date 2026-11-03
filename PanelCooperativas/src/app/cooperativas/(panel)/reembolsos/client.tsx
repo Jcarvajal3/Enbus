@@ -9,20 +9,31 @@
 import { useCallback, useId, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import {
   ArrowClockwise,
-  ArrowCounterClockwise,
+  Bank,
   CheckCircle,
-  SpinnerIcon,
+  CurrencyDollar,
+  DeviceMobile,
+  Money,
   WarningCircle,
   WhatsappLogo,
+  type Icon,
 } from "@phosphor-icons/react";
-import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
+import { TabsUrl } from "@/components/barra-filtros";
+import { TonoBadge } from "@/components/status-badge";
+import { AvisoError } from "@/components/aviso-error";
+import { GrupoOpciones, OpcionTile } from "@/components/opcion-tile";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Card } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useParamUrl } from "@/hooks/use-param-url";
+import { avisarExito, avisarInfo } from "@/lib/avisos";
+import { ICONO_SECCION } from "@/lib/navigation";
 import { EmptyState } from "@/components/empty-state";
 import { ErrorState } from "@/components/error-state";
 import { Monto } from "@/components/monto";
 import { requireOnline } from "@/components/connectivity-banner";
 import { useTasaBCV } from "@/components/tasa-bcv-provider";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -35,14 +46,13 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useUser } from "@/hooks/use-user";
 import { buscarBanco } from "@/lib/bancos";
 import { formatBs, formatUsd, usdABs } from "@/lib/dinero";
 import { humanizeError } from "@/lib/errores";
 import { etiquetaMetodoPago, METODO_PAGO } from "@/lib/estados";
-import { formatFechaVE, formatHoraVE } from "@/lib/fechas";
+import { formatFechaHoraCortaVE, formatFechaVE } from "@/lib/fechas";
 import { formatCedula, formatTelefono, telefonoWhatsApp } from "@/lib/ve";
 import type { CanceladoPor, MetodoReembolso, Reembolso } from "@/lib/types/reembolsos";
 import { cn } from "@/lib/utils";
@@ -53,6 +63,14 @@ import { formatRuta } from "@/lib/ciudades";
 type Pestana = "pendientes" | "devueltos";
 
 const METODOS_DEVOLUCION: MetodoReembolso[] = ["PAGO_MOVIL", "TRANSFERENCIA_BANCARIA", "ZELLE", "EFECTIVO"];
+
+/** Icono de cada método (§2.3), igual que en la app. */
+const ICONO_METODO: Record<MetodoReembolso, Icon> = {
+  PAGO_MOVIL: DeviceMobile,
+  TRANSFERENCIA_BANCARIA: Bank,
+  ZELLE: CurrencyDollar,
+  EFECTIVO: Money,
+};
 
 /** Boletos de una misma compra: se devuelven y se registran juntos. */
 type Grupo = {
@@ -79,7 +97,7 @@ type Grupo = {
 };
 
 function fechaCorta(iso: string | null | undefined) {
-  return iso ? formatFechaVE(iso, { day: "2-digit", month: "2-digit" }) : "";
+  return iso ? formatFechaVE(iso) : "";
 }
 
 function agrupar(filas: Reembolso[]): Grupo[] {
@@ -155,7 +173,8 @@ function enlaceWhatsApp(g: Grupo, cooperativa: string | null | undefined) {
 
 export function ReembolsosClient({ inicial }: { inicial: ResultadoAccion<Reembolso[]> }) {
   const { user } = useUser();
-  const [pestana, setPestana] = useState<Pestana>("pendientes");
+  const [estado] = useParamUrl("estado", "pendientes");
+  const pestana: Pestana = estado === "devueltos" ? "devueltos" : "pendientes";
   // Primer render con los datos del servidor; "Actualizar" y "Reintentar" los vuelven a pedir.
   const [filas, setFilas] = useState<Reembolso[]>(inicial.success ? inicial.data : []);
   const [cargando, setCargando] = useState(false);
@@ -200,51 +219,56 @@ export function ReembolsosClient({ inicial }: { inicial: ResultadoAccion<Reembol
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader
-        title="Reembolsos"
-        description="Devoluciones de boletos cancelados. Devuelve el dinero por el mismo medio con que pagó el pasajero y regístralo aquí."
-      >
-        <Button variant="outline" onClick={() => void cargar()} disabled={cargando}>
-          <ArrowClockwise className={cn("mr-2", cargando && "motion-safe:animate-spin")} aria-hidden />
+      <PageHeader title="Reembolsos" description="Devuelve por el mismo medio y regístralo.">
+        <Button variant="outline" onClick={() => void cargar()} disabled={cargando} aria-busy={cargando || undefined}>
+          <ArrowClockwise className={cn(cargando && "motion-safe:animate-spin")} aria-hidden />
           Actualizar
         </Button>
       </PageHeader>
 
-      <Tabs value={pestana} onValueChange={(v) => setPestana(v === "devueltos" ? "devueltos" : "pendientes")}>
-        <TabsList aria-label="Estado de los reembolsos">
-          <TabsTrigger value="pendientes">
-            {/* Sin datos (cargando o con error) no se muestra un "(0)" engañoso. */}
-            Por devolver{filas.length > 0 || (!cargando && !errorCarga) ? ` (${pendientes.length})` : ""}
-          </TabsTrigger>
-          <TabsTrigger value="devueltos">Devueltos</TabsTrigger>
-        </TabsList>
-      </Tabs>
+      <TabsUrl
+        param="estado"
+        defecto="pendientes"
+        opciones={[
+          // Sin datos (cargando o con error) no se muestra un conteo engañoso.
+          { valor: "pendientes", etiqueta: "Por devolver", conteo: filas.length > 0 || !errorCarga ? pendientes.length : undefined },
+          { valor: "devueltos", etiqueta: "Devueltos" },
+        ]}
+      />
 
       {cargando && filas.length === 0 ? (
-        <div className="flex h-40 items-center justify-center gap-3 rounded-md border bg-card text-muted-foreground">
-          <Spinner size="md" />
-          <span className="font-medium">Cargando reembolsos…</span>
+        <div role="status" aria-label="Cargando" className="flex flex-col gap-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <Card key={i} className="grid gap-4 p-4 sm:grid-cols-2 xl:grid-cols-4" aria-hidden>
+              {Array.from({ length: 4 }).map((__, j) => (
+                <div key={j} className="flex flex-col gap-2">
+                  <Skeleton className="h-3 w-20" />
+                  <Skeleton className="h-4 w-32" />
+                </div>
+              ))}
+            </Card>
+          ))}
         </div>
       ) : errorCarga && filas.length === 0 ? (
-        <div className="rounded-md border bg-card">
+        <Card className="p-0">
           <ErrorState titulo="No pudimos cargar los reembolsos" descripcion={errorCarga} onReintentar={cargar} />
-        </div>
+        </Card>
       ) : visibles.length === 0 ? (
-        <div className="rounded-md border bg-card">
+        <Card className="p-0">
           {pestana === "pendientes" ? (
             <EmptyState
-              icon={ArrowCounterClockwise}
+              icon={ICONO_SECCION.reembolsos}
               title="Todo al día"
-              description="No tienes reembolsos pendientes. Cuando un pasajero cancele un boleto pagado o canceles un viaje, aparecerán aquí."
+              description="Aquí llegan los boletos pagados que se cancelan."
             />
           ) : (
             <EmptyState
               icon={CheckCircle}
               title="Sin devoluciones registradas"
-              description="Cuando registres una devolución, la verás aquí con su método y referencia."
+              description="Aquí verás cada devolución con su método y referencia."
             />
           )}
-        </div>
+        </Card>
       ) : (
         <>
           {errorCarga && (
@@ -293,9 +317,9 @@ export function ReembolsosClient({ inicial }: { inicial: ResultadoAccion<Reembol
 
 function Dato({ etiqueta, children }: { etiqueta: string; children: ReactNode }) {
   return (
-    <div className="min-w-0">
+    <div className="flex min-w-0 flex-col gap-0.5">
       <dt className="text-xs text-muted-foreground">{etiqueta}</dt>
-      <dd className="text-sm">{children}</dd>
+      <dd className="text-sm text-foreground">{children}</dd>
     </div>
   );
 }
@@ -314,7 +338,7 @@ function TarjetaReembolso({
   const moneda = g.pagoMoneda === "USD" ? "USD" : undefined;
 
   return (
-    <article className="rounded-xl border bg-card p-4">
+    <article className="rounded-md border border-border bg-card p-4">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <dl className="grid flex-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <Dato etiqueta="Cancelado">
@@ -325,7 +349,7 @@ function TarjetaReembolso({
           </Dato>
           <Dato etiqueta={g.filas.length === 1 ? "Boleto" : `${g.filas.length} boletos`}>
             <span className="block">{asientosTexto(g)}</span>
-            <span className="block font-mono text-xs text-muted-foreground">
+            <span className="block font-mono text-xs text-foreground">
               {g.filas.map((f) => formatCodigoBoleto(f.codigo_boleto)).join(", ")}
             </span>
           </Dato>
@@ -345,10 +369,10 @@ function TarjetaReembolso({
                   href={whatsapp}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="mt-0.5 inline-flex items-center gap-1 text-xs font-medium text-foreground underline decoration-primary underline-offset-4"
+                  className="mt-0.5 inline-flex items-center gap-1 text-xs font-medium text-info-text underline-offset-4 hover:underline focus-visible:underline"
                   aria-label={`Escribir por WhatsApp a ${g.contactoNombre} (${formatTelefono(g.contactoTelefono)})`}
                 >
-                  <WhatsappLogo className="size-3.5" weight="fill" aria-hidden />
+                  <WhatsappLogo className="size-3.5" aria-hidden />
                   {formatTelefono(g.contactoTelefono)}
                 </a>
               ) : (
@@ -360,9 +384,7 @@ function TarjetaReembolso({
           </Dato>
           <Dato etiqueta="Viaje">
             <span className="block">{g.ruta}</span>
-            <span className="block text-xs text-muted-foreground">
-              {fechaCorta(g.salida)} · {formatHoraVE(g.salida)}
-            </span>
+            <span className="block text-xs text-muted-foreground tabular-nums">{formatFechaHoraCortaVE(g.salida)}</span>
           </Dato>
           <Dato etiqueta={g.procesado ? "Devuelto" : "Monto a devolver"}>
             <Monto usd={g.totalUsd} moneda={moneda} size="sm" />
@@ -370,13 +392,9 @@ function TarjetaReembolso({
           <Dato etiqueta="Cómo pagó">
             <span className="block">{comoPago(g)}</span>
             {pagoSinVerificar && (
-              <Badge
-                variant="secondary"
-                className="mt-1 bg-warning-light text-warning-deep"
-                title="El pago de este boleto no se aprobó. Confirma en tu banco que el dinero llegó antes de devolverlo."
-              >
+              <TonoBadge tono="pendiente" className="mt-1">
                 Pago sin verificar
-              </Badge>
+              </TonoBadge>
             )}
           </Dato>
           {g.motivo && (
@@ -400,7 +418,7 @@ function TarjetaReembolso({
           )}
         </dl>
         {!g.procesado && (
-          <Button className="shrink-0 self-start" onClick={onRegistrar}>
+          <Button variant="outline" className="shrink-0 self-start" onClick={onRegistrar}>
             Registrar devolución
           </Button>
         )}
@@ -508,9 +526,9 @@ function FormularioDevolucion({
         return;
       }
       if (res.data.procesados === 0 && res.data.ya_procesados > 0) {
-        toast.info("Esta devolución ya estaba registrada.");
+        avisarInfo("Esta devolución ya estaba registrada.");
       } else {
-        toast.success("Devolución registrada. Le avisamos al pasajero.");
+        avisarExito("Devolución registrada. Le avisamos al pasajero.");
       }
       setEnviando(false);
       onHecho();
@@ -523,8 +541,8 @@ function FormularioDevolucion({
   };
 
   return (
-    <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-lg" showCloseButton={!enviando}>
-      <form onSubmit={enviar} noValidate className="grid gap-5">
+    <DialogContent showCloseButton={!enviando}>
+      <form onSubmit={enviar} noValidate className="grid gap-4">
         <DialogHeader>
           <DialogTitle>Registrar devolución</DialogTitle>
           <DialogDescription>
@@ -532,54 +550,53 @@ function FormularioDevolucion({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="rounded-xl border bg-muted/40 p-3 text-sm">
-          <p>
-            <span className="text-muted-foreground">Pagó con: </span>
-            {comoPago(g)}
-          </p>
-          <p>
-            <span className="text-muted-foreground">{g.filas.length === 1 ? "Boleto: " : "Boletos: "}</span>
-            {asientosTexto(g)} · {g.ruta}
-          </p>
+        <dl className="grid gap-1 rounded-md bg-muted/50 p-3 text-sm">
+          <div className="flex gap-2">
+            <dt className="text-muted-foreground">Pagó con</dt>
+            <dd className="text-foreground">{comoPago(g)}</dd>
+          </div>
+          <div className="flex gap-2">
+            <dt className="text-muted-foreground">{g.filas.length === 1 ? "Boleto" : "Boletos"}</dt>
+            <dd className="text-foreground">
+              {asientosTexto(g)} · {g.ruta}
+            </dd>
+          </div>
           {g.contactoTelefono && (
-            <p>
-              <span className="text-muted-foreground">Teléfono: </span>
-              {formatTelefono(g.contactoTelefono)}
-            </p>
+            <div className="flex gap-2">
+              <dt className="text-muted-foreground">Teléfono</dt>
+              <dd className="text-foreground tabular-nums">{formatTelefono(g.contactoTelefono)}</dd>
+            </div>
           )}
-        </div>
+        </dl>
 
         {pagoSinVerificar && (
-          <div
-            role="note"
-            className="flex items-start gap-2 rounded-xl border border-warning/40 bg-warning-light p-3 text-sm text-warning-deep"
-          >
-            <WarningCircle className="mt-0.5 size-4 shrink-0" weight="fill" aria-hidden />
-            <p>El pago de este boleto no está verificado. Antes de devolver, confirma en tu banco que el dinero llegó.</p>
-          </div>
+          <Alert variant="warning">
+            <WarningCircle weight="fill" aria-hidden />
+            <AlertDescription>Este pago no está verificado. Confirma en tu banco que el dinero llegó.</AlertDescription>
+          </Alert>
         )}
 
-        <fieldset className="grid gap-2" disabled={enviando}>
-          <legend className="mb-2 text-sm font-medium">¿Cómo lo devolviste?</legend>
-          <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="¿Cómo lo devolviste?">
+        <div className="grid gap-2">
+          <p className="text-sm font-medium text-foreground" id={`${uid}-metodo`}>
+            ¿Cómo lo devolviste?
+          </p>
+          <GrupoOpciones etiqueta="¿Cómo lo devolviste?" className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             {METODOS_DEVOLUCION.map((m) => (
-              <Button
+              <OpcionTile
                 key={m}
-                type="button"
-                size="sm"
-                role="radio"
-                aria-checked={metodo === m}
-                variant={metodo === m ? "default" : "outline"}
-                onClick={() => {
+                seleccionado={metodo === m}
+                disabled={enviando}
+                icono={ICONO_METODO[m]}
+                titulo={METODO_PAGO[m]}
+                className="p-3"
+                onSelect={() => {
                   setMetodo(m);
                   setErrorReferencia(null);
                 }}
-              >
-                {METODO_PAGO[m]}
-              </Button>
+              />
             ))}
-          </div>
-        </fieldset>
+          </GrupoOpciones>
+        </div>
 
         <div className="grid gap-2">
           <Label htmlFor={`${uid}-referencia`}>
@@ -621,22 +638,14 @@ function FormularioDevolucion({
           />
         </div>
 
-        {error && (
-          <div
-            role="alert"
-            className="flex items-start gap-2 rounded-xl border border-destructive/40 bg-destructive-light p-3 text-sm text-destructive-deep"
-          >
-            <WarningCircle className="mt-0.5 size-4 shrink-0" weight="fill" aria-hidden />
-            <p>{error}</p>
-          </div>
-        )}
+        {error && <AvisoError>{error}</AvisoError>}
 
         <DialogFooter>
           <Button type="button" variant="outline" onClick={onCancelar} disabled={enviando}>
             Cancelar
           </Button>
           <Button type="submit" disabled={enviando} aria-busy={enviando || undefined}>
-            {enviando && <SpinnerIcon className="motion-safe:animate-spin" aria-hidden />}
+            {enviando && <Spinner size="sm" aria-hidden />}
             {enviando ? "Registrando…" : "Registrar devolución"}
           </Button>
         </DialogFooter>

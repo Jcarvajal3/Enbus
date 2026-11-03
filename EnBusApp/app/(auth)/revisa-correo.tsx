@@ -1,20 +1,22 @@
 /**
  * "Revisa tu correo" (#23, M-04): lo que ve el usuario después de registrarse
  * (con "Confirmar correo" activo) o de pedir un enlace para recuperar la
- * contraseña. Antes solo había un toast que desaparecía en 3 segundos.
+ * contraseña. Misma composición que el resto del acceso (AU-44): cabecera
+ * `compact` con ← al login y el mensaje con `EmptyState`.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { EnvelopeSimple } from 'phosphor-react-native';
 import * as Haptics from 'expo-haptics';
 import { supabase } from '@/src/utils/supabase';
 import { humanizeError } from '@/src/utils/errores';
 import { redirectAuth } from '@/src/utils/authLinks';
+import { useVolver } from '@/src/hooks/useVolver';
 import { useToast } from '@/src/components/Toast';
-import { Button, Screen, Text } from '@/src/components/ui';
-import { Colors, Layout, Radius, Sizes, Spacing } from '@/src/theme';
+import { Button, EmptyState, FloatingBar, Screen, ScreenHeader, scrollContent } from '@/src/components/ui';
+import { Spacing } from '@/src/theme';
 
 type TipoCorreo = 'registro' | 'recuperar';
 
@@ -35,10 +37,21 @@ export default function RevisaCorreoScreen() {
   const toast = useToast();
   // `enviado=0`: no acabamos de mandar el correo (p. ej. entró con una cuenta sin
   // confirmar), así que puede reenviarlo enseguida, sin esperar.
-  const params = useLocalSearchParams<{ email?: string; tipo?: string; enviado?: string }>();
+  const params = useLocalSearchParams<{
+    email?: string;
+    tipo?: string;
+    enviado?: string;
+    volver?: string;
+  }>();
 
   const email = typeof params.email === 'string' ? params.email.trim() : '';
   const tipo: TipoCorreo = params.tipo === 'recuperar' ? 'recuperar' : 'registro';
+  const volver = typeof params.volver === 'string' ? params.volver : undefined;
+  const login = useMemo<Href>(
+    () => (volver ? { pathname: '/login', params: { volver } } : '/login'),
+    [volver]
+  );
+  const atras = useVolver(login);
   const destino = email ? enmascararCorreo(email) : 'tu correo';
 
   const [espera, setEspera] = useState(params.enviado === '0' ? 0 : ESPERA_REENVIO_S);
@@ -67,7 +80,7 @@ export default function RevisaCorreoScreen() {
             });
       if (error) throw error;
       setEspera(ESPERA_REENVIO_S);
-      toast.show('success', 'Te enviamos otro enlace. Revisa también Spam o Promociones.');
+      toast.show('success', 'Te enviamos otro enlace.');
     } catch (err) {
       if (__DEV__) console.error('[revisa-correo] reenviar:', err);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -79,27 +92,33 @@ export default function RevisaCorreoScreen() {
 
   const texto =
     tipo === 'registro'
-      ? `Te enviamos un enlace a ${destino} para confirmar tu cuenta. Puede tardar unos minutos y llegar a Spam o Promociones.`
-      : `Te enviamos un enlace a ${destino} para crear una contraseña nueva. Ábrelo desde este teléfono.`;
+      ? `Abre el enlace que enviamos a ${destino} para confirmar tu cuenta. Mira también en Spam.`
+      : `Abre desde este teléfono el enlace que enviamos a ${destino}.`;
+
+  const usarOtroCorreo = () =>
+    tipo === 'recuperar'
+      ? router.replace({ pathname: '/recuperar', params: volver ? { volver } : {} })
+      : router.replace({
+          pathname: '/login',
+          params: { modo: 'registro', ...(volver ? { volver } : {}) },
+        });
 
   return (
     <Screen>
+      <ScreenHeader
+        variant="compact"
+        title={tipo === 'recuperar' ? 'Recuperar contraseña' : 'Crear cuenta'}
+        onBack={atras}
+      />
+
       <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
-        <View style={s.icono}>
-          <EnvelopeSimple size={Sizes.icon['2xl']} color={Colors.foreground} weight="regular" />
-        </View>
+        <EmptyState icon={EnvelopeSimple} title="Revisa tu correo" description={texto} />
+      </ScrollView>
 
-        <Text variant="title" align="center" accessibilityRole="header">
-          Revisa tu correo
-        </Text>
-        <Text variant="body" color="muted" align="center" style={s.texto}>
-          {texto}
-        </Text>
-
+      <FloatingBar fade={false}>
         <View style={s.acciones}>
           {email ? (
             <Button
-              variant="accent"
               fullWidth
               loading={reenviando}
               disabled={espera > 0}
@@ -112,49 +131,18 @@ export default function RevisaCorreoScreen() {
             </Button>
           ) : null}
 
-          <Button variant="outline" fullWidth onPress={() => router.replace('/login')}>
-            Volver a iniciar sesión
-          </Button>
-
-          <Button
-            variant="ghost"
-            fullWidth
-            onPress={() =>
-              tipo === 'recuperar'
-                ? router.replace('/recuperar')
-                : router.replace({ pathname: '/login', params: { modo: 'registro' } })
-            }
-          >
+          <Button variant="ghost" fullWidth onPress={usarOtroCorreo}>
             Usar otro correo
           </Button>
         </View>
-      </ScrollView>
+      </FloatingBar>
     </Screen>
   );
 }
 
 const s = StyleSheet.create({
-  scroll: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    paddingHorizontal: Layout.screenPadding,
-    paddingVertical: Spacing['5xl'],
-  },
-  icono: {
-    alignSelf: 'center',
-    width: Sizes.iconBox['2xl'],
-    height: Sizes.iconBox['2xl'],
-    borderRadius: Radius.full,
-    backgroundColor: Colors.primaryLight,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: Spacing.xl,
-  },
-  texto: {
-    marginTop: Spacing.md,
-  },
+  scroll: scrollContent({ top: 0, floatingAction: true }),
   acciones: {
-    marginTop: Spacing['3xl'],
-    gap: Spacing.md,
+    gap: Spacing.sm,
   },
 });

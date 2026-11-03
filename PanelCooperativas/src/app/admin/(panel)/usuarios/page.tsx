@@ -35,11 +35,8 @@ export default async function AdminUsuariosPage({ searchParams }: PageProps) {
   const [resultado, cooperativas] = await Promise.all([fetchUsuarios(filtros), fetchCooperativas()]);
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Usuarios"
-        description="Pasajeros, taquilleros y administradores de cooperativas. Busca por nombre, cédula o teléfono."
-      />
+    <div className="flex flex-col gap-6">
+      <PageHeader title="Usuarios" />
 
       <UsuariosTable
         resultado={resultado}

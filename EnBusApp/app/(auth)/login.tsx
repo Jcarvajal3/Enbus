@@ -26,8 +26,8 @@ import {
   telefonoValido,
 } from '@/src/utils/validation';
 import { useToast } from '@/src/components/Toast';
-import { PressableScale } from '@/src/components/PressableScale';
 import { StaggerItem } from '@/src/components/StaggerItem';
+import { BrandMark } from '@/src/components/BrandMark';
 import { CedulaField } from '@/src/components/CedulaField';
 import { TelefonoField } from '@/src/components/TelefonoField';
 import {
@@ -38,7 +38,9 @@ import {
   Screen,
   SegmentedControl,
   Text,
+  TextLink,
 } from '@/src/components/ui';
+import { CLAVE_AYUDA, CLAVE_ERROR, CLAVE_MINIMO } from '@/src/utils/formatters';
 import { Colors, Layout, Radius, Sizes, Spacing } from '@/src/theme';
 
 // Cierra la ventana del navegador si la app se abrió desde la redirección (web).
@@ -59,11 +61,24 @@ const ERROR_GOOGLE = 'No pudimos entrar con Google. Intenta de nuevo o usa tu co
 
 const CORREO_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+/**
+ * `?volver=` (AN-16): la ruta interna que se pidió sin sesión. Solo rutas que
+ * empiezan por "/" (nunca "//otro-sitio" ni una URL completa). Tras entrar,
+ * `app/_layout.tsx` hace `replace(volver ?? '/(tabs)')`; aquí se conserva al
+ * pasar por recuperar o "Revisa tu correo".
+ */
+function leerVolver(v: string | string[] | undefined): string | undefined {
+  const ruta = Array.isArray(v) ? v[0] : v;
+  if (typeof ruta !== 'string' || !ruta.startsWith('/') || ruta.startsWith('//')) return undefined;
+  return ruta;
+}
+
 export default function LoginScreen() {
   const router = useRouter();
   const toast = useToast();
   // "Usar otro correo" desde "Revisa tu correo" vuelve directo a "Crear cuenta".
-  const params = useLocalSearchParams<{ modo?: string }>();
+  const params = useLocalSearchParams<{ modo?: string; volver?: string }>();
+  const volver = leerVolver(params.volver);
 
   const [mode, setMode] = useState<Mode>(params.modo === 'registro' ? 'register' : 'login');
   const [form, setForm] = useState(EMPTY_FORM);
@@ -107,7 +122,7 @@ export default function LoginScreen() {
       if (!nombreValido(form.nombre_completo)) next.nombre_completo = 'Escribe tu nombre y apellido.';
       if (!cedulaValida(form.cedula_rif)) next.cedula_rif = MENSAJE_CEDULA;
       if (!telefonoValido(form.telefono)) next.telefono = MENSAJE_TELEFONO;
-      if (form.password && form.password.length < 6) next.password = 'Usa al menos 6 caracteres.';
+      if (form.password && form.password.length < CLAVE_MINIMO) next.password = CLAVE_ERROR;
       if (form.password !== form.confirmPassword) {
         next.confirmPassword = 'Las contraseñas no coinciden.';
       }
@@ -152,7 +167,10 @@ export default function LoginScreen() {
 
         // Con "Confirmar correo" activo no hay sesión: hay que abrir el enlace.
         if (!data.session) {
-          router.replace({ pathname: '/revisa-correo', params: { email, tipo: 'registro' } });
+          router.replace({
+            pathname: '/revisa-correo',
+            params: { email, tipo: 'registro', ...(volver ? { volver } : {}) },
+          });
         }
       }
     } catch (err) {
@@ -163,7 +181,7 @@ export default function LoginScreen() {
         // `enviado: '0'`: el correo se mandó al registrarse; puede reenviarlo ya.
         router.push({
           pathname: '/revisa-correo',
-          params: { email, tipo: 'registro', enviado: '0' },
+          params: { email, tipo: 'registro', enviado: '0', ...(volver ? { volver } : {}) },
         });
         return;
       }
@@ -227,20 +245,7 @@ export default function LoginScreen() {
           keyboardShouldPersistTaps="handled"
         >
           <StaggerItem index={0} style={s.brand}>
-            <View style={s.logo}>
-              <Text variant="heading" size="2xl" weight="heavy" color="foreground" compact>
-                EB
-              </Text>
-            </View>
-          </StaggerItem>
-
-          <StaggerItem index={1} style={s.titles}>
-            <Text variant="title" align="center" accessibilityRole="header">
-              EnBus
-            </Text>
-            <Text variant="body" color="muted" align="center" style={s.tagline}>
-              Boletos de autobús y encomiendas entre ciudades, desde tu teléfono
-            </Text>
+            <BrandMark size={56} conNombre />
           </StaggerItem>
 
           {aviso ? (
@@ -262,7 +267,7 @@ export default function LoginScreen() {
             </View>
           ) : null}
 
-          <StaggerItem index={2}>
+          <StaggerItem index={1}>
             <Card tone="sunken" padding="md" elevated={false}>
               <SegmentedControl<Mode>
                 value={mode}
@@ -272,7 +277,7 @@ export default function LoginScreen() {
                 }}
                 tone="raised"
                 options={[
-                  { value: 'login', label: 'Iniciar sesión' },
+                  { value: 'login', label: 'Entrar' },
                   { value: 'register', label: 'Crear cuenta' },
                 ]}
                 style={s.modeToggle}
@@ -282,7 +287,6 @@ export default function LoginScreen() {
                 <>
                   <Field
                     label="Nombre y apellido"
-                    placeholder="Ana Pérez"
                     value={form.nombre_completo}
                     onChangeText={(v) => update('nombre_completo', v)}
                     error={errors.nombre_completo}
@@ -317,8 +321,8 @@ export default function LoginScreen() {
 
               <Field
                 ref={emailRef}
-                label="Correo electrónico"
-                placeholder="tu@correo.com"
+                label="Correo"
+                placeholder="Ej. tu@correo.com"
                 keyboardType="email-address"
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -336,7 +340,6 @@ export default function LoginScreen() {
               <Field
                 ref={passwordRef}
                 label="Contraseña"
-                placeholder="••••••••"
                 secureTextEntry
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -345,7 +348,7 @@ export default function LoginScreen() {
                 value={form.password}
                 onChangeText={(v) => update('password', v)}
                 error={errors.password}
-                helper={isRegister && !errors.password ? 'Mínimo 6 caracteres.' : undefined}
+                helper={isRegister ? CLAVE_AYUDA : undefined}
                 returnKeyType={isRegister ? 'next' : 'go'}
                 submitBehavior={isRegister ? 'submit' : 'blurAndSubmit'}
                 onSubmitEditing={() =>
@@ -358,7 +361,6 @@ export default function LoginScreen() {
                 <Field
                   ref={confirmRef}
                   label="Repite la contraseña"
-                  placeholder="••••••••"
                   secureTextEntry
                   autoCapitalize="none"
                   autoCorrect={false}
@@ -374,28 +376,22 @@ export default function LoginScreen() {
               )}
 
               {!isRegister && (
-                <PressableScale
-                  onPress={() => {
-                    Haptics.selectionAsync();
-                    const email = form.email.trim();
-                    router.push(
-                      email
-                        ? { pathname: '/recuperar', params: { email } }
-                        : '/recuperar'
-                    );
-                  }}
-                  style={s.forgot}
-                  accessibilityRole="button"
-                  accessibilityLabel="¿Olvidaste tu contraseña?"
-                >
-                  <Text variant="label" color="accent">
+                <View style={s.forgot}>
+                  <TextLink
+                    onPress={() => {
+                      const email = form.email.trim();
+                      router.push({
+                        pathname: '/recuperar',
+                        params: { ...(email ? { email } : {}), ...(volver ? { volver } : {}) },
+                      });
+                    }}
+                  >
                     ¿Olvidaste tu contraseña?
-                  </Text>
-                </PressableScale>
+                  </TextLink>
+                </View>
               )}
 
               <Button
-                variant="accent"
                 fullWidth
                 loading={loading}
                 disabled={googleLoading}
@@ -440,21 +436,7 @@ const s = StyleSheet.create({
   },
   brand: {
     alignItems: 'center',
-    marginBottom: Spacing.xl,
-  },
-  logo: {
-    width: Sizes.iconBox.xl + Spacing.lg,
-    height: Sizes.iconBox.xl + Spacing.lg,
-    borderRadius: Radius.full,
-    backgroundColor: Colors.primaryLight,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  titles: {
     marginBottom: Spacing['3xl'],
-  },
-  tagline: {
-    marginTop: Spacing.xs,
   },
   aviso: {
     flexDirection: 'row',
@@ -474,7 +456,6 @@ const s = StyleSheet.create({
   },
   forgot: {
     alignSelf: 'flex-end',
-    paddingVertical: Spacing.sm,
     marginBottom: Spacing.sm,
   },
   divider: {

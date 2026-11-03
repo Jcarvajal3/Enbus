@@ -6,28 +6,26 @@
  *   {proximo && <ProximoViajeCard proximo={proximo} onVerPase={() => router.push(…)} />}
  *
  * El bloque informativo se lee como uno solo con el lector de pantalla; el
- * botón queda aparte.
+ * botón queda aparte. El botón es `outline`: en Inicio la acción principal es
+ * "Buscar viaje" (un solo amarillo por pantalla).
  */
 import React, { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { QrCode } from 'phosphor-react-native';
-import { Badge, Button, Card, Text } from '@/src/components/ui';
-import { fechaVE, formatDuracion, formatHoraVE, sumarDiasVE } from '@/src/utils/ve.generated';
+import { Badge, Button, Card, SectionLabel, Text } from '@/src/components/ui';
+import { capitalizarInicio, fechaVE, formatDiaVE, formatDuracion, formatHoraVE, sumarDiasVE } from '@/src/utils/formatters';
 import type { ProximoViaje } from '@/src/types';
 import { Spacing } from '@/src/theme';
 
-const DIAS_CORTOS = ['dom.', 'lun.', 'mar.', 'mié.', 'jue.', 'vie.', 'sáb.'];
 const TRES_HORAS_MIN = 180;
 
-/** "Hoy", "Mañana" o "vie. 04/10" (día de la salida en hora de Venezuela). */
+/** "Hoy", "Mañana" o "Vie. 4 oct." (día de la salida en hora de Venezuela). */
 function etiquetaDia(salida: string, ahora: Date): string {
   const dia = fechaVE(salida);
   const hoy = fechaVE(ahora);
   if (dia === hoy) return 'Hoy';
   if (dia === sumarDiasVE(hoy, 1)) return 'Mañana';
-  const [y, m, d] = dia.split('-');
-  const semana = DIAS_CORTOS[new Date(Date.UTC(Number(y), Number(m) - 1, Number(d))).getUTCDay()];
-  return `${semana} ${d}/${m}`;
+  return capitalizarInicio(formatDiaVE(salida, ahora));
 }
 
 /** "Asiento 14" · "Asientos 14 y 15" · "Asientos 9, 14 y 15" */
@@ -83,35 +81,33 @@ export function ProximoViajeCard({
     .join('. ');
 
   return (
-    <Card tone="raised" padding="lg" style={s.card}>
-      <View accessible accessibilityLabel={etiquetaAccesible} style={s.info}>
-        <Text variant="overline" color="muted" uppercase>
-          Tu próximo viaje
-        </Text>
-        <Text variant="heading">{titulo}</Text>
-        {ruta ? (
-          <Text variant="bodyStrong" numberOfLines={2}>
-            {ruta}
-          </Text>
-        ) : null}
-        {meta ? (
-          <Text variant="secondary" color="muted" numberOfLines={2}>
-            {meta}
-          </Text>
-        ) : null}
-        {aviso ? (
-          <View style={s.aviso}>
-            <Badge tone="pending" size="md">
-              {aviso}
-            </Badge>
+    <View>
+      <SectionLabel>Tu próximo viaje</SectionLabel>
+      <Card tone="sunken" padding="md" style={s.card}>
+        <View accessible accessibilityLabel={etiquetaAccesible} style={s.info}>
+          <View style={s.cabecera}>
+            <Text variant="heading" style={s.titulo}>
+              {titulo}
+            </Text>
+            {aviso ? <Badge tone="pending">{aviso}</Badge> : null}
           </View>
-        ) : null}
-      </View>
+          {ruta ? (
+            <Text variant="bodyStrong" numberOfLines={2}>
+              {ruta}
+            </Text>
+          ) : null}
+          {meta ? (
+            <Text variant="secondary" color="muted" numberOfLines={2}>
+              {meta}
+            </Text>
+          ) : null}
+        </View>
 
-      <Button variant="accent" icon={QrCode} fullWidth onPress={onVerPase}>
-        Ver pase de abordaje
-      </Button>
-    </Card>
+        <Button variant="outline" size="md" icon={QrCode} fullWidth onPress={onVerPase}>
+          Ver pase de abordaje
+        </Button>
+      </Card>
+    </View>
   );
 }
 
@@ -122,8 +118,13 @@ const s = StyleSheet.create({
   info: {
     gap: Spacing.xs,
   },
-  aviso: {
+  cabecera: {
     flexDirection: 'row',
-    marginTop: Spacing.xs,
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: Spacing.sm,
+  },
+  titulo: {
+    flexShrink: 1,
   },
 });

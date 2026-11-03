@@ -8,15 +8,15 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as Linking from 'expo-linking';
 import { LinkBreak } from 'phosphor-react-native';
 import { supabase } from '@/src/utils/supabase';
 import { completarSesionDesdeUrl } from '@/src/utils/authLinks';
 import { humanizeError } from '@/src/utils/errores';
-import { Button, LoadingState, Screen, Text } from '@/src/components/ui';
-import { Colors, Layout, Radius, Sizes, Spacing } from '@/src/theme';
+import { BrandMark } from '@/src/components/BrandMark';
+import { Button, EmptyState, FloatingBar, Screen, ScreenHeader, scrollContent } from '@/src/components/ui';
 
 type Params = {
   code?: string;
@@ -107,75 +107,53 @@ export default function AuthCallbackScreen() {
   }, [url, tipo, router]);
 
   if (!error) {
+    // La misma marca que el arranque: es un paso de la entrada, no una pantalla.
     return (
       <Screen>
-        <LoadingState label="Entrando…" />
+        <View
+          style={s.espera}
+          accessible
+          accessibilityRole="progressbar"
+          accessibilityLabel="Entrando"
+        >
+          <BrandMark size={56} />
+        </View>
       </Screen>
     );
   }
 
   const esRecuperar = tipo === 'recuperar';
+  const titulo = esRecuperar ? 'Recuperar contraseña' : tipo === 'registro' ? 'Crear cuenta' : 'Entrar';
+  // Supabase confirma el correo antes de volver a la app: si el enlace se abrió
+  // en otro navegador o ya se usó, la cuenta puede estar confirmada.
+  const descripcion =
+    tipo === 'registro' ? `${error} Si ya confirmaste tu correo, entra con tu contraseña.` : error;
 
   return (
     <Screen>
-      <View style={s.body} accessibilityRole="alert">
-        <View style={s.icono}>
-          <LinkBreak size={Sizes.icon['2xl']} color={Colors.dangerText} weight="regular" />
+      <ScreenHeader variant="compact" title={titulo} onBack={() => router.replace('/login')} />
+      <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
+        <View accessibilityRole="alert">
+          <EmptyState icon={LinkBreak} title="No pudimos abrir el enlace" description={descripcion} />
         </View>
-        <Text variant="heading" align="center" accessibilityRole="header">
-          No pudimos abrir el enlace
-        </Text>
-        <Text variant="body" color="muted" align="center" style={s.texto}>
-          {error}
-        </Text>
-        {tipo === 'registro' ? (
-          // Supabase confirma el correo antes de volver a la app: si el enlace se
-          // abrió en otro navegador o ya se usó, la cuenta puede estar confirmada.
-          <Text variant="secondary" color="muted" align="center" style={s.texto}>
-            Si ya confirmaste tu correo, inicia sesión con tu correo y contraseña.
-          </Text>
-        ) : null}
-
-        <View style={s.acciones}>
-          {esRecuperar ? (
-            <Button variant="accent" fullWidth onPress={() => router.replace('/recuperar')}>
-              Pedir otro enlace
-            </Button>
-          ) : null}
-          <Button
-            variant={esRecuperar ? 'outline' : 'accent'}
-            fullWidth
-            onPress={() => router.replace('/login')}
-          >
-            Volver a iniciar sesión
-          </Button>
-        </View>
-      </View>
+      </ScrollView>
+      <FloatingBar fade={false}>
+        <Button
+          fullWidth
+          onPress={() => router.replace(esRecuperar ? '/recuperar' : '/login')}
+        >
+          {esRecuperar ? 'Pedir otro enlace' : 'Volver a iniciar sesión'}
+        </Button>
+      </FloatingBar>
     </Screen>
   );
 }
 
 const s = StyleSheet.create({
-  body: {
+  espera: {
     flex: 1,
-    justifyContent: 'center',
-    paddingHorizontal: Layout.screenPadding,
-  },
-  icono: {
-    alignSelf: 'center',
-    width: Sizes.iconBox['2xl'],
-    height: Sizes.iconBox['2xl'],
-    borderRadius: Radius.full,
-    backgroundColor: Colors.destructiveLight,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: Spacing.xl,
   },
-  texto: {
-    marginTop: Spacing.md,
-  },
-  acciones: {
-    marginTop: Spacing['3xl'],
-    gap: Spacing.md,
-  },
+  scroll: scrollContent({ top: 0, floatingAction: true }),
 });

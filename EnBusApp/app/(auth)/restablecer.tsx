@@ -11,25 +11,29 @@ import * as Haptics from 'expo-haptics';
 import { LinkBreak } from 'phosphor-react-native';
 import { supabase } from '@/src/utils/supabase';
 import { humanizeError } from '@/src/utils/errores';
+import { CLAVE_AYUDA, CLAVE_ERROR, CLAVE_MINIMO } from '@/src/utils/formatters';
 import { useAuth } from '@/src/contexts/AuthContext';
+import { useVolver } from '@/src/hooks/useVolver';
 import { useToast } from '@/src/components/Toast';
 import {
   Button,
   Card,
   EmptyState,
   Field,
+  FloatingBar,
   Screen,
   ScreenHeader,
-  Text,
+  scrollContent,
 } from '@/src/components/ui';
-import { Layout, Spacing } from '@/src/theme';
-
-const MIN_CLAVE = 6;
+import { Spacing } from '@/src/theme';
 
 export default function RestablecerScreen() {
   const router = useRouter();
   const toast = useToast();
   const { session } = useAuth();
+  // Con la sesión de recuperación, ← sale a Inicio (ya está dentro); sin ella, al login.
+  const salirConSesion = useVolver('/(tabs)');
+  const salirSinSesion = useVolver('/login');
 
   const [clave, setClave] = useState('');
   const [repetir, setRepetir] = useState('');
@@ -40,7 +44,7 @@ export default function RestablecerScreen() {
   async function guardar() {
     if (guardando) return;
     const next: typeof errores = {};
-    if (clave.length < MIN_CLAVE) next.clave = `Usa al menos ${MIN_CLAVE} caracteres.`;
+    if (clave.length < CLAVE_MINIMO) next.clave = CLAVE_ERROR;
     if (clave !== repetir) next.repetir = 'Las contraseñas no coinciden.';
     setErrores(next);
     if (Object.keys(next).length > 0) {
@@ -53,7 +57,7 @@ export default function RestablecerScreen() {
       const { error } = await supabase.auth.updateUser({ password: clave });
       if (error) throw error;
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      toast.show('success', 'Listo. Ya puedes entrar con tu nueva contraseña.');
+      toast.show('success', 'Listo. Guardamos tu contraseña nueva.');
       router.replace('/(tabs)');
     } catch (err) {
       if (__DEV__) console.error('[restablecer] updateUser:', err);
@@ -67,21 +71,22 @@ export default function RestablecerScreen() {
   if (!session) {
     return (
       <Screen>
-        <ScreenHeader
-          variant="compact"
-          title="Contraseña nueva"
-          onBack={() => router.replace('/login')}
-        />
-        <EmptyState
-          icon={LinkBreak}
-          title="Abre el enlace desde este teléfono"
-          description="Abre el enlace del correo desde este teléfono para cambiar tu contraseña."
-          action={{
-            children: 'Pedir otro enlace',
-            variant: 'accent',
-            onPress: () => router.replace('/recuperar'),
-          }}
-        />
+        <ScreenHeader variant="compact" title="Contraseña nueva" onBack={salirSinSesion} />
+        <ScrollView
+          contentContainerStyle={scrollContent({ top: 0, floatingAction: true })}
+          showsVerticalScrollIndicator={false}
+        >
+          <EmptyState
+            icon={LinkBreak}
+            title="Abre el enlace desde este teléfono"
+            description="El enlace del correo solo funciona en el teléfono donde lo pediste."
+          />
+        </ScrollView>
+        <FloatingBar fade={false}>
+          <Button fullWidth onPress={() => router.replace('/recuperar')}>
+            Pedir otro enlace
+          </Button>
+        </FloatingBar>
       </Screen>
     );
   }
@@ -92,7 +97,7 @@ export default function RestablecerScreen() {
         variant="compact"
         title="Contraseña nueva"
         onBack={() => {
-          if (!guardando) router.replace('/(tabs)');
+          if (!guardando) salirConSesion();
         }}
       />
 
@@ -101,21 +106,13 @@ export default function RestablecerScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <ScrollView
-          contentContainerStyle={s.scroll}
+          contentContainerStyle={scrollContent({ top: Spacing['2xl'] })}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          <Text variant="title" accessibilityRole="header">
-            Crea una contraseña nueva
-          </Text>
-          <Text variant="secondary" color="muted" style={s.intro}>
-            La usarás para entrar a EnBus desde ahora.
-          </Text>
-
-          <Card tone="sunken" padding="md" elevated={false}>
+          <Card tone="sunken" padding="md">
             <Field
               label="Contraseña nueva"
-              placeholder="••••••••"
               secureTextEntry
               autoCapitalize="none"
               autoCorrect={false}
@@ -127,7 +124,7 @@ export default function RestablecerScreen() {
                 if (errores.clave) setErrores((p) => ({ ...p, clave: undefined }));
               }}
               error={errores.clave}
-              helper={`Mínimo ${MIN_CLAVE} caracteres.`}
+              helper={CLAVE_AYUDA}
               returnKeyType="next"
               submitBehavior="submit"
               onSubmitEditing={() => repetirRef.current?.focus()}
@@ -137,7 +134,6 @@ export default function RestablecerScreen() {
             <Field
               ref={repetirRef}
               label="Repite la contraseña"
-              placeholder="••••••••"
               secureTextEntry
               autoCapitalize="none"
               autoCorrect={false}
@@ -154,7 +150,7 @@ export default function RestablecerScreen() {
               editable={!guardando}
             />
 
-            <Button variant="accent" fullWidth loading={guardando} onPress={guardar}>
+            <Button fullWidth loading={guardando} onPress={guardar}>
               Guardar contraseña
             </Button>
           </Card>
@@ -166,14 +162,4 @@ export default function RestablecerScreen() {
 
 const s = StyleSheet.create({
   flex: { flex: 1 },
-  scroll: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    paddingHorizontal: Layout.screenPadding,
-    paddingBottom: Spacing['5xl'],
-  },
-  intro: {
-    marginTop: Spacing.xs,
-    marginBottom: Spacing.xl,
-  },
 });

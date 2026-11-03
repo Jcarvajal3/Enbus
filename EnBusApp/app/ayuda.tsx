@@ -2,7 +2,7 @@
  * Ayuda (#28, M-52, APP-52): WhatsApp de soporte, "Reportar un problema" y
  * preguntas frecuentes.
  *
- * Se abre desde Perfil ("Ayuda y soporte") y desde el detalle de un boleto o una
+ * Se abre desde Perfil ("Ayuda") y desde el detalle de un boleto o una
  * encomienda con el recurso ya elegido:
  *
  *   router.push({ pathname: '/ayuda', params: { tipo: 'boleto', id, codigo } });
@@ -12,23 +12,25 @@
  */
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import {
   CaretDown,
   CaretUp,
   CheckCircle,
   PaperPlaneTilt,
+  WarningCircle,
   WhatsappLogo,
 } from 'phosphor-react-native';
 import * as Haptics from 'expo-haptics';
-import { PageTransition } from '@/src/components/PageTransition';
 import { PressableScale } from '@/src/components/PressableScale';
+import { useVolver } from '@/src/hooks/useVolver';
 import { useToast } from '@/src/components/Toast';
 import {
   Button,
   Card,
   Chip,
   Field,
+  FieldMessage,
   Screen,
   ScreenHeader,
   SectionLabel,
@@ -99,8 +101,8 @@ function uuidONull(v: string | undefined): string | null {
 }
 
 export default function AyudaScreen() {
-  const router = useRouter();
   const toast = useToast();
+  const atras = useVolver('/(tabs)');
   const params = useLocalSearchParams<{ tipo?: string; id?: string; codigo?: string }>();
 
   const tipo = unParam(params.tipo)?.toLowerCase();
@@ -193,171 +195,161 @@ export default function AyudaScreen() {
 
   return (
     <Screen>
-      <PageTransition>
-        <ScreenHeader variant="compact" title="Ayuda" onBack={() => router.back()} />
+      <ScreenHeader variant="compact" title="Ayuda" onBack={atras} />
 
-        <KeyboardAvoidingView
-          style={s.flex}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      <KeyboardAvoidingView
+        style={s.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <ScrollView
+          contentContainerStyle={scrollContent({ top: Spacing['2xl'] })}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
         >
-          <ScrollView
-            contentContainerStyle={scrollContent({ top: Spacing.lg })}
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-          >
-            {/* ── WhatsApp (solo si hay número configurado) ───────────────── */}
-            {SOPORTE_WHATSAPP ? (
-              <Card padding="md" style={s.card}>
-                <View style={s.row}>
-                  <View style={[s.iconBox, s.iconWhatsApp]}>
-                    <WhatsappLogo size={Sizes.icon.lg} color={Colors.successText} weight="fill" />
-                  </View>
-                  <View style={s.flex}>
-                    <Text variant="bodyStrong">Escríbenos por WhatsApp</Text>
-                    <Text variant="secondary" color="muted">
-                      Para algo urgente, como un viaje que sale hoy.
-                    </Text>
-                  </View>
+          {/* ── WhatsApp (solo si hay número configurado) ───────────────── */}
+          {SOPORTE_WHATSAPP ? (
+            <Card tone="sunken" padding="md" style={s.card}>
+              <View style={s.row}>
+                <View style={s.iconBox}>
+                  <WhatsappLogo size={Sizes.icon.lg} color={Colors.successText} weight="fill" />
                 </View>
-                <Button
-                  variant="secondary"
-                  icon={WhatsappLogo}
-                  fullWidth
-                  onPress={escribirWhatsApp}
-                  style={s.cardAction}
-                >
-                  Abrir WhatsApp
-                </Button>
-              </Card>
-            ) : null}
-
-            {/* ── Reportar un problema ────────────────────────────────────── */}
-            <SectionLabel>Reportar un problema</SectionLabel>
-            {creado ? (
-              <Card padding="md" style={s.card} accessibilityRole="alert">
-                <View style={s.row}>
-                  <View style={[s.iconBox, s.iconOk]}>
-                    <CheckCircle size={Sizes.icon.lg} color={Colors.successText} weight="fill" />
-                  </View>
-                  <View style={s.flex}>
-                    <Text variant="bodyStrong">{`Recibimos tu reporte ${creado.codigo}`}</Text>
-                    <Text variant="secondary" color="muted">
-                      Te responderemos por WhatsApp o por correo en menos de 24 horas hábiles.
-                      Guarda el código por si necesitas escribirnos.
-                    </Text>
-                  </View>
-                </View>
-                <Button variant="secondary" fullWidth onPress={() => router.back()} style={s.cardAction}>
-                  Volver
-                </Button>
-              </Card>
-            ) : (
-              <Card tone="sunken" padding="md" elevated={false} style={s.card}>
-                {recurso ? (
-                  <Text variant="secondary" style={s.recurso}>
-                    <Text variant="secondary" color="muted">
-                      Sobre:{' '}
-                    </Text>
-                    {recurso.etiqueta}
+                <View style={s.flex}>
+                  <Text variant="bodyStrong">Escríbenos por WhatsApp</Text>
+                  <Text variant="secondary" color="muted">
+                    Para algo urgente, como un viaje que sale hoy.
                   </Text>
-                ) : null}
+                </View>
+              </View>
+              <Button
+                variant="outline"
+                size="md"
+                icon={WhatsappLogo}
+                fullWidth
+                onPress={escribirWhatsApp}
+                style={s.cardAction}
+              >
+                Abrir WhatsApp
+              </Button>
+            </Card>
+          ) : null}
 
-                <Text variant="label" style={s.label}>
-                  ¿De qué se trata?
+          {/* ── Reportar un problema ────────────────────────────────────── */}
+          <SectionLabel>Reportar un problema</SectionLabel>
+          {creado ? (
+            <Card tone="sunken" padding="md" style={s.card} accessibilityRole="alert">
+              <View style={s.row}>
+                <View style={s.iconBox}>
+                  <CheckCircle size={Sizes.icon.lg} color={Colors.successText} weight="fill" />
+                </View>
+                <View style={s.flex}>
+                  <Text variant="bodyStrong">{`Recibimos tu reporte ${creado.codigo}`}</Text>
+                  <Text variant="secondary" color="muted">
+                    Te responderemos por WhatsApp o por correo en menos de 24 horas hábiles.
+                  </Text>
+                </View>
+              </View>
+              <Button variant="outline" size="md" fullWidth onPress={atras} style={s.cardAction}>
+                Listo
+              </Button>
+            </Card>
+          ) : (
+            <Card tone="sunken" padding="md" style={s.card}>
+              {recurso ? (
+                <Text variant="secondary" style={s.recurso}>
+                  <Text variant="secondary" color="muted">
+                    Sobre:{' '}
+                  </Text>
+                  {recurso.etiqueta}
                 </Text>
-                <View style={s.chips} accessibilityRole="radiogroup">
-                  {CATEGORIAS.map((c) => (
-                    <Chip
-                      key={c}
-                      label={CATEGORIA_REPORTE[c]}
-                      selected={categoria === c}
-                      onPress={() => {
-                        setCategoria(c);
-                        setErrores((e) => ({ ...e, categoria: undefined }));
-                      }}
-                      accessibilityLabel={`Categoría: ${CATEGORIA_REPORTE[c]}`}
-                    />
-                  ))}
-                </View>
-                {errores.categoria ? (
-                  <Text variant="caption" color="dangerText" style={s.errorText} accessibilityRole="alert">
-                    {errores.categoria}
-                  </Text>
-                ) : null}
+              ) : null}
 
-                <Field
-                  label="Cuéntanos qué pasó"
-                  placeholder="Qué intentabas hacer, qué viste y, si pagaste, la referencia."
-                  value={descripcion}
-                  onChangeText={(v) => {
-                    setDescripcion(v.slice(0, MAXIMO_DESCRIPCION));
-                    if (errores.descripcion) setErrores((e) => ({ ...e, descripcion: undefined }));
-                  }}
-                  error={errores.descripcion}
-                  helper={`Mínimo ${MINIMO_DESCRIPCION} caracteres.`}
-                  multiline
-                  numberOfLines={5}
-                  editable={!enviando}
-                  containerStyle={s.field}
-                />
+              <Text variant="label" style={s.label}>
+                ¿De qué se trata?
+              </Text>
+              <View style={s.chips} accessibilityRole="radiogroup">
+                {CATEGORIAS.map((c) => (
+                  <Chip
+                    key={c}
+                    label={CATEGORIA_REPORTE[c]}
+                    selected={categoria === c}
+                    sobre="surface"
+                    onPress={() => {
+                      setCategoria(c);
+                      setErrores((e) => ({ ...e, categoria: undefined }));
+                    }}
+                    accessibilityLabel={`Categoría: ${CATEGORIA_REPORTE[c]}`}
+                  />
+                ))}
+              </View>
+              <FieldMessage error={errores.categoria} />
 
-                {errorGeneral ? (
-                  <Text variant="secondary" color="dangerText" style={s.errorGeneral} accessibilityRole="alert">
+              <Field
+                label="Cuéntanos qué pasó"
+                value={descripcion}
+                onChangeText={(v) => {
+                  setDescripcion(v.slice(0, MAXIMO_DESCRIPCION));
+                  if (errores.descripcion) setErrores((e) => ({ ...e, descripcion: undefined }));
+                }}
+                error={errores.descripcion}
+                helper={`Mínimo ${MINIMO_DESCRIPCION} caracteres.`}
+                multiline
+                numberOfLines={5}
+                editable={!enviando}
+                containerStyle={s.field}
+              />
+
+              {errorGeneral ? (
+                <View style={s.errorGeneral} accessibilityRole="alert" accessibilityLiveRegion="polite">
+                  <WarningCircle size={Sizes.icon.md} color={Colors.dangerText} weight="fill" />
+                  <Text variant="secondary" color="dangerText" style={s.flex}>
                     {errorGeneral}
                   </Text>
-                ) : null}
+                </View>
+              ) : null}
 
-                <Button
-                  variant="accent"
-                  icon={PaperPlaneTilt}
-                  fullWidth
-                  loading={enviando}
-                  onPress={enviar}
-                  accessibilityLabel={enviando ? 'Enviando…' : 'Enviar reporte'}
-                >
-                  {enviando ? 'Enviando…' : 'Enviar reporte'}
-                </Button>
-              </Card>
-            )}
-
-            {/* ── Preguntas frecuentes ────────────────────────────────────── */}
-            <SectionLabel>Preguntas frecuentes</SectionLabel>
-            <Card tone="sunken" padding="none" elevated={false}>
-              {PREGUNTAS.map((p, i) => {
-                const expandida = abierta === i;
-                return (
-                  <View key={p.pregunta} style={i > 0 ? s.faqDivided : undefined}>
-                    <PressableScale
-                      onPress={() => setAbierta(expandida ? null : i)}
-                      haptic
-                      hapticType="selection"
-                      scaleValue={Motion.press.card}
-                      style={s.faqHead}
-                      accessibilityRole="button"
-                      accessibilityState={{ expanded: expandida }}
-                      accessibilityLabel={p.pregunta}
-                    >
-                      <Text variant="bodyStrong" style={s.flex}>
-                        {p.pregunta}
-                      </Text>
-                      {expandida ? (
-                        <CaretUp size={Sizes.icon.sm} color={Colors.mutedForeground} weight="bold" />
-                      ) : (
-                        <CaretDown size={Sizes.icon.sm} color={Colors.mutedForeground} weight="bold" />
-                      )}
-                    </PressableScale>
-                    {expandida ? (
-                      <Text variant="secondary" color="muted" style={s.faqBody}>
-                        {p.respuesta}
-                      </Text>
-                    ) : null}
-                  </View>
-                );
-              })}
+              <Button icon={PaperPlaneTilt} fullWidth loading={enviando} onPress={enviar}>
+                Enviar reporte
+              </Button>
             </Card>
-          </ScrollView>
-        </KeyboardAvoidingView>
-      </PageTransition>
+          )}
+
+          {/* ── Preguntas frecuentes ────────────────────────────────────── */}
+          <SectionLabel>Preguntas frecuentes</SectionLabel>
+          <Card tone="sunken" padding="none">
+            {PREGUNTAS.map((p, i) => {
+              const expandida = abierta === i;
+              return (
+                <View key={p.pregunta} style={i > 0 ? s.faqDivided : undefined}>
+                  <PressableScale
+                    onPress={() => setAbierta(expandida ? null : i)}
+                    haptic
+                    hapticType="selection"
+                    scaleValue={Motion.press.card}
+                    style={s.faqHead}
+                    accessibilityRole="button"
+                    accessibilityState={{ expanded: expandida }}
+                    accessibilityLabel={p.pregunta}
+                  >
+                    <Text variant="bodyStrong" style={s.flex}>
+                      {p.pregunta}
+                    </Text>
+                    {expandida ? (
+                      <CaretUp size={Sizes.icon.sm} color={Colors.mutedForeground} weight="bold" />
+                    ) : (
+                      <CaretDown size={Sizes.icon.sm} color={Colors.mutedForeground} weight="bold" />
+                    )}
+                  </PressableScale>
+                  {expandida ? (
+                    <Text variant="secondary" color="muted" style={s.faqBody}>
+                      {p.respuesta}
+                    </Text>
+                  ) : null}
+                </View>
+              );
+            })}
+          </Card>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </Screen>
   );
 }
@@ -381,34 +373,35 @@ const s = StyleSheet.create({
     width: Sizes.iconBox.lg,
     height: Sizes.iconBox.lg,
     borderRadius: Radius.full,
+    backgroundColor: Colors.white,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  iconWhatsApp: {
-    backgroundColor: Colors.successLight,
-  },
-  iconOk: {
-    backgroundColor: Colors.successLight,
-  },
   recurso: {
     marginBottom: Spacing.lg,
+    marginLeft: Spacing.xl,
   },
+  /** Mismo borde que la etiqueta de `Field` (AU-09). */
   label: {
     marginBottom: Spacing.sm,
+    marginLeft: Spacing.xl,
   },
   chips: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: Spacing.sm,
   },
-  errorText: {
-    marginTop: Spacing.sm,
-  },
   field: {
     marginTop: Spacing.lg,
   },
   errorGeneral: {
-    marginBottom: Spacing.md,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: Spacing.sm,
+    padding: Spacing.md,
+    borderRadius: Radius.lg,
+    backgroundColor: Colors.destructiveLight,
+    marginBottom: Spacing.lg,
   },
   faqHead: {
     flexDirection: 'row',

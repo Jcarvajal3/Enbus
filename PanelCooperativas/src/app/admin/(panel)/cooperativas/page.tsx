@@ -19,11 +19,8 @@ export default async function AdminCooperativasPage({ searchParams }: PageProps)
   const cooperativas = await fetchCooperativas({ estado: estado || undefined, search: q || undefined });
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Cooperativas"
-        description="Consulta, edita, suspende o registra cooperativas. Las solicitudes nuevas se aprueban en Solicitudes."
-      >
+    <div className="flex flex-col gap-6">
+      <PageHeader title="Cooperativas">
         <CreateCooperativaDialog />
       </PageHeader>
 

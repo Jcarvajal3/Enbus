@@ -1,22 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Image, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import {
-  CheckCircle,
-  Clock,
-  Copy,
-  Info,
-  LockKey,
-  Storefront,
-  XCircle,
-} from 'phosphor-react-native';
+import { CheckCircle, Clock, Copy, Info, LockKey, Storefront, XCircle } from 'phosphor-react-native';
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StatusTimeline, buildEncomiendaTimeline } from '@/src/components/StatusTimeline';
 import { PaymentFlow } from '@/src/components/PaymentFlow';
-import { PageTransition } from '@/src/components/PageTransition';
-import { PressableScale } from '@/src/components/PressableScale';
+import { ScreenSkeleton, SkeletonLoader } from '@/src/components/SkeletonLoader';
 import { useToast } from '@/src/components/Toast';
 import {
   BottomSheet,
@@ -25,13 +16,13 @@ import {
   Divider,
   ErrorState,
   InfoRow,
-  LoadingState,
   Monto,
   Screen,
   ScreenHeader,
   StaleBanner,
   StatusBadge,
   Text,
+  TextLink,
   scrollContent,
 } from '@/src/components/ui';
 import { supabase } from '@/src/utils/supabase';
@@ -39,7 +30,7 @@ import { useAuth } from '@/src/contexts/AuthContext';
 import { urlFotoEncomienda } from '@/src/utils/fotos';
 import { SOPORTE_WHATSAPP } from '@/src/utils/soporte';
 import { formatCity } from '@/src/utils/formatters';
-import { getCobroEncomienda, getEstadoVisual, puedePagarEncomienda } from '@/src/utils/estados';
+import { getCobroEncomienda, puedePagarEncomienda } from '@/src/utils/estados';
 import { humanizeError } from '@/src/utils/errores';
 import { formatNumeroVE, tasaRefDe } from '@/src/utils/dinero';
 import {
@@ -50,6 +41,7 @@ import {
   useSucursalesEncomienda,
   type PagoEncomienda,
 } from '@/src/hooks/useEncomiendas';
+import { useVolver } from '@/src/hooks/useVolver';
 import type { Encomienda, RemitenteEncomienda } from '@/src/types';
 import { Colors, Radius, Sizes, Spacing, StatusPalette, type StatusTone } from '@/src/theme';
 
@@ -59,6 +51,9 @@ interface HistorialRow {
 }
 
 type EncomiendaDetalle = Encomienda & { cooperativas?: { nombre: string } | null };
+
+/** Ceja del detalle = nombre del segmento de la lista (AN-07). */
+const CEJA = 'Para mí';
 
 /** Estados en los que el PIN ya no sirve (paquete entregado o envío cerrado). */
 const SIN_PIN = ['ENTREGADA', 'CANCELADA', 'DEVUELTA'];
@@ -75,6 +70,7 @@ export default function DetalleRecibirScreen() {
   const router = useRouter();
   const toast = useToast();
   const { user } = useAuth();
+  const volver = useVolver('/(tabs)/encomiendas?vista=para-mi');
 
   const [encomienda, setEncomienda] = useState<EncomiendaDetalle | null>(null);
   const [historial, setHistorial] = useState<HistorialRow[]>([]);
@@ -210,32 +206,26 @@ export default function DetalleRecibirScreen() {
 
   if (loading) {
     return (
-      <Screen background={Colors.surface}>
-        <ScreenHeader
-          variant="compact"
-          eyebrow="Encomienda para ti"
-          title="Cargando…"
-          onBack={() => router.back()}
-        />
-        <LoadingState label="Buscando la encomienda…" />
+      <Screen>
+        <ScreenHeader variant="compact" eyebrow={CEJA} title="Encomienda" onBack={volver} />
+        <ScreenSkeleton variante="detalle" />
       </Screen>
     );
   }
 
   if (!encomienda) {
     return (
-      <Screen background={Colors.surface}>
-        <ScreenHeader variant="compact" title="Encomienda para ti" onBack={() => router.back()} />
+      <Screen>
+        <ScreenHeader variant="compact" eyebrow={CEJA} title="Encomienda" onBack={volver} />
         <ErrorState
-          title="No pudimos cargar esta encomienda"
-          description={errorCarga ?? 'Revisa tu conexión e inténtalo de nuevo.'}
+          title="No pudimos cargar la encomienda"
+          description={errorCarga ?? 'Revisa tu conexión.'}
           onRetry={fetchData}
         />
       </Screen>
     );
   }
 
-  const estadoVisual = getEstadoVisual('encomienda', encomienda.estado);
   const costo = Number(encomienda.costo_calculado);
   const pagaDestino = encomienda.modalidad_pago === 'DESTINO';
   const tracking = encomienda.tracking_id ?? null;
@@ -272,297 +262,268 @@ export default function DetalleRecibirScreen() {
     });
 
   return (
-    <Screen background={Colors.surface}>
-      <PageTransition>
-        <ScreenHeader
-          variant="compact"
-          eyebrow="Encomienda para ti"
-          title={tracking ?? 'Encomienda'}
-          onBack={() => router.back()}
-          right={<StatusBadge dominio="encomienda" estado={encomienda.estado} size="md" bordered />}
-        />
+    <Screen>
+      <ScreenHeader
+        variant="compact"
+        eyebrow={CEJA}
+        title={tracking ?? 'Encomienda'}
+        onBack={volver}
+        status={<StatusBadge dominio="encomienda" estado={encomienda.estado} />}
+      />
 
-        <ScrollView
-          contentContainerStyle={scrollContent({ top: Spacing.lg })}
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              colors={[Colors.accent]}
-              tintColor={Colors.accent}
-            />
-          }
-        >
-          {errorCarga ? <StaleBanner actualizadoAt={actualizadoAt} onRetry={fetchData} /> : null}
+      <ScrollView
+        contentContainerStyle={scrollContent({ top: Spacing['2xl'] })}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[Colors.mutedForeground]}
+            tintColor={Colors.mutedForeground}
+          />
+        }
+      >
+        {errorCarga ? <StaleBanner actualizadoAt={actualizadoAt} onRetry={fetchData} /> : null}
 
-          {!enOficina && estadoVisual.hint ? (
-            <Text variant="secondary" color="muted" style={s.hint}>
-              {estadoVisual.hint}
+        {/* ── PIN de retiro (APP-45): destacado solo cuando ya se puede retirar.
+            Sin la pista del estado (AU-03): es la instrucción de quien envía. ─ */}
+        {enOficina && pin ? (
+          <Card style={[s.card, s.pinCard]}>
+            <Text variant="bodyStrong" align="center">
+              {`Retírala en ${puntoRetiro.completo} con este PIN y tu cédula`}
+            </Text>
+            {puntoRetiro.detalle ? (
+              <Text variant="caption" color="muted" align="center">
+                {puntoRetiro.detalle}
+              </Text>
+            ) : null}
+            <Text
+              variant="display"
+              color="foreground"
+              align="center"
+              compact
+              style={s.pin}
+              accessibilityLabel={`PIN de retiro ${pin.split('').join(' ')}`}
+            >
+              {pin}
+            </Text>
+            {encomienda.pin_bloqueado ? (
+              <View style={s.pinBloqueado}>
+                <LockKey size={Sizes.icon.md} color={Colors.dangerText} weight="bold" />
+                <Text variant="caption" color="dangerText" style={s.flex}>
+                  {`Tu PIN se bloqueó por intentos fallidos. Pide en la taquilla que lo desbloqueen${
+                    SOPORTE_WHATSAPP ? ' o escríbenos desde Ayuda' : ''
+                  }.`}
+                </Text>
+              </View>
+            ) : null}
+            <Button
+              variant="outline"
+              size="sm"
+              icon={Copy}
+              onPress={() => copiarPin(pin)}
+              accessibilityLabel="Copiar PIN"
+            >
+              Copiar PIN
+            </Button>
+          </Card>
+        ) : pinActivo ? (
+          <Card tone="sunken" style={[s.card, s.pinLinea]}>
+            <LockKey size={Sizes.icon.md} color={Colors.mutedForeground} weight="bold" />
+            <Text variant="secondary" color="muted" style={s.flex}>
+              {pin
+                ? `Tu PIN es ${pin}. Lo necesitarás cuando llegue a ${ciudadDestino}.`
+                : enOficina
+                  ? 'No pudimos mostrar tu PIN. Desliza hacia abajo o pídelo en la taquilla con tu cédula.'
+                  : 'Tu PIN aparecerá cuando la cooperativa la reciba.'}
+            </Text>
+          </Card>
+        ) : null}
+
+        {/* ── Remitente, paquete y costo ──────────────────────────────── */}
+        <Card tone="sunken" style={s.card}>
+          <InfoRow label="Te la envía" value={nombreRemitente || 'Sin datos de quien envía'} />
+          {telefonoRemitente ? (
+            <Text variant="caption" color="muted" style={s.phone}>
+              {`Teléfono ${telefonoRemitente}`}
             </Text>
           ) : null}
 
-          {/* ── PIN de retiro (APP-45): destacado solo cuando ya se puede retirar ─ */}
-          {enOficina && pin ? (
-            <Card padding="md" elevated={false} style={[s.card, s.pinCard]}>
-              <Text variant="bodyStrong" align="center">
-                {`Lista para retirar: presenta este PIN y tu cédula en ${puntoRetiro.completo}`}
+          <Divider spacing={Spacing.xs} />
+
+          <View style={s.row}>
+            <InfoRow label="Contenido" value={encomienda.descripcion_contenido || '—'} />
+            <InfoRow
+              label="Peso"
+              value={
+                Number(encomienda.peso_kg) > 0
+                  ? `${formatNumeroVE(Number(encomienda.peso_kg), 1)} kg`
+                  : '—'
+              }
+              align="right"
+            />
+          </View>
+
+          <Divider spacing={Spacing.xs} />
+
+          {/* M-51 y AN-19: "No pagas nada" solo aquí, una vez. */}
+          <View style={s.costRow}>
+            <View style={s.flex}>
+              <Text variant="caption" color="muted">
+                Costo del envío
               </Text>
-              {puntoRetiro.detalle ? (
-                <Text variant="caption" color="muted" align="center" style={s.pinDetalle}>
+              <Text variant="bodyStrong">
+                {!pagaDestino
+                  ? cobro.estado === 'PAGADO'
+                    ? 'Pagado por quien envía'
+                    : 'Lo paga quien envía'
+                  : cobro.estado === 'PAGADO'
+                    ? 'Pagado'
+                    : 'Pagas al retirar'}
+              </Text>
+            </View>
+            {pagaDestino && costo > 0 ? (
+              <Monto usd={costo} size="sm" align="right" />
+            ) : !pagaDestino ? (
+              <Text variant="bodyStrong" align="right">
+                No pagas nada
+              </Text>
+            ) : (
+              <Text variant="bodyStrong" align="right">
+                Por calcular
+              </Text>
+            )}
+          </View>
+
+          <Divider spacing={Spacing.xs} />
+
+          <View style={s.puntoRow}>
+            <Storefront size={Sizes.icon.md} color={Colors.foreground} weight="bold" />
+            <View style={s.flex}>
+              <Text variant="caption" color="muted">
+                Dónde retirarla
+              </Text>
+              <Text variant="bodyStrong">{puntoRetiro.completo}</Text>
+              {puntoRetiro.detalle && !enOficina ? (
+                <Text variant="caption" color="muted">
                   {puntoRetiro.detalle}
                 </Text>
               ) : null}
-              <Text
-                variant="display"
-                color="foreground"
-                align="center"
-                compact
-                style={s.pin}
-                accessibilityLabel={`PIN de retiro ${pin.split('').join(' ')}`}
-              >
-                {pin}
-              </Text>
-              {encomienda.pin_bloqueado ? (
-                <View style={s.pinBloqueado}>
-                  <LockKey size={Sizes.icon.md} color={Colors.dangerText} weight="bold" />
-                  <Text variant="caption" color="dangerText" style={s.flex}>
-                    {`Tu PIN se bloqueó por intentos fallidos. Pide en la taquilla que lo desbloqueen${
-                      SOPORTE_WHATSAPP ? ' o escríbenos por WhatsApp desde Ayuda' : ''
-                    }.`}
-                  </Text>
-                </View>
-              ) : null}
-              <Button
-                variant="secondary"
-                size="sm"
-                icon={Copy}
-                onPress={() => copiarPin(pin)}
-                accessibilityLabel="Copiar PIN"
-              >
-                Copiar PIN
-              </Button>
-            </Card>
-          ) : pinActivo ? (
-            <Card padding="md" elevated={false} style={[s.card, s.pinLinea]}>
-              <LockKey size={Sizes.icon.md} color={Colors.mutedForeground} weight="bold" />
-              <Text variant="secondary" color="muted" style={s.flex}>
-                {pin
-                  ? `Tu PIN: ${pin} · Lo necesitarás cuando llegue a ${ciudadDestino}.`
-                  : enOficina
-                    ? 'No pudimos mostrar tu PIN. Desliza hacia abajo para actualizar o pídelo en la taquilla con tu cédula.'
-                    : 'Tu PIN aparecerá cuando la cooperativa reciba el paquete.'}
-              </Text>
-            </Card>
-          ) : null}
-
-          {/* ── Remitente, paquete y costo ──────────────────────────────── */}
-          <Card padding="md" style={s.card}>
-            <InfoRow label="Te lo envía" value={nombreRemitente || 'Sin datos de quien envía'} />
-            {telefonoRemitente ? (
-              <Text variant="caption" color="muted" style={s.phone}>
-                {`Teléfono de quien envía: ${telefonoRemitente}`}
-              </Text>
-            ) : null}
-
-            <Divider spacing={Spacing.md} />
-
-            <View style={s.row}>
-              <InfoRow label="Contenido" value={encomienda.descripcion_contenido || '—'} />
-              <InfoRow
-                label="Peso"
-                value={
-                  Number(encomienda.peso_kg) > 0
-                    ? `${formatNumeroVE(Number(encomienda.peso_kg), 1)} kg`
-                    : '—'
-                }
-                align="right"
-              />
             </View>
+          </View>
+        </Card>
 
-            <Divider spacing={Spacing.md} />
-
-            {/* M-51: el costo dice lo mismo que el bloque de cobro. */}
-            <View style={s.costRow}>
-              <View style={s.costLabel}>
-                <Text variant="overline" color="muted" uppercase>
-                  Costo del envío
-                </Text>
-                <Text variant="caption" color="muted">
-                  {!pagaDestino
-                    ? cobro.estado === 'PAGADO'
-                      ? 'Pagado por quien te lo envió'
-                      : 'Lo paga quien te lo envió'
-                    : costo > 0
-                      ? cobro.estado === 'PAGADO'
-                        ? 'Pagado'
-                        : 'Pagas al retirar'
-                      : 'Se calcula cuando la taquilla pese el paquete'}
-                </Text>
-              </View>
-              {pagaDestino && costo > 0 ? (
-                <Monto usd={costo} size="sm" align="right" />
-              ) : !pagaDestino ? (
-                <Text variant="bodyStrong" align="right">
-                  No pagas nada
-                </Text>
-              ) : (
-                <Text variant="bodyStrong" align="right">
-                  Por calcular
-                </Text>
-              )}
-            </View>
-
-            <Divider spacing={Spacing.md} />
-
-            <View style={s.puntoRow}>
-              <Storefront size={Sizes.icon.md} color={Colors.foreground} weight="bold" />
-              <View style={s.flex}>
-                <Text variant="overline" color="muted" uppercase>
-                  Dónde retirarla
-                </Text>
-                <Text variant="bodyStrong">{puntoRetiro.completo}</Text>
-                {puntoRetiro.detalle && !enOficina ? (
-                  <Text variant="caption" color="muted">
-                    {puntoRetiro.detalle}
-                  </Text>
-                ) : null}
-              </View>
-            </View>
-          </Card>
-
-          {/* ── Cobro ───────────────────────────────────────────────────── */}
-          {!pagaDestino ? (
-            cobro.estado === 'PAGADO' ? (
-              <AvisoCobro tone="success" icon={CheckCircle} titulo="Pagado por quien envía">
-                Para retirarla solo necesitas tu PIN y tu cédula.
-              </AvisoCobro>
-            ) : cobro.estado !== 'NO_APLICA' ? (
-              <AvisoCobro tone="neutral" icon={Info} titulo="No tienes que pagar nada">
-                El envío lo paga quien te lo envió.
-              </AvisoCobro>
-            ) : null
-          ) : cobro.estado === 'PAGADO' ? (
-            <AvisoCobro tone="success" icon={CheckCircle} titulo={pagoEsMio ? 'Pago confirmado' : 'Pagado por quien envía'}>
-              Para retirarla solo necesitas tu PIN y tu cédula.
-            </AvisoCobro>
-          ) : cobro.estado === 'EN_VERIFICACION' ? (
-            <AvisoCobro
-              tone="pending"
-              icon={Clock}
-              titulo="Pago en verificación"
-              extra={
-                pagoVisible ? (
-                  <Monto
-                    usd={pagoVisible.monto ?? costo}
-                    bs={pagoVisible.monto_bs ?? null}
-                    tasa={tasaRefDe(pagoVisible.tasa_bcv, pagoVisible.tasa_bcv_fecha)}
-                    moneda={pagoVisible.moneda}
-                    size="sm"
-                  />
-                ) : null
-              }
-            >
-              {!pagoEsMio
-                ? 'Quien envía ya registró el pago; está en verificación. No tienes que pagar nada.'
-                : pagoVisible?.numero_referencia
-                  ? `Registraste tu pago con la referencia ${pagoVisible.numero_referencia}. La cooperativa lo está revisando y te avisaremos cuando lo confirme.`
-                  : 'La cooperativa está revisando tu pago y te avisaremos cuando lo confirme.'}
-            </AvisoCobro>
-          ) : pago.pagoDeOtro ? (
-            <AvisoCobro tone="progress" icon={Info} titulo="Ya hay un pago registrado">
-              Quien te lo envió ya registró un pago para este envío. Si la cooperativa lo rechaza,
-              podrás pagarlo tú desde aquí.
-            </AvisoCobro>
-          ) : cobro.estado === 'COSTO_PENDIENTE' ? (
-            <AvisoCobro tone="neutral" icon={Storefront} titulo="Pagas al retirar">
-              El costo se calcula cuando la taquilla pese el paquete. Después podrás pagarlo desde
-              aquí o en la oficina de destino.
-            </AvisoCobro>
-          ) : null}
-
-          {cobro.estado === 'RECHAZADO' && pagaDestino && !pago.pagoDeOtro ? (
-            <AvisoCobro tone="danger" icon={XCircle} titulo="Pago rechazado">
-              {pagoEsMio
-                ? `Motivo: ${cobro.motivoRechazo || 'la cooperativa no indicó el motivo.'} Revisa los datos y registra el pago de nuevo.`
-                : `La cooperativa rechazó el pago que registró quien envía (${
-                    cobro.motivoRechazo || 'no indicó el motivo'
-                  }). Puedes pagarlo tú desde aquí o en la oficina de destino al retirarla.`}
-            </AvisoCobro>
-          ) : null}
-
-          {/* Nunca un formulario con costo 0: `puedePagarEncomienda` exige costo calculado. */}
-          {debePagar && encomienda.cooperativa_id ? (
-            <View style={s.card}>
-              <Text variant="subheading">Paga el envío</Text>
-              <Text variant="secondary" color="muted" style={s.sectionText}>
-                Puedes pagarlo ahora desde la app o en la oficina de destino al retirarlo.
-              </Text>
-              {pago.cargandoTasa || !pago.cotizacion ? (
-                <Card padding="lg">
-                  <LoadingState label="Calculando el monto en bolívares…" compact />
-                </Card>
-              ) : (
-                <PaymentFlow
-                  cooperativaId={encomienda.cooperativa_id}
-                  concepto={`Encomienda ${tracking ?? ''}`.trim()}
-                  tipoRecurso="encomienda"
-                  cotizacion={pago.cotizacion}
-                  onRegistrar={pago.registrar}
-                  bloqueado={pago.reintentando}
-                />
-              )}
-            </View>
-          ) : null}
-
-          {/* ── Seguimiento ─────────────────────────────────────────────── */}
-          <Card padding="md" style={s.card}>
-            <Text variant="subheading">Seguimiento</Text>
-            <StatusTimeline
-              estados={buildEncomiendaTimeline(encomienda.estado, historial, {
-                creadaAt: encomienda.created_at,
-              })}
-            />
-          </Card>
-
-          {/* ── Fotos ───────────────────────────────────────────────────── */}
-          {fotos.length > 0 ? (
-            <Card padding="md" style={s.card}>
-              <Text variant="subheading" style={s.cardTitle}>
-                Foto del paquete
-              </Text>
-              {fotos.map((uri, i) => (
-                <Image
-                  key={uri}
-                  source={{ uri }}
-                  style={[s.photo, i > 0 ? s.photoSecond : null]}
-                  resizeMode="cover"
-                  accessibilityLabel="Foto del paquete"
-                />
-              ))}
-              <Text variant="caption" color="muted" style={s.photoCaption}>
-                Así se veía el paquete cuando lo registraron. Revísalo al retirarlo.
-              </Text>
-            </Card>
-          ) : null}
-
-          <PressableScale
-            onPress={reportar}
-            haptic
-            hapticType="selection"
-            style={s.reportar}
-            accessibilityRole="button"
-            accessibilityLabel="¿Problemas con este envío? Reportar un problema"
+        {/* ── Cobro: solo cuando paga quien recibe (AU-43) ───────────── */}
+        {!pagaDestino ? null : cobro.estado === 'PAGADO' ? (
+          <AvisoCobro
+            tone="success"
+            icon={CheckCircle}
+            titulo={pagoEsMio ? 'Pago confirmado' : 'Pagado por quien envía'}
           >
-            <Text variant="caption" color="muted" align="center">
-              ¿Problemas con este envío?{' '}
-              <Text variant="caption" weight="bold" color="foreground" style={s.link}>
-                Reportar un problema
-              </Text>
+            Para retirarla solo necesitas tu PIN y tu cédula.
+          </AvisoCobro>
+        ) : cobro.estado === 'EN_VERIFICACION' ? (
+          <AvisoCobro
+            tone="pending"
+            icon={Clock}
+            titulo="Pago en verificación"
+            extra={
+              pagoVisible ? (
+                <Monto
+                  usd={pagoVisible.monto ?? costo}
+                  bs={pagoVisible.monto_bs ?? null}
+                  tasa={tasaRefDe(pagoVisible.tasa_bcv, pagoVisible.tasa_bcv_fecha)}
+                  moneda={pagoVisible.moneda}
+                  size="sm"
+                />
+              ) : null
+            }
+          >
+            {!pagoEsMio
+              ? 'Quien envía registró el pago y la cooperativa lo está revisando.'
+              : pagoVisible?.numero_referencia
+                ? `Referencia ${pagoVisible.numero_referencia}. Te avisaremos cuando la cooperativa lo confirme.`
+                : 'Te avisaremos cuando la cooperativa lo confirme.'}
+          </AvisoCobro>
+        ) : pago.pagoDeOtro ? (
+          <AvisoCobro tone="progress" icon={Info} titulo="Ya hay un pago registrado">
+            Quien envía ya registró un pago. Si la cooperativa lo rechaza, podrás pagarlo tú.
+          </AvisoCobro>
+        ) : cobro.estado === 'COSTO_PENDIENTE' ? (
+          <AvisoCobro tone="neutral" icon={Storefront} titulo="Pagas al retirar">
+            La taquilla calcula el costo al pesar el paquete.
+          </AvisoCobro>
+        ) : null}
+
+        {cobro.estado === 'RECHAZADO' && pagaDestino && !pago.pagoDeOtro ? (
+          <AvisoCobro tone="danger" icon={XCircle} titulo="Pago rechazado">
+            {`Motivo: ${cobro.motivoRechazo || 'la cooperativa no indicó el motivo.'} ${
+              pagoEsMio
+                ? 'Registra el pago de nuevo.'
+                : 'Lo había registrado quien envía; puedes pagarlo tú.'
+            }`}
+          </AvisoCobro>
+        ) : null}
+
+        {/* Nunca un formulario con costo 0: `puedePagarEncomienda` exige costo calculado. */}
+        {debePagar && encomienda.cooperativa_id ? (
+          <View style={s.card}>
+            <Text variant="subheading" style={s.cardTitle}>
+              Pago
             </Text>
-          </PressableScale>
-        </ScrollView>
-      </PageTransition>
+            {pago.cargandoTasa || !pago.cotizacion ? (
+              <SkeletonLoader height={Sizes.control.xl * 3} borderRadius={Radius.xl} />
+            ) : (
+              <PaymentFlow
+                cooperativaId={encomienda.cooperativa_id}
+                concepto={`Encomienda ${tracking ?? ''}`.trim()}
+                tipoRecurso="encomienda"
+                cotizacion={pago.cotizacion}
+                onRegistrar={pago.registrar}
+                bloqueado={pago.reintentando}
+              />
+            )}
+          </View>
+        ) : null}
+
+        {/* ── Seguimiento ─────────────────────────────────────────────── */}
+        <Card tone="sunken" style={s.card}>
+          <Text variant="subheading">Seguimiento</Text>
+          <StatusTimeline
+            estados={buildEncomiendaTimeline(encomienda.estado, historial, {
+              creadaAt: encomienda.created_at,
+            })}
+          />
+        </Card>
+
+        {/* ── Fotos ───────────────────────────────────────────────────── */}
+        {fotos.length > 0 ? (
+          <Card tone="sunken" style={s.card}>
+            <Text variant="subheading" style={s.cardTitle}>
+              Fotos
+            </Text>
+            {fotos.map((uri, i) => (
+              <Image
+                key={uri}
+                source={{ uri }}
+                style={[s.photo, i > 0 ? s.photoSecond : null]}
+                resizeMode="cover"
+                accessibilityLabel="Foto de la encomienda"
+              />
+            ))}
+            <Text variant="caption" color="muted" style={s.photoCaption}>
+              Revísala al retirarla
+            </Text>
+          </Card>
+        ) : null}
+
+        <View style={s.reportar}>
+          <Text variant="caption" color="muted" align="center">
+            ¿Problemas con esta encomienda?
+          </Text>
+          <TextLink onPress={reportar}>Reportar un problema</TextLink>
+        </View>
+      </ScrollView>
 
       {/* ── EB_TASA_CAMBIO ──────────────────────────────────────────────── */}
       <BottomSheet
@@ -571,12 +532,7 @@ export default function DetalleRecibirScreen() {
         title="Cambió el total"
         footer={
           <View style={s.sheetFooter}>
-            <Button
-              variant="accent"
-              fullWidth
-              loading={pago.reintentando}
-              onPress={pago.confirmarNuevaTasa}
-            >
+            <Button fullWidth loading={pago.reintentando} onPress={pago.confirmarNuevaTasa}>
               Registrar con el nuevo total
             </Button>
             <Button
@@ -615,7 +571,7 @@ function AvisoCobro({
 }) {
   const palette = StatusPalette[tone];
   return (
-    <Card padding="md" style={s.card} accessibilityRole="summary">
+    <Card tone="sunken" style={s.card} accessibilityRole="summary">
       <View style={s.avisoHead}>
         <View style={[s.avisoIcon, { backgroundColor: palette.bg }]}>
           <Icon color={palette.fg} weight="fill" size={Sizes.icon.lg} />
@@ -636,32 +592,22 @@ const s = StyleSheet.create({
   flex: {
     flex: 1,
   },
-  hint: {
-    marginBottom: Spacing.lg,
-  },
   card: {
-    marginBottom: Spacing.lg,
+    marginBottom: Spacing['2xl'],
   },
   cardTitle: {
-    marginBottom: Spacing.md,
-  },
-  sectionText: {
-    marginTop: Spacing.xs,
-    marginBottom: Spacing.md,
+    marginBottom: Spacing.lg,
   },
   pinCard: {
     alignItems: 'center',
     gap: Spacing.sm,
-    // APP-45: brand tint behind a dark PIN — never yellow text on white.
+    // APP-45: tinte de marca detrás de un PIN oscuro, nunca texto amarillo.
     backgroundColor: Colors.primaryLight,
     borderWidth: Sizes.hairline,
     borderColor: Colors.primaryBorder,
   },
-  pinDetalle: {
-    marginTop: -Spacing.xs,
-  },
   pin: {
-    letterSpacing: 8,
+    letterSpacing: Spacing.sm,
     marginVertical: Spacing.sm,
   },
   pinBloqueado: {
@@ -674,7 +620,6 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.md,
-    backgroundColor: Colors.white,
   },
   row: {
     flexDirection: 'row',
@@ -685,19 +630,17 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: Spacing.md,
+    paddingTop: Spacing.md,
   },
   phone: {
-    marginTop: -Spacing.sm,
+    marginBottom: Spacing.sm,
   },
   costRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: Spacing.md,
-  },
-  costLabel: {
-    flex: 1,
-    gap: Spacing.xs / 2,
+    paddingVertical: Spacing.md,
   },
   avisoHead: {
     flexDirection: 'row',
@@ -718,20 +661,17 @@ const s = StyleSheet.create({
   photo: {
     width: '100%',
     height: 200,
-    borderRadius: Radius.md,
+    borderRadius: Radius.lg,
   },
   photoSecond: {
     marginTop: Spacing.lg,
   },
   photoCaption: {
-    marginTop: Spacing.md,
+    marginTop: Spacing.sm,
   },
   reportar: {
-    marginTop: Spacing.xl,
-    paddingVertical: Spacing.sm,
-  },
-  link: {
-    textDecorationLine: 'underline',
+    alignItems: 'center',
+    marginTop: Spacing['2xl'],
   },
   sheetFooter: {
     gap: Spacing.sm,

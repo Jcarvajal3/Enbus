@@ -1,43 +1,17 @@
 import { createClient } from "@/lib/supabase/server";
-import { getUserProfile } from "@/lib/supabase/cached";
-import { redirect } from "next/navigation";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { exigirRolPanel } from "@/lib/supabase/auth-guards";
 import { PageHeader } from "@/components/page-header";
 import { humanizeError } from "@/lib/errores";
 import { DatosCooperativaTab } from "./tab-datos";
 import { MetodosPagoTab } from "./tab-metodos-pago";
 import { SucursalesTab } from "./tab-sucursales";
+import { PestanasConfiguracion, type Pestana } from "./pestanas";
 import type { CooperativaData, MetodoPagoCooperativa } from "@/lib/types/configuracion";
 import type { SucursalGuardada } from "./actions";
 
-export const metadata = {
-  title: "Configuración | EnBus Panel",
-  description: "Datos de la cooperativa, métodos de pago y sucursales",
-};
-
-const PESTANAS = ["datos", "metodos-pago", "sucursales"] as const;
-
-export default async function ConfiguracionPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ tab?: string }>;
-}) {
-  const { tab } = await searchParams;
-  const defaultTab = (PESTANAS as readonly string[]).includes(tab ?? "") ? (tab as string) : "datos";
-
-  const user = await getUserProfile();
-  if (!user) redirect("/cooperativas/login");
-
-  // Solo el administrador configura la cooperativa
-  if (user.role !== "admin_cooperativa") {
-    return (
-      <div className="flex flex-col items-center justify-center gap-3 py-20 text-center">
-        <p className="text-muted-foreground text-sm">
-          Solo el administrador de la cooperativa puede ver la configuración.
-        </p>
-      </div>
-    );
-  }
+export default async function ConfiguracionPage() {
+  // Solo el administrador configura la cooperativa (PN-12).
+  const user = await exigirRolPanel(["admin_cooperativa"]);
 
   const supabase = await createClient();
 
@@ -72,38 +46,32 @@ export default async function ConfiguracionPage({
     throw new Error(humanizeError(cooperativaResult.error, "cargar los datos de la cooperativa"));
   }
 
+  // Mientras la cooperativa está en revisión o rechazada, lo primero son sus datos (PN-32).
+  const estado = cooperativa.estado ?? user.cooperativa_estado ?? null;
+  const defecto: Pestana = estado === "PENDIENTE" || estado === "RECHAZADA" ? "datos" : "sucursales";
+
   return (
-    <div className="flex flex-col gap-6 max-w-4xl mx-auto w-full">
-      <PageHeader
-        title="Configuración"
-        description="Datos de tu cooperativa, métodos de pago y sucursales."
+    <div className="flex w-full max-w-4xl flex-col gap-6">
+      <PageHeader title="Configuración" />
+
+      <PestanasConfiguracion
+        defecto={defecto}
+        paneles={{
+          sucursales: (
+            <SucursalesTab
+              sucursales={sucursales}
+              errorCarga={sucursalesResult.error ? humanizeError(sucursalesResult.error, "cargar las sucursales") : null}
+            />
+          ),
+          "metodos-pago": (
+            <MetodosPagoTab
+              metodos={metodos}
+              errorCarga={metodosResult.error ? humanizeError(metodosResult.error, "cargar los métodos de pago") : null}
+            />
+          ),
+          datos: <DatosCooperativaTab cooperativa={cooperativa} estado={estado} />,
+        }}
       />
-
-      <Tabs key={defaultTab} defaultValue={defaultTab} className="w-full">
-        <TabsList className="mb-6 w-full sm:w-auto">
-          <TabsTrigger value="datos">Datos</TabsTrigger>
-          <TabsTrigger value="metodos-pago">Métodos de pago</TabsTrigger>
-          <TabsTrigger value="sucursales">Sucursales</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="datos">
-          <DatosCooperativaTab cooperativa={cooperativa} estado={cooperativa.estado ?? user.cooperativa_estado ?? null} />
-        </TabsContent>
-
-        <TabsContent value="metodos-pago">
-          <MetodosPagoTab
-            metodos={metodos}
-            errorCarga={metodosResult.error ? humanizeError(metodosResult.error, "cargar los métodos de pago") : null}
-          />
-        </TabsContent>
-
-        <TabsContent value="sucursales">
-          <SucursalesTab
-            sucursales={sucursales}
-            errorCarga={sucursalesResult.error ? humanizeError(sucursalesResult.error, "cargar las sucursales") : null}
-          />
-        </TabsContent>
-      </Tabs>
     </div>
   );
 }

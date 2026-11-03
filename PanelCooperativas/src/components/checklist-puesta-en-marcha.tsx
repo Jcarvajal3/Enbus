@@ -33,8 +33,8 @@ function pasos(c: ChecklistCooperativa): Paso[] {
       hecho: Number(c.sucursales) > 0,
     },
     {
-      titulo: "Agrega un método de pago digital (Pago Móvil, transferencia o Zelle)",
-      ayuda: "Es donde los pasajeros te pagan desde la app.",
+      titulo: "Agrega un método de pago digital",
+      ayuda: "Pago Móvil, transferencia o Zelle: así te pagan desde la app.",
       href: "/cooperativas/configuracion?tab=metodos-pago",
       hecho: Number(c.metodos_digitales) > 0,
     },
@@ -45,8 +45,8 @@ function pasos(c: ChecklistCooperativa): Paso[] {
       hecho: Number(c.rutas) > 0,
     },
     {
-      titulo: "Programa tu primera salida",
-      ayuda: "Sin salidas próximas, la app no muestra tus viajes.",
+      titulo: "Programa tu primer viaje",
+      ayuda: "Sin viajes próximos, la app no muestra tu cooperativa.",
       href: "/cooperativas/viajes",
       hecho: Number(c.viajes_proximos) > 0,
     },
@@ -79,8 +79,8 @@ export function ChecklistPuestaEnMarcha({ checklist }: { checklist: ChecklistCoo
         </CardTitle>
         <CardDescription>
           {completo
-            ? "Tu panel está listo para vender. Te avisaremos por correo cuando aprobemos tu cooperativa."
-            : "Completa estos pasos para empezar a vender boletos y recibir encomiendas."}
+            ? "Listo para vender. Te avisaremos por correo cuando aprobemos tu cooperativa."
+            : "Completa estos pasos para empezar a vender."}
         </CardDescription>
         <div
           className="mt-2 h-2 w-full overflow-hidden rounded-full bg-muted"
@@ -97,12 +97,12 @@ export function ChecklistPuestaEnMarcha({ checklist }: { checklist: ChecklistCoo
         </div>
       </CardHeader>
       <CardContent>
-        <ol className="divide-y rounded-xl border">
+        <ol className="divide-y divide-border overflow-hidden rounded-md border border-border">
           {lista.map((p) => (
             <li key={p.href}>
               <Link
                 href={p.href}
-                className="group flex items-center gap-3 p-3 transition-colors hover:bg-muted/50 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring"
+                className="group flex items-center gap-3 p-3 outline-none hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:ring-inset motion-safe:transition-colors"
               >
                 {p.hecho ? (
                   <CheckCircle className="size-5 shrink-0 text-success-text" weight="fill" aria-hidden />
@@ -110,7 +110,7 @@ export function ChecklistPuestaEnMarcha({ checklist }: { checklist: ChecklistCoo
                   <Circle className="size-5 shrink-0 text-muted-foreground" aria-hidden />
                 )}
                 <span className="min-w-0 flex-1">
-                  <span className={cn("block text-sm font-medium", p.hecho && "text-muted-foreground line-through decoration-1")}>
+                  <span className={cn("block text-sm font-medium", p.hecho ? "text-muted-foreground" : "text-foreground")}>
                     {p.titulo}
                     {p.opcional && <span className="font-normal text-muted-foreground"> (opcional)</span>}
                   </span>

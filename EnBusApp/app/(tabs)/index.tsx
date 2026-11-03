@@ -1,75 +1,51 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Image, ScrollView, StatusBar, StyleSheet, View } from 'react-native';
+/**
+ * Inicio — la marca en la misma cabecera que las demás pestañas (AN-22), tu
+ * próximo viaje si lo hay, el buscador y "Tu actividad" solo con algo en curso
+ * (AN-24, AU-41).
+ */
+import { ScrollView, StatusBar, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { CaretRight, Package, Ticket } from 'phosphor-react-native';
-import { useAuth } from '@/src/contexts/AuthContext';
+import { CaretRight, Package, Ticket, type IconProps } from 'phosphor-react-native';
 import { useActivity } from '@/src/contexts/ActivityContext';
 import { useProximoViaje } from '@/src/hooks/useProximoViaje';
+import { usePerfil } from '@/src/hooks/usePerfil';
 import { SearchForm } from '@/src/components/SearchForm';
 import { StaggerItem } from '@/src/components/StaggerItem';
 import { PressableScale } from '@/src/components/PressableScale';
 import { HeaderActions } from '@/src/components/HeaderActions';
+import { BrandMark } from '@/src/components/BrandMark';
 import { ProximoViajeCard } from '@/src/components/ProximoViajeCard';
-import { Screen, Text } from '@/src/components/ui';
-import { supabase } from '@/src/utils/supabase';
+import { Screen, ScreenHeader, SectionLabel, Text } from '@/src/components/ui';
 import { nombreValido } from '@/src/utils/validation';
-import { Colors, Layout, Motion, Radius, Shadows, Sizes, Spacing } from '@/src/theme';
+import { Colors, Layout, Motion, Radius, Sizes, Spacing } from '@/src/theme';
+
+/** "Buenos días" / "Buenas tardes" / "Buenas noches" según la hora del teléfono. */
+function saludo(): string {
+  const h = new Date().getHours();
+  if (h < 12) return 'Buenos días';
+  if (h < 19) return 'Buenas tardes';
+  return 'Buenas noches';
+}
 
 export default function HomeScreen() {
-  const { user } = useAuth();
   const router = useRouter();
   const { boletosActivos, encomiendasActivas } = useActivity();
   const { proximo } = useProximoViaje();
+  const { perfil } = usePerfil();
 
-  // ── Nombre real para el saludo ─────────────────────────────────────────────
-  const [profileName, setProfileName] = useState<string | null>(null);
-  useEffect(() => {
-    if (!user?.id) return;
-    let isMounted = true;
-    supabase
-      .from('profiles')
-      .select('nombre_completo')
-      .eq('id', user.id)
-      .single()
-      .then(({ data }) => {
-        // Sin el relleno "Usuario EnBus" del alta con Google.
-        if (data?.nombre_completo && nombreValido(data.nombre_completo) && isMounted) {
-          setProfileName(data.nombre_completo.trim().split(' ')[0]);
-        }
-      });
-    return () => {
-      isMounted = false;
-    };
-  }, [user?.id]);
+  // Solo el nombre real (AU-07): nunca el prefijo del correo ni "Usuario EnBus".
+  const nombre = nombreValido(perfil?.nombre_completo)
+    ? (perfil?.nombre_completo ?? '').trim().split(/\s+/)[0]
+    : null;
 
-  const displayName = profileName || (user?.email ? user.email.split('@')[0] : '');
-
-  const greeting = useMemo(() => {
-    const h = new Date().getHours();
-    if (h < 12) return 'Buenos días';
-    if (h < 19) return 'Buenas tardes';
-    return 'Buenas noches';
-  }, []);
+  const hayActividad = boletosActivos > 0 || encomiendasActivas > 0;
 
   return (
     <Screen>
       <StatusBar barStyle="dark-content" backgroundColor={Colors.background} />
 
-      <View style={s.header}>
-        <View style={s.brand}>
-          <View style={s.logoBadge}>
-            <Text variant="overline" size="sm" weight="heavy" color="foreground" compact>
-              EB
-            </Text>
-          </View>
-          <Text variant="subheading" weight="heavy" compact>
-            EnBus
-          </Text>
-        </View>
-
-        {/* El contador de no leídas sale de ActivityContext (un solo canal). */}
-        <HeaderActions />
-      </View>
+      {/* El contador de no leídas sale de ActivityContext (un solo canal). */}
+      <ScreenHeader title={<BrandMark conNombre />} right={<HeaderActions />} />
 
       <ScrollView
         contentContainerStyle={s.scroll}
@@ -78,7 +54,7 @@ export default function HomeScreen() {
       >
         {/* ── Tu próximo viaje (APP-16) ──────────────────────────────────── */}
         {proximo ? (
-          <View style={s.proximo}>
+          <View style={s.seccion}>
             <ProximoViajeCard
               proximo={proximo}
               onVerPase={() =>
@@ -91,253 +67,159 @@ export default function HomeScreen() {
           </View>
         ) : null}
 
-        {/* ── Hero: saludo + buscador ─────────────────────────────────────── */}
-        <View style={s.hero}>
-          <Image
-            source={require('../../assets/images/gradient-1.png')}
-            style={s.heroWave}
-            resizeMode="cover"
-          />
-
-          <View style={s.heroContent}>
-            <StaggerItem index={0} delayStep={110} translateYStart={22}>
-              <Text variant="overline" color="muted" uppercase align="center">
-                {greeting}
-              </Text>
-              <Text variant="title" size="2xl" align="center" style={s.heroTitle}>
-                {displayName ? `¿A dónde vamos, ${displayName}?` : '¿A dónde vamos hoy?'}
-              </Text>
-            </StaggerItem>
-
-            <StaggerItem index={1} delayStep={110} translateYStart={22} style={s.heroSubtitleSlot}>
-              <Text variant="secondary" color="muted" align="center">
-                Compra tu boleto o envía una encomienda desde tu teléfono.
-              </Text>
-            </StaggerItem>
-
-            <StaggerItem index={2} delayStep={110} translateYStart={28}>
-              <SearchForm
-                showModeToggle
-                onSubmit={(data) => {
-                  if (data.mode === 'boletos') {
-                    router.push({
-                      pathname: '/boletos/buscar',
-                      params: {
-                        origen: data.origen.ciudad,
-                        destino: data.destino.ciudad,
-                        fecha: data.fecha ?? '',
-                      },
-                    });
-                  } else {
-                    router.push({
-                      pathname: '/encomiendas/nueva',
-                      params: {
-                        origen_ciudad: data.origen.ciudad,
-                        origen_estado: data.origen.estado,
-                        destino_ciudad: data.destino.ciudad,
-                        destino_estado: data.destino.estado,
-                      },
-                    });
-                  }
-                }}
-              />
-            </StaggerItem>
-          </View>
-        </View>
-
-        {/* ── Actividad en curso ──────────────────────────────────────────── */}
-        <StaggerItem index={3} delayStep={110} style={s.activity}>
-          <Text variant="overline" color="muted" uppercase style={s.activityLabel}>
-            Tu actividad
+        {/* ── Saludo + buscador ───────────────────────────────────────────── */}
+        <StaggerItem index={0}>
+          <Text variant="secondary" color="muted">
+            {saludo()}
           </Text>
-          <View style={s.activityRow}>
-            <ActivityTile
-              icon={Ticket}
-              count={boletosActivos}
-              label="Boletos activos"
-              empty="Sin boletos activos"
-              tint={Colors.accent}
-              tintBackground={Colors.accentLight}
-              onPress={() => router.push('/(tabs)/boletos')}
-            />
-            <ActivityTile
-              icon={Package}
-              count={encomiendasActivas}
-              label="Encomiendas activas"
-              empty="Sin encomiendas activas"
-              tint={Colors.secondary}
-              tintBackground={Colors.secondaryLight}
-              onPress={() => router.push('/(tabs)/encomiendas')}
-            />
-          </View>
+          <Text variant="heading" accessibilityRole="header" style={s.pregunta}>
+            {nombre ? `¿A dónde vamos, ${nombre}?` : '¿A dónde vamos hoy?'}
+          </Text>
         </StaggerItem>
+
+        <StaggerItem index={1}>
+          <SearchForm
+            showModeToggle
+            onSubmit={(data) => {
+              if (data.mode === 'boletos') {
+                router.push({
+                  pathname: '/boletos/buscar',
+                  params: {
+                    origen: data.origen.ciudad,
+                    destino: data.destino.ciudad,
+                    fecha: data.fecha ?? '',
+                  },
+                });
+              } else {
+                router.push({
+                  pathname: '/encomiendas/nueva',
+                  params: {
+                    origen_ciudad: data.origen.ciudad,
+                    origen_estado: data.origen.estado,
+                    destino_ciudad: data.destino.ciudad,
+                    destino_estado: data.destino.estado,
+                  },
+                });
+              }
+            }}
+          />
+        </StaggerItem>
+
+        {/* ── Actividad en curso: solo lo que tiene algo ──────────────────── */}
+        {hayActividad ? (
+          <StaggerItem index={2} style={s.actividad}>
+            <SectionLabel>Tu actividad</SectionLabel>
+            <View style={s.mosaicos}>
+              {boletosActivos > 0 ? (
+                <Mosaico
+                  icono={Ticket}
+                  cantidad={boletosActivos}
+                  etiqueta={boletosActivos === 1 ? 'Boleto activo' : 'Boletos activos'}
+                  tinte={Colors.accentStrong}
+                  fondoTinte={Colors.accentLight}
+                  onPress={() => router.push('/(tabs)/boletos')}
+                />
+              ) : null}
+              {encomiendasActivas > 0 ? (
+                <Mosaico
+                  icono={Package}
+                  cantidad={encomiendasActivas}
+                  etiqueta={encomiendasActivas === 1 ? 'Encomienda activa' : 'Encomiendas activas'}
+                  tinte={Colors.secondary}
+                  fondoTinte={Colors.secondaryLight}
+                  onPress={() => router.push('/(tabs)/encomiendas')}
+                />
+              ) : null}
+            </View>
+          </StaggerItem>
+        ) : null}
       </ScrollView>
     </Screen>
   );
 }
 
-// ─── Activity tile ───────────────────────────────────────────────────────────
+// ─── Mosaico de actividad ────────────────────────────────────────────────────
 
-/**
- * Compact entry point to an in-flight list. Home used to be a search form and
- * nothing else — there was no way to reach an active trip without switching
- * tabs first.
- */
-function ActivityTile({
-  icon: Icon,
-  count,
-  label,
-  empty,
-  tint,
-  tintBackground,
+/** Acceso a una lista con algo en curso: icono del dominio, número y nombre. */
+function Mosaico({
+  icono: Icono,
+  cantidad,
+  etiqueta,
+  tinte,
+  fondoTinte,
   onPress,
 }: {
-  icon: React.ComponentType<{ size?: number; color?: string; weight?: 'fill' | 'bold' }>;
-  count: number;
-  label: string;
-  empty: string;
-  tint: string;
-  tintBackground: string;
+  icono: React.ComponentType<IconProps>;
+  cantidad: number;
+  etiqueta: string;
+  tinte: string;
+  fondoTinte: string;
   onPress: () => void;
 }) {
-  const hasItems = count > 0;
-
   return (
     <PressableScale
       onPress={onPress}
       haptic
       hapticType="selection"
       scaleValue={Motion.press.card}
-      style={s.tile}
+      style={s.mosaico}
       accessibilityRole="button"
-      accessibilityLabel={hasItems ? `${count} ${label}` : `${label}. ${empty}`}
+      accessibilityLabel={`${cantidad} ${etiqueta.toLowerCase()}`}
     >
-      <View style={s.tileTop}>
-        <View style={[s.tileIcon, { backgroundColor: tintBackground }]}>
-          <Icon size={Sizes.icon.md} color={tint} weight="fill" />
+      <View style={s.mosaicoArriba}>
+        <View style={[s.mosaicoIcono, { backgroundColor: fondoTinte }]}>
+          <Icono size={Sizes.icon.md} color={tinte} weight="bold" />
         </View>
-        <CaretRight size={Sizes.icon.sm} color={Colors.mutedForeground} weight="bold" />
+        <CaretRight size={Sizes.icon.md} color={Colors.mutedForeground} weight="bold" />
       </View>
-
-      {/* El número va en `foreground`: el coral y el azul claros no llegan a 3:1 sobre beige. */}
-      {hasItems ? (
-        <Text variant="title" size="3xl" color="foreground" compact style={s.tileCount}>
-          {String(count)}
-        </Text>
-      ) : (
-        <Text variant="title" size="3xl" color="muted" compact style={s.tileCount}>
-          0
-        </Text>
-      )}
-
+      <Text variant="title" compact>
+        {String(cantidad)}
+      </Text>
       <Text variant="caption" color="muted" numberOfLines={2}>
-        {hasItems ? label : empty}
+        {etiqueta}
       </Text>
     </PressableScale>
   );
 }
 
-/**
- * Separación entre el saludo y el buscador. Con 96 pt el botón "Buscar viaje"
- * quedaba bajo el pliegue en 360 × 640 (APP-17).
- */
-const HERO_SPACER = Spacing['2xl'];
-
 const s = StyleSheet.create({
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: Layout.screenPaddingCompact + Spacing.xs,
-    paddingTop: Spacing.sm,
-    paddingBottom: Spacing.xs,
-    zIndex: 10,
-  },
-  brand: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
-  },
-  logoBadge: {
-    width: Sizes.iconBox.md,
-    height: Sizes.iconBox.md,
-    borderRadius: Radius.sm,
-    backgroundColor: Colors.primaryLight,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
   scroll: {
-    paddingHorizontal: Layout.screenPaddingCompact,
-    paddingTop: Spacing.md,
+    paddingHorizontal: Layout.screenPadding,
+    paddingTop: Spacing.lg,
     paddingBottom: Layout.scrollBottomInset,
   },
-
-  proximo: {
+  seccion: {
+    marginBottom: Spacing['2xl'],
+  },
+  pregunta: {
+    marginTop: Spacing.xs,
     marginBottom: Spacing.lg,
   },
-
-  hero: {
-    backgroundColor: Colors.surface,
-    borderRadius: Radius['2xl'],
-    overflow: 'hidden',
-    ...Shadows.card,
+  actividad: {
+    marginTop: Spacing['3xl'],
   },
-  heroWave: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    width: '100%',
-    height: 300,
-  },
-  heroContent: {
-    paddingHorizontal: Spacing.xl,
-    paddingTop: Spacing['3xl'],
-    paddingBottom: Spacing.xl,
-    // Pushes the search form down so it sits over the crest of the wave.
-    gap: HERO_SPACER,
-  },
-  heroTitle: {
-    marginTop: Spacing.sm,
-  },
-  /** Sits directly under the title, so it cancels the hero's large gap. */
-  heroSubtitleSlot: {
-    marginTop: -HERO_SPACER + Spacing.sm,
-    paddingHorizontal: Spacing.lg,
-  },
-
-  activity: {
-    marginTop: Spacing['2xl'],
-  },
-  activityLabel: {
-    marginBottom: Spacing.md,
-    marginLeft: Spacing.xs,
-  },
-  activityRow: {
+  mosaicos: {
     flexDirection: 'row',
     gap: Spacing.md,
   },
-  tile: {
+  mosaico: {
     flex: 1,
+    gap: Spacing.xs,
     backgroundColor: Colors.surface,
-    borderRadius: Radius.lg,
+    borderRadius: Radius.xl,
     padding: Spacing.lg,
   },
-  tileTop: {
+  mosaicoArriba: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: Spacing.md,
+    marginBottom: Spacing.sm,
   },
-  tileIcon: {
-    width: Sizes.iconBox.sm,
-    height: Sizes.iconBox.sm,
+  mosaicoIcono: {
+    width: Sizes.iconBox.md,
+    height: Sizes.iconBox.md,
     borderRadius: Radius.full,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  tileCount: {
-    marginBottom: Spacing.xs,
   },
 });

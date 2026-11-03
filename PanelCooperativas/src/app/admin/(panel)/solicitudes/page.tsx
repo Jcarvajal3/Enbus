@@ -14,7 +14,7 @@ export default async function SolicitudesPage() {
     <div className="flex flex-col gap-6">
       <PageHeader
         title="Solicitudes"
-        description="Revisa los datos de cada cooperativa y apruébala o recházala con un motivo. Un rechazo se puede reabrir."
+        description="Cooperativas que piden entrar a EnBus."
       />
 
       <SolicitudesTable solicitudes={solicitudes} />

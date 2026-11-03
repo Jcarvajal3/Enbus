@@ -1,15 +1,18 @@
 /**
  * Mi perfil (#50, M-55, M-56, APP-52), en secciones:
  *
- * - **Cuenta**: datos personales (botón "Editar") y contraseña ("Cambiar
- *   contraseña", o "Crear una contraseña" si la cuenta es solo de Google).
- * - **Notificaciones**: las tres preferencias `notif_*`; guardan al cambiar y
- *   vuelven atrás si falla.
- * - **Ayuda**, **Legal** (solo con `SITIO_URL`), "Cerrar sesión", "Eliminar mi
- *   cuenta" y la versión.
+ * - **Cuenta**: datos personales ("Editar"), contraseña ("Cambiar contraseña",
+ *   o "Crear una contraseña" si la cuenta es solo de Google) y "Cerrar sesión"
+ *   (con `ConfirmSheet`, D3).
+ * - **Avisos que recibes**: las tres preferencias `notif_*`; guardan al cambiar
+ *   y vuelven atrás si falla. (No es la bandeja "Notificaciones" de la campana.)
+ * - **Ayuda**, **Legal** (solo con `SITIO_URL`), "Eliminar mi cuenta" (el único
+ *   rojo de la pantalla) y la versión.
+ *
+ * Todas las filas son el mismo `ListRow` (icono en círculo, relleno 16), AU-37.
  */
 import { useCallback, useRef, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Switch, TextInput, View } from 'react-native';
+import { Platform, ScrollView, StyleSheet, Switch, TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import {
   CaretRight,
@@ -21,9 +24,8 @@ import {
   Phone,
   ShieldCheck,
   SignOut,
-  UserCircle,
+  User,
   WarningCircle,
-  WhatsappLogo,
   type IconProps,
 } from 'phosphor-react-native';
 import * as Haptics from 'expo-haptics';
@@ -36,28 +38,23 @@ import {
   type CampoPerfil,
   type PreferenciaNotificacion,
 } from '@/src/hooks/usePerfil';
+import { useVolver } from '@/src/hooks/useVolver';
 import { humanizeError } from '@/src/utils/errores';
 import { supabase } from '@/src/utils/supabase';
-import {
-  SITIO_URL,
-  SOPORTE_WHATSAPP,
-  abrirPaginaLegal,
-  abrirSoporteWhatsApp,
-} from '@/src/utils/soporte';
+import { SITIO_URL, abrirPaginaLegal } from '@/src/utils/soporte';
 import { useToast } from '@/src/components/Toast';
-import { PageTransition } from '@/src/components/PageTransition';
 import { PressableScale } from '@/src/components/PressableScale';
 import { StaggerItem } from '@/src/components/StaggerItem';
+import { ScreenSkeleton } from '@/src/components/SkeletonLoader';
 import { CompletarPerfilSheet } from '@/src/components/CompletarPerfilSheet';
 import { CedulaField } from '@/src/components/CedulaField';
 import { TelefonoField } from '@/src/components/TelefonoField';
 import {
   Button,
   Card,
+  ConfirmSheet,
   ErrorState,
   Field,
-  InfoRow,
-  LoadingState,
   Screen,
   ScreenHeader,
   SectionLabel,
@@ -93,12 +90,12 @@ const PREFERENCIAS: { clave: PreferenciaNotificacion; titulo: string; detalle: s
   {
     clave: 'notif_boletos',
     titulo: 'Boletos y pagos',
-    detalle: 'Confirmaciones, pagos y cambios en tus viajes',
+    detalle: 'Pagos y cambios de tus viajes',
   },
   {
     clave: 'notif_encomiendas',
     titulo: 'Encomiendas',
-    detalle: 'Cuando lo que envías o recibes cambia de estado',
+    detalle: 'Cuando un envío cambia de estado',
   },
   {
     clave: 'notif_recordatorios',
@@ -107,8 +104,15 @@ const PREFERENCIAS: { clave: PreferenciaNotificacion; titulo: string; detalle: s
   },
 ];
 
+/**
+ * En la web, `Switch` pinta el pulgar activo turquesa si no se le da color
+ * (SY-35, AU-38): `activeThumbColor` solo existe en react-native-web.
+ */
+const SWITCH_WEB = Platform.OS === 'web' ? { activeThumbColor: Colors.white } : {};
+
 export default function PerfilScreen() {
   const router = useRouter();
+  const atras = useVolver('/(tabs)');
   const { user, signOut } = useAuth();
   const toast = useToast();
   const { perfil, completo, faltan, loading, error, recargar, guardar, guardarNotificaciones } =
@@ -116,6 +120,7 @@ export default function PerfilScreen() {
 
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [confirmarSalida, setConfirmarSalida] = useState(false);
   const [cerrandoSesion, setCerrandoSesion] = useState(false);
   const [completarPerfil, setCompletarPerfil] = useState(false);
 
@@ -229,304 +234,256 @@ export default function PerfilScreen() {
       // El guard de `app/_layout.tsx` lleva al inicio de sesión.
     } catch (err) {
       setCerrandoSesion(false);
+      setConfirmarSalida(false);
       toast.show('error', `No pudimos cerrar la sesión. ${humanizeError(err)}`);
     }
   }, [signOut, toast]);
-
-  const confirmarCerrarSesion = () => {
-    Haptics.selectionAsync();
-    Alert.alert('¿Cerrar sesión?', 'Se borrarán los boletos guardados en este teléfono.', [
-      { text: 'Cancelar', style: 'cancel' },
-      { text: 'Cerrar sesión', style: 'destructive', onPress: cerrarSesion },
-    ]);
-  };
-
-  const escribirSoporte = async () => {
-    const ok = await abrirSoporteWhatsApp();
-    if (!ok) toast.show('error', 'No pudimos abrir WhatsApp. Revisa que esté instalado.');
-  };
 
   const abrirLegal = async (pagina: 'terminos' | 'privacidad') => {
     const ok = await abrirPaginaLegal(pagina);
     if (!ok) toast.show('error', 'No pudimos abrir la página. Revisa tu conexión e intenta de nuevo.');
   };
 
-  const displayName =
-    (nombreValido(perfil?.nombre_completo) ? perfil?.nombre_completo : null) ||
-    user?.email?.split('@')[0] ||
-    'Tu cuenta';
+  // Sin nombre válido, "Tu cuenta" (nunca el prefijo del correo), AU-07.
+  const displayName = nombreValido(perfil?.nombre_completo)
+    ? (perfil?.nombre_completo ?? 'Tu cuenta')
+    : 'Tu cuenta';
   const email = user?.email ?? '';
 
   return (
     <Screen>
-      <PageTransition>
-        <ScreenHeader variant="compact" title="Mi perfil" onBack={() => router.back()} />
+      <ScreenHeader variant="compact" title="Mi perfil" onBack={atras} />
 
-        {loading && !perfil ? (
-          <LoadingState label="Cargando tu perfil…" />
-        ) : error && !perfil ? (
-          <ErrorState title="No pudimos cargar tu perfil" description={error} onRetry={recargar} />
-        ) : (
-          <ScrollView
-            contentContainerStyle={scrollContent({ top: 0 })}
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-          >
-            <StaggerItem index={0} style={s.avatarBlock}>
-              <View style={s.avatar}>
-                <UserCircle weight="fill" color={Colors.primary} size={Sizes.avatar.md + Spacing.lg} />
-              </View>
-              <Text variant="heading" size="2xl" align="center">
-                {displayName}
-              </Text>
+      {loading && !perfil ? (
+        <ScreenSkeleton variante="perfil" />
+      ) : error && !perfil ? (
+        <ErrorState title="No pudimos cargar tu perfil" description={error} onRetry={recargar} />
+      ) : (
+        <ScrollView
+          contentContainerStyle={scrollContent({ top: 0 })}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          <StaggerItem index={0} style={s.avatarBlock}>
+            <View style={s.avatar} importantForAccessibility="no" accessibilityElementsHidden>
+              <User weight="regular" color={Colors.mutedForeground} size={Sizes.icon['2xl']} />
+            </View>
+            <Text variant="heading" align="center" accessibilityRole="header">
+              {displayName}
+            </Text>
+            {email ? (
               <Text variant="secondary" color="muted" align="center">
                 {email}
               </Text>
-            </StaggerItem>
+            ) : null}
+          </StaggerItem>
 
-            {/* ── Aviso: faltan datos para comprar (#24) ─────────────────── */}
-            {!completo && !isEditing ? (
-              <StaggerItem index={1}>
-                <Card tone="outline" padding="md" style={s.aviso} accessibilityRole="summary">
-                  <View style={s.avisoHead}>
-                    <WarningCircle color={Colors.warningText} weight="fill" size={Sizes.icon.lg} />
-                    <View style={s.avisoBody}>
-                      <Text variant="bodyStrong">Faltan tus datos para comprar</Text>
-                      <Text variant="secondary" color="muted">
-                        {`Agrega ${listaCampos(faltan)} para comprar boletos, enviar encomiendas y recibir las que te envíen.`}
-                      </Text>
-                    </View>
+          {/* ── Aviso: faltan datos para comprar (#24) ─────────────────── */}
+          {!completo && !isEditing ? (
+            <StaggerItem index={1} style={s.section}>
+              <Card tone="outline" padding="md" accessibilityRole="summary">
+                <View style={s.avisoHead}>
+                  <WarningCircle color={Colors.warningText} weight="fill" size={Sizes.icon.lg} />
+                  <View style={s.avisoBody}>
+                    <Text variant="bodyStrong">Faltan tus datos para comprar</Text>
+                    <Text variant="secondary" color="muted">
+                      {`Agrega ${listaCampos(faltan)} para comprar y enviar.`}
+                    </Text>
                   </View>
-                  <Button
-                    variant="accent"
-                    size="md"
-                    fullWidth
-                    onPress={() => setCompletarPerfil(true)}
-                    style={s.avisoAction}
-                  >
-                    Completar
-                  </Button>
-                </Card>
-              </StaggerItem>
-            ) : null}
-
-            {/* ── Cuenta ───────────────────────────────────────────────────── */}
-            <StaggerItem index={2}>
-              <SectionLabel>Cuenta</SectionLabel>
-              <Card tone="sunken" padding="md" elevated={false}>
-                <View style={s.cardHead}>
-                  <Text variant="bodyStrong" accessibilityRole="header" style={s.cardHeadTitle}>
-                    Datos personales
-                  </Text>
-                  {perfil ? (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onPress={isEditing ? handleCancel : empezarEdicion}
-                      disabled={saving}
-                      accessibilityLabel={
-                        isEditing ? 'Cancelar la edición de tus datos' : 'Editar tus datos personales'
-                      }
-                      style={s.textButton}
-                    >
-                      {isEditing ? 'Cancelar' : 'Editar'}
-                    </Button>
-                  ) : null}
                 </View>
-
-                {isEditing ? (
-                  <>
-                    <Field
-                      label="Nombre y apellido"
-                      placeholder="Juan Pérez"
-                      value={nombreCompleto}
-                      onChangeText={(v) => {
-                        setNombreCompleto(v.slice(0, 80));
-                        limpiarCampo('nombre');
-                      }}
-                      editable={!saving}
-                      error={errors.nombre}
-                      autoComplete="name"
-                      textContentType="name"
-                      autoCapitalize="words"
-                      returnKeyType="next"
-                      submitBehavior="submit"
-                      onSubmitEditing={() => telefonoRef.current?.focus()}
-                    />
-                    <TelefonoField
-                      ref={telefonoRef}
-                      value={telefono}
-                      onChangeText={(v) => {
-                        setTelefono(v);
-                        limpiarCampo('telefono');
-                      }}
-                      editable={!saving}
-                      error={errors.telefono}
-                      returnKeyType="next"
-                      onSubmitEditing={() => cedulaRef.current?.focus()}
-                    />
-                    <CedulaField
-                      ref={cedulaRef}
-                      value={cedulaRif}
-                      onChangeText={(v) => {
-                        setCedulaRif(v);
-                        limpiarCampo('cedula');
-                      }}
-                      editable={!saving}
-                      error={errors.cedula}
-                      returnKeyType="done"
-                      onSubmitEditing={handleSave}
-                    />
-                    <Button
-                      variant="accent"
-                      fullWidth
-                      disabled={saving}
-                      onPress={handleSave}
-                    >
-                      {saving ? 'Guardando…' : 'Guardar cambios'}
-                    </Button>
-                  </>
-                ) : (
-                  <>
-                    <InfoRow
-                      label="Correo"
-                      value={email || '—'}
-                      icon={
-                        <EnvelopeSimple
-                          color={Colors.mutedForeground}
-                          size={Sizes.icon.md}
-                          weight="bold"
-                        />
-                      }
-                    />
-                    <InfoRow
-                      label="Teléfono"
-                      value={perfil?.telefono ? formatTelefono(perfil.telefono) : 'Sin agregar'}
-                      divided
-                      icon={
-                        <Phone color={Colors.mutedForeground} size={Sizes.icon.md} weight="bold" />
-                      }
-                    />
-                    <InfoRow
-                      label="Cédula"
-                      value={perfil?.cedula_rif ? formatCedula(perfil.cedula_rif) : 'Sin agregar'}
-                      divided
-                      icon={
-                        <IdentificationCard
-                          color={Colors.mutedForeground}
-                          size={Sizes.icon.md}
-                          weight="bold"
-                        />
-                      }
-                    />
-                  </>
-                )}
-              </Card>
-
-              <Card tone="sunken" padding="none" elevated={false} style={s.cardSpaced}>
-                <FilaMenu
-                  icon={Key}
-                  titulo={conContrasena ? 'Cambiar contraseña' : 'Crear una contraseña'}
-                  detalle={
-                    conContrasena ? undefined : 'Para entrar también con tu correo, no solo con Google'
-                  }
-                  onPress={() => router.push('/cuenta/contrasena')}
-                />
+                <Button
+                  size="md"
+                  fullWidth
+                  onPress={() => setCompletarPerfil(true)}
+                  style={s.avisoAction}
+                >
+                  Completar datos
+                </Button>
               </Card>
             </StaggerItem>
+          ) : null}
 
-            {/* ── Notificaciones ───────────────────────────────────────────── */}
-            <StaggerItem index={3} style={s.section}>
-              <SectionLabel>Notificaciones</SectionLabel>
-              <Card tone="sunken" padding="none" elevated={false}>
-                {PREFERENCIAS.map((p, i) => (
-                  <FilaSwitch
-                    key={p.clave}
-                    titulo={p.titulo}
-                    detalle={p.detalle}
-                    valor={valorPreferencia(p.clave)}
-                    guardando={prefLocal[p.clave] !== undefined}
-                    onCambiar={(v) => cambiarPreferencia(p.clave, v)}
-                    divided={i > 0}
-                  />
-                ))}
-              </Card>
-            </StaggerItem>
-
-            {/* ── Ayuda (#28) ──────────────────────────────────────────────── */}
-            <StaggerItem index={4} style={s.section}>
-              <SectionLabel>Ayuda</SectionLabel>
-              <Card tone="sunken" padding="none" elevated={false}>
-                <FilaMenu
-                  icon={Lifebuoy}
-                  titulo="Ayuda y soporte"
-                  detalle="Reporta un problema o lee las preguntas frecuentes"
-                  onPress={() => router.push('/ayuda')}
-                />
-                {SOPORTE_WHATSAPP ? (
-                  <FilaMenu
-                    icon={WhatsappLogo}
-                    titulo="Escríbenos por WhatsApp"
-                    detalle="Abre un chat con el equipo de EnBus"
-                    onPress={escribirSoporte}
-                    divided
-                  />
-                ) : null}
-              </Card>
-            </StaggerItem>
-
-            {/* ── Legal (solo con el sitio configurado) ────────────────────── */}
-            {SITIO_URL ? (
-              <StaggerItem index={5} style={s.section}>
-                <SectionLabel>Legal</SectionLabel>
-                <Card tone="sunken" padding="none" elevated={false}>
-                  <FilaMenu
-                    icon={FileText}
-                    titulo="Términos y condiciones"
-                    onPress={() => abrirLegal('terminos')}
-                  />
-                  <FilaMenu
-                    icon={ShieldCheck}
-                    titulo="Política de privacidad"
-                    onPress={() => abrirLegal('privacidad')}
-                    divided
-                  />
-                </Card>
-              </StaggerItem>
-            ) : null}
-
-            <StaggerItem index={6} style={s.actions}>
-              <Button
-                variant="dangerSoft"
-                icon={SignOut}
-                fullWidth
-                loading={cerrandoSesion}
-                onPress={confirmarCerrarSesion}
-              >
-                Cerrar sesión
-              </Button>
-
-              <PressableScale
-                onPress={() => router.push('/cuenta/eliminar')}
-                haptic
-                hapticType="selection"
-                scaleValue={Motion.press.button}
-                style={s.eliminar}
-                accessibilityRole="button"
-                accessibilityLabel="Eliminar mi cuenta"
-              >
-                <Text variant="label" color="dangerText" weight="bold">
-                  Eliminar mi cuenta
+          {/* ── Cuenta ───────────────────────────────────────────────────── */}
+          <StaggerItem index={2} style={s.section}>
+            <SectionLabel>Cuenta</SectionLabel>
+            <Card tone="sunken" padding="none">
+              <View style={s.cardHead}>
+                <Text variant="bodyStrong" accessibilityRole="header" style={s.cardHeadTitle}>
+                  Datos personales
                 </Text>
-              </PressableScale>
+                {perfil ? (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onPress={isEditing ? handleCancel : empezarEdicion}
+                    disabled={saving}
+                    accessibilityLabel={
+                      isEditing ? 'Cancelar la edición de tus datos' : 'Editar tus datos personales'
+                    }
+                    style={s.textButton}
+                  >
+                    {isEditing ? 'Cancelar' : 'Editar'}
+                  </Button>
+                ) : null}
+              </View>
 
-              <Text variant="caption" color="muted" align="center" style={s.version}>
-                {APP_VERSION ? `EnBus · versión ${APP_VERSION}` : 'EnBus'}
-              </Text>
+              {isEditing ? (
+                <View style={s.form}>
+                  <Field
+                    label="Nombre y apellido"
+                    value={nombreCompleto}
+                    onChangeText={(v) => {
+                      setNombreCompleto(v.slice(0, 80));
+                      limpiarCampo('nombre');
+                    }}
+                    editable={!saving}
+                    error={errors.nombre}
+                    autoComplete="name"
+                    textContentType="name"
+                    autoCapitalize="words"
+                    returnKeyType="next"
+                    submitBehavior="submit"
+                    onSubmitEditing={() => telefonoRef.current?.focus()}
+                  />
+                  <TelefonoField
+                    ref={telefonoRef}
+                    value={telefono}
+                    onChangeText={(v) => {
+                      setTelefono(v);
+                      limpiarCampo('telefono');
+                    }}
+                    editable={!saving}
+                    error={errors.telefono}
+                    returnKeyType="next"
+                    onSubmitEditing={() => cedulaRef.current?.focus()}
+                  />
+                  <CedulaField
+                    ref={cedulaRef}
+                    value={cedulaRif}
+                    onChangeText={(v) => {
+                      setCedulaRif(v);
+                      limpiarCampo('cedula');
+                    }}
+                    editable={!saving}
+                    error={errors.cedula}
+                    returnKeyType="done"
+                    onSubmitEditing={handleSave}
+                  />
+                  <Button fullWidth loading={saving} onPress={handleSave}>
+                    Guardar cambios
+                  </Button>
+                </View>
+              ) : (
+                <>
+                  <ListRow icon={EnvelopeSimple} etiqueta="Correo" titulo={email || '—'} divided />
+                  <ListRow
+                    icon={Phone}
+                    etiqueta="Teléfono"
+                    titulo={perfil?.telefono ? formatTelefono(perfil.telefono) : 'Sin agregar'}
+                    divided
+                  />
+                  <ListRow
+                    icon={IdentificationCard}
+                    etiqueta="Cédula"
+                    titulo={perfil?.cedula_rif ? formatCedula(perfil.cedula_rif) : 'Sin agregar'}
+                    divided
+                  />
+                </>
+              )}
+            </Card>
+
+            <Card tone="sunken" padding="none" style={s.cardSpaced}>
+              <ListRow
+                icon={Key}
+                titulo={conContrasena ? 'Cambiar contraseña' : 'Crear una contraseña'}
+                detalle={conContrasena ? undefined : 'Para entrar también con tu correo'}
+                onPress={() => router.push('/cuenta/contrasena')}
+              />
+              <ListRow
+                icon={SignOut}
+                titulo="Cerrar sesión"
+                onPress={() => setConfirmarSalida(true)}
+                chevron={false}
+                divided
+              />
+            </Card>
+          </StaggerItem>
+
+          {/* ── Avisos que recibes (AN-17) ───────────────────────────────── */}
+          <StaggerItem index={3} style={s.section}>
+            <SectionLabel>Avisos que recibes</SectionLabel>
+            <Card tone="sunken" padding="none">
+              {PREFERENCIAS.map((p, i) => (
+                <FilaSwitch
+                  key={p.clave}
+                  titulo={p.titulo}
+                  detalle={p.detalle}
+                  valor={valorPreferencia(p.clave)}
+                  guardando={prefLocal[p.clave] !== undefined}
+                  onCambiar={(v) => cambiarPreferencia(p.clave, v)}
+                  divided={i > 0}
+                />
+              ))}
+            </Card>
+          </StaggerItem>
+
+          {/* ── Ayuda (#28); WhatsApp vive en Ayuda (AN-17) ──────────────── */}
+          <StaggerItem index={4} style={s.section}>
+            <SectionLabel>Ayuda</SectionLabel>
+            <Card tone="sunken" padding="none">
+              <ListRow
+                icon={Lifebuoy}
+                titulo="Ayuda"
+                detalle="Preguntas frecuentes y reportes"
+                onPress={() => router.push('/ayuda')}
+              />
+            </Card>
+          </StaggerItem>
+
+          {/* ── Legal (solo con el sitio configurado) ────────────────────── */}
+          {SITIO_URL ? (
+            <StaggerItem index={5} style={s.section}>
+              <SectionLabel>Legal</SectionLabel>
+              <Card tone="sunken" padding="none">
+                <ListRow
+                  icon={FileText}
+                  titulo="Términos y condiciones"
+                  onPress={() => abrirLegal('terminos')}
+                />
+                <ListRow
+                  icon={ShieldCheck}
+                  titulo="Política de privacidad"
+                  onPress={() => abrirLegal('privacidad')}
+                  divided
+                />
+              </Card>
             </StaggerItem>
-          </ScrollView>
-        )}
-      </PageTransition>
+          ) : null}
+
+          <StaggerItem index={6} style={s.pie}>
+            <Button
+              variant="dangerGhost"
+              size="md"
+              onPress={() => router.push('/cuenta/eliminar')}
+            >
+              Eliminar mi cuenta
+            </Button>
+            <Text variant="caption" color="muted" align="center">
+              {APP_VERSION ? `EnBus · versión ${APP_VERSION}` : 'EnBus'}
+            </Text>
+          </StaggerItem>
+        </ScrollView>
+      )}
+
+      <ConfirmSheet
+        visible={confirmarSalida}
+        cargando={cerrandoSesion}
+        titulo="¿Cerrar sesión?"
+        mensaje="Se borrarán los boletos guardados en este teléfono."
+        confirmar="Cerrar sesión"
+        onConfirm={cerrarSesion}
+        onClose={() => setConfirmarSalida(false)}
+      />
 
       <CompletarPerfilSheet
         visible={completarPerfil}
@@ -541,21 +498,66 @@ export default function PerfilScreen() {
   );
 }
 
-// ─── Fila de menú ────────────────────────────────────────────────────────────
+// ─── Fila ────────────────────────────────────────────────────────────────────
 
-function FilaMenu({
+/**
+ * La única fila del perfil (AU-37): icono en círculo blanco, relleno 16.
+ * Dato (`etiqueta` + `titulo`: "Correo" / "ana@…") o acción (`titulo` +
+ * `detalle`, con `onPress` y chevron si abre otra pantalla).
+ */
+function ListRow({
   icon: Icon,
+  etiqueta,
   titulo,
   detalle,
   onPress,
+  chevron = true,
   divided,
 }: {
   icon: React.ComponentType<IconProps>;
+  etiqueta?: string;
   titulo: string;
   detalle?: string;
-  onPress: () => void;
+  onPress?: () => void;
+  chevron?: boolean;
   divided?: boolean;
 }) {
+  const contenido = (
+    <>
+      <View style={s.filaIcon}>
+        <Icon size={Sizes.icon.md} color={Colors.foreground} weight="bold" />
+      </View>
+      <View style={s.filaBody}>
+        {etiqueta ? (
+          <Text variant="caption" color="muted">
+            {etiqueta}
+          </Text>
+        ) : null}
+        <Text variant="bodyStrong">{titulo}</Text>
+        {detalle ? (
+          <Text variant="caption" color="muted">
+            {detalle}
+          </Text>
+        ) : null}
+      </View>
+      {onPress && chevron ? (
+        <CaretRight size={Sizes.icon.sm} color={Colors.mutedForeground} weight="bold" />
+      ) : null}
+    </>
+  );
+
+  if (!onPress) {
+    return (
+      <View
+        style={[s.fila, divided && s.filaDivided]}
+        accessible
+        accessibilityLabel={etiqueta ? `${etiqueta}: ${titulo}` : titulo}
+      >
+        {contenido}
+      </View>
+    );
+  }
+
   return (
     <PressableScale
       onPress={onPress}
@@ -566,18 +568,7 @@ function FilaMenu({
       accessibilityRole="button"
       accessibilityLabel={detalle ? `${titulo}. ${detalle}` : titulo}
     >
-      <View style={s.filaIcon}>
-        <Icon size={Sizes.icon.md} color={Colors.foreground} weight="bold" />
-      </View>
-      <View style={s.filaBody}>
-        <Text variant="bodyStrong">{titulo}</Text>
-        {detalle ? (
-          <Text variant="caption" color="muted">
-            {detalle}
-          </Text>
-        ) : null}
-      </View>
-      <CaretRight size={Sizes.icon.sm} color={Colors.mutedForeground} weight="bold" />
+      {contenido}
     </PressableScale>
   );
 }
@@ -620,9 +611,10 @@ function FilaSwitch({
           onCambiar(v);
         }}
         disabled={guardando}
-        trackColor={{ false: Colors.borderStrong, true: Colors.accent }}
+        trackColor={{ false: Colors.borderStrong, true: Colors.accentStrong }}
         thumbColor={Colors.white}
         ios_backgroundColor={Colors.borderStrong}
+        {...SWITCH_WEB}
         accessibilityLabel={detalle ? `${titulo}. ${detalle}` : titulo}
         accessibilityState={{ checked: valor, disabled: guardando, busy: guardando }}
       />
@@ -633,20 +625,17 @@ function FilaSwitch({
 const s = StyleSheet.create({
   avatarBlock: {
     alignItems: 'center',
-    paddingVertical: Spacing['3xl'],
+    paddingTop: Spacing['2xl'],
     gap: Spacing.xs,
   },
   avatar: {
     width: Sizes.avatar.lg,
     height: Sizes.avatar.lg,
     borderRadius: Radius.full,
-    backgroundColor: Colors.primaryLight,
+    backgroundColor: Colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: Spacing.md,
-  },
-  aviso: {
-    marginBottom: Spacing.lg,
   },
   avisoHead: {
     flexDirection: 'row',
@@ -665,13 +654,19 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: Spacing.md,
-    marginBottom: Spacing.sm,
+    paddingLeft: Spacing.lg,
+    paddingRight: Spacing.xs,
+    minHeight: Sizes.control.lg,
   },
   cardHeadTitle: {
     flex: 1,
   },
   textButton: {
-    marginRight: -Spacing.md,
+    paddingHorizontal: Spacing.md,
+  },
+  form: {
+    paddingHorizontal: Spacing.lg,
+    paddingBottom: Spacing.lg,
   },
   cardSpaced: {
     marginTop: Spacing.md,
@@ -679,25 +674,17 @@ const s = StyleSheet.create({
   section: {
     marginTop: Spacing['2xl'],
   },
-  actions: {
+  pie: {
     marginTop: Spacing['2xl'],
-  },
-  eliminar: {
-    alignSelf: 'center',
-    minHeight: Sizes.touchTarget,
-    justifyContent: 'center',
-    paddingHorizontal: Spacing.lg,
-    marginTop: Spacing.lg,
-  },
-  version: {
-    marginTop: Spacing.lg,
+    alignItems: 'center',
+    gap: Spacing.sm,
   },
   fila: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.md,
     paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.lg,
+    paddingVertical: Spacing.md,
     minHeight: Sizes.control.lg,
   },
   filaDivided: {
@@ -705,8 +692,8 @@ const s = StyleSheet.create({
     borderTopColor: Colors.border,
   },
   filaIcon: {
-    width: Sizes.iconBox.sm,
-    height: Sizes.iconBox.sm,
+    width: Sizes.iconBox.md,
+    height: Sizes.iconBox.md,
     borderRadius: Radius.full,
     backgroundColor: Colors.white,
     alignItems: 'center',
@@ -714,6 +701,5 @@ const s = StyleSheet.create({
   },
   filaBody: {
     flex: 1,
-    gap: Spacing.xs / 2,
   },
 });

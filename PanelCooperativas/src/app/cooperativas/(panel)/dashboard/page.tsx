@@ -1,22 +1,26 @@
 import { createClient } from "@/lib/supabase/server";
 import { getUserProfile } from "@/lib/supabase/cached";
 import { obtenerTasaBCV } from "@/lib/tasa-bcv";
-import { formatFechaHoraVE, formatFechaVE, hoyVE, rangoDiaVE, sumarDiasVE } from "@/lib/fechas";
+import { formatFechaHoraCortaVE, formatFechaVE, hoyVE, rangoDiaVE, sumarDiasVE } from "@/lib/fechas";
 import { resumirIngresos } from "@/lib/types/admin-dashboard";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Package, TruckTrailer, Ticket, CurrencyDollar, CheckCircle, WarningCircle, WhatsappLogo } from "@phosphor-icons/react/dist/ssr";
+import { CheckCircle, Coins, WarningCircle, WhatsappLogo } from "@phosphor-icons/react/dist/ssr";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { StatusBadge } from "@/components/status-badge";
+import { StatusBadge, TonoBadge } from "@/components/status-badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Monto } from "@/components/monto";
+import { KpiCard } from "@/components/kpi-card";
+import { FilaVacia } from "@/components/fila-vacia";
 import { formatMoney } from "@/lib/dinero";
+import { ICONO_SECCION } from "@/lib/navigation";
 import { ChecklistPuestaEnMarcha, type ChecklistCooperativa } from "@/components/checklist-puesta-en-marcha";
 import dynamic from "next/dynamic";
 import { formatCiudad } from "@/lib/ciudades";
 import { telefonoWhatsApp } from "@/lib/ve";
 import { CeldaEnlace } from "@/components/celda-enlace";
 import { BandejaAtencion } from "./bandeja-atencion";
+import { ErrorRecargable } from "./error-recargable";
 import { cargarBandeja } from "./actions";
 
 // Gráfico con recharts cargado aparte (~280 KB menos en la carga inicial)
@@ -24,7 +28,7 @@ const ActivityChart = dynamic(
   () => import("@/components/activity-chart").then((m) => ({ default: m.ActivityChart })),
   {
     loading: () => (
-      <Card className="col-span-1 lg:col-span-2">
+      <Card className="lg:col-span-2">
         <CardHeader>
           <CardTitle>Actividad</CardTitle>
         </CardHeader>
@@ -54,12 +58,6 @@ type EncomiendaReciente = {
   remitente_nombre?: string | null;
   sender: unknown;
 };
-
-/** Columna DATE 'YYYY-MM-DD' → "dd/mm/aaaa", sin convertir de zona horaria (no se desplaza un día). */
-function formatDia(fecha: string | null | undefined) {
-  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(fecha ?? "");
-  return m ? `${m[3]}/${m[2]}/${m[1]}` : "";
-}
 
 /** WhatsApp de soporte de EnBus solo con dígitos (para wa.me), o null si no está configurado. */
 function whatsappSoporte(): string | null {
@@ -212,10 +210,12 @@ export default async function DashboardPage() {
   if (checklistRes?.error) console.error("[DashboardPage] checklist:", checklistRes.error);
   const checklist = (checklistRes && !checklistRes.error ? checklistRes.data : null) as ChecklistCooperativa | null;
 
+  // Un KPI que falla muestra "—" y un solo aviso encima de la fila (PU-14), nunca un 0 engañoso.
   const kpi = (r: { count: number | null; error: unknown }) => (r.error ? "—" : String(r.count ?? 0));
-  // Σ coalesce(monto_bs, monto × tasa de hoy) en Bs; los pagos sin monto_bs son anteriores a la fase 2.
-  // Si la consulta falla, se muestra "—" y un aviso en vez de un 0 engañoso.
+  const kpisConError = [kpiRecibidas, kpiDespachadas, kpiBoletos, kpiPagos].some((r) => r.error);
+  // Σ coalesce(monto_bs, monto × tasa de hoy) en Bs; cada pago a su propia tasa (sin la de hoy como referencia).
   const ingresos = resumirIngresos(kpiPagos.data, tasa?.tasa ?? null);
+  const montoIngresos = formatMoney({ usd: ingresos.usd, bs: ingresos.bs, tasa: null });
   const soporte = whatsappSoporte();
   const encomiendasRecientes = (recentData.data ?? []) as unknown as EncomiendaReciente[];
   const chartData = adminData?.chartData ?? [];
@@ -234,185 +234,133 @@ export default async function DashboardPage() {
         }
       : null;
 
-  const montoComision = comisionPendiente ? formatMoney({ usd: comisionPendiente.total, tasa }) : null;
-
-  const kpis = [
-    { titulo: "Encomiendas recibidas hoy", ayuda: "En tu taquilla", icono: Package, r: kpiRecibidas },
-    { titulo: "Encomiendas despachadas hoy", ayuda: "Salieron en un bus", icono: TruckTrailer, r: kpiDespachadas },
-    { titulo: "Boletos vendidos hoy", ayuda: "App y taquilla", icono: Ticket, r: kpiBoletos },
-  ];
-
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader title="Resumen" description="Lo que pasó hoy en tu cooperativa." />
+      <PageHeader title="Resumen" />
 
       {checklist && <ChecklistPuestaEnMarcha checklist={checklist} />}
 
       <BandejaAtencion inicial={bandeja} />
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {kpis.map(({ titulo, ayuda, icono: Icono, r }) => (
-          <Card key={titulo}>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">{titulo}</CardTitle>
-              <Icono className="h-4 w-4 text-muted-foreground" weight="regular" aria-hidden />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold tabular-nums">{kpi(r)}</div>
-              <p className="text-xs text-muted-foreground">
-                {r.error ? "No pudimos cargar el dato. Recarga la página." : ayuda}
-              </p>
-            </CardContent>
-          </Card>
-        ))}
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Ingresos de hoy</CardTitle>
-            <CurrencyDollar className="h-4 w-4 text-muted-foreground" weight="regular" aria-hidden />
-          </CardHeader>
-          <CardContent>
-            {kpiPagos.error ? (
-              <>
-                <div className="text-2xl font-bold">—</div>
-                <p className="text-xs text-muted-foreground">No pudimos cargar los pagos. Recarga la página.</p>
-              </>
-            ) : (
-              <>
-                {/* Cada pago a su propia tasa: sin la tasa de hoy como referencia. */}
-                <Monto usd={ingresos.usd} bs={ingresos.bs} tasa={null} size="lg" />
-                <p className="text-xs text-muted-foreground mt-1">
-                  {ingresos.pagos === 0 ? "Sin pagos verificados hoy" : "Pagos verificados hoy"}
-                </p>
-              </>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+      <section aria-labelledby="hoy-titulo" className="flex flex-col gap-3">
+        <h2 id="hoy-titulo" className="text-lg font-semibold">
+          Hoy
+        </h2>
+        {kpisConError && <ErrorRecargable titulo="No pudimos cargar algunos datos de hoy" />}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <KpiCard title="Encomiendas recibidas" value={kpi(kpiRecibidas)} icon={ICONO_SECCION.taquillaEncomiendas} />
+          <KpiCard title="Encomiendas despachadas" value={kpi(kpiDespachadas)} icon={ICONO_SECCION.despacho} />
+          <KpiCard title="Boletos vendidos" value={kpi(kpiBoletos)} icon={ICONO_SECCION.taquillaBoletos} />
+          <KpiCard
+            title="Ingresos verificados"
+            value={kpiPagos.error ? "—" : <span aria-label={montoIngresos.accesible}>{montoIngresos.principal}</span>}
+            detail={kpiPagos.error ? null : montoIngresos.secundario}
+            icon={Coins}
+          />
+        </div>
+      </section>
 
       {esAdmin && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
           <ActivityChart data={chartData} />
 
-          {adminData?.comisionesError ? (
-            <Card className="col-span-1 flex flex-col justify-center">
-              <CardHeader>
-                <CardTitle>Comisión con EnBus</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground">No pudimos cargar tus comisiones. Recarga la página.</p>
-              </CardContent>
-            </Card>
-          ) : comisionPendiente ? (
-            <Card className="col-span-1 flex flex-col justify-center border-warning/40 bg-warning-light text-warning-deep">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
+          <Card>
+            <CardHeader>
+              <CardTitle
+                className={comisionPendiente && !adminData?.comisionesError ? "flex items-center gap-2 text-warning-text" : undefined}
+              >
+                {comisionPendiente && !adminData?.comisionesError && (
                   <WarningCircle className="size-5 shrink-0" weight="fill" aria-hidden />
-                  Comisión pendiente con EnBus
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-2">
-                {/* Texto en warning-deep (el secundario de <Monto> es muted y pierde contraste en este fondo). */}
-                <p className="flex flex-col leading-tight tabular-nums">
-                  <span aria-hidden className="text-2xl font-semibold tracking-tight">{montoComision?.principal}</span>
-                  {montoComision?.secundario && (
-                    <span aria-hidden className="text-xs">{montoComision.secundario}</span>
-                  )}
-                  <span className="sr-only">{montoComision?.accesible}</span>
-                </p>
-                <p className="text-sm">
-                  {comisionPendiente.ciclos === 1 ? "Período" : `${comisionPendiente.ciclos} ciclos sin pagar`}:{" "}
-                  {formatDia(comisionPendiente.desde)} — {formatDia(comisionPendiente.hasta)}
-                </p>
-                <p className="text-xs">Se paga a EnBus en bolívares a la tasa BCV del día del pago.</p>
-                {soporte ? (
-                  <a
-                    href={`https://wa.me/${soporte}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 text-sm font-medium underline underline-offset-4"
-                  >
-                    <WhatsappLogo className="size-4" weight="fill" aria-hidden />
-                    ¿Dudas sobre cómo pagarla? Escríbenos
-                  </a>
-                ) : (
-                  <p className="text-sm font-medium">¿Dudas sobre cómo pagarla? Escríbenos.</p>
                 )}
-              </CardContent>
-            </Card>
-          ) : (
-            <Card className="col-span-1 flex flex-col justify-center">
-              <CardHeader>
-                <CardTitle>Comisión con EnBus</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="flex items-center gap-2 font-medium text-success-text">
-                  <CheckCircle className="size-5" weight="fill" aria-hidden />
+                {comisionPendiente && !adminData?.comisionesError ? "Comisión pendiente con EnBus" : "Comisión con EnBus"}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-4">
+              {adminData?.comisionesError ? (
+                <ErrorRecargable titulo="No pudimos cargar tus comisiones" />
+              ) : comisionPendiente ? (
+                <>
+                  <Monto usd={comisionPendiente.total} size="lg" />
+                  <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground tabular-nums">
+                    {comisionPendiente.ciclos > 1 && (
+                      <TonoBadge tono="pendiente">{`${comisionPendiente.ciclos} ciclos sin pagar`}</TonoBadge>
+                    )}
+                    <span>
+                      {formatFechaVE(comisionPendiente.desde)} – {formatFechaVE(comisionPendiente.hasta)}
+                    </span>
+                  </div>
+                  {soporte && (
+                    <a
+                      href={`https://wa.me/${soporte}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 text-sm font-medium text-info-text underline-offset-4 hover:underline focus-visible:underline"
+                    >
+                      <WhatsappLogo className="size-4" aria-hidden />
+                      ¿Dudas para pagarla? Escríbenos
+                    </a>
+                  )}
+                </>
+              ) : (
+                <p className="flex items-center gap-2 text-sm font-medium text-success-text">
+                  <CheckCircle className="size-5 shrink-0" weight="fill" aria-hidden />
                   Sin comisiones pendientes
                 </p>
-              </CardContent>
-            </Card>
-          )}
+              )}
+            </CardContent>
+          </Card>
         </div>
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Encomiendas recientes</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="rounded-md border">
+      <section aria-labelledby="recientes-titulo" className="flex flex-col gap-3">
+        <h2 id="recientes-titulo" className="text-lg font-semibold">
+          Encomiendas recientes
+        </h2>
+        {recentData.error ? (
+          <ErrorRecargable titulo="No pudimos cargar las encomiendas recientes" />
+        ) : (
+          <Card className="gap-0 overflow-hidden p-0">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Código de seguimiento</TableHead>
-                  <TableHead>Remitente</TableHead>
+                  <TableHead>Código</TableHead>
+                  <TableHead className="hidden lg:table-cell">Remitente</TableHead>
                   <TableHead>Destinatario</TableHead>
-                  <TableHead>Ruta</TableHead>
+                  <TableHead className="hidden lg:table-cell">Ruta</TableHead>
                   <TableHead>Estado</TableHead>
                   <TableHead>Fecha</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {recentData.error ? (
-                  <TableRow>
-                    <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
-                      No pudimos cargar las encomiendas recientes. Recarga la página.
-                    </TableCell>
-                  </TableRow>
-                ) : encomiendasRecientes.length > 0 ? (
+                {encomiendasRecientes.length > 0 ? (
                   encomiendasRecientes.map((enc) => (
                     <TableRow key={enc.id ?? enc.tracking_id} className="relative">
                       <CeldaEnlace
                         href={`/cooperativas/taquilla/encomiendas?encomienda=${encodeURIComponent(enc.id)}`}
                         etiqueta={`Ver encomienda ${enc.tracking_id}`}
-                        className="font-mono text-xs"
+                        className="font-mono text-sm text-foreground"
                       >
                         {enc.tracking_id}
                       </CeldaEnlace>
-                      <TableCell>{nombreRemitente(enc)}</TableCell>
+                      <TableCell className="hidden lg:table-cell">{nombreRemitente(enc)}</TableCell>
                       <TableCell>{enc.receiver_nombre}</TableCell>
-                      <TableCell>
+                      <TableCell className="hidden lg:table-cell">
                         {formatCiudad(enc.ciudad_origen)} → {formatCiudad(enc.ciudad_destino)}
                       </TableCell>
                       <TableCell>
                         <StatusBadge status={enc.estado} dominio="encomienda" />
                       </TableCell>
-                      <TableCell>{formatFechaHoraVE(enc.created_at)}</TableCell>
+                      <TableCell className="tabular-nums">{formatFechaHoraCortaVE(enc.created_at)}</TableCell>
                     </TableRow>
                   ))
                 ) : (
-                  <TableRow>
-                    <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
-                      Todavía no hay encomiendas. Cuando recibas la primera en taquilla, aparecerá aquí.
-                    </TableCell>
-                  </TableRow>
+                  <FilaVacia colSpan={6} icon={ICONO_SECCION.taquillaEncomiendas} titulo="Todavía no hay encomiendas" />
                 )}
               </TableBody>
             </Table>
-          </div>
-        </CardContent>
-      </Card>
+          </Card>
+        )}
+      </section>
     </div>
   );
 }

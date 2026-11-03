@@ -1,36 +1,42 @@
 "use client";
 
+// ─── Detalle de una incidencia (AD5-07, AD5-08, AD5-22, AD5-33) ─────────────
+// H1 = código ("INC-1A2B3C"); estado y prioridad junto al título; acciones en
+// la cabecera como en Cooperativa y Usuario. "Resolver caso" abre un diálogo.
+
 import { useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { toast } from "sonner";
-import {
-  Calendar,
-  CheckSquare,
-  HandPointing,
-  Package,
-  ShieldCheck,
-  SpinnerIcon,
-  Ticket,
-  User,
-  WarningCircle,
-} from "@phosphor-icons/react";
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { CheckSquare, HandPointing, Package, ShieldCheck, Ticket } from "@phosphor-icons/react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
+import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
+import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { AvisoError } from "@/components/aviso-error";
 import { StatusBadge } from "@/components/status-badge";
-import type { Incidencia } from "@/lib/types/admin-incidencias";
+import { PageHeader } from "@/components/page-header";
+import { MigaObjeto } from "@/components/miga-objeto";
+import { Monto } from "@/components/monto";
+import { Dato, Vacio } from "@/components/admin/detalle";
+import { codigoIncidencia, type Incidencia } from "@/lib/types/admin-incidencias";
 import { tomarCaso, resolverIncidencia, activarSeguro } from "@/app/admin/(panel)/incidencias/actions";
 import { humanizeError } from "@/lib/errores";
-import { formatUsd } from "@/lib/dinero";
+import { avisarError, avisarExito } from "@/lib/avisos";
 import { formatFechaHoraVE } from "@/lib/fechas";
 import { formatTelefono, telefonoWhatsApp } from "@/lib/ve";
-import { codigoIncidencia, PrioridadBadge, tipoConCategoria } from "./incidencias-table";
-import { PageHeader } from "@/components/page-header";
 import { etiquetaRol } from "@/lib/estados";
 import { formatCodigoBoleto } from "@/lib/artefactos.generated";
+import { PrioridadBadge, tipoConCategoria } from "./incidencias-table";
 
 interface IncidenciaDetailProps {
   incidencia: Incidencia;
@@ -38,33 +44,14 @@ interface IncidenciaDetailProps {
 }
 
 const MINIMO_RESOLUCION = 10;
-const CLASE_ENLACE = "text-foreground underline decoration-primary underline-offset-4";
-
-function Dato({ icono, etiqueta, children }: { icono: React.ReactNode; etiqueta: string; children: React.ReactNode }) {
-  return (
-    <div className="flex items-start gap-3">
-      <span className="mt-0.5 text-muted-foreground" aria-hidden>
-        {icono}
-      </span>
-      <div className="flex min-w-0 flex-col">
-        <span className="text-xs font-medium text-muted-foreground">{etiqueta}</span>
-        <div className="text-sm text-foreground">{children}</div>
-      </div>
-    </div>
-  );
-}
+const ENLACE = "font-medium text-info-text underline-offset-4 hover:underline focus-visible:underline";
 
 export function IncidenciaDetail({ incidencia, currentUser }: IncidenciaDetailProps) {
   const router = useRouter();
   const [tomando, setTomando] = useState(false);
-  const [resolviendo, setResolviendo] = useState(false);
-  const enCurso = useRef(false);
-  const [resolucionText, setResolucionText] = useState("");
-  const [errorResolucion, setErrorResolucion] = useState<string | null>(null);
-  const [showResolveForm, setShowResolveForm] = useState(false);
+  const [resolverOpen, setResolverOpen] = useState(false);
   const [seguroOpen, setSeguroOpen] = useState(false);
-
-  const ocupado = tomando || resolviendo;
+  const enCurso = useRef(false);
 
   const handleTomarCaso = async () => {
     if (enCurso.current) return;
@@ -73,56 +60,25 @@ export function IncidenciaDetail({ incidencia, currentUser }: IncidenciaDetailPr
     try {
       const res = await tomarCaso(incidencia.id);
       if (res.success) {
-        toast.success("Tomaste esta incidencia. Ahora aparece «En proceso» a tu nombre.");
+        avisarExito("Tomaste esta incidencia. Ahora está «En proceso» a tu nombre.");
         router.refresh();
       } else {
-        toast.error(res.error || "No pudimos tomar la incidencia. Intenta de nuevo.");
+        avisarError(res.error || "No pudimos tomar la incidencia. Intenta de nuevo.");
       }
     } catch (err) {
-      toast.error(humanizeError(err, "tomar la incidencia"));
+      avisarError(humanizeError(err, "tomar la incidencia"));
     } finally {
       enCurso.current = false;
       setTomando(false);
     }
   };
 
-  const handleResolverIncidencia = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (enCurso.current) return;
-    if (resolucionText.trim().length < MINIMO_RESOLUCION) {
-      setErrorResolucion(`Cuenta cómo se resolvió (mínimo ${MINIMO_RESOLUCION} caracteres).`);
-      return;
-    }
-    enCurso.current = true;
-    setResolviendo(true);
-    setErrorResolucion(null);
-    try {
-      const formData = new FormData();
-      formData.append("resolucion", resolucionText.trim());
-      const res = await resolverIncidencia(incidencia.id, formData);
-      if (res.success) {
-        toast.success("Incidencia resuelta.");
-        setShowResolveForm(false);
-        setResolucionText("");
-        router.refresh();
-      } else {
-        setErrorResolucion(res.error || "No pudimos resolver la incidencia. Intenta de nuevo.");
-      }
-    } catch (err) {
-      setErrorResolucion(humanizeError(err, "resolver la incidencia"));
-    } finally {
-      enCurso.current = false;
-      setResolviendo(false);
-    }
-  };
-
   const valorDeclarado = incidencia.encomienda?.valor_declarado ? Number(incidencia.encomienda.valor_declarado) : 0;
   // Spec: cobertura = 3× valor declarado
   const montoSeguro = valorDeclarado * 3;
-
-  const puedeActivarSeguro =
-    incidencia.tipo === "PERDIDA" && Boolean(incidencia.encomienda) && incidencia.estado === "EN_PROCESO" && valorDeclarado > 0;
-  const seguroSinValor = incidencia.tipo === "PERDIDA" && Boolean(incidencia.encomienda) && valorDeclarado <= 0;
+  const esPerdida = incidencia.tipo === "PERDIDA" && Boolean(incidencia.encomienda);
+  const puedeActivarSeguro = esPerdida && incidencia.estado === "EN_PROCESO" && valorDeclarado > 0;
+  const seguroSinValor = esPerdida && valorDeclarado <= 0;
 
   const reportante = incidencia.reportado_por_profile;
   const telefono = reportante?.telefono ? formatTelefono(reportante.telefono) : "—";
@@ -130,235 +86,142 @@ export function IncidenciaDetail({ incidencia, currentUser }: IncidenciaDetailPr
   const codigo = codigoIncidencia(incidencia.id);
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-6">
+      <MigaObjeto label={codigo} />
       <PageHeader
-        title={tipoConCategoria(incidencia)}
-        migas={[{ label: "Incidencias", href: "/admin/incidencias" }, { label: codigo }]}
-        description={
-          <div className="mt-1 flex flex-wrap items-center gap-2">
-            <span className="font-mono text-sm">{codigo}</span>
+        title={codigo}
+        estado={
+          <>
             <StatusBadge status={incidencia.estado} dominio="incidencia" />
-            <span className="text-sm">Prioridad</span>
             <PrioridadBadge incidencia={incidencia} />
-          </div>
+          </>
         }
-      />
+        description={tipoConCategoria(incidencia)}
+      >
+        {incidencia.estado === "ABIERTA" && (
+          <Button onClick={handleTomarCaso} disabled={tomando} aria-busy={tomando || undefined}>
+            {tomando ? <Spinner size="sm" aria-hidden /> : <HandPointing aria-hidden />}
+            {tomando ? "Tomando…" : "Tomar caso"}
+          </Button>
+        )}
+        {incidencia.estado === "EN_PROCESO" && (
+          <Button onClick={() => setResolverOpen(true)}>
+            <CheckSquare aria-hidden /> Resolver caso
+          </Button>
+        )}
+        {/* Seguro (AD-20): solo con el caso tomado y un valor declarado mayor que 0. */}
+        {puedeActivarSeguro && (
+          <Button variant="outline" onClick={() => setSeguroOpen(true)}>
+            <ShieldCheck aria-hidden /> Activar seguro
+          </Button>
+        )}
+      </PageHeader>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <div className="space-y-6 lg:col-span-2">
-          <Card>
-            <CardHeader className="border-b pb-5">
-              <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
-                <CardTitle className="text-lg font-semibold">Detalle del caso</CardTitle>
-                <span className="text-sm text-muted-foreground">Reportada {formatFechaHoraVE(incidencia.created_at)}</span>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-6 pt-6">
-              <div className="space-y-2">
-                <span className="text-sm font-medium text-muted-foreground">Qué pasó</span>
-                <p className="rounded-lg border bg-muted/40 p-4 text-sm leading-relaxed whitespace-pre-line text-foreground">
-                  {incidencia.descripcion}
-                </p>
-              </div>
-
-              {incidencia.estado === "RESUELTA" && (
-                <div className="space-y-2">
-                  <span className="flex items-center gap-1.5 text-sm font-medium text-success-text">
-                    <CheckSquare className="h-4 w-4" aria-hidden />
-                    Cómo se resolvió
-                  </span>
-                  <div className="rounded-lg border border-success/40 bg-success-light p-4 text-sm leading-relaxed text-success-deep">
-                    {incidencia.resolucion || "Se resolvió sin detalles."}
-                  </div>
-                </div>
-              )}
-
-              {seguroSinValor && incidencia.estado !== "RESUELTA" && (
-                <p className="rounded-lg border border-warning/40 bg-warning-light p-3 text-sm text-warning-deep">
-                  Esta encomienda no declaró valor: el seguro no aplica. Registra la compensación manualmente en la
-                  resolución.
-                </p>
-              )}
-              {incidencia.tipo === "PERDIDA" && !seguroSinValor && incidencia.estado === "ABIERTA" && (
-                <p className="text-sm text-muted-foreground">
-                  Toma el caso para poder activar el seguro (cubre hasta 3 veces el valor declarado).
-                </p>
-              )}
-
-              {showResolveForm && (
-                <form onSubmit={handleResolverIncidencia} noValidate className="space-y-4 border-t pt-6">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="resolucion">Cómo se resolvió</Label>
-                    <Textarea
-                      id="resolucion"
-                      rows={4}
-                      autoFocus
-                      placeholder="Por ejemplo: se contactó al pasajero y la cooperativa le devolvió el pago por Pago Móvil."
-                      value={resolucionText}
-                      onChange={(e) => {
-                        setResolucionText(e.target.value);
-                        if (errorResolucion) setErrorResolucion(null);
-                      }}
-                      aria-invalid={errorResolucion ? true : undefined}
-                      aria-describedby={errorResolucion ? "resolucion-error" : "resolucion-ayuda"}
-                      disabled={resolviendo}
-                    />
-                    {errorResolucion ? (
-                      <p id="resolucion-error" role="alert" className="flex items-start gap-1.5 text-sm text-destructive-text">
-                        <WarningCircle className="mt-0.5 size-4 shrink-0" weight="fill" aria-hidden />
-                        {errorResolucion}
-                      </p>
-                    ) : (
-                      <p id="resolucion-ayuda" className="text-xs text-muted-foreground">
-                        Quien reportó no ve este texto; queda en el historial de EnBus.
-                      </p>
-                    )}
-                  </div>
-                  <div className="flex justify-end gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        setShowResolveForm(false);
-                        setResolucionText("");
-                        setErrorResolucion(null);
-                      }}
-                      disabled={resolviendo}
-                    >
-                      Cancelar
-                    </Button>
-                    <Button type="submit" size="sm" disabled={resolviendo} aria-busy={resolviendo || undefined}>
-                      {resolviendo && <SpinnerIcon className="motion-safe:animate-spin" aria-hidden />}
-                      {resolviendo ? "Guardando…" : "Marcar como resuelta"}
-                    </Button>
-                  </div>
-                </form>
-              )}
-            </CardContent>
-
-            {!showResolveForm && incidencia.estado !== "RESUELTA" && (
-              <CardFooter className="flex flex-wrap justify-end gap-3 border-t bg-muted/30 pt-5">
-                {/* Seguro (AD-20): solo con el caso tomado y un valor declarado mayor que 0. */}
-                {puedeActivarSeguro && (
-                  <Button
-                    variant="outline"
-                    className="gap-1.5 border-destructive/40 text-destructive-text hover:bg-destructive/10"
-                    onClick={() => setSeguroOpen(true)}
-                    disabled={ocupado}
-                  >
-                    <ShieldCheck className="h-4 w-4" aria-hidden />
-                    Activar seguro ({formatUsd(montoSeguro)})
-                  </Button>
-                )}
-
-                {incidencia.estado === "ABIERTA" && (
-                  <Button onClick={handleTomarCaso} className="gap-1.5" disabled={ocupado} aria-busy={tomando || undefined}>
-                    {tomando ? (
-                      <SpinnerIcon className="h-4 w-4 motion-safe:animate-spin" aria-hidden />
-                    ) : (
-                      <HandPointing className="h-4 w-4" aria-hidden />
-                    )}
-                    {tomando ? "Tomando…" : "Tomar caso"}
-                  </Button>
-                )}
-
-                {incidencia.estado === "EN_PROCESO" && (
-                  <Button
-                    onClick={() => {
-                      setShowResolveForm(true);
-                      setResolucionText("");
-                    }}
-                    className="gap-1.5"
-                    disabled={ocupado}
-                  >
-                    <CheckSquare className="h-4 w-4" aria-hidden />
-                    Resolver caso
-                  </Button>
-                )}
-              </CardFooter>
-            )}
-          </Card>
-        </div>
-
-        <div className="space-y-6">
+        <div className="flex flex-col gap-6 lg:col-span-2">
           <Card>
             <CardHeader>
-              <CardTitle className="text-sm font-semibold">Información del caso</CardTitle>
+              <CardTitle>Qué pasó</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <Dato icono={<User className="h-4 w-4" />} etiqueta="Reportada por">
-                {incidencia.reportado_por && reportante ? (
-                  <Link href={`/admin/usuarios/${incidencia.reportado_por}`} className={CLASE_ENLACE}>
-                    {reportante.nombre_completo}
-                  </Link>
-                ) : (
-                  "Sistema (automática)"
-                )}
-              </Dato>
-
-              {reportante && (
-                <Dato icono={<User className="h-4 w-4" />} etiqueta="Contacto">
-                  <div className="flex flex-col gap-0.5">
-                    {reportante.email && (
-                      <a href={`mailto:${reportante.email}?subject=${encodeURIComponent(`Tu reporte ${codigo} en EnBus`)}`} className={CLASE_ENLACE}>
-                        {reportante.email}
-                      </a>
-                    )}
-                    {whatsapp ? (
-                      <a
-                        href={`https://wa.me/${whatsapp}?text=${encodeURIComponent(`Hola ${reportante.nombre_completo}, te escribimos de EnBus por tu reporte ${codigo}.`)}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className={CLASE_ENLACE}
-                      >
-                        {telefono} · WhatsApp
-                      </a>
-                    ) : (
-                      <span className="text-muted-foreground">Sin teléfono válido</span>
-                    )}
-                  </div>
-                </Dato>
+            <CardContent className="flex flex-col gap-4">
+              <p className="text-sm leading-relaxed whitespace-pre-line">{incidencia.descripcion}</p>
+              {seguroSinValor && incidencia.estado !== "RESUELTA" && (
+                <p className="text-sm text-muted-foreground">
+                  La encomienda no declaró valor: el seguro no aplica. Anota la compensación en la resolución.
+                </p>
               )}
+              {esPerdida && !seguroSinValor && incidencia.estado === "ABIERTA" && (
+                <p className="text-sm text-muted-foreground">Toma el caso para activar el seguro.</p>
+              )}
+            </CardContent>
+          </Card>
 
-              <Dato icono={<Calendar className="h-4 w-4" />} etiqueta="Fecha del reporte">
-                {formatFechaHoraVE(incidencia.created_at)}
-              </Dato>
+          {incidencia.estado === "RESUELTA" && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Cómo se resolvió</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm leading-relaxed whitespace-pre-line">
+                  {incidencia.resolucion || <Vacio texto="Se resolvió sin detalles" />}
+                </p>
+              </CardContent>
+            </Card>
+          )}
+        </div>
 
-              {incidencia.estado !== "ABIERTA" && (
-                <Dato
-                  icono={<User className="h-4 w-4" />}
-                  etiqueta={incidencia.estado === "EN_PROCESO" ? "La atiende" : "La resolvió"}
-                >
-                  <span className="font-medium">
+        <div className="flex flex-col gap-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Caso</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <dl className="flex flex-col gap-4">
+                <Dato etiqueta="Reportada por">
+                  {incidencia.reportado_por && reportante ? (
+                    <Link href={`/admin/usuarios/${incidencia.reportado_por}`} className={ENLACE}>
+                      {reportante.nombre_completo}
+                    </Link>
+                  ) : (
+                    "Sistema (automática)"
+                  )}
+                </Dato>
+                {reportante && (
+                  <Dato etiqueta="Contacto">
+                    <span className="flex flex-col gap-0.5">
+                      {reportante.email && (
+                        <a
+                          href={`mailto:${reportante.email}?subject=${encodeURIComponent(`Tu reporte ${codigo} en EnBus`)}`}
+                          className={ENLACE}
+                        >
+                          {reportante.email}
+                        </a>
+                      )}
+                      {whatsapp ? (
+                        <a
+                          href={`https://wa.me/${whatsapp}?text=${encodeURIComponent(`Hola ${reportante.nombre_completo}, te escribimos de EnBus por tu reporte ${codigo}.`)}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className={ENLACE}
+                        >
+                          {telefono} · WhatsApp
+                        </a>
+                      ) : (
+                        <Vacio texto="Sin teléfono válido" />
+                      )}
+                    </span>
+                  </Dato>
+                )}
+                <Dato etiqueta="Fecha del reporte">
+                  <span className="tabular-nums">{formatFechaHoraVE(incidencia.created_at)}</span>
+                </Dato>
+                {incidencia.estado !== "ABIERTA" && (
+                  <Dato etiqueta={incidencia.estado === "EN_PROCESO" ? "La atiende" : "La resolvió"}>
                     {incidencia.resuelta_por_profile?.nombre_completo ||
                       (incidencia.resuelta_por === currentUser.id ? currentUser.nombre_completo : etiquetaRol("super_admin"))}
-                  </span>
-                </Dato>
-              )}
+                  </Dato>
+                )}
+              </dl>
             </CardContent>
           </Card>
 
           {incidencia.boleto && (
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-sm font-semibold">
-                  <Ticket className="h-4 w-4 text-muted-foreground" aria-hidden />
-                  Boleto relacionado
+                <CardTitle className="flex items-center gap-2">
+                  <Ticket className="size-5 text-muted-foreground" aria-hidden /> Boleto
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-3">
-                <Dato icono={<Ticket className="h-4 w-4" />} etiqueta="Código">
-                  <span className="font-mono font-semibold">{formatCodigoBoleto(incidencia.boleto.codigo_boleto)}</span>
-                </Dato>
-                {incidencia.boleto.asiento && (
-                  <Dato icono={<Ticket className="h-4 w-4" />} etiqueta="Asiento">
-                    {incidencia.boleto.asiento}
+              <CardContent>
+                <dl className="flex flex-col gap-4">
+                  <Dato etiqueta="Código">
+                    <span className="font-mono">{formatCodigoBoleto(incidencia.boleto.codigo_boleto)}</span>
                   </Dato>
-                )}
-                <Dato icono={<Ticket className="h-4 w-4" />} etiqueta="Estado">
-                  <StatusBadge status={incidencia.boleto.estado} dominio="boleto" />
-                </Dato>
+                  {incidencia.boleto.asiento && <Dato etiqueta="Asiento">{incidencia.boleto.asiento}</Dato>}
+                  <Dato etiqueta="Estado">
+                    <StatusBadge status={incidencia.boleto.estado} dominio="boleto" />
+                  </Dato>
+                </dl>
               </CardContent>
             </Card>
           )}
@@ -366,60 +229,163 @@ export function IncidenciaDetail({ incidencia, currentUser }: IncidenciaDetailPr
           {incidencia.encomienda && (
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-sm font-semibold">
-                  <Package className="h-4 w-4 text-muted-foreground" aria-hidden />
-                  Encomienda relacionada
+                <CardTitle className="flex items-center gap-2">
+                  <Package className="size-5 text-muted-foreground" aria-hidden /> Encomienda
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-3">
-                <Dato icono={<Package className="h-4 w-4" />} etiqueta="Código de seguimiento">
-                  <Link
-                    href={`/admin/encomiendas?codigo=${encodeURIComponent(incidencia.encomienda.tracking_id)}`}
-                    className={`${CLASE_ENLACE} font-mono font-semibold`}
-                  >
-                    {incidencia.encomienda.tracking_id}
-                  </Link>
-                </Dato>
-                <Dato icono={<Package className="h-4 w-4" />} etiqueta="Contenido declarado">
-                  {incidencia.encomienda.descripcion_contenido || "Sin descripción."}
-                </Dato>
-                <Dato icono={<Package className="h-4 w-4" />} etiqueta="Valor declarado">
-                  <span className="font-semibold">{formatUsd(valorDeclarado)}</span>
-                </Dato>
-                <Dato icono={<Package className="h-4 w-4" />} etiqueta="Estado del envío">
-                  <StatusBadge status={incidencia.encomienda.estado} dominio="encomienda" />
-                </Dato>
+              <CardContent>
+                <dl className="flex flex-col gap-4">
+                  <Dato etiqueta="Código de seguimiento">
+                    <Link
+                      href={`/admin/encomiendas?codigo=${encodeURIComponent(incidencia.encomienda.tracking_id)}`}
+                      className={`${ENLACE} font-mono`}
+                    >
+                      {incidencia.encomienda.tracking_id}
+                    </Link>
+                  </Dato>
+                  <Dato etiqueta="Contenido declarado">
+                    {incidencia.encomienda.descripcion_contenido || <Vacio texto="Sin descripción" />}
+                  </Dato>
+                  <Dato etiqueta="Valor declarado">
+                    {valorDeclarado > 0 ? <Monto usd={valorDeclarado} moneda="USD" size="sm" /> : <Vacio texto="Sin valor declarado" />}
+                  </Dato>
+                  <Dato etiqueta="Estado">
+                    <StatusBadge status={incidencia.encomienda.estado} dominio="encomienda" />
+                  </Dato>
+                </dl>
               </CardContent>
             </Card>
           )}
         </div>
       </div>
 
+      <ResolverDialog incidenciaId={incidencia.id} open={resolverOpen} onOpenChange={setResolverOpen} />
+
       <ConfirmDialog
         open={seguroOpen}
         onOpenChange={setSeguroOpen}
         titulo="¿Activar el seguro de esta encomienda?"
         descripcion={
-          <>
-            Se aprueba un reembolso de <strong>{formatUsd(montoSeguro)}</strong> (3 veces el valor declarado de{" "}
-            {formatUsd(valorDeclarado)}) y la incidencia queda resuelta.
-          </>
+          <span className="flex flex-col gap-3">
+            <span>Se aprueba un reembolso de 3 veces el valor declarado y la incidencia queda resuelta.</span>
+            <span className="flex items-start justify-between gap-4 rounded-md bg-muted p-3 text-foreground">
+              <span className="text-sm">Reembolso</span>
+              <Monto usd={montoSeguro} moneda="USD" size="md" align="right" />
+            </span>
+          </span>
         }
-        impacto={[
-          "La incidencia pasa a «Resuelta» con el monto del seguro en la resolución.",
-          "No se puede deshacer desde el panel.",
-        ]}
+        impacto={["La incidencia pasa a «Resuelta» con el monto del seguro en la resolución.", "No se puede deshacer."]}
         verbo="Activar seguro"
         verboCargando="Activando…"
         tono="destructive"
         onConfirm={async () => {
           const res = await activarSeguro(incidencia.id);
           if (!res.success) return { ok: false, error: res.error };
-          toast.success("Seguro activado. La incidencia quedó resuelta.");
+          avisarExito("Seguro activado. La incidencia quedó resuelta.");
           router.refresh();
           return { ok: true };
         }}
       />
     </div>
+  );
+}
+
+function ResolverDialog({
+  incidenciaId,
+  open,
+  onOpenChange,
+}: {
+  incidenciaId: string;
+  open: boolean;
+  onOpenChange(v: boolean): void;
+}) {
+  const router = useRouter();
+  const [texto, setTexto] = useState("");
+  const [errorCampo, setErrorCampo] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [guardando, setGuardando] = useState(false);
+
+  const cambiarAbierto = (v: boolean) => {
+    if (guardando) return;
+    onOpenChange(v);
+    if (!v) {
+      setTexto("");
+      setErrorCampo(null);
+      setError(null);
+    }
+  };
+
+  const enviar = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (guardando) return;
+    if (texto.trim().length < MINIMO_RESOLUCION) {
+      setErrorCampo(`Cuenta cómo se resolvió (mínimo ${MINIMO_RESOLUCION} caracteres).`);
+      return;
+    }
+    setGuardando(true);
+    setError(null);
+    try {
+      const formData = new FormData();
+      formData.append("resolucion", texto.trim());
+      const res = await resolverIncidencia(incidenciaId, formData);
+      if (!res.success) {
+        setError(res.error || "No pudimos resolver la incidencia. Intenta de nuevo.");
+        return;
+      }
+      avisarExito("Incidencia resuelta.");
+      setGuardando(false);
+      cambiarAbierto(false);
+      router.refresh();
+    } catch (err) {
+      setError(humanizeError(err, "resolver la incidencia"));
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={cambiarAbierto}>
+      <DialogContent>
+        <form onSubmit={enviar} noValidate className="flex flex-col gap-6">
+          <DialogHeader>
+            <DialogTitle>Resolver caso</DialogTitle>
+            <DialogDescription>Queda en el historial de EnBus; quien reportó no lo ve.</DialogDescription>
+          </DialogHeader>
+          <Field data-invalid={errorCampo ? true : undefined}>
+            <FieldLabel htmlFor="resolucion">Cómo se resolvió</FieldLabel>
+            <Textarea
+              id="resolucion"
+              rows={4}
+              autoFocus
+              placeholder="Ej. La cooperativa devolvió el pago por Pago Móvil."
+              value={texto}
+              onChange={(e) => {
+                setTexto(e.target.value);
+                setErrorCampo(null);
+                setError(null);
+              }}
+              aria-invalid={errorCampo ? true : undefined}
+              aria-describedby="resolucion-ayuda"
+              disabled={guardando}
+            />
+            {errorCampo ? (
+              <FieldError id="resolucion-ayuda">{errorCampo}</FieldError>
+            ) : (
+              <FieldDescription id="resolucion-ayuda">Mínimo {MINIMO_RESOLUCION} caracteres.</FieldDescription>
+            )}
+          </Field>
+          {error && <AvisoError>{error}</AvisoError>}
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => cambiarAbierto(false)} disabled={guardando}>
+              Cancelar
+            </Button>
+            <Button type="submit" disabled={guardando} aria-busy={guardando || undefined}>
+              {guardando && <Spinner size="sm" aria-hidden />}
+              {guardando ? "Guardando…" : "Marcar como resuelta"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }

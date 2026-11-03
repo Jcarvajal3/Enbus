@@ -1,16 +1,24 @@
 "use client";
 
+// ─── Acciones de la ficha de un usuario (AD5-10, D13) ───────────────────────
+// La cabecera solo trae lo que es de la cuenta: "Reactivar cuenta" o
+// "Completar baja" como principal y "Suspender cuenta" en "Más". Desbloquear y
+// reenviar el PIN son de cada encomienda: van en su fila (`AccionesPinEncomienda`).
+
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Key, PaperPlaneTilt, SpinnerIcon, UserMinus, UserPlus } from "@phosphor-icons/react";
+import { Key, PaperPlaneTilt, UserMinus, UserPlus } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Spinner } from "@/components/ui/spinner";
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { ConfirmDialog } from "@/components/confirm-dialog";
-import { StatusBadge } from "@/components/status-badge";
+import { MenuMas } from "@/components/admin/menu-mas";
 import { desbloquearPIN, reenviarPIN, toggleUsuarioEstado } from "@/app/admin/(panel)/usuarios/actions";
 import { humanizeError } from "@/lib/errores";
+import { avisarError, avisarExito } from "@/lib/avisos";
 import { etiquetaRol } from "@/lib/estados";
+import { PIN_MAX_INTENTOS } from "@/lib/artefactos.generated";
 import type { EncomiendaUsuario, Usuario } from "@/lib/types/admin-usuarios";
 import { ConfirmDialogBaja } from "./usuarios-table";
 
@@ -24,11 +32,7 @@ interface UsuarioActionsProps {
   eliminada?: boolean;
   role: Usuario["role"];
   isBanned: boolean;
-  encomiendasEnviadas: EncomiendaUsuario[];
-  encomiendasRecibidas: EncomiendaUsuario[];
 }
-
-const ESTADOS_CERRADOS = ["ENTREGADA", "CANCELADA", "DEVUELTA"];
 
 export function UsuarioActions({
   usuarioId,
@@ -38,104 +42,30 @@ export function UsuarioActions({
   eliminada = false,
   role,
   isBanned,
-  encomiendasEnviadas,
-  encomiendasRecibidas,
 }: UsuarioActionsProps) {
   const router = useRouter();
   const [estadoOpen, setEstadoOpen] = useState(false);
   const [bajaOpen, setBajaOpen] = useState(false);
-  const [unlockListOpen, setUnlockListOpen] = useState(false);
-  const [resendListOpen, setResendListOpen] = useState(false);
-  const [aDesbloquear, setADesbloquear] = useState<EncomiendaUsuario | null>(null);
-  const [reenviandoId, setReenviandoId] = useState<string | null>(null);
-  const reenviando = useRef(false);
-
-  // Sin duplicados (una encomienda puede estar en enviadas y recibidas).
-  const activas = Array.from(
-    new Map([...encomiendasEnviadas, ...encomiendasRecibidas].map((e) => [e.id, e])).values()
-  ).filter((e) => !ESTADOS_CERRADOS.includes(e.estado));
-
-  const bloqueables = activas.filter((e) => e.pin_bloqueado || e.intentos_pin > 0);
-  const conPin = activas.filter((e) => e.pin_retiro);
   const esAdmin = role === "admin_cooperativa" || role === "super_admin";
 
-  const reenviar = async (e: EncomiendaUsuario) => {
-    if (reenviando.current) return;
-    reenviando.current = true;
-    setReenviandoId(e.id);
-    try {
-      const res = await reenviarPIN(e.id);
-      if (!res.success) {
-        toast.error(res.error || "No pudimos reenviar el PIN. Intenta de nuevo.");
-      } else if (res.enviado) {
-        if (res.fallidos && res.fallidos.length > 0) toast.warning(res.message || "PIN reenviado, pero un canal falló.");
-        else toast.success(res.message || "PIN reenviado.");
-        setResendListOpen(false);
-      } else {
-        toast.warning(res.message || "No pudimos enviar el PIN. Dáselo por otro medio.");
-      }
-    } catch (err) {
-      toast.error(humanizeError(err, "reenviar el PIN"));
-    } finally {
-      reenviando.current = false;
-      setReenviandoId(null);
-    }
-  };
-
-  // Motivo visible (no en `title`) de cada botón deshabilitado (AD-22).
-  const motivoDesbloquear = bloqueables.length === 0 ? "No tiene encomiendas con intentos fallidos de PIN." : null;
-  const motivoReenviar = conPin.length === 0 ? "No tiene encomiendas activas con PIN." : null;
+  if (eliminada && !bajaPendiente) return null;
 
   return (
-    <div className="flex flex-col items-start gap-2 sm:items-end">
-      <div className="flex flex-wrap items-center gap-3">
-        <Button
-          variant="outline"
-          onClick={() => setUnlockListOpen(true)}
-          className="gap-2"
-          disabled={bloqueables.length === 0}
-          aria-describedby={motivoDesbloquear ? `${usuarioId}-motivo-desbloquear` : undefined}
-        >
-          <Key className="h-4 w-4" aria-hidden /> Desbloquear PIN
+    <>
+      {bajaPendiente ? (
+        <Button variant="outline" onClick={() => setBajaOpen(true)}>
+          <UserMinus aria-hidden /> Completar baja
         </Button>
-
-        <Button
-          variant="outline"
-          onClick={() => setResendListOpen(true)}
-          className="gap-2"
-          disabled={conPin.length === 0}
-          aria-describedby={motivoReenviar ? `${usuarioId}-motivo-reenviar` : undefined}
-        >
-          <PaperPlaneTilt className="h-4 w-4" aria-hidden /> Reenviar PIN
+      ) : isBanned ? (
+        <Button onClick={() => setEstadoOpen(true)}>
+          <UserPlus aria-hidden /> Reactivar cuenta
         </Button>
-
-        {bajaPendiente ? (
-          <Button
-            variant="outline"
-            className="gap-2 border-destructive/40 text-destructive-text hover:bg-destructive-light"
-            onClick={() => setBajaOpen(true)}
-          >
-            <UserMinus className="h-4 w-4" aria-hidden /> Completar baja
-          </Button>
-        ) : eliminada ? null : isBanned ? (
-          <Button className="gap-2" onClick={() => setEstadoOpen(true)}>
-            <UserPlus className="h-4 w-4" aria-hidden /> Reactivar cuenta
-          </Button>
-        ) : (
-          <Button
-            variant="outline"
-            className="gap-2 border-destructive/40 text-destructive-text hover:bg-destructive-light"
-            onClick={() => setEstadoOpen(true)}
-          >
-            <UserMinus className="h-4 w-4" aria-hidden /> Suspender cuenta
-          </Button>
-        )}
-      </div>
-      {(motivoDesbloquear || motivoReenviar) && (
-        <ul className="space-y-0.5 text-xs text-muted-foreground sm:text-right">
-          {motivoDesbloquear && <li id={`${usuarioId}-motivo-desbloquear`}>Desbloquear PIN: {motivoDesbloquear}</li>}
-          {motivoReenviar && <li id={`${usuarioId}-motivo-reenviar`}>Reenviar PIN: {motivoReenviar}</li>}
-        </ul>
+      ) : (
+        <MenuMas>
+          <DropdownMenuItem variant="destructive" onClick={() => setEstadoOpen(true)}>
+            <UserMinus aria-hidden /> Suspender cuenta
+          </DropdownMenuItem>
+        </MenuMas>
       )}
 
       <ConfirmDialogBaja
@@ -144,7 +74,6 @@ export function UsuarioActions({
         onHecho={() => router.refresh()}
       />
 
-      {/* Suspender / reactivar */}
       {isBanned ? (
         <ConfirmDialog
           open={estadoOpen}
@@ -156,7 +85,7 @@ export function UsuarioActions({
           onConfirm={async () => {
             const res = await toggleUsuarioEstado(usuarioId, true);
             if (!res.success) return { ok: false, error: res.error };
-            toast.success(`La cuenta de ${nombre} está activa de nuevo.`);
+            avisarExito(`La cuenta de ${nombre} está activa de nuevo.`);
             router.refresh();
             return { ok: true };
           }}
@@ -169,8 +98,8 @@ export function UsuarioActions({
           descripcion={
             esAdmin ? (
               <>
-                Es <strong>{etiquetaRol(role)}</strong>: al suspenderla deja de entrar al panel y su cooperativa puede
-                quedarse sin quien la administre.
+                Es <strong className="font-semibold">{etiquetaRol(role)}</strong>: deja de entrar al panel y su cooperativa
+                puede quedarse sin quien la administre.
               </>
             ) : (
               "No podrá entrar a la app hasta que la reactives."
@@ -183,7 +112,7 @@ export function UsuarioActions({
           ]}
           motivo={{
             etiqueta: "Motivo de la suspensión",
-            placeholder: "Por ejemplo: pagos con referencias falsas.",
+            placeholder: "Ej. Pagos con referencias falsas.",
             chips: ["Pagos falsos o duplicados", "Uso indebido de la cuenta", "Lo pidió el usuario", "Otro"],
           }}
           confirmarEscribiendo={esAdmin ? nombre : undefined}
@@ -193,104 +122,104 @@ export function UsuarioActions({
           onConfirm={async (motivo) => {
             const res = await toggleUsuarioEstado(usuarioId, false, motivo);
             if (!res.success) return { ok: false, error: res.error };
-            toast.success(`Cuenta de ${nombre} suspendida.`);
+            avisarExito(`Cuenta de ${nombre} suspendida.`);
             router.refresh();
             return { ok: true };
           }}
         />
       )}
+    </>
+  );
+}
 
-      {/* Elegir la encomienda cuyo PIN se desbloquea */}
-      <Dialog open={unlockListOpen} onOpenChange={setUnlockListOpen}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Desbloquear PIN</DialogTitle>
-            <DialogDescription>
-              Reinicia los intentos fallidos del PIN de retiro. Elige la encomienda.
-            </DialogDescription>
-          </DialogHeader>
-          <ul className="divide-y rounded-lg border">
-            {bloqueables.map((e) => (
-              <li key={e.id} className="flex flex-wrap items-center justify-between gap-3 p-3">
-                <div className="min-w-0 text-sm">
-                  <p className="font-mono font-semibold">{e.tracking_id}</p>
-                  <p className="text-muted-foreground">
-                    Para {e.receiver_nombre} · {e.intentos_pin} {e.intentos_pin === 1 ? "intento fallido" : "intentos fallidos"}
-                    {e.pin_bloqueado ? " · PIN bloqueado" : ""}
-                  </p>
-                  <StatusBadge status={e.estado} dominio="encomienda" className="mt-1" />
-                </div>
-                <Button
-                  size="sm"
-                  aria-label={`Desbloquear PIN de ${e.tracking_id}`}
-                  onClick={() => {
-                    setUnlockListOpen(false);
-                    setADesbloquear(e);
-                  }}
-                >
-                  Desbloquear
-                </Button>
-              </li>
-            ))}
-          </ul>
-        </DialogContent>
-      </Dialog>
+const ESTADOS_CERRADOS = ["ENTREGADA", "CANCELADA", "DEVUELTA"];
+
+/** true si la fila de la encomienda tiene alguna acción de PIN. */
+export function tieneAccionPin(e: EncomiendaUsuario): boolean {
+  if (ESTADOS_CERRADOS.includes(e.estado)) return false;
+  return e.pin_bloqueado || e.intentos_pin > 0 || Boolean(e.pin_retiro);
+}
+
+/** "Desbloquear PIN" (con intentos fallidos) o "Reenviar PIN" (con PIN activo) en la fila de una encomienda. */
+export function AccionesPinEncomienda({ encomienda: e }: { encomienda: EncomiendaUsuario }) {
+  const router = useRouter();
+  const [desbloquearOpen, setDesbloquearOpen] = useState(false);
+  const [reenviando, setReenviando] = useState(false);
+  const enCurso = useRef(false);
+
+  if (!tieneAccionPin(e)) return null;
+  const conIntentos = e.pin_bloqueado || e.intentos_pin > 0;
+
+  const reenviar = async () => {
+    if (enCurso.current) return;
+    enCurso.current = true;
+    setReenviando(true);
+    try {
+      const res = await reenviarPIN(e.id);
+      if (!res.success) {
+        avisarError(res.error || "No pudimos reenviar el PIN. Intenta de nuevo.");
+      } else if (res.enviado) {
+        if (res.fallidos && res.fallidos.length > 0) toast.warning(res.message || "PIN reenviado, pero un canal falló.");
+        else avisarExito(res.message || "PIN reenviado.");
+      } else {
+        toast.warning(res.message || "No pudimos enviar el PIN. Dáselo por otro medio.", { closeButton: true });
+      }
+    } catch (err) {
+      avisarError(humanizeError(err, "reenviar el PIN"));
+    } finally {
+      enCurso.current = false;
+      setReenviando(false);
+    }
+  };
+
+  return (
+    <div className="relative z-10 flex flex-wrap justify-end gap-2">
+      {conIntentos && (
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={() => setDesbloquearOpen(true)}
+          aria-label={`Desbloquear PIN de ${e.tracking_id}`}
+        >
+          <Key aria-hidden /> Desbloquear PIN
+        </Button>
+      )}
+      {e.pin_retiro && (
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={reenviar}
+          disabled={reenviando}
+          aria-busy={reenviando || undefined}
+          aria-label={`Reenviar PIN de ${e.tracking_id}`}
+        >
+          {reenviando ? <Spinner size="sm" aria-hidden /> : <PaperPlaneTilt aria-hidden />}
+          {reenviando ? "Reenviando…" : "Reenviar PIN"}
+        </Button>
+      )}
 
       <ConfirmDialog
-        open={aDesbloquear !== null}
-        onOpenChange={(v) => !v && setADesbloquear(null)}
-        titulo={`¿Desbloquear el PIN de ${aDesbloquear?.tracking_id ?? "la encomienda"}?`}
-        descripcion="Quien retira podrá intentar el PIN otra vez (hasta 10 intentos). Hazlo solo si confirmaste su identidad."
+        open={desbloquearOpen}
+        onOpenChange={setDesbloquearOpen}
+        titulo={`¿Desbloquear el PIN de ${e.tracking_id}?`}
+        descripcion={`Quien retira podrá intentar el PIN otra vez (hasta ${PIN_MAX_INTENTOS} intentos). Hazlo solo si confirmaste su identidad.`}
         motivo={{
           etiqueta: "Motivo",
-          placeholder: "Por ejemplo: el destinatario confirmó su cédula por WhatsApp.",
+          placeholder: "Ej. El destinatario confirmó su cédula por WhatsApp.",
           chips: ["Destinatario verificado por teléfono", "Se equivocó al escribir el PIN", "Otro"],
         }}
         verbo="Desbloquear PIN"
         verboCargando="Desbloqueando…"
         onConfirm={async (motivo) => {
-          if (!aDesbloquear) return { ok: false };
-          const res = await desbloquearPIN(aDesbloquear.id, motivo ?? "");
+          const res = await desbloquearPIN(e.id, motivo ?? "");
           if (!res.success) return { ok: false, error: res.error };
-          toast.success(`PIN de ${aDesbloquear.tracking_id} desbloqueado.`);
+          avisarExito(`PIN de ${e.tracking_id} desbloqueado.`);
           router.refresh();
           return { ok: true };
         }}
       />
-
-      {/* Reenviar PIN */}
-      <Dialog open={resendListOpen} onOpenChange={(v) => !reenviandoId && setResendListOpen(v)}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Reenviar PIN de retiro</DialogTitle>
-            <DialogDescription>
-              Enviamos el mismo PIN por WhatsApp a quien recibe (no se genera uno nuevo). Elige la encomienda.
-            </DialogDescription>
-          </DialogHeader>
-          <ul className="divide-y rounded-lg border">
-            {conPin.map((e) => (
-              <li key={e.id} className="flex flex-wrap items-center justify-between gap-3 p-3">
-                <div className="min-w-0 text-sm">
-                  <p className="font-mono font-semibold">{e.tracking_id}</p>
-                  <p className="text-muted-foreground">
-                    Para {e.receiver_nombre} · {e.receiver_telefono}
-                  </p>
-                </div>
-                <Button
-                  size="sm"
-                  onClick={() => reenviar(e)}
-                  aria-label={`Reenviar PIN de ${e.tracking_id}`}
-                  disabled={reenviandoId !== null}
-                  aria-busy={reenviandoId === e.id || undefined}
-                >
-                  {reenviandoId === e.id && <SpinnerIcon className="motion-safe:animate-spin" aria-hidden />}
-                  {reenviandoId === e.id ? "Reenviando…" : "Reenviar PIN"}
-                </Button>
-              </li>
-            ))}
-          </ul>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

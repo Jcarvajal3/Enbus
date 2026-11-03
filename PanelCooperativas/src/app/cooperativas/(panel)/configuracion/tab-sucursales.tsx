@@ -3,15 +3,18 @@
 import { useId, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import {
-  Card, CardContent, CardDescription, CardHeader, CardTitle,
+  Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { MapPin, Plus, PencilSimple, Trash, Check, X, WarningCircle } from "@phosphor-icons/react";
-import { toast } from "sonner";
+import { MapPin, Plus, PencilSimple, Trash } from "@phosphor-icons/react";
+import { AvisoError } from "@/components/aviso-error";
+import { EmptyState } from "@/components/empty-state";
+import { Spinner } from "@/components/ui/spinner";
+import { avisarError, avisarExito } from "@/lib/avisos";
 import {
   crearSucursal,
   actualizarSucursal,
@@ -25,7 +28,7 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { ErrorState } from "@/components/error-state";
 import { humanizeError } from "@/lib/errores";
 import { CIUDADES_POR_ESTADO, ESTADOS_VENEZUELA } from "@/lib/data/venezuela";
-import { formatTelefono, telefonoValido } from "@/lib/ve";
+import { formatTelefono, telefonoValido, TELEFONO_ERROR } from "@/lib/ve";
 import { cn } from "@/lib/utils";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -102,7 +105,7 @@ function validar(form: FormState): Errores {
   if (!form.ciudad) e.ciudad = "Elige la ciudad.";
   if (form.direccion.trim().length < 5) e.direccion = "Escribe la dirección para que los clientes la encuentren.";
   if (form.telefono.trim() && !telefonoValido(form.telefono)) {
-    e.telefono = "Escribe un teléfono venezolano, por ejemplo 0241-1234567.";
+    e.telefono = TELEFONO_ERROR;
   }
   return e;
 }
@@ -211,10 +214,10 @@ export function SucursalesTab({ sucursales: initialSucursales, errorCarga = null
       }
       if (editingId) {
         setSucursales((prev) => prev.map((s) => (s.id === editingId ? res.data : s)));
-        toast.success("Sucursal actualizada.");
+        avisarExito("Sucursal actualizada.");
       } else {
         setSucursales((prev) => [...prev, res.data].sort((a, b) => a.nombre.localeCompare(b.nombre)));
-        toast.success("Sucursal creada.");
+        avisarExito("Sucursal creada.");
       }
       closeForm();
       router.refresh();
@@ -230,14 +233,14 @@ export function SucursalesTab({ sucursales: initialSucursales, errorCarga = null
     try {
       const res = await requireOnline(() => cambiarActivaSucursal(s.id, activa))();
       if (!res.ok) {
-        toast.error(res.error);
+        avisarError(res.error);
         return false;
       }
       setSucursales((prev) => prev.map((x) => (x.id === s.id ? { ...x, activa } : x)));
-      toast.success(activa ? `${s.nombre} activada.` : `${s.nombre} desactivada.`);
+      avisarExito(activa ? `${s.nombre} activada.` : `${s.nombre} desactivada.`);
       return true;
     } catch (err: unknown) {
-      toast.error(humanizeError(err, activa ? "activar la sucursal" : "desactivar la sucursal"));
+      avisarError(humanizeError(err, activa ? "activar la sucursal" : "desactivar la sucursal"));
       return false;
     } finally {
       setCambiandoId(null);
@@ -262,7 +265,7 @@ export function SucursalesTab({ sucursales: initialSucursales, errorCarga = null
       return { ok: false, error: humanizeError(err, "eliminar la sucursal") };
     }
     setSucursales((prev) => prev.filter((s) => s.id !== aEliminar.id));
-    toast.success(`Sucursal ${aEliminar.nombre} eliminada.`);
+    avisarExito(`Sucursal ${aEliminar.nombre} eliminada.`);
     if (editingId === aEliminar.id) closeForm();
     router.refresh();
     return { ok: true };
@@ -273,25 +276,18 @@ export function SucursalesTab({ sucursales: initialSucursales, errorCarga = null
   return (
     <Card>
       <CardHeader>
-        <div className="flex items-center justify-between gap-4 flex-wrap">
-          <div>
-            <CardTitle className="flex items-center gap-2">
-              <MapPin size={20} weight="duotone" aria-hidden />
-              Sucursales
-            </CardTitle>
-            <CardDescription>
-              Tus taquillas. Los pasajeros ven la dirección y el horario para llevar encomiendas y tomar el bus.
-            </CardDescription>
-          </div>
-          {!showForm && (
-            <Button onClick={openCreate} size="sm">
-              <Plus size={16} className="mr-2" aria-hidden />
+        <CardTitle>Sucursales</CardTitle>
+        <CardDescription>Los pasajeros ven su dirección y horario.</CardDescription>
+        {!showForm && sucursales.length > 0 && (
+          <CardAction>
+            <Button onClick={openCreate}>
+              <Plus aria-hidden />
               Nueva sucursal
             </Button>
-          )}
-        </div>
+          </CardAction>
+        )}
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="flex flex-col gap-4">
         {errorCarga && (
           <ErrorState
             compacto
@@ -302,11 +298,11 @@ export function SucursalesTab({ sucursales: initialSucursales, errorCarga = null
         )}
 
         {showForm && (
-          <form onSubmit={handleSubmit} noValidate className="border rounded-lg p-4 space-y-4 bg-muted/30">
-            <p className="font-medium text-sm">
+          <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4 rounded-md border border-border p-4">
+            <h3 className="text-sm font-semibold text-foreground">
               {editingId ? "Editar sucursal" : "Nueva sucursal"}
-            </p>
-            <div className="grid gap-3 sm:grid-cols-2">
+            </h3>
+            <div className="grid gap-4 sm:grid-cols-2">
               <Campo
                 id={id("nombre")}
                 label="Nombre"
@@ -318,7 +314,7 @@ export function SucursalesTab({ sucursales: initialSucursales, errorCarga = null
                 className="sm:col-span-2"
               />
 
-              <div className="space-y-1.5">
+              <div className="flex flex-col gap-2">
                 <Label htmlFor={id("estado")}>Estado</Label>
                 <Select value={form.estado} onValueChange={(v) => setField("estado", v ?? "")} disabled={guardando}>
                   <SelectTrigger id={id("estado")} className="w-full" aria-invalid={errores.estado ? true : undefined}>
@@ -332,10 +328,10 @@ export function SucursalesTab({ sucursales: initialSucursales, errorCarga = null
                     ))}
                   </SelectContent>
                 </Select>
-                {errores.estado && <p className="text-xs text-destructive-text">{errores.estado}</p>}
+                {errores.estado && <p className="text-sm text-destructive-text">{errores.estado}</p>}
               </div>
 
-              <div className="space-y-1.5">
+              <div className="flex flex-col gap-2">
                 <Label htmlFor={id("ciudad")}>Ciudad</Label>
                 <Select
                   value={form.ciudad}
@@ -356,7 +352,7 @@ export function SucursalesTab({ sucursales: initialSucursales, errorCarga = null
                     ))}
                   </SelectContent>
                 </Select>
-                {errores.ciudad && <p className="text-xs text-destructive-text">{errores.ciudad}</p>}
+                {errores.ciudad && <p className="text-sm text-destructive-text">{errores.ciudad}</p>}
               </div>
 
               <Campo
@@ -375,7 +371,7 @@ export function SucursalesTab({ sucursales: initialSucursales, errorCarga = null
                 value={form.telefono}
                 onChange={(v) => setField("telefono", v)}
                 type="tel"
-                placeholder="0241-1234567"
+                placeholder="Ej.: 0241-1234567"
                 error={errores.telefono}
                 disabled={guardando}
               />
@@ -384,28 +380,20 @@ export function SucursalesTab({ sucursales: initialSucursales, errorCarga = null
                 label="Horario de atención (opcional)"
                 value={form.horario}
                 onChange={(v) => setField("horario", v)}
-                placeholder="Lun a sáb 7:00 a. m. – 6:00 p. m."
+                placeholder="Ej.: Lun a sáb 7:00 a. m. – 6:00 p. m."
                 error={errores.horario}
                 disabled={guardando}
               />
             </div>
 
-            {errorGeneral && (
-              <div
-                role="alert"
-                className="flex items-start gap-2 rounded-xl border border-destructive/40 bg-destructive-light p-3 text-sm text-destructive-deep"
-              >
-                <WarningCircle className="mt-0.5 size-4 shrink-0" weight="fill" aria-hidden />
-                <p>{errorGeneral}</p>
-              </div>
-            )}
+            {errorGeneral && <AvisoError>{errorGeneral}</AvisoError>}
 
-            <div className="flex gap-2 justify-end">
-              <Button type="button" variant="outline" size="sm" onClick={closeForm} disabled={guardando}>
-                <X size={14} className="mr-1" aria-hidden /> Cancelar
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <Button type="button" variant="outline" onClick={closeForm} disabled={guardando}>
+                Cancelar
               </Button>
-              <Button type="submit" size="sm" disabled={guardando}>
-                <Check size={14} className="mr-1" aria-hidden />
+              <Button type="submit" disabled={guardando} aria-busy={guardando || undefined}>
+                {guardando && <Spinner size="sm" aria-hidden />}
                 {guardando ? "Guardando…" : editingId ? "Guardar cambios" : "Crear sucursal"}
               </Button>
             </div>
@@ -413,18 +401,21 @@ export function SucursalesTab({ sucursales: initialSucursales, errorCarga = null
         )}
 
         {sucursales.length === 0 && !showForm && !errorCarga && (
-          <div className="text-center py-8 space-y-3">
-            <p className="text-sm text-muted-foreground">
-              Aún no tienes sucursales. Crea la primera: cada empleado y cada encomienda pertenecen a una.
-            </p>
-            <Button size="sm" onClick={openCreate}>
-              <Plus size={16} className="mr-2" aria-hidden />
-              Nueva sucursal
-            </Button>
-          </div>
+          <EmptyState
+            compacto
+            icon={MapPin}
+            title="Todavía no tienes sucursales"
+            description="Cada empleado y cada encomienda pertenecen a una."
+            action={
+              <Button onClick={openCreate}>
+                <Plus aria-hidden />
+                Nueva sucursal
+              </Button>
+            }
+          />
         )}
 
-        <ul className="space-y-2">
+        <ul className="flex flex-col gap-2">
           {sucursales.map((s) => {
             const switchId = `${uid}-activa-${s.id}`;
             const detalle = [
@@ -438,13 +429,13 @@ export function SucursalesTab({ sucursales: initialSucursales, errorCarga = null
             return (
               <li
                 key={s.id}
-                className="flex flex-col gap-3 p-3 rounded-lg border bg-card sm:flex-row sm:items-center sm:justify-between"
+                className="flex flex-col gap-3 rounded-md border border-border bg-card p-4 sm:flex-row sm:items-center sm:justify-between"
               >
-                <div className="min-w-0">
-                  <p className={cn("font-medium text-sm truncate", !s.activa && "text-muted-foreground")}>{s.nombre}</p>
+                <div className="flex min-w-0 flex-col gap-0.5">
+                  <p className={cn("truncate text-sm font-medium", s.activa ? "text-foreground" : "text-muted-foreground")}>{s.nombre}</p>
                   <p className="text-xs text-muted-foreground">{detalle}</p>
                 </div>
-                <div className="flex items-center gap-3 shrink-0">
+                <div className="flex shrink-0 items-center gap-2">
                   <div className="flex items-center gap-2">
                     <Switch
                       id={switchId}
@@ -452,12 +443,12 @@ export function SucursalesTab({ sucursales: initialSucursales, errorCarga = null
                       disabled={cambiandoId === s.id}
                       onCheckedChange={(v) => void cambiarActiva(s, v)}
                     />
-                    <Label htmlFor={switchId} className="text-sm font-normal">
+                    <Label htmlFor={switchId} className="w-14 text-sm font-normal">
                       {s.activa ? "Activa" : "Inactiva"}
                     </Label>
                   </div>
                   <Button variant="ghost" size="icon-sm" aria-label={`Editar sucursal ${s.nombre}`} onClick={() => openEdit(s)}>
-                    <PencilSimple size={16} aria-hidden />
+                    <PencilSimple aria-hidden />
                   </Button>
                   <Button
                     variant="ghost"
@@ -466,7 +457,7 @@ export function SucursalesTab({ sucursales: initialSucursales, errorCarga = null
                     aria-label={`Eliminar sucursal ${s.nombre}`}
                     onClick={() => pedirEliminar(s)}
                   >
-                    <Trash size={16} aria-hidden />
+                    <Trash aria-hidden />
                   </Button>
                 </div>
               </li>
@@ -482,7 +473,7 @@ export function SucursalesTab({ sucursales: initialSucursales, errorCarga = null
         titulo={aEliminar ? `¿Eliminar la sucursal ${aEliminar.nombre}?` : "¿Eliminar la sucursal?"}
         descripcion={
           conRelaciones && aEliminar ? (
-            <div className="space-y-3">
+            <div className="flex flex-col items-start gap-3">
               <p>Si la desactivas, deja de aparecer para los pasajeros y conservas su historial.</p>
               {aEliminar.activa ? (
                 <Button
@@ -502,7 +493,7 @@ export function SucursalesTab({ sucursales: initialSucursales, errorCarga = null
               )}
             </div>
           ) : (
-            "Dejará de aparecer para los pasajeros y no se podrá recuperar. Si tiene empleados o encomiendas, desactívala en su lugar."
+            "No se puede deshacer. Si tiene empleados o encomiendas, desactívala."
           )
         }
         verbo="Eliminar sucursal"
@@ -529,7 +520,7 @@ function Campo({
   className?: string;
 }) {
   return (
-    <div className={cn("space-y-1.5", className)}>
+    <div className={cn("flex flex-col gap-2", className)}>
       <Label htmlFor={id}>{label}</Label>
       <Input
         id={id}
@@ -542,7 +533,7 @@ function Campo({
         onChange={(e) => onChange(e.target.value)}
       />
       {error && (
-        <p id={`${id}-error`} className="text-xs text-destructive-text">
+        <p id={`${id}-error`} className="text-sm text-destructive-text">
           {error}
         </p>
       )}

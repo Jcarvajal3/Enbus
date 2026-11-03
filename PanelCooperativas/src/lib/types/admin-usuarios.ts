@@ -121,3 +121,8 @@ export interface UsuarioDetalle extends Usuario {
   pagos: PagoUsuario[];
   notificaciones: NotificacionUsuario[];
 }
+
+/** Estado de la cuenta para `StatusBadge dominio="cuenta"`: Activa / Suspendida / Cuenta eliminada. */
+export function estadoCuenta(u: Pick<Usuario, "eliminada_at" | "is_banned">): "ACTIVA" | "SUSPENDIDA" | "ELIMINADA" {
+  return u.eliminada_at ? "ELIMINADA" : u.is_banned ? "SUSPENDIDA" : "ACTIVA";
+}

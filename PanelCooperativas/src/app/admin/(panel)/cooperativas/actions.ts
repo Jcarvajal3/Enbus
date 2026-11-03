@@ -29,7 +29,7 @@ export async function createCooperativa(formData: FormData) {
       return { success: false, error: RIF_ERROR, campo: "rif" as const };
     }
 
-    const comision = parseFloat(comisionStr);
+    const comision = parseFloat(comisionStr.replace(",", "."));
     if (isNaN(comision) || comision < 0 || comision > 100) {
       return { success: false, error: "La comisión debe ser un número entre 0 y 100." };
     }
@@ -209,7 +209,7 @@ export async function updateCooperativa(id: string, formData: FormData) {
       }
     }
 
-    const comision = parseFloat(comisionStr);
+    const comision = parseFloat(comisionStr.replace(",", "."));
     if (isNaN(comision) || comision < 0 || comision > 100) {
       return { success: false, error: "La comisión debe ser un número entre 0 y 100." };
     }

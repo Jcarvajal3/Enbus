@@ -42,12 +42,9 @@ interface CompletarPerfilSheetProps {
 }
 
 const INTRO: Record<MotivoCompletarPerfil, string> = {
-  compra:
-    'Para emitir tus boletos necesitamos tu cédula y tu teléfono. Solo te lo pedimos una vez.',
-  envio:
-    'Para registrar tu envío necesitamos tu cédula y tu teléfono. Solo te lo pedimos una vez.',
-  perfil:
-    'Con tu cédula y tu teléfono podrás comprar boletos y recibir encomiendas a tu nombre.',
+  compra: 'Los necesitamos para emitir tus boletos. Solo te los pedimos una vez.',
+  envio: 'Los necesitamos para registrar tu envío. Solo te los pedimos una vez.',
+  perfil: 'Con ellos compras boletos y recibes encomiendas a tu nombre.',
 };
 
 type Errores = Partial<Record<'nombre' | 'cedula' | 'telefono', string>>;
@@ -138,7 +135,7 @@ export function CompletarPerfilSheet({
       }}
       title="Completa tus datos"
       footer={
-        <Button variant="accent" fullWidth loading={guardando} onPress={handleGuardar}>
+        <Button fullWidth loading={guardando} onPress={handleGuardar}>
           Guardar y continuar
         </Button>
       }
@@ -155,7 +152,6 @@ export function CompletarPerfilSheet({
 
           <Field
             label="Nombre y apellido"
-            placeholder="Ana Pérez"
             value={nombre}
             onChangeText={(v) => {
               setNombre(v);
@@ -233,9 +229,7 @@ const s = StyleSheet.create({
   error: {
     padding: Spacing.lg,
     borderRadius: Radius.lg,
-    backgroundColor: Colors.destructiveSoft,
-    borderWidth: 1,
-    borderColor: Colors.destructiveBorder,
+    backgroundColor: Colors.destructiveLight,
   },
   errorAccion: {
     alignSelf: 'flex-start',

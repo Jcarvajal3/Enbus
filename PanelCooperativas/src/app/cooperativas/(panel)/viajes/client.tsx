@@ -1,49 +1,48 @@
 "use client";
 
-import { useState, useEffect, useMemo, useRef, useTransition, useCallback, useId, type FormEvent, type ReactNode, type TransitionStartFunction } from "react";
+import { useState, useEffect, useMemo, useRef, useTransition, useId, type FormEvent, type TransitionStartFunction } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import { toast } from "sonner";
+import { Bus, DotsThree, Eye, FlagCheckered, Info, PencilSimple, Plus, XCircle, WarningCircle } from "@phosphor-icons/react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Switch } from "@/components/ui/switch";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { Plus, DotsThree, Eye, MapTrifold, XCircle, CalendarBlank, Ticket, Package, Bus, WarningCircle, PencilSimple, FlagCheckered, Printer, Info } from "@phosphor-icons/react";
-import { toast } from "sonner";
-import { guardarViaje, cancelarViaje, checkBoletosVendidos, marcarSalidaViaje, editarViaje, completarViaje } from "./actions";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Spinner } from "@/components/ui/spinner";
+import { guardarViaje, cancelarViaje, checkBoletosVendidos, editarViaje } from "./actions";
 import { DIAS_SEMANA, planificarSalidas, resumenSalidas, textoBotonSalidas } from "./salidas";
 import { PageHeader } from "@/components/page-header";
-import { EmptyState } from "@/components/empty-state";
 import { ErrorState } from "@/components/error-state";
+import { AvisoError } from "@/components/aviso-error";
+import { FilaVacia } from "@/components/fila-vacia";
+import { BarraFiltros } from "@/components/barra-filtros";
+import { PaginacionTabla, usePaginacion } from "@/components/paginacion-tabla";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { CeldaEnlace } from "@/components/celda-enlace";
 import { requireOnline } from "@/components/connectivity-banner";
-import { useTasaBCV } from "@/components/tasa-bcv-provider";
 import { createClient } from "@/lib/supabase/client";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { StatusBadge } from "@/components/status-badge";
-import { Spinner } from "@/components/ui/spinner";
 import { Monto } from "@/components/monto";
-import { useUser } from "@/hooks/use-user";
+import { ViajeSheet, paraSalida, rutaViaje } from "@/components/viajes/viaje-sheet";
+import { MarcarLlegadaDialog, MarcarSalidaDialog, type ViajeParaSalida } from "@/components/viajes/marcar-viaje-dialogs";
+import { useCambiarParams, useParamUrl } from "@/hooks/use-param-url";
+import { avisarExito, avisarInfo } from "@/lib/avisos";
 import { humanizeError } from "@/lib/errores";
 import { formatUsd } from "@/lib/dinero";
 import { estadosDe, etiquetaEstado } from "@/lib/estados";
-import { fechaVE, formatFechaCalendario, formatFechaVE, formatHoraVE } from "@/lib/fechas";
-import { formatCedula, formatTelefono } from "@/lib/ve";
-import { formatCodigoBoleto } from "@/lib/artefactos.generated";
-import { imprimirManifiesto, MSG_VENTANA_BLOQUEADA } from "@/lib/printing/manifiesto";
-import { getEstadoUiBoleto, type SalidaViaje } from "@/lib/types/pagos";
+import { fechaVE, formatDiaVE, formatFechaHoraCortaVE, formatFechaVE } from "@/lib/fechas";
+import { ICONO_SECCION } from "@/lib/navigation";
 import type { ImpactoCancelarViaje } from "@/lib/types/reembolsos";
 import { formatCiudad } from "@/lib/ciudades";
 import { cn } from "@/lib/utils";
-
-export type ViajeParaSalida = { id: string; origen: string; destino: string; salida: string };
 
 export type VistaViajes = "hoy" | "proximos" | "historial";
 
@@ -51,9 +50,9 @@ function plural(n: number, uno: string, varios: string) {
   return n === 1 ? uno : varios.replace("{n}", String(n));
 }
 
-/** "05/10 a las 8:00 a. m." (hora de Venezuela). */
+/** "05/11 · 8:00 a. m." (hora de Venezuela, D4). */
 function salidaLarga(iso: string) {
-  return `${formatFechaVE(iso, { day: "2-digit", month: "2-digit" })} a las ${formatHoraVE(iso)}`;
+  return formatFechaHoraCortaVE(iso);
 }
 
 /** ISO → 'YYYY-MM-DDTHH:mm' en hora de Venezuela (para un input datetime-local). */
@@ -62,76 +61,6 @@ function isoALocalVE(iso: string) {
 }
 
 const MOTIVOS_CANCELAR_VIAJE = ["Falla mecánica", "Vía cerrada o mal tiempo", "Pocos pasajeros", "Otro"];
-
-/**
- * Confirmación de "Marcar salida" (también la usa Despacho). Cierra la venta de
- * boletos de esa salida y libera las reservas sin pagar (fn_marcar_salida_viaje).
- */
-export function MarcarSalidaDialog({
-  viaje,
-  open,
-  onOpenChange,
-  onHecho,
-}: {
-  viaje: ViajeParaSalida | null;
-  open: boolean;
-  onOpenChange: (abierto: boolean) => void;
-  onHecho?: (r: SalidaViaje) => void;
-}) {
-  const [enviando, setEnviando] = useState(false);
-
-  const confirmar = async () => {
-    if (!viaje || enviando) return;
-    setEnviando(true);
-    try {
-      const res = await requireOnline(() => marcarSalidaViaje(viaje.id))();
-      if (!res.success) {
-        toast.error(res.error);
-        return;
-      }
-      if (res.data.ya_procesado) {
-        toast.info("Este viaje ya estaba marcado como salido.");
-      } else {
-        const r = res.data.reservas_liberadas ?? 0;
-        const p = res.data.pagos_en_verificacion ?? 0;
-        const liberadas = plural(r, "Se liberó 1 reserva sin pagar.", "Se liberaron {n} reservas sin pagar.");
-        const pendientes =
-          p > 0 ? ` ${plural(p, "Queda 1 pago por verificar.", "Quedan {n} pagos por verificar.")}` : "";
-        toast.success(`Salida registrada. ${liberadas}${pendientes}`);
-      }
-      onOpenChange(false);
-      onHecho?.(res.data);
-    } catch (err) {
-      toast.error(humanizeError(err, "marcar la salida del viaje"));
-    } finally {
-      setEnviando(false);
-    }
-  };
-
-  const hora = viaje ? formatFechaVE(viaje.salida, { hour: "2-digit", minute: "2-digit", hourCycle: "h23" }) : "";
-
-  return (
-    <AlertDialog open={open} onOpenChange={(abierto) => !enviando && onOpenChange(abierto)}>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>
-            ¿El bus de {formatCiudad(viaje?.origen)} → {formatCiudad(viaje?.destino)} {hora} ya salió?
-          </AlertDialogTitle>
-          <AlertDialogDescription>
-            Se cerrará la venta de boletos de esta salida y se liberarán las reservas sin pagar. Los pagos en
-            verificación seguirán pendientes.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel disabled={enviando}>Todavía no</AlertDialogCancel>
-          <AlertDialogAction onClick={() => void confirmar()} disabled={enviando}>
-            {enviando ? "Registrando…" : "Sí, ya salió"}
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
-  );
-}
 
 type ViajeACancelar = {
   id: string;
@@ -175,39 +104,6 @@ function lineasImpacto(impacto: ImpactoCancelarViaje | null) {
     );
   }
   return lineas;
-}
-
-function AvisoPagosPendientes({ n }: { n: number | null }) {
-  return (
-    <div
-      role="alert"
-      className="flex items-start gap-2 rounded-xl border border-warning/40 bg-warning-light p-3 text-sm text-warning-deep"
-    >
-      <WarningCircle className="mt-0.5 size-4 shrink-0" weight="fill" aria-hidden />
-      <p>
-        {n && n > 0
-          ? plural(n, "Hay 1 pago por verificar en este viaje. ", "Hay {n} pagos por verificar en este viaje. ")
-          : "Hay pagos por verificar en este viaje. "}
-        Apruébalos o recházalos antes de cancelarlo.{" "}
-        <Link href="/cooperativas/pagos?tipo=boleto" className="font-medium underline underline-offset-4">
-          Ir a Pagos por verificar
-        </Link>
-      </p>
-    </div>
-  );
-}
-
-function MensajeError({ id, children }: { id?: string; children: ReactNode }) {
-  return (
-    <div
-      id={id}
-      role="alert"
-      className="flex items-start gap-2 rounded-xl border border-destructive/40 bg-destructive-light p-3 text-sm text-destructive-deep"
-    >
-      <WarningCircle className="mt-0.5 size-4 shrink-0" weight="fill" aria-hidden />
-      <p>{children}</p>
-    </div>
-  );
 }
 
 // ─── Programar viaje (#52, PC-44) ────────────────────────────────────────────
@@ -304,7 +200,7 @@ function FormularioProgramar({
           setFormError(res.error);
         } else {
           onCerrar();
-          toast.success(
+          avisarExito(
             isRecurring && plan.ok
               ? plural(plan.salidas.length, "Programamos 1 salida.", "Programamos {n} salidas.")
               : "Viaje programado."
@@ -319,15 +215,15 @@ function FormularioProgramar({
   const errorPlan = isRecurring && mostrarPlan && !plan.ok ? plan : null;
 
   return (
-    <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-xl">
+    <DialogContent>
       <DialogHeader>
         <DialogTitle>Programar viaje</DialogTitle>
-        <DialogDescription>Hora de Venezuela. La llegada estimada se calcula con la duración de la ruta.</DialogDescription>
+        <DialogDescription>Hora de Venezuela.</DialogDescription>
       </DialogHeader>
 
-      <form onSubmit={handleSubmit} noValidate>
-        <div className="grid gap-6 py-4">
-          {formError && <MensajeError>{formError}</MensajeError>}
+      <form onSubmit={handleSubmit} noValidate className="grid gap-6">
+        <div className="grid gap-6">
+          {formError && <AvisoError>{formError}</AvisoError>}
 
           <div className="grid gap-2">
             <Label htmlFor={`${uid}-ruta`}>Ruta</Label>
@@ -342,26 +238,25 @@ function FormularioProgramar({
               </SelectContent>
             </Select>
             {rutasActivas.length === 0 && (
-              <p className="text-xs text-muted-foreground">
+              <p className="text-sm text-muted-foreground">
                 No tienes rutas activas.{" "}
-                <Link href="/cooperativas/rutas" className="font-medium text-foreground underline decoration-primary underline-offset-4">
+                <Link href="/cooperativas/rutas" className="font-medium text-info-text underline underline-offset-4">
                   Crea una ruta
-                </Link>{" "}
-                antes de programar viajes.
+                </Link>
               </p>
             )}
           </div>
 
-          <div className="flex items-center justify-between gap-4 rounded-lg border p-4">
-            <div className="space-y-0.5">
-              <Label htmlFor={`${uid}-recurrente`} className="text-base">Viaje recurrente</Label>
-              <p className="text-sm text-muted-foreground">Crea una salida por cada día elegido dentro de un periodo.</p>
+          <div className="flex items-center justify-between gap-4 rounded-md border border-border p-4">
+            <div className="flex flex-col gap-1">
+              <Label htmlFor={`${uid}-recurrente`}>Viaje recurrente</Label>
+              <p className="text-sm text-muted-foreground">Una salida por cada día elegido.</p>
             </div>
             <Switch id={`${uid}-recurrente`} checked={isRecurring} onCheckedChange={setIsRecurring} />
           </div>
 
           {isRecurring ? (
-            <div className="grid gap-4 rounded-lg border bg-muted/20 p-4">
+            <div className="grid gap-4 rounded-md bg-muted/50 p-4">
               <div className="grid gap-2">
                 <p id={`${uid}-dias-label`} className="text-sm font-medium">Días de salida</p>
                 <div
@@ -378,11 +273,14 @@ function FormularioProgramar({
                         key={d.valor}
                         type="button"
                         size="sm"
-                        variant={activo ? "default" : "outline"}
+                        variant="outline"
                         aria-pressed={activo}
                         aria-label={d.nombre}
                         onClick={() => alternarDia(d.valor)}
-                        className="min-w-12"
+                        className={cn(
+                          "min-w-12",
+                          activo && "border-accent-strong bg-accent-strong text-accent-strong-foreground hover:bg-accent-strong/90"
+                        )}
                       >
                         {d.corto}
                       </Button>
@@ -413,9 +311,9 @@ function FormularioProgramar({
               </div>
               <div aria-live="polite">
                 {errorPlan ? (
-                  <MensajeError>{errorPlan.error}</MensajeError>
+                  <AvisoError>{errorPlan.error}</AvisoError>
                 ) : plan.ok ? (
-                  <p className="flex items-start gap-2 rounded-xl border bg-card p-3 text-sm">
+                  <p className="flex items-start gap-2 rounded-md border border-border bg-card p-3 text-sm">
                     <Info className="mt-0.5 size-4 shrink-0 text-info-text" weight="fill" aria-hidden />
                     {resumenSalidas(plan)}
                   </p>
@@ -459,7 +357,7 @@ function FormularioProgramar({
           </Button>
           <Button type="submit" disabled={isPending} aria-busy={isPending || undefined}>
             {isPending && <Spinner size="sm" />}
-            {isPending ? "Programando…" : isRecurring ? textoBotonSalidas(plan) : "Programar salida"}
+            {isPending ? "Programando…" : isRecurring ? textoBotonSalidas(plan) : "Programar viaje"}
           </Button>
         </DialogFooter>
       </form>
@@ -582,7 +480,7 @@ function FormularioEditar({
       asientosTotales: nAsientos !== Number(viaje.asientos_totales) ? nAsientos : undefined,
     };
     if (Object.values(cambios).every((v) => v === undefined)) {
-      toast.info("No hay cambios que guardar.");
+      avisarInfo("No hay cambios que guardar.");
       onCerrar();
       return;
     }
@@ -605,7 +503,7 @@ function FormularioEditar({
         return;
       }
       const n = res.data.pasajeros_avisados ?? 0;
-      toast.success(
+      avisarExito(
         n > 0 ? `Viaje actualizado. ${plural(n, "Avisamos a 1 pasajero.", "Avisamos a {n} pasajeros.")}` : "Viaje actualizado."
       );
       setEnviando(false);
@@ -622,7 +520,7 @@ function FormularioEditar({
   const ruta = `${formatCiudad(viaje.ruta?.ciudad_origen)} → ${formatCiudad(viaje.ruta?.ciudad_destino)}`;
 
   return (
-    <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-lg" showCloseButton={!enviando}>
+    <DialogContent showCloseButton={!enviando}>
       <form onSubmit={enviar} noValidate className="grid gap-5">
         <DialogHeader>
           <DialogTitle>Editar viaje</DialogTitle>
@@ -631,7 +529,7 @@ function FormularioEditar({
           </DialogDescription>
         </DialogHeader>
 
-        {errorGeneral && <MensajeError>{errorGeneral}</MensajeError>}
+        {errorGeneral && <AvisoError>{errorGeneral}</AvisoError>}
 
         <div className="grid gap-2">
           <Label htmlFor={`${uid}-salida`}>Fecha y hora de salida</Label>
@@ -650,14 +548,14 @@ function FormularioEditar({
           {errores.salida ? (
             <p id={`${uid}-salida-error`} className="text-sm text-destructive-text">{errores.salida}</p>
           ) : (
-            <p id={`${uid}-salida-ayuda`} className="text-xs text-muted-foreground">
-              Hora de Venezuela. La llegada estimada se recalcula con la duración de la ruta.
+            <p id={`${uid}-salida-ayuda`} className="text-sm text-muted-foreground">
+              Hora de Venezuela.
             </p>
           )}
         </div>
 
         {cambiaHora && (
-          <div className="grid gap-3 rounded-xl border border-warning/40 bg-warning-light p-3 text-sm text-warning-deep">
+          <div className="grid gap-3 rounded-md border border-warning/40 bg-warning-light p-3 text-sm text-warning-deep">
             <p className="flex items-start gap-2" role="status">
               <WarningCircle className="mt-0.5 size-4 shrink-0" weight="fill" aria-hidden />
               {pasajeros === null
@@ -723,7 +621,7 @@ function FormularioEditar({
           {errores.asientos ? (
             <p id={`${uid}-asientos-error`} className="text-sm text-destructive-text">{errores.asientos}</p>
           ) : (
-            <p id={`${uid}-asientos-ayuda`} className="text-xs text-muted-foreground">
+            <p id={`${uid}-asientos-ayuda`} className="text-sm text-muted-foreground">
               {minimoAsientos
                 ? `Mínimo ${minimoAsientos}: ya hay pasajeros hasta ese asiento.`
                 : "No puede ser menor que el asiento más alto ya vendido."}
@@ -747,11 +645,14 @@ function FormularioEditar({
 
 // ─── Lista ───────────────────────────────────────────────────────────────────
 
-const VISTAS: { valor: VistaViajes; etiqueta: (totalHoy: number | null) => string }[] = [
-  { valor: "hoy", etiqueta: (n) => (n === null ? "Hoy" : `Hoy (${n})`) },
-  { valor: "proximos", etiqueta: () => "Próximos 7 días" },
-  { valor: "historial", etiqueta: () => "Historial" },
+const VISTAS: { valor: VistaViajes; etiqueta: string }[] = [
+  { valor: "hoy", etiqueta: "Hoy" },
+  { valor: "proximos", etiqueta: "Próximos 7 días" },
+  { valor: "historial", etiqueta: "Historial" },
 ];
+
+/** Parámetros que no son de la lista (vista y día van en la ruta; el viaje abierto, aparte). */
+const PARAMS_PROPIOS = ["vista", "fecha", "viaje", "pagina"];
 
 export function ViajesClient({
   viajes,
@@ -769,7 +670,7 @@ export function ViajesClient({
   vista?: VistaViajes;
   /** Día elegido en el filtro ('YYYY-MM-DD'): reemplaza a la pestaña. */
   fecha?: string | null;
-  /** Salidas de hoy (más las que están en curso), para "Hoy ({n})". */
+  /** Salidas de hoy (más las que están en curso), para el conteo de "Hoy". */
   totalHoy?: number | null;
   /** El historial llegó al límite de 100. */
   historialRecortado?: boolean;
@@ -778,111 +679,42 @@ export function ViajesClient({
 }) {
   const isAdmin = userRole === "admin_cooperativa";
   const router = useRouter();
-  const supabase = useMemo(() => createClient(), []);
-  const { user } = useUser();
-  const tasa = useTasaBCV();
+  const searchParams = useSearchParams();
+  const cambiarParams = useCambiarParams();
 
-  // Filtros del cliente (la pestaña y el día van en la URL)
-  const [filterRuta, setFilterRuta] = useState<string>("all");
-  const [filterEstado, setFilterEstado] = useState<string>("all");
+  // Filtros y viaje abierto en la URL (§2.1 regla 5).
+  const [filterRuta] = useParamUrl("ruta");
+  const [filterEstado] = useParamUrl("estado");
+  const [viajeAbierto] = useParamUrl("viaje");
+  const abrirViaje = (id: string | null) => cambiarParams({ viaje: id }, { conservarPagina: true });
+  const [recargaHoja, setRecargaHoja] = useState(0);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isSheetOpen, setIsSheetOpen] = useState(false);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [selectedSnapshot, setSelectedSnapshot] = useState<any | null>(null);
-  // Tras editar, la lista llega de nuevo del servidor: el detalle muestra la fila al día.
-  const selectedViaje = useMemo(
-    () => viajes.find((v) => v.id === selectedId) ?? selectedSnapshot,
-    [viajes, selectedId, selectedSnapshot]
-  );
-
-  // Sub-listas de boletos y encomiendas en el detalle del viaje
-  const [detallesLoading, setDetallesLoading] = useState(false);
-  const [detallesError, setDetallesError] = useState<string | null>(null);
-  const [viajeBoletos, setViajeBoletos] = useState<any[]>([]);
-  const [viajeEncomiendas, setViajeEncomiendas] = useState<any[]>([]);
-
-  const cargarDetalles = useCallback(
-    async (viajeId: string, estaMontado: () => boolean = () => true) => {
-      setDetallesLoading(true);
-      setDetallesError(null);
-      setViajeBoletos([]);
-      setViajeEncomiendas([]);
-      try {
-        const [boletosRes, encomiendasRes] = await Promise.all([
-          supabase
-            .from("boletos")
-            .select("id, codigo_boleto, asiento, estado, pasajero_nombre, pasajero_cedula, pago:pagos!boletos_pago_id_fkey(estado_verificacion)")
-            .eq("viaje_id", viajeId),
-          supabase
-            .from("encomiendas")
-            .select("id, tracking_id, estado, receiver_nombre, receiver_telefono, descripcion_contenido, peso_kg, modalidad_pago, costo_calculado")
-            .eq("viaje_id", viajeId),
-        ]);
-        if (!estaMontado()) return;
-        const error = boletosRes.error ?? encomiendasRes.error;
-        if (error) {
-          setDetallesError(humanizeError(error, "cargar los boletos y encomiendas del viaje"));
-          return;
-        }
-        const boletos = [...(boletosRes.data || [])].sort((a, b) =>
-          String(a.asiento ?? "").localeCompare(String(b.asiento ?? ""), "es", { numeric: true })
-        );
-        setViajeBoletos(boletos);
-        setViajeEncomiendas(encomiendasRes.data || []);
-      } catch (err) {
-        if (!estaMontado()) return;
-        setDetallesError(humanizeError(err, "cargar los boletos y encomiendas del viaje"));
-      } finally {
-        if (estaMontado()) setDetallesLoading(false);
-      }
-    },
-    [supabase]
-  );
-
-  useEffect(() => {
-    if (!selectedId || !isSheetOpen) return;
-    let isMounted = true;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void cargarDetalles(selectedId, () => isMounted);
-    return () => {
-      isMounted = false;
-    };
-  }, [selectedId, isSheetOpen, cargarDetalles]);
 
   // "Cancelar viaje" (solo administrador). Se conserva el viaje al cerrar para la animación.
   const [viajeCancelar, setViajeCancelar] = useState<ViajeACancelar | null>(null);
   const [cancelarOpen, setCancelarOpen] = useState(false);
   const [revisandoId, setRevisandoId] = useState<string | null>(null);
-  /** Pagos por verificar que bloquean la cancelación: se muestra solo el aviso con el enlace. */
+  /** Pagos por verificar que bloquean la cancelación. */
   const [bloqueo, setBloqueo] = useState<{ ruta: string; salida: string; pendientes: number | null } | null>(null);
 
-  // "Marcar salida" (taquillero y administrador)
+  // "Marcar salida" y "Marcar llegada" desde la fila (ambos roles)
   const [viajeSalida, setViajeSalida] = useState<ViajeParaSalida | null>(null);
   const [salidaOpen, setSalidaOpen] = useState(false);
-
-  // "Marcar llegada" (EN_CURSO, ambos roles)
-  const [viajeLlegada, setViajeLlegada] = useState<any | null>(null);
+  const [viajeLlegada, setViajeLlegada] = useState<ViajeParaSalida | null>(null);
   const [llegadaOpen, setLlegadaOpen] = useState(false);
 
   // "Editar viaje" (admin, PROGRAMADO)
   const [viajeEditar, setViajeEditar] = useState<any | null>(null);
   const [editarOpen, setEditarOpen] = useState(false);
 
-  const rutaDe = (viaje: any) => `${formatCiudad(viaje?.ruta?.ciudad_origen)} → ${formatCiudad(viaje?.ruta?.ciudad_destino)}`;
-
   function abrirMarcarSalida(viaje: any) {
+    setViajeSalida(paraSalida(viaje));
     setSalidaOpen(true);
-    setViajeSalida({
-      id: viaje.id,
-      origen: viaje.ruta?.ciudad_origen ?? "",
-      destino: viaje.ruta?.ciudad_destino ?? "",
-      salida: viaje.fecha_hora_salida,
-    });
   }
 
   function abrirLlegada(viaje: any) {
-    setViajeLlegada(viaje);
+    setViajeLlegada(paraSalida(viaje));
     setLlegadaOpen(true);
   }
 
@@ -891,52 +723,30 @@ export function ViajesClient({
     setEditarOpen(true);
   }
 
-  async function confirmarLlegada() {
-    if (!viajeLlegada) return { ok: false, error: "No encontramos el viaje. Actualiza la página." };
-    let res: Awaited<ReturnType<typeof completarViaje>>;
-    try {
-      res = await requireOnline(() => completarViaje(viajeLlegada.id))();
-    } catch (err) {
-      return { ok: false, error: humanizeError(err, "marcar la llegada del viaje") };
-    }
-    if (!res.success) return { ok: false, error: res.error };
-    if (res.data.ya_procesado) {
-      toast.info("Este viaje ya estaba completado.");
-    } else {
-      const n = res.data.no_embarcados ?? 0;
-      toast.success(
-        n > 0
-          ? `Viaje completado. ${plural(n, "1 pasajero no embarcó.", "{n} pasajeros no embarcaron.")}`
-          : "Viaje completado."
-      );
-    }
-    return { ok: true };
-  }
-
   const opcionesRuta = rutasActivas.map((r) => ({
-    value: r.id as string,
-    label: `${formatCiudad(r.ciudad_origen)} → ${formatCiudad(r.ciudad_destino)}`,
+    valor: r.id as string,
+    etiqueta: `${formatCiudad(r.ciudad_origen)} → ${formatCiudad(r.ciudad_destino)}`,
   }));
+  const opcionesEstado = estadosDe("viaje").map((e) => ({ valor: e, etiqueta: etiquetaEstado("viaje", e) }));
 
-  const filteredViajes = viajes.filter((v) => {
-    if (filterRuta !== "all" && v.ruta_id !== filterRuta) return false;
-    if (filterEstado !== "all" && v.estado !== filterEstado) return false;
-    return true;
-  });
+  const filteredViajes = useMemo(
+    () =>
+      viajes.filter((v) => {
+        if (filterRuta && v.ruta_id !== filterRuta) return false;
+        if (filterEstado && v.estado !== filterEstado) return false;
+        return true;
+      }),
+    [viajes, filterRuta, filterEstado]
+  );
+  const { visibles, pagina, paginas, ir } = usePaginacion(filteredViajes);
 
-  /** Navega a la misma página con otra pestaña o día (sin recargar todo). */
-  function irA(params: { vista?: VistaViajes; fecha?: string | null }) {
-    const sp = new URLSearchParams();
-    if (params.fecha) sp.set("fecha", params.fecha);
-    else if (params.vista && params.vista !== "hoy") sp.set("vista", params.vista);
+  /** Enlace a otra pestaña: conserva los filtros del cliente y quita el día. */
+  function hrefVista(v: VistaViajes) {
+    const sp = new URLSearchParams(searchParams.toString());
+    for (const p of PARAMS_PROPIOS) sp.delete(p);
+    if (v !== "hoy") sp.set("vista", v);
     const qs = sp.toString();
-    router.push(qs ? `/cooperativas/viajes?${qs}` : "/cooperativas/viajes");
-  }
-
-  function openDetalle(viaje: any) {
-    setSelectedId(viaje.id);
-    setSelectedSnapshot(viaje);
-    setIsSheetOpen(true);
+    return qs ? `/cooperativas/viajes?${qs}` : "/cooperativas/viajes";
   }
 
   /** Calcula el impacto y abre la confirmación. Si el cálculo falla, se abre igual con un texto genérico. */
@@ -954,10 +764,10 @@ export function ViajesClient({
     }
     if (impacto && impacto.pagos_pendientes > 0) {
       // Con pagos por verificar no se puede cancelar: solo el aviso con el enlace a Pagos.
-      setBloqueo({ ruta: rutaDe(viaje), salida: viaje.fecha_hora_salida, pendientes: impacto.pagos_pendientes });
+      setBloqueo({ ruta: rutaViaje(viaje), salida: viaje.fecha_hora_salida, pendientes: impacto.pagos_pendientes });
       return;
     }
-    setViajeCancelar({ id: viaje.id, ruta: rutaDe(viaje), salida: viaje.fecha_hora_salida, impacto });
+    setViajeCancelar({ id: viaje.id, ruta: rutaViaje(viaje), salida: viaje.fecha_hora_salida, impacto });
     setCancelarOpen(true);
   }
 
@@ -985,62 +795,41 @@ export function ViajesClient({
 
     const r = res.data;
     if (r.ya_procesado) {
-      toast.info("Este viaje ya estaba cancelado.");
+      avisarInfo("Este viaje ya estaba cancelado.");
     } else {
       const n = r.boletos_reembolso ?? 0;
       if (n > 0) {
-        toast.success(
-          `Viaje cancelado. ${plural(n, "1 reembolso pendiente.", "{n} reembolsos pendientes.")}`,
-          { action: { label: "Ver reembolsos", onClick: () => router.push("/cooperativas/reembolsos") } }
-        );
+        toast.success(`Viaje cancelado. ${plural(n, "1 reembolso pendiente.", "{n} reembolsos pendientes.")}`, {
+          duration: 3000,
+          action: { label: "Ver reembolsos", onClick: () => router.push("/cooperativas/reembolsos") },
+        });
       } else if ((r.reservas_anuladas ?? 0) > 0) {
-        toast.success("Viaje cancelado. Avisamos a los pasajeros que tenían reservas.");
+        avisarExito("Viaje cancelado. Avisamos a los pasajeros que tenían reservas.");
       } else {
-        toast.success("Viaje cancelado.");
+        avisarExito("Viaje cancelado.");
       }
     }
-    setIsSheetOpen(false);
+    abrirViaje(null);
     return { ok: true };
   }
 
-  function imprimir() {
-    if (!selectedViaje) return;
-    const ok = imprimirManifiesto({
-      cooperativa: user.cooperativa_nombre,
-      ciudadOrigen: selectedViaje.ruta?.ciudad_origen,
-      ciudadDestino: selectedViaje.ruta?.ciudad_destino,
-      salida: selectedViaje.fecha_hora_salida,
-      numeroUnidad: selectedViaje.numero_unidad,
-      nombreChofer: selectedViaje.nombre_chofer,
-      pasajeros: viajeBoletos,
-      encomiendas: viajeEncomiendas,
-      tasa: tasa?.tasa ?? null,
-    });
-    if (!ok) toast.error(MSG_VENTANA_BLOQUEADA);
-  }
-
   const sinRutas = rutasActivas.length === 0;
+  const COLUMNAS = 7;
 
-  function vacio() {
+  function filaVacia() {
     if (viajes.length > 0) {
-      return (
-        <EmptyState icon={CalendarBlank} title="Sin resultados" description="No hay viajes que coincidan con los filtros." />
-      );
+      return <FilaVacia colSpan={COLUMNAS} icon={ICONO_SECCION.viajes} titulo="No hay viajes con estos filtros" />;
     }
     if (sinRutas && vista !== "historial") {
       return (
-        <EmptyState
-          icon={MapTrifold}
-          title="Primero crea una ruta con su precio."
-          description={
-            isAdmin
-              ? "Con la ruta y su precio en USD podrás programar salidas y vender boletos."
-              : "Cuando el administrador cree rutas y programe salidas, aparecerán aquí."
-          }
-          action={
+        <FilaVacia
+          colSpan={COLUMNAS}
+          icon={ICONO_SECCION.rutas}
+          titulo="Primero crea una ruta con su precio"
+          accion={
             isAdmin ? (
               <Link href="/cooperativas/rutas" className={buttonVariants()}>
-                <Plus className="h-4 w-4" weight="bold" aria-hidden />
+                <Plus aria-hidden />
                 Crear ruta
               </Link>
             ) : undefined
@@ -1050,414 +839,193 @@ export function ViajesClient({
     }
     const accionProgramar = isAdmin ? (
       <Button onClick={() => setIsModalOpen(true)}>
-        <Plus className="h-4 w-4" weight="bold" aria-hidden />
-        Programar salida
+        <Plus aria-hidden />
+        Programar viaje
       </Button>
     ) : undefined;
-    const sinAdmin = "Cuando el administrador programe salidas, aparecerán aquí.";
-    if (fecha) {
-      return (
-        <EmptyState
-          icon={CalendarBlank}
-          title={`No hay salidas el ${formatFechaCalendario(fecha)}.`}
-          description={isAdmin ? "Elige otro día o programa una salida." : sinAdmin}
-          action={accionProgramar}
-        />
-      );
-    }
-    if (vista === "proximos") {
-      return (
-        <EmptyState
-          icon={CalendarBlank}
-          title="No hay salidas en los próximos 7 días."
-          description={isAdmin ? "Programa las salidas de la semana para vender boletos." : sinAdmin}
-          action={accionProgramar}
-        />
-      );
-    }
-    if (vista === "historial") {
-      return (
-        <EmptyState
-          icon={CalendarBlank}
-          title="Todavía no hay viajes anteriores."
-          description="Los viajes de días pasados aparecerán aquí."
-        />
-      );
-    }
+    const titulo = fecha
+      ? `No hay salidas el ${formatDiaVE(fecha)}`
+      : vista === "proximos"
+        ? "No hay salidas en los próximos 7 días"
+        : vista === "historial"
+          ? "Todavía no hay viajes anteriores"
+          : "No hay salidas hoy";
     return (
-      <EmptyState
-        icon={CalendarBlank}
-        title="No hay salidas hoy."
-        description={isAdmin ? "Programa una salida para vender boletos de hoy." : sinAdmin}
-        action={accionProgramar}
+      <FilaVacia
+        colSpan={COLUMNAS}
+        icon={ICONO_SECCION.viajes}
+        titulo={titulo}
+        accion={vista === "historial" && !fecha ? undefined : accionProgramar}
       />
     );
   }
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader title="Viajes" description="Programa las salidas de tus rutas y sigue cada viaje.">
+      <PageHeader title="Viajes">
         {isAdmin && (
           <Button onClick={() => setIsModalOpen(true)}>
-            <Plus className="mr-2 h-4 w-4" weight="bold" aria-hidden />
+            <Plus aria-hidden />
             Programar viaje
           </Button>
         )}
       </PageHeader>
 
-      <nav aria-label="Vista de viajes" className="flex flex-wrap items-center gap-2">
-        {VISTAS.map((v) => {
-          const activa = !fecha && vista === v.valor;
-          return (
-            <Link
-              key={v.valor}
-              href={v.valor === "hoy" ? "/cooperativas/viajes" : `/cooperativas/viajes?vista=${v.valor}`}
-              aria-current={activa ? "page" : undefined}
-              className={cn(
-                "rounded-full border px-4 py-1.5 text-sm font-medium transition-colors",
-                "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
-                activa ? "border-primary bg-primary text-primary-foreground" : "bg-card hover:bg-muted"
+      <Tabs value={fecha ? "fecha" : vista}>
+        <TabsList aria-label="Vista de viajes">
+          {VISTAS.map((v) => (
+            <TabsTrigger key={v.valor} value={v.valor} className="group/tab flex-none" render={<Link href={hrefVista(v.valor)} />}>
+              {v.etiqueta}
+              {v.valor === "hoy" && totalHoy !== null && totalHoy > 0 && (
+                <span className="min-w-5 rounded-full bg-background px-1.5 text-xs leading-5 font-semibold text-foreground tabular-nums group-data-active/tab:bg-muted">
+                  {totalHoy}
+                </span>
               )}
-            >
-              {v.etiqueta(totalHoy)}
-            </Link>
-          );
-        })}
-        {fecha && (
-          <span className="rounded-full border border-primary bg-primary-light px-4 py-1.5 text-sm font-medium" aria-current="page">
-            Salidas del {formatFechaCalendario(fecha)}
-          </span>
-        )}
-      </nav>
+            </TabsTrigger>
+          ))}
+          {fecha && (
+            <TabsTrigger value="fecha" className="flex-none">
+              {formatDiaVE(fecha)}
+            </TabsTrigger>
+          )}
+        </TabsList>
+      </Tabs>
 
-      <div className="flex flex-col sm:flex-row gap-4 bg-muted/50 p-4 rounded-lg border">
-        <div className="flex-1 space-y-1">
-          <Label htmlFor="filtro-ruta">Ruta</Label>
-          <Select value={filterRuta} onValueChange={(val) => setFilterRuta(val ?? "all")} items={[{ value: "all", label: "Todas las rutas" }, ...opcionesRuta]}>
-            <SelectTrigger id="filtro-ruta"><SelectValue placeholder="Todas las rutas" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todas las rutas</SelectItem>
-              {rutasActivas.map((r) => (
-                <SelectItem key={r.id} value={r.id}>
-                  {formatCiudad(r.ciudad_origen)} → {formatCiudad(r.ciudad_destino)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="flex-1 space-y-1">
-          <Label htmlFor="filtro-fecha">Día de salida</Label>
-          <Input
-            id="filtro-fecha"
-            type="date"
-            value={fecha ?? ""}
-            onChange={(e) => irA({ vista, fecha: e.target.value || null })}
-          />
-        </div>
-        <div className="flex-1 space-y-1">
-          <Label htmlFor="filtro-estado">Estado</Label>
-          <Select value={filterEstado} onValueChange={(val) => setFilterEstado(val ?? "all")} items={[{ value: "all", label: "Todos los estados" }, ...estadosDe("viaje").map((e) => ({ value: e, label: etiquetaEstado("viaje", e) }))]}>
-            <SelectTrigger id="filtro-estado"><SelectValue placeholder="Todos los estados" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos los estados</SelectItem>
-              {estadosDe("viaje").map((estado) => (
-                <SelectItem key={estado} value={estado}>{etiquetaEstado("viaje", estado)}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        {(filterRuta !== "all" || fecha || filterEstado !== "all") && (
-          <div className="flex items-end">
-            <Button
-              variant="ghost"
-              onClick={() => {
-                setFilterRuta("all");
-                setFilterEstado("all");
-                if (fecha) irA({ vista: "hoy", fecha: null });
-              }}
-            >
-              Limpiar filtros
-            </Button>
-          </div>
-        )}
-      </div>
+      <BarraFiltros
+        selects={[
+          { param: "ruta", etiqueta: "Ruta", opciones: opcionesRuta },
+          { param: "estado", etiqueta: "Estado", opciones: opcionesEstado, todas: "Todos" },
+        ]}
+        fechas={[{ param: "fecha", etiqueta: "Día de salida" }]}
+      />
 
-      <div className="rounded-md border bg-card">
+      <Card className="gap-0 overflow-hidden p-0">
         {errorCarga && viajes.length === 0 ? (
           <ErrorState titulo="No pudimos cargar los viajes" descripcion={errorCarga} onReintentar={() => router.refresh()} />
         ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Ruta</TableHead>
-                <TableHead>Salida</TableHead>
-                <TableHead>Llegada estimada</TableHead>
-                <TableHead>Asientos libres</TableHead>
-                <TableHead>Precio</TableHead>
-                <TableHead>Estado</TableHead>
-                <TableHead className="text-right">Acciones</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredViajes.map((viaje) => (
-                <TableRow key={viaje.id} className={cn("relative", viaje.estado === "CANCELADO" && "text-muted-foreground")}>
-                  <CeldaEnlace
-                    onAbrir={() => openDetalle(viaje)}
-                    etiqueta={`Ver viaje ${rutaDe(viaje)} del ${salidaLarga(viaje.fecha_hora_salida)}`}
-                  >
-                    <span className="flex items-center gap-2">
-                      <MapTrifold className="h-4 w-4 text-muted-foreground" aria-hidden />
-                      <span>{formatCiudad(viaje.ruta?.ciudad_origen)}</span>
-                      <span className="text-muted-foreground">→</span>
-                      <span>{formatCiudad(viaje.ruta?.ciudad_destino)}</span>
-                    </span>
-                  </CeldaEnlace>
-                  <TableCell>{formatFechaVE(viaje.fecha_hora_salida, { dateStyle: "short", timeStyle: "short" })}</TableCell>
-                  <TableCell>{formatFechaVE(viaje.fecha_hora_llegada_est, { dateStyle: "short", timeStyle: "short" })}</TableCell>
-                  <TableCell>
-                    <span className="font-medium">{viaje.asientos_disponibles}</span> / <span className="text-muted-foreground">{viaje.asientos_totales}</span>
-                  </TableCell>
-                  <TableCell>
-                    {Number(viaje.ruta?.precio_pasaje) > 0 ? (
-                      <Monto usd={Number(viaje.ruta.precio_pasaje)} size="sm" />
-                    ) : (
-                      <span className="text-sm text-muted-foreground">Sin precio</span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <StatusBadge status={viaje.estado} dominio="viaje" />
-                  </TableCell>
-                  <TableCell className="text-right whitespace-nowrap">
-                    {viaje.estado === "PROGRAMADO" && (
-                      <Button variant="outline" size="sm" className="relative z-10 mr-1" onClick={() => abrirMarcarSalida(viaje)}>
-                        <Bus className="h-4 w-4" aria-hidden />
-                        Marcar salida
-                      </Button>
-                    )}
-                    {viaje.estado === "EN_CURSO" && (
-                      <Button variant="outline" size="sm" className="relative z-10 mr-1" onClick={() => abrirLlegada(viaje)}>
-                        <FlagCheckered className="h-4 w-4" aria-hidden />
-                        Marcar llegada
-                      </Button>
-                    )}
-                    <DropdownMenu>
-                      <DropdownMenuTrigger
-                        disabled={revisandoId === viaje.id}
-                        className="relative z-10 inline-flex h-8 w-8 items-center justify-center rounded-md p-0 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
-                      >
-                        <span className="sr-only">Más acciones del viaje {rutaDe(viaje)}</span>
-                        {revisandoId === viaje.id ? <Spinner size="sm" /> : <DotsThree className="h-4 w-4" weight="bold" aria-hidden />}
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => openDetalle(viaje)}>
-                          <Eye className="mr-2 h-4 w-4" aria-hidden />
-                          Ver detalles
-                        </DropdownMenuItem>
-                        {isAdmin && viaje.estado === "PROGRAMADO" && (
-                          <DropdownMenuItem onClick={() => abrirEditar(viaje)}>
-                            <PencilSimple className="mr-2 h-4 w-4" aria-hidden />
-                            Editar viaje
-                          </DropdownMenuItem>
-                        )}
-                        {isAdmin && viaje.estado === "PROGRAMADO" && (
-                          <DropdownMenuItem
-                            onClick={() => void abrirCancelar(viaje)}
-                            className="text-destructive-text focus:text-destructive-text"
-                          >
-                            <XCircle className="mr-2 h-4 w-4" aria-hidden />
-                            Cancelar viaje
-                          </DropdownMenuItem>
-                        )}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                </TableRow>
-              ))}
-
-              {filteredViajes.length === 0 && (
+          <>
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={7} className="h-48 p-0 text-center text-muted-foreground">
-                    {vacio()}
-                  </TableCell>
+                  <TableHead>Ruta</TableHead>
+                  <TableHead>Salida</TableHead>
+                  <TableHead className="hidden lg:table-cell">Llegada estimada</TableHead>
+                  <TableHead className="text-right">Asientos libres</TableHead>
+                  <TableHead className="hidden text-right lg:table-cell">Precio</TableHead>
+                  <TableHead>Estado</TableHead>
+                  <TableHead className="text-right">Acciones</TableHead>
                 </TableRow>
-              )}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {filteredViajes.length === 0
+                  ? filaVacia()
+                  : visibles.map((viaje) => (
+                      <TableRow key={viaje.id} className={cn("relative", viaje.estado === "CANCELADO" && "text-muted-foreground")}>
+                        <CeldaEnlace
+                          onAbrir={() => abrirViaje(viaje.id)}
+                          etiqueta={`Ver viaje ${rutaViaje(viaje)} del ${salidaLarga(viaje.fecha_hora_salida)}`}
+                        >
+                          {rutaViaje(viaje)}
+                        </CeldaEnlace>
+                        <TableCell className="tabular-nums">{formatFechaHoraCortaVE(viaje.fecha_hora_salida)}</TableCell>
+                        <TableCell className="hidden tabular-nums lg:table-cell">
+                          {viaje.fecha_hora_llegada_est ? formatFechaHoraCortaVE(viaje.fecha_hora_llegada_est) : "—"}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          <span className="font-medium">{viaje.asientos_disponibles}</span>
+                          <span className="text-muted-foreground"> / {viaje.asientos_totales}</span>
+                        </TableCell>
+                        <TableCell className="hidden text-right lg:table-cell">
+                          {Number(viaje.ruta?.precio_pasaje) > 0 ? (
+                            <Monto usd={Number(viaje.ruta.precio_pasaje)} size="sm" align="right" />
+                          ) : (
+                            <span className="text-sm text-muted-foreground">Sin precio</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <StatusBadge status={viaje.estado} dominio="viaje" />
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            {viaje.estado === "PROGRAMADO" && (
+                              <Button variant="outline" size="sm" className="relative z-10" onClick={() => abrirMarcarSalida(viaje)}>
+                                <Bus aria-hidden />
+                                Marcar salida
+                              </Button>
+                            )}
+                            {viaje.estado === "EN_CURSO" && (
+                              <Button variant="outline" size="sm" className="relative z-10" onClick={() => abrirLlegada(viaje)}>
+                                <FlagCheckered aria-hidden />
+                                Marcar llegada
+                              </Button>
+                            )}
+                            <DropdownMenu>
+                              <DropdownMenuTrigger
+                                disabled={revisandoId === viaje.id}
+                                render={
+                                  <Button
+                                    variant="ghost"
+                                    size="icon-sm"
+                                    className="relative z-10"
+                                    aria-label={`Más acciones del viaje ${rutaViaje(viaje)}`}
+                                  />
+                                }
+                              >
+                                {revisandoId === viaje.id ? <Spinner size="sm" /> : <DotsThree aria-hidden />}
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => abrirViaje(viaje.id)}>
+                                  <Eye aria-hidden />
+                                  Ver viaje
+                                </DropdownMenuItem>
+                                {isAdmin && viaje.estado === "PROGRAMADO" && (
+                                  <DropdownMenuItem onClick={() => abrirEditar(viaje)}>
+                                    <PencilSimple aria-hidden />
+                                    Editar viaje
+                                  </DropdownMenuItem>
+                                )}
+                                {isAdmin && viaje.estado === "PROGRAMADO" && (
+                                  <DropdownMenuItem variant="destructive" onClick={() => void abrirCancelar(viaje)}>
+                                    <XCircle aria-hidden />
+                                    Cancelar viaje
+                                  </DropdownMenuItem>
+                                )}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+              </TableBody>
+            </Table>
+            <PaginacionTabla pagina={pagina} paginas={paginas} onCambio={ir} />
+          </>
         )}
-      </div>
+      </Card>
       {historialRecortado && (
-        <p className="text-sm text-muted-foreground">
-          Mostrando los últimos 100 viajes. Para ver uno más antiguo, elige su día de salida.
-        </p>
+        <p className="text-sm text-muted-foreground">Últimos 100 viajes. Para uno más antiguo, elige su día de salida.</p>
       )}
 
       <ProgramarViajeDialog open={isModalOpen} onOpenChange={setIsModalOpen} rutasActivas={rutasActivas} />
 
-      <EditarViajeDialog viaje={viajeEditar} open={editarOpen} onOpenChange={setEditarOpen} />
+      <EditarViajeDialog
+        viaje={viajeEditar}
+        open={editarOpen}
+        onOpenChange={(abierto) => {
+          setEditarOpen(abierto);
+          if (!abierto) setRecargaHoja((n) => n + 1);
+        }}
+      />
 
-      <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
-        <SheetContent className="sm:max-w-2xl w-full flex flex-col h-full">
-          <SheetHeader className="pb-4 border-b">
-            <SheetTitle>Detalle del viaje</SheetTitle>
-            <SheetDescription>
-              {selectedViaje ? etiquetaEstado("viaje", selectedViaje.estado) : ""} — {selectedViaje && formatFechaVE(selectedViaje.fecha_hora_salida, { dateStyle: "long", timeStyle: "short" })}
-            </SheetDescription>
-          </SheetHeader>
-
-          <ScrollArea className="flex-1 -mx-6 px-6 py-6">
-            <div className="space-y-6">
-              <div className="grid grid-cols-2 gap-4 text-sm bg-muted/30 p-4 rounded-lg border">
-                <div>
-                  <span className="text-muted-foreground block text-xs">Ruta</span>
-                  <span className="font-semibold text-base">{rutaDe(selectedViaje)}</span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground block text-xs">Asientos</span>
-                  <span className="font-semibold text-base">{selectedViaje?.asientos_disponibles} libres de {selectedViaje?.asientos_totales}</span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground block text-xs">Chofer</span>
-                  <span className="font-semibold text-base">{selectedViaje?.nombre_chofer || "Sin asignar"}</span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground block text-xs">Unidad</span>
-                  <span className="font-semibold text-base">{selectedViaje?.numero_unidad ? `Unidad ${selectedViaje.numero_unidad}` : "Sin asignar"}</span>
-                </div>
-              </div>
-
-              <div className="flex flex-wrap gap-2">
-                <Button variant="outline" onClick={imprimir} disabled={detallesLoading || Boolean(detallesError)}>
-                  <Printer className="h-4 w-4" aria-hidden />
-                  Imprimir manifiesto
-                </Button>
-                {isAdmin && selectedViaje?.estado === "PROGRAMADO" && (
-                  <Button variant="outline" onClick={() => abrirEditar(selectedViaje)}>
-                    <PencilSimple className="h-4 w-4" aria-hidden />
-                    Editar viaje
-                  </Button>
-                )}
-                {selectedViaje?.estado === "EN_CURSO" && (
-                  <Button variant="outline" onClick={() => abrirLlegada(selectedViaje)}>
-                    <FlagCheckered className="h-4 w-4" aria-hidden />
-                    Marcar llegada
-                  </Button>
-                )}
-              </div>
-
-              {detallesError && !detallesLoading ? (
-                <ErrorState
-                  compacto
-                  titulo="No pudimos cargar los boletos y encomiendas"
-                  descripcion={detallesError}
-                  onReintentar={() => (selectedId ? cargarDetalles(selectedId) : undefined)}
-                />
-              ) : (
-                <>
-                  {/* Sección Boletos */}
-                  <div className="border-t pt-4">
-                    <h3 className="font-semibold text-base mb-3 flex items-center gap-2">
-                      <Ticket className="w-5 h-5 text-primary-text" aria-hidden />
-                      Boletos ({viajeBoletos.length})
-                    </h3>
-                    {detallesLoading ? (
-                      <div className="py-8 flex justify-center"><Spinner size="sm" /></div>
-                    ) : viajeBoletos.length === 0 ? (
-                      <div className="bg-muted/30 border border-dashed p-6 rounded-md text-center text-sm text-muted-foreground">
-                        Este viaje no tiene boletos vendidos ni reservas.
-                      </div>
-                    ) : (
-                      <div className="rounded-md border bg-card">
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead className="w-16">Asiento</TableHead>
-                              <TableHead>Pasajero</TableHead>
-                              <TableHead>Código</TableHead>
-                              <TableHead>Estado</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {viajeBoletos.map((b) => (
-                              <TableRow key={b.id}>
-                                <TableCell className="font-bold text-center bg-muted/30">{b.asiento}</TableCell>
-                                <TableCell>
-                                  <div className="flex flex-col">
-                                    <span className="font-medium">{b.pasajero_nombre || "Sin nombre"}</span>
-                                    <span className="text-xs text-muted-foreground">{b.pasajero_cedula ? formatCedula(b.pasajero_cedula) : "Sin cédula"}</span>
-                                  </div>
-                                </TableCell>
-                                <TableCell className="font-mono text-xs">{formatCodigoBoleto(b.codigo_boleto)}</TableCell>
-                                <TableCell><StatusBadge status={getEstadoUiBoleto(b.estado, b.pago?.estado_verificacion)} dominio="boleto" /></TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Sección Encomiendas */}
-                  <div className="border-t pt-4">
-                    <h3 className="font-semibold text-base mb-3 flex items-center gap-2">
-                      <Package className="w-5 h-5 text-primary-text" aria-hidden />
-                      Encomiendas ({viajeEncomiendas.length})
-                    </h3>
-                    {detallesLoading ? (
-                      <div className="py-8 flex justify-center"><Spinner size="sm" /></div>
-                    ) : viajeEncomiendas.length === 0 ? (
-                      <div className="bg-muted/30 border border-dashed p-6 rounded-md text-center text-sm text-muted-foreground">
-                        No hay encomiendas asignadas a este viaje.
-                      </div>
-                    ) : (
-                      <div className="rounded-md border bg-card">
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Código de seguimiento</TableHead>
-                              <TableHead>Destinatario</TableHead>
-                              <TableHead>Peso</TableHead>
-                              <TableHead>Estado</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {viajeEncomiendas.map((e) => (
-                              <TableRow key={e.id}>
-                                <TableCell className="font-mono text-xs font-semibold">{e.tracking_id}</TableCell>
-                                <TableCell>
-                                  <div className="flex flex-col">
-                                    <span className="font-medium truncate max-w-[150px]">{e.receiver_nombre}</span>
-                                    <span className="text-xs text-muted-foreground">{e.receiver_telefono ? formatTelefono(e.receiver_telefono) : ""}</span>
-                                  </div>
-                                </TableCell>
-                                <TableCell className="text-xs">{e.peso_kg ? `${String(e.peso_kg).replace(".", ",")} kg` : "Sin pesar"}</TableCell>
-                                <TableCell><StatusBadge status={e.estado} dominio="encomienda" /></TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      </div>
-                    )}
-                  </div>
-                </>
-              )}
-
-              {isAdmin && selectedViaje?.estado === "PROGRAMADO" && (
-                <div className="border-t pt-4">
-                  <Button
-                    variant="outline"
-                    className="text-destructive-text"
-                    disabled={revisandoId === selectedViaje.id}
-                    onClick={() => void abrirCancelar(selectedViaje)}
-                  >
-                    {revisandoId === selectedViaje.id ? <Spinner size="sm" /> : <XCircle className="h-4 w-4" aria-hidden />}
-                    Cancelar viaje
-                  </Button>
-                </div>
-              )}
-            </div>
-          </ScrollArea>
-        </SheetContent>
-      </Sheet>
+      <ViajeSheet
+        viajeId={viajeAbierto || null}
+        onOpenChange={(abierto) => !abierto && abrirViaje(null)}
+        onCambio={() => router.refresh()}
+        onEditar={isAdmin ? abrirEditar : undefined}
+        onCancelar={isAdmin ? (v) => void abrirCancelar(v) : undefined}
+        cancelando={revisandoId !== null && revisandoId === viajeAbierto}
+        recarga={recargaHoja}
+      />
 
       <ConfirmDialog
         open={cancelarOpen && viajeCancelar !== null}
@@ -1466,48 +1034,54 @@ export function ViajesClient({
         titulo={viajeCancelar ? `¿Cancelar el viaje ${viajeCancelar.ruta} del ${salidaLarga(viajeCancelar.salida)}?` : "¿Cancelar el viaje?"}
         impacto={lineasImpacto(viajeCancelar?.impacto ?? null)}
         motivo={{
-          etiqueta: "Motivo de la cancelación (lo verán los pasajeros)",
-          placeholder: "Ej.: Falla mecánica de la unidad",
+          etiqueta: "Motivo (lo verán los pasajeros)",
+          placeholder: "Ej. Falla mecánica de la unidad",
           minimo: 5,
           chips: MOTIVOS_CANCELAR_VIAJE,
         }}
-        verbo="Cancelar viaje y avisar a los pasajeros"
+        verbo="Cancelar viaje"
         verboCargando="Cancelando…"
-        textoCancelar="Volver"
         onConfirm={confirmarCancelar}
       />
 
-      <AlertDialog open={bloqueo !== null} onOpenChange={(abierto) => !abierto && setBloqueo(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {bloqueo ? `Todavía no puedes cancelar el viaje ${bloqueo.ruta} del ${salidaLarga(bloqueo.salida)}` : "Todavía no puedes cancelar el viaje"}
-            </AlertDialogTitle>
-            <AlertDialogDescription render={<div />}>
-              <AvisoPagosPendientes n={bloqueo?.pendientes ?? null} />
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Volver</AlertDialogCancel>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
       <ConfirmDialog
-        open={llegadaOpen && viajeLlegada !== null}
-        onOpenChange={setLlegadaOpen}
-        titulo={viajeLlegada ? `¿El bus de ${rutaDe(viajeLlegada)} ya llegó?` : "¿El bus ya llegó?"}
-        impacto={[
-          "El viaje quedará como «Completado».",
-          "Los pasajeros que no embarcaron quedan registrados en el viaje.",
-        ]}
-        verbo="Marcar llegada"
-        verboCargando="Registrando…"
-        textoCancelar="Todavía no"
-        onConfirm={confirmarLlegada}
+        open={bloqueo !== null}
+        onOpenChange={(abierto) => !abierto && setBloqueo(null)}
+        titulo="Todavía no puedes cancelar este viaje"
+        descripcion={
+          <p className="flex items-start gap-2">
+            <WarningCircle className="mt-0.5 size-4 shrink-0 text-warning-text" weight="fill" aria-hidden />
+            {bloqueo?.pendientes && bloqueo.pendientes > 0
+              ? plural(bloqueo.pendientes, "Tiene 1 pago por verificar.", "Tiene {n} pagos por verificar.")
+              : "Tiene pagos por verificar."}{" "}
+            Apruébalos o recházalos antes.
+          </p>
+        }
+        verbo="Verificar pagos"
+        onConfirm={async () => {
+          router.push("/cooperativas/pagos?tipo=boleto");
+          return { ok: true };
+        }}
       />
 
-      <MarcarSalidaDialog viaje={viajeSalida} open={salidaOpen && viajeSalida !== null} onOpenChange={setSalidaOpen} />
+      <MarcarSalidaDialog
+        viaje={viajeSalida}
+        open={salidaOpen}
+        onOpenChange={setSalidaOpen}
+        onHecho={() => {
+          setRecargaHoja((n) => n + 1);
+          router.refresh();
+        }}
+      />
+      <MarcarLlegadaDialog
+        viaje={viajeLlegada}
+        open={llegadaOpen}
+        onOpenChange={setLlegadaOpen}
+        onHecho={() => {
+          setRecargaHoja((n) => n + 1);
+          router.refresh();
+        }}
+      />
     </div>
   );
 }

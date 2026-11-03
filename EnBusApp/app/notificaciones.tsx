@@ -17,7 +17,7 @@ import {
   type SectionListRenderItem,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Bell, CaretRight } from 'phosphor-react-native';
+import { Bell, CaretRight, Checks } from 'phosphor-react-native';
 import * as Haptics from 'expo-haptics';
 import { supabase } from '@/src/utils/supabase';
 import { useAuth } from '@/src/contexts/AuthContext';
@@ -25,14 +25,15 @@ import { useRealtime } from '@/src/hooks/useRealtime';
 import { useToast } from '@/src/components/Toast';
 import { PressableScale } from '@/src/components/PressableScale';
 import { StaggerItem } from '@/src/components/StaggerItem';
-import { PageTransition } from '@/src/components/PageTransition';
+import { ScreenSkeleton } from '@/src/components/SkeletonLoader';
+import { useVolver } from '@/src/hooks/useVolver';
 import {
-  Button,
   EmptyState,
   ErrorState,
-  LoadingState,
+  IconButton,
   Screen,
   ScreenHeader,
+  SectionLabel,
   StaleBanner,
   Text,
   scrollContent,
@@ -49,7 +50,6 @@ import {
 import type { Notificacion } from '@/src/types';
 import {
   Colors,
-  Layout,
   Motion,
   Radius,
   Sizes,
@@ -79,6 +79,7 @@ function tieneRecurso(n: Notificacion): boolean {
 
 export default function NotificacionesScreen() {
   const router = useRouter();
+  const atras = useVolver('/(tabs)');
   const { user } = useAuth();
   const toast = useToast();
 
@@ -179,77 +180,70 @@ export default function NotificacionesScreen() {
 
   const renderSectionHeader = useCallback(
     ({ section }: { section: SectionListData<Notificacion, Seccion> }) => (
-      <Text variant="overline" color="muted" uppercase accessibilityRole="header" style={s.seccion}>
-        {section.titulo}
-      </Text>
+      <SectionLabel style={s.seccion}>{section.titulo}</SectionLabel>
     ),
     []
   );
 
   return (
     <Screen>
-      <PageTransition>
-        <ScreenHeader
-          variant="compact"
-          title="Notificaciones"
-          subtitle={unreadCount > 0 ? `${unreadCount} sin leer` : undefined}
-          onBack={() => router.back()}
-        />
-
-        {unreadCount > 0 ? (
-          <View style={s.toolbar}>
-            <Button
-              variant="ghost"
-              size="sm"
+      <ScreenHeader
+        variant="compact"
+        title="Notificaciones"
+        subtitle={unreadCount > 0 ? `${unreadCount} sin leer` : undefined}
+        onBack={atras}
+        right={
+          unreadCount > 0 ? (
+            <IconButton
+              icon={Checks}
+              label="Marcar todo como leído"
               onPress={handleMarkAllAsRead}
               disabled={markingAll}
-            >
-              Marcar todo como leído
-            </Button>
-          </View>
-        ) : null}
+            />
+          ) : null
+        }
+      />
 
-        {errorCarga && sinDatos && !loading ? (
-          <ErrorState
-            title="No pudimos cargar tus notificaciones"
-            description={errorCarga}
-            onRetry={reintentar}
-          />
-        ) : loading && sinDatos ? (
-          <LoadingState label="Cargando notificaciones…" />
-        ) : (
-          <SectionList<Notificacion, Seccion>
-            sections={secciones}
-            renderItem={renderItem}
-            renderSectionHeader={renderSectionHeader}
-            keyExtractor={(item) => item.id}
-            stickySectionHeadersEnabled={false}
-            ListHeaderComponent={
-              errorCarga ? <StaleBanner actualizadoAt={actualizadoAt} onRetry={() => refetch()} /> : null
-            }
-            ListEmptyComponent={
-              <EmptyState
-                icon={Bell}
-                title="Sin notificaciones"
-                description="Aquí aparecerán los cambios de tus boletos y encomiendas."
-              />
-            }
-            contentContainerStyle={scrollContent()}
-            showsVerticalScrollIndicator={false}
-            refreshControl={
-              <RefreshControl
-                refreshing={refreshing}
-                onRefresh={onRefresh}
-                colors={[Colors.accent]}
-                tintColor={Colors.accent}
-              />
-            }
-            maxToRenderPerBatch={15}
-            windowSize={5}
-            initialNumToRender={10}
-          />
-        )}
-      </PageTransition>
+      {errorCarga && sinDatos && !loading ? (
+        <ErrorState
+          title="No pudimos cargar tus notificaciones"
+          description={errorCarga}
+          onRetry={reintentar}
+        />
+      ) : loading && sinDatos ? (
+        <ScreenSkeleton variante="lista" />
+      ) : (
+        <SectionList<Notificacion, Seccion>
+          sections={secciones}
+          renderItem={renderItem}
+          renderSectionHeader={renderSectionHeader}
+          keyExtractor={(item) => item.id}
+          stickySectionHeadersEnabled={false}
+          ListHeaderComponent={
+            errorCarga ? <StaleBanner actualizadoAt={actualizadoAt} onRetry={() => refetch()} /> : null
+          }
+          ListEmptyComponent={
+            <EmptyState
+              icon={Bell}
+              title="Sin notificaciones"
+              description="Aquí verás los cambios de tus boletos y encomiendas."
+            />
+          }
+          contentContainerStyle={scrollContent({ top: Spacing.sm })}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={[Colors.accentStrong]}
+              tintColor={Colors.accentStrong}
+            />
+          }
+          maxToRenderPerBatch={15}
+          windowSize={5}
+          initialNumToRender={10}
+        />
+      )}
     </Screen>
   );
 }
@@ -335,24 +329,15 @@ function FilaNotificacion({
 }
 
 const s = StyleSheet.create({
-  toolbar: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    // El texto del botón (con su padding de `Spacing.lg`) queda alineado al margen.
-    paddingHorizontal: Layout.screenPadding - Spacing.lg,
-    paddingTop: Spacing.xs,
-  },
   seccion: {
     marginTop: Spacing.lg,
-    marginBottom: Spacing.sm,
-    marginLeft: Spacing.xs,
   },
   card: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: Spacing.md,
     padding: Spacing.lg,
-    borderRadius: Radius.lg,
+    borderRadius: Radius.xl,
     marginBottom: Spacing.md,
   },
   cardRead: {
@@ -383,15 +368,14 @@ const s = StyleSheet.create({
     flex: 1,
   },
   message: {
-    marginTop: Spacing.xs / 2,
-    marginBottom: Spacing.xs + 2,
+    marginBottom: Spacing.xs,
   },
   dot: {
     width: Spacing.sm,
     height: Spacing.sm,
     borderRadius: Radius.full,
-    backgroundColor: Colors.accent,
-    marginTop: Spacing.xs + 2,
+    backgroundColor: Colors.accentStrong,
+    marginTop: Spacing.sm,
   },
   chevron: {
     alignSelf: 'center',
