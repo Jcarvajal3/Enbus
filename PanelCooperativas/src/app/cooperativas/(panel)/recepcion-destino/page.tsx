@@ -294,7 +294,7 @@ function RecepcionDestino() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Código</TableHead>
-                    <TableHead className="hidden lg:table-cell">Remitente</TableHead>
+                    <TableHead className="hidden xl:table-cell">Remitente</TableHead>
                     <TableHead>Destinatario</TableHead>
                     <TableHead>Origen</TableHead>
                     <TableHead>Viaje</TableHead>
@@ -313,7 +313,7 @@ function RecepcionDestino() {
                         >
                           {encomienda.tracking_id}
                         </CeldaEnlace>
-                        <TableCell className="hidden max-w-40 truncate lg:table-cell">{remitenteDe(encomienda).nombre}</TableCell>
+                        <TableCell className="hidden max-w-40 truncate xl:table-cell">{remitenteDe(encomienda).nombre}</TableCell>
                         <TableCell className="max-w-40 truncate">{encomienda.receiver_nombre}</TableCell>
                         <TableCell className="max-w-32 truncate">{formatCiudad(encomienda.ciudad_origen)}</TableCell>
                         <TableCell className="text-sm">

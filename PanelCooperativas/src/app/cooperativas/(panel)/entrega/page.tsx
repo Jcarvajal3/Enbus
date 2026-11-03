@@ -290,7 +290,7 @@ function Entrega() {
                     <TableRow>
                       <TableHead>Código</TableHead>
                       <TableHead>Destinatario</TableHead>
-                      <TableHead className="hidden lg:table-cell">Teléfono</TableHead>
+                      <TableHead className="hidden xl:table-cell">Teléfono</TableHead>
                       <TableHead>En la oficina</TableHead>
                       <TableHead>Cobro</TableHead>
                       <TableHead>PIN</TableHead>
@@ -316,7 +316,7 @@ function Entrega() {
                               {encomienda.tracking_id}
                             </CeldaEnlace>
                             <TableCell className="max-w-48 truncate font-medium">{encomienda.receiver_nombre}</TableCell>
-                            <TableCell className="hidden whitespace-nowrap text-muted-foreground tabular-nums lg:table-cell">
+                            <TableCell className="hidden whitespace-nowrap text-muted-foreground tabular-nums xl:table-cell">
                               {formatTelefono(encomienda.receiver_telefono)}
                             </TableCell>
                             <TableCell>

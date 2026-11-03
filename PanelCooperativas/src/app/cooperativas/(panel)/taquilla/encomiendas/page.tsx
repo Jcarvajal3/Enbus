@@ -316,12 +316,12 @@ function TaquillaEncomiendas() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Código</TableHead>
-                      <TableHead className="hidden lg:table-cell">Remitente</TableHead>
+                      <TableHead className="hidden xl:table-cell">Remitente</TableHead>
                       <TableHead>Destinatario</TableHead>
                       <TableHead>Ruta</TableHead>
                       <TableHead>Estado</TableHead>
                       <TableHead className="text-right">Costo</TableHead>
-                      <TableHead className="hidden lg:table-cell">Fecha</TableHead>
+                      <TableHead className="hidden xl:table-cell">Fecha</TableHead>
                       <TableHead className="w-12 text-right">
                         <span className="sr-only">Guía</span>
                       </TableHead>
@@ -356,7 +356,7 @@ function TaquillaEncomiendas() {
                           >
                             {encomienda.tracking_id}
                           </CeldaEnlace>
-                          <TableCell className="hidden max-w-40 truncate lg:table-cell">{remitenteDe(encomienda).nombre}</TableCell>
+                          <TableCell className="hidden max-w-40 truncate xl:table-cell">{remitenteDe(encomienda).nombre}</TableCell>
                           <TableCell className="max-w-40 truncate">{encomienda.receiver_nombre}</TableCell>
                           <TableCell>
                             <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
@@ -387,7 +387,7 @@ function TaquillaEncomiendas() {
                               <span className="text-sm text-muted-foreground">Por calcular</span>
                             )}
                           </TableCell>
-                          <TableCell className="hidden text-sm whitespace-nowrap text-muted-foreground lg:table-cell">
+                          <TableCell className="hidden text-sm whitespace-nowrap text-muted-foreground xl:table-cell">
                             {capitalizarInicio(formatHaceTiempo(encomienda.created_at))}
                           </TableCell>
                           <TableCell className="text-right">

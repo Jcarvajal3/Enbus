@@ -846,7 +846,7 @@ function TaquillaBoletos() {
                       <TableHead>Pasajero</TableHead>
                       <TableHead>Asiento</TableHead>
                       <TableHead>Estado</TableHead>
-                      <TableHead className="hidden text-right lg:table-cell">Precio</TableHead>
+                      <TableHead className="hidden text-right xl:table-cell">Precio</TableHead>
                       <TableHead className="text-right">Acciones</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -921,7 +921,7 @@ function TaquillaBoletos() {
                                 )}
                               </div>
                             </TableCell>
-                            <TableCell className="hidden text-right lg:table-cell">
+                            <TableCell className="hidden text-right xl:table-cell">
                               <Monto usd={boleto.precio} align="right" size="sm" />
                             </TableCell>
                             <TableCell className="text-right">

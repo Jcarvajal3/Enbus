@@ -911,7 +911,7 @@ export function ViajesClient({
                   <TableHead>Salida</TableHead>
                   <TableHead className="hidden 2xl:table-cell">Llegada estimada</TableHead>
                   <TableHead className="text-right">Asientos libres</TableHead>
-                  <TableHead className="hidden text-right lg:table-cell">Precio</TableHead>
+                  <TableHead className="hidden text-right xl:table-cell">Precio</TableHead>
                   <TableHead>Estado</TableHead>
                   <TableHead className="text-right">Acciones</TableHead>
                 </TableRow>
@@ -935,7 +935,7 @@ export function ViajesClient({
                           <span className="font-medium">{viaje.asientos_disponibles}</span>
                           <span className="text-muted-foreground"> / {viaje.asientos_totales}</span>
                         </TableCell>
-                        <TableCell className="hidden text-right lg:table-cell">
+                        <TableCell className="hidden text-right xl:table-cell">
                           {Number(viaje.ruta?.precio_pasaje) > 0 ? (
                             <Monto usd={Number(viaje.ruta.precio_pasaje)} size="sm" align="right" />
                           ) : (
