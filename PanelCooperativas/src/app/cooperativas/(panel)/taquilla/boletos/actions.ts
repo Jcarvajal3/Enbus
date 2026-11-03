@@ -9,6 +9,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { codigoEB, humanizeError, parseDetalleEB, type DetalleEB } from "@/lib/errores";
+import { normalizarCodigoBoleto } from "@/lib/artefactos.generated";
 import type {
   BoletoImpresion,
   CobroTaquilla,
@@ -234,7 +235,8 @@ export async function validarEmbarque(
   codigo: string,
   viajeId?: string | null
 ): Promise<ResultadoTaquilla<ResultadoEmbarque>> {
-  const limpio = (codigo ?? "").trim().toUpperCase();
+  // "bol 7cab-e4ad", "BOL-7CAB-E4AD" o "PASS-BOL-7CABE4AD" → "BOL-7CABE4AD" (#58).
+  const limpio = normalizarCodigoBoleto(codigo ?? "");
   if (!limpio) return { success: false, error: "Escanea el código del boleto o escríbelo completo." };
   try {
     const supabase = await createClient();

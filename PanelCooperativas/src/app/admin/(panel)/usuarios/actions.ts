@@ -48,6 +48,8 @@ export async function reenviarPIN(encomiendaId: string) {
 
     // 2. Invocar Edge Function de WhatsApp — el PIN completo se envía aquí
     let waEnviado = false;
+    // Canales que fallaron: se avisan en el toast en vez de dar el envío por bueno (AD-21).
+    const fallidos: string[] = [];
     try {
       const { data: waData, error: waError } = await adminSupabase.functions.invoke("enviar-whatsapp", {
         body: {
@@ -65,11 +67,14 @@ export async function reenviarPIN(encomiendaId: string) {
       });
       if (waError) {
         console.error("Error invoking enviar-whatsapp Edge Function:", waError);
+        fallidos.push("WhatsApp");
       } else {
         waEnviado = waData?.enviado || false;
+        if (!waEnviado) fallidos.push("WhatsApp");
       }
     } catch (e1) {
       console.error("Failed to invoke enviar-whatsapp Edge Function:", e1);
+      fallidos.push("WhatsApp");
     }
 
     // 3. Invocar Edge Function de Push si el destinatario está registrado.
@@ -90,11 +95,13 @@ export async function reenviarPIN(encomiendaId: string) {
         });
         if (pushError) {
           console.error("Error invoking enviar-push Edge Function:", pushError);
+          fallidos.push("la notificación de la app");
         } else {
           pushEnviado = pushData?.enviado || false;
         }
       } catch (e2) {
         console.error("Failed to invoke enviar-push Edge Function:", e2);
+        fallidos.push("la notificación de la app");
       }
     }
 
@@ -102,8 +109,11 @@ export async function reenviarPIN(encomiendaId: string) {
     return { 
       success: true, 
       enviado: waEnviado || pushEnviado,
+      fallidos,
       message: waEnviado
-        ? `Le reenviamos el PIN por WhatsApp a ${e.receiver_nombre}.`
+        ? fallidos.length > 0
+          ? `Le reenviamos el PIN por WhatsApp a ${e.receiver_nombre}, pero no pudimos enviar ${fallidos.join(" ni ")}.`
+          : `Le reenviamos el PIN por WhatsApp a ${e.receiver_nombre}.`
         : "No pudimos enviar el WhatsApp. Dale el PIN por otro medio o revisa la configuración de WhatsApp."
     };
   } catch (err) {
@@ -152,5 +162,71 @@ export async function toggleUsuarioEstado(userId: string, currentIsBanned: boole
   } catch (err) {
     console.error("Error inside toggleUsuarioEstado:", err);
     return { success: false, error: humanizeError(err, "cambiar el estado de la cuenta") };
+  }
+}
+
+/**
+ * Completa la baja de una cuenta que la persona eliminó desde la app (Google Play):
+ * borra su identidad de Auth (borrado suave, `deleteUser(id, true)`) y marca
+ * `bajas_cuenta.auth_eliminada_at`. Lo hace la edge function `eliminar-cuenta`;
+ * esto es el respaldo cuando no está desplegada o falló.
+ */
+export async function completarBajaCuenta(usuarioId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    await requireSuperAdmin();
+  } catch {
+    return { success: false, error: "Solo el equipo de EnBus puede completar bajas de cuenta." };
+  }
+  if (!usuarioId) return { success: false, error: "No encontramos la cuenta. Actualiza la página." };
+
+  try {
+    const adminSupabase = createAdminClient();
+
+    const [{ data: perfil, error: perfilError }, { data: baja, error: bajaError }] = await Promise.all([
+      adminSupabase.from("profiles").select("id, eliminada_at").eq("id", usuarioId).maybeSingle(),
+      adminSupabase.from("bajas_cuenta").select("id, auth_eliminada_at").eq("usuario_id", usuarioId).maybeSingle(),
+    ]);
+    if (perfilError || bajaError) {
+      console.error("Error loading account deletion:", perfilError ?? bajaError);
+      return { success: false, error: humanizeError(perfilError ?? bajaError, "cargar la baja de la cuenta") };
+    }
+    if (!perfil?.eliminada_at || !baja) {
+      return {
+        success: false,
+        error: "Esta cuenta no pidió su baja desde la app. Para cerrarle el acceso, suspéndela.",
+      };
+    }
+    if (baja.auth_eliminada_at) {
+      revalidatePath("/admin/usuarios");
+      return { success: true };
+    }
+
+    const { error: deleteError } = await adminSupabase.auth.admin.deleteUser(usuarioId, true);
+    // Si la identidad ya no existe (la borró la edge function a medias), solo falta marcarla.
+    const yaNoExiste = deleteError && (deleteError.status === 404 || /not.?found/i.test(deleteError.message ?? ""));
+    if (deleteError && !yaNoExiste) {
+      console.error("Error deleting auth user:", deleteError);
+      return { success: false, error: humanizeError(deleteError, "borrar el acceso de la cuenta") };
+    }
+
+    const { error: updateError } = await adminSupabase
+      .from("bajas_cuenta")
+      .update({ auth_eliminada_at: new Date().toISOString() })
+      .eq("usuario_id", usuarioId)
+      .is("auth_eliminada_at", null);
+    if (updateError) {
+      console.error("Error marking account deletion:", updateError);
+      return {
+        success: false,
+        error: "Borramos el acceso, pero no pudimos marcar la baja como completada. Intenta de nuevo.",
+      };
+    }
+
+    revalidatePath("/admin/usuarios");
+    revalidatePath(`/admin/usuarios/${usuarioId}`);
+    return { success: true };
+  } catch (err) {
+    console.error("Error inside completarBajaCuenta:", err);
+    return { success: false, error: humanizeError(err, "completar la baja de la cuenta") };
   }
 }

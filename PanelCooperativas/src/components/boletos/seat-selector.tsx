@@ -122,7 +122,7 @@ export function SeatSelector({
         <div className="flex gap-2">
           <Button variant="ghost" onClick={onCancel}>Volver</Button>
           <Button variant="outline" onClick={() => void fetchOcupados()}>
-            <ArrowClockwise className="w-4 h-4 mr-2" />
+            <ArrowClockwise className="w-4 h-4 mr-2" aria-hidden />
             Reintentar
           </Button>
         </div>
@@ -141,12 +141,12 @@ export function SeatSelector({
         type="button"
         disabled={bloqueado}
         aria-pressed={elegido}
-        aria-label={`Asiento ${asiento}, ${ocupado ? "ocupado" : elegido ? "elegido" : "libre"}`}
+        aria-label={`Asiento ${asiento}, ${ocupado ? "ocupado" : elegido ? "elegido" : bloqueado ? "libre (llegaste al máximo)" : "libre"}`}
         onClick={() => alternar(asiento)}
         className={cn(
           "relative w-12 h-12 sm:w-14 sm:h-14 rounded-xl flex items-center justify-center gap-0.5 font-bold text-sm tabular-nums transition-all duration-200 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
           ocupado && "bg-muted text-muted-foreground/50 cursor-not-allowed border-none line-through",
-          !ocupado && !elegido && "bg-background border-2 border-border hover:border-primary/50 text-foreground shadow-sm",
+          !ocupado && !elegido && "bg-background border-2 border-border-strong hover:border-primary/50 text-foreground shadow-sm",
           !ocupado && !elegido && bloqueado && "opacity-50 cursor-not-allowed",
           elegido && "bg-primary text-primary-foreground shadow-md ring-2 ring-primary ring-offset-2 ring-offset-background"
         )}
@@ -181,21 +181,21 @@ export function SeatSelector({
 
       <div className="flex items-center gap-6 text-sm text-muted-foreground">
         <div className="flex items-center gap-2">
-          <div className="w-4 h-4 rounded-md border-2 border-border bg-background" />
+          <div className="w-4 h-4 rounded-md border-2 border-border-strong bg-background" aria-hidden />
           <span>Libre</span>
         </div>
         <div className="flex items-center gap-2">
-          <div className="w-4 h-4 rounded-md bg-muted" />
+          <div className="w-4 h-4 rounded-md bg-muted" aria-hidden />
           <span>Ocupado</span>
         </div>
         <div className="flex items-center gap-2">
-          <div className="w-4 h-4 rounded-md bg-primary" />
+          <div className="w-4 h-4 rounded-md bg-primary" aria-hidden />
           <span className="text-foreground font-medium">Elegido</span>
         </div>
       </div>
 
       {lleno && (
-        <p className="text-sm text-amber-700 dark:text-amber-400" role="status">
+        <p className="text-sm text-warning-text" role="status">
           Llegaste al máximo de {maxSeleccion} asientos por venta.
         </p>
       )}

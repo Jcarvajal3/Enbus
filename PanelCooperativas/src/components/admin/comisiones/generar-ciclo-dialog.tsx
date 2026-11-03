@@ -155,7 +155,7 @@ export function GenerarCicloDialog({ cooperativas, tasa: tasaServidor }: Generar
         {generationSummary ? (
           // Vista de resumen de generación exitosa
           <div className="space-y-6 py-4 flex-1 overflow-y-auto">
-            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-emerald-900 dark:bg-emerald-400/15 dark:text-emerald-200">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-success-light text-success-deep">
               <ShieldCheck className="h-8 w-8" />
             </div>
             <div className="space-y-2 text-center">
@@ -264,7 +264,7 @@ export function GenerarCicloDialog({ cooperativas, tasa: tasaServidor }: Generar
               >
                 {previewLoading ? (
                   <>
-                    <Spinner className="animate-spin h-4 w-4" aria-hidden /> Calculando…
+                    <Spinner className="motion-safe:animate-spin h-4 w-4" aria-hidden /> Calculando…
                   </>
                 ) : (
                   "Ver vista previa"
@@ -312,7 +312,7 @@ export function GenerarCicloDialog({ cooperativas, tasa: tasaServidor }: Generar
                             </td>
                             <td className="p-3 text-center">
                               {p.se_solapa ? (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-red-100 text-red-900 dark:bg-red-400/15 dark:text-red-200">
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-destructive-light text-destructive-deep">
                                   <Warning className="h-3 w-3" /> Ya tiene ciclo
                                 </span>
                               ) : totalVentas === 0 ? (
@@ -320,7 +320,7 @@ export function GenerarCicloDialog({ cooperativas, tasa: tasaServidor }: Generar
                                   Sin ventas
                                 </span>
                               ) : (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-emerald-100 text-emerald-900 dark:bg-emerald-400/15 dark:text-emerald-200">
+                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-success-light text-success-deep">
                                   Se generará
                                 </span>
                               )}
@@ -359,7 +359,7 @@ export function GenerarCicloDialog({ cooperativas, tasa: tasaServidor }: Generar
                   >
                     {loading ? (
                       <>
-                        <Spinner className="animate-spin h-4 w-4" /> Generando…
+                        <Spinner className="motion-safe:animate-spin h-4 w-4" /> Generando…
                       </>
                     ) : (
                       "Generar ciclos"

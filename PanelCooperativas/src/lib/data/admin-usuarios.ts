@@ -2,7 +2,11 @@ import { createClient, createAdminClient } from "@/lib/supabase/server";
 import type { User } from "@supabase/supabase-js";
 import { humanizeError } from "@/lib/errores";
 import { formatFechaHoraVE } from "@/lib/fechas";
-import type { 
+import { cedulaParaGuardar, telefonoParaGuardar } from "@/lib/ve";
+import type {
+  BajaCuenta,
+  FiltrosUsuarios,
+  PaginaUsuarios,
   Usuario, 
   UsuarioDetalle, 
   EncomiendaUsuario, 
@@ -11,50 +15,115 @@ import type {
   NotificacionUsuario 
 } from "@/lib/types/admin-usuarios";
 
-export async function fetchUsuarios(filters?: { 
-  role?: string; 
-  cooperativa_id?: string; 
-  search?: string; 
-}): Promise<Usuario[]> {
-  const supabase = await createClient();
-  const adminSupabase = createAdminClient();
+export const USUARIOS_POR_PAGINA = 50;
 
-  // 1. Fetch profiles from database
+const ROLES_VALIDOS = ["user", "taquillero", "admin_cooperativa", "super_admin"];
+
+/** bajas_cuenta no existe sin la migración 20260721000003: se trata como "sin bajas". */
+function faltaTablaBajas(err: { code?: string } | null): boolean {
+  return err?.code === "42P01" || err?.code === "PGRST205" || err?.code === "PGRST200";
+}
+
+/**
+ * Condición `or` de PostgREST para buscar por nombre, cédula o teléfono. Además de lo
+ * escrito, prueba la forma en que se guardan ("v12.345.678" → "V-12345678").
+ * Sin comas, paréntesis ni comodines: romperían el filtro.
+ */
+function filtroBusqueda(q: string): string | null {
+  const termino = q.replace(/[,()*%\\"]/g, " ").replace(/\s+/g, " ").trim().slice(0, 80);
+  if (!termino) return null;
+  const partes = [
+    `nombre_completo.ilike.%${termino}%`,
+    `cedula_rif.ilike.%${termino}%`,
+    `telefono.ilike.%${termino}%`,
+  ];
+  const cedula = cedulaParaGuardar(termino);
+  if (cedula && cedula !== termino) partes.push(`cedula_rif.ilike.%${cedula}%`);
+  const telefono = telefonoParaGuardar(termino);
+  if (telefono && telefono !== termino) partes.push(`telefono.ilike.%${telefono}%`);
+  return partes.join(",");
+}
+
+type FilaBaja = BajaCuenta & { usuario_id: string };
+
+/** Correo y suspensión de cada perfil (auth.users). Una cuenta ya borrada de Auth no tiene datos. */
+async function datosAuth(ids: string[]): Promise<Map<string, User>> {
+  const adminSupabase = createAdminClient();
+  const mapa = new Map<string, User>();
+  const resultados = await Promise.allSettled(ids.map((id) => adminSupabase.auth.admin.getUserById(id)));
+  resultados.forEach((r, i) => {
+    if (r.status === "fulfilled" && r.value.data?.user) mapa.set(ids[i], r.value.data.user);
+    else if (r.status === "rejected") console.error("[fetchUsuarios] auth:", r.reason);
+  });
+  return mapa;
+}
+
+/**
+ * Usuarios con búsqueda y paginación en el servidor (`?q=&rol=&cooperativa=&pagina=`,
+ * 50 por página). `vista: "bajas"` lista solo las cuentas eliminadas desde la app
+ * cuyo acceso falta borrar.
+ */
+export async function fetchUsuarios(filtros: FiltrosUsuarios = {}): Promise<PaginaUsuarios> {
+  const supabase = await createClient();
+  const porPagina = USUARIOS_POR_PAGINA;
+  const pagina = Math.max(1, Math.floor(Number(filtros.pagina) || 1));
+  const desde = (pagina - 1) * porPagina;
+
+  // Bajas por completar: conteo para el filtro y, en esa vista, la lista de ids.
+  const { data: bajasPend, error: bajasError } = await supabase
+    .from("bajas_cuenta")
+    .select("usuario_id")
+    .is("auth_eliminada_at", null)
+    .limit(1000);
+  if (bajasError && !faltaTablaBajas(bajasError)) {
+    console.error("Error fetching bajas_cuenta:", bajasError);
+  }
+  const idsBajas = ((bajasPend ?? []) as { usuario_id: string }[]).map((b) => b.usuario_id);
+
+  if (filtros.vista === "bajas" && idsBajas.length === 0) {
+    return { usuarios: [], total: 0, pagina: 1, porPagina, bajasPendientes: 0 };
+  }
+
   let query = supabase
     .from("profiles")
-    .select("*, cooperativas(nombre)")
+    .select("*, cooperativas(nombre)", { count: "exact" })
     .order("created_at", { ascending: false })
-    .limit(500); // Safeguard: paginate if user base grows beyond this
+    .range(desde, desde + porPagina - 1);
 
-  if (filters?.role && filters.role !== "ALL") {
-    query = query.eq("role", filters.role);
+  if (filtros.rol && ROLES_VALIDOS.includes(filtros.rol)) query = query.eq("role", filtros.rol);
+  if (filtros.cooperativa && /^[0-9a-f-]{36}$/i.test(filtros.cooperativa)) {
+    query = query.eq("cooperativa_id", filtros.cooperativa);
   }
+  const busqueda = filtroBusqueda(filtros.q ?? "");
+  if (busqueda) query = query.or(busqueda);
+  if (filtros.vista === "bajas") query = query.in("id", idsBajas);
 
-  if (filters?.cooperativa_id && filters.cooperativa_id !== "ALL") {
-    query = query.eq("cooperativa_id", filters.cooperativa_id);
-  }
-
-  const { data: profiles, error: profilesError } = await query;
+  const { data: profiles, error: profilesError, count } = await query;
 
   if (profilesError) {
+    // Una página fuera de rango (PGRST103) no es un error: no hay filas.
+    if (profilesError.code === "PGRST103") {
+      return { usuarios: [], total: count ?? 0, pagina, porPagina, bajasPendientes: idsBajas.length };
+    }
     console.error("Error fetching profiles:", profilesError);
     throw new Error(humanizeError(profilesError, "cargar los usuarios"));
   }
 
-  // 2. Fetch auth users to map emails and banned status
-  let authUsers: User[] = [];
-  try {
-    const authUsersResult = await adminSupabase.auth.admin.listUsers({ perPage: 1000 });
-    authUsers = authUsersResult.data?.users || [];
-  } catch (err) {
-    console.error("Error listing auth users:", err);
-  }
+  const filas = profiles ?? [];
+  const ids = filas.map((p) => p.id as string);
 
-  // 3. Merge profiles and auth users
-  // NOTE: listUsers({ perPage: 1000 }) is a hard cap. For >1000 users,
-  // implement cursor-based pagination via listUsers({ page, perPage }).
-  let usuarios: Usuario[] = (profiles || []).map((p) => {
-    const authUser = authUsers.find((u) => u.id === p.id);
+  const [auth, bajasRes] = await Promise.all([
+    datosAuth(ids),
+    ids.length
+      ? supabase.from("bajas_cuenta").select("usuario_id, email, motivo, solicitada_at, auth_eliminada_at").in("usuario_id", ids)
+      : Promise.resolve({ data: [] as FilaBaja[], error: null }),
+  ]);
+  if (bajasRes.error && !faltaTablaBajas(bajasRes.error)) console.error("Error fetching bajas:", bajasRes.error);
+  const bajas = new Map(((bajasRes.data ?? []) as FilaBaja[]).map((b) => [b.usuario_id, b]));
+
+  const usuarios: Usuario[] = filas.map((p) => {
+    const authUser = auth.get(p.id);
+    const baja = bajas.get(p.id);
     return {
       id: p.id,
       role: p.role,
@@ -63,28 +132,21 @@ export async function fetchUsuarios(filters?: {
       cedula_rif: p.cedula_rif,
       cooperativa_id: p.cooperativa_id || null,
       cooperativa_nombre: p.cooperativas?.nombre || null,
-      email: authUser?.email || undefined,
+      email: authUser?.email || baja?.email || undefined,
       is_banned: authUser?.banned_until ? new Date(authUser.banned_until) > new Date() : false,
       created_at: p.created_at,
       notif_encomiendas: p.notif_encomiendas ?? true,
       notif_boletos: p.notif_boletos ?? true,
       notif_recordatorios: p.notif_recordatorios ?? true,
       has_push_token: Boolean(p.expo_push_token),
+      eliminada_at: p.eliminada_at ?? null,
+      baja: baja
+        ? { email: baja.email, motivo: baja.motivo, solicitada_at: baja.solicitada_at, auth_eliminada_at: baja.auth_eliminada_at }
+        : null,
     };
   });
 
-  // 4. In-memory filter for search query (name, phone, RIF/cédula, and email)
-  if (filters?.search) {
-    const searchLower = filters.search.toLowerCase();
-    usuarios = usuarios.filter((u) => 
-      u.nombre_completo.toLowerCase().includes(searchLower) ||
-      u.telefono.toLowerCase().includes(searchLower) ||
-      u.cedula_rif.toLowerCase().includes(searchLower) ||
-      (u.email && u.email.toLowerCase().includes(searchLower))
-    );
-  }
-
-  return usuarios;
+  return { usuarios, total: count ?? usuarios.length, pagina, porPagina, bajasPendientes: idsBajas.length };
 }
 
 export async function fetchUsuarioById(id: string): Promise<UsuarioDetalle | null> {
@@ -123,7 +185,8 @@ export async function fetchUsuarioById(id: string): Promise<UsuarioDetalle | nul
     recibidasResult,
     boletosResult,
     pagosResult,
-    notificacionesResult
+    notificacionesResult,
+    bajaResult,
   ] = await Promise.all([
     supabase
       .from("encomiendas")
@@ -149,8 +212,15 @@ export async function fetchUsuarioById(id: string): Promise<UsuarioDetalle | nul
       .from("notificaciones_log")
       .select("*")
       .eq("destinatario_id", id)
-      .order("created_at", { ascending: false })
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("bajas_cuenta")
+      .select("email, motivo, solicitada_at, auth_eliminada_at")
+      .eq("usuario_id", id)
+      .maybeSingle(),
   ]);
+  if (bajaResult.error && !faltaTablaBajas(bajaResult.error)) console.error("Error baja:", bajaResult.error);
+  const baja = (bajaResult.data ?? null) as BajaCuenta | null;
 
   // Una pestaña vacía por error se ve igual que "sin datos": al menos queda en el log.
   if (enviadasResult.error) console.error("Error encomiendas enviadas:", enviadasResult.error);
@@ -253,9 +323,11 @@ export async function fetchUsuarioById(id: string): Promise<UsuarioDetalle | nul
     cedula_rif: profile.cedula_rif,
     cooperativa_id: profile.cooperativa_id || null,
     cooperativa_nombre: profile.cooperativas?.nombre || null,
-    email: authUser?.email || undefined,
+    email: authUser?.email || baja?.email || undefined,
     is_banned: authUser?.banned_until ? new Date(authUser.banned_until) > new Date() : false,
     created_at: profile.created_at,
+    eliminada_at: profile.eliminada_at ?? null,
+    baja,
     notif_encomiendas: profile.notif_encomiendas ?? true,
     notif_boletos: profile.notif_boletos ?? true,
     notif_recordatorios: profile.notif_recordatorios ?? true,

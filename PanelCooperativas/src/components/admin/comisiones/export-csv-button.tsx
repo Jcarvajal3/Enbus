@@ -5,6 +5,7 @@ import { DownloadSimple } from "@phosphor-icons/react";
 import { ComisionCiclo } from "@/lib/types/admin-comisiones";
 import { toast } from "sonner";
 import { fechaVE } from "@/lib/fechas";
+import { etiquetaMetodoPago } from "@/lib/estados";
 
 /** Decimal con coma (Excel en español con separador ";"), sin separador de miles: 1250.5 -> "1250,50". */
 const decimalCsv = (n: number, decimales = 2) => Number(n ?? 0).toFixed(decimales).replace(".", ",");
@@ -43,6 +44,7 @@ export function ExportCSVButton({ data, filename = "ciclos_comisiones.csv" }: Ex
         "Monto Comisión (USD)",
         "Estado Pago",
         "Fecha Pago",
+        "Método Pago",
         "Referencia Pago",
         "Fecha Creación"
       ];
@@ -59,6 +61,7 @@ export function ExportCSVButton({ data, filename = "ciclos_comisiones.csv" }: Ex
         decimalCsv(item.monto_comision),
         item.pagado ? "Pagado" : "Pendiente",
         item.pagado_at ? fechaVE(item.pagado_at) : "",
+        textoCsv(item.pago_metodo ? etiquetaMetodoPago(item.pago_metodo) : ""),
         textoCsv(item.pago_referencia ?? ""),
         fechaVE(item.created_at)
       ]);
@@ -99,7 +102,7 @@ export function ExportCSVButton({ data, filename = "ciclos_comisiones.csv" }: Ex
       size="sm"
       className="gap-1.5 h-9"
     >
-      <DownloadSimple className="h-4 w-4" /> Exportar CSV
+      <DownloadSimple className="h-4 w-4" aria-hidden /> Exportar CSV
     </Button>
   );
 }

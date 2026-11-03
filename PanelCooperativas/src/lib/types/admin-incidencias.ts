@@ -38,7 +38,47 @@ export interface Incidencia {
   } | null;
 }
 
+/** "pendientes" = ABIERTA y EN_PROCESO (vista por defecto); "todas" sin filtro. */
+export type FiltroEstadoIncidencia = "pendientes" | "todas" | "ABIERTA" | "EN_PROCESO" | "RESUELTA";
+
+export const FILTROS_ESTADO_INCIDENCIA: readonly FiltroEstadoIncidencia[] = [
+  "pendientes",
+  "ABIERTA",
+  "EN_PROCESO",
+  "RESUELTA",
+  "todas",
+];
+
 export interface FetchIncidenciasFilters {
   tipo?: string;
-  estado?: string;
+  estado?: FiltroEstadoIncidencia | string;
+}
+
+export type PrioridadIncidencia = "alta" | "media" | "baja";
+
+export const ETIQUETA_PRIORIDAD: Record<PrioridadIncidencia, string> = {
+  alta: "Alta",
+  media: "Media",
+  baja: "Baja",
+};
+
+/**
+ * Prioridad de atención (AD-19): pérdida o daño → alta; reporte de un pago o más de
+ * 72 h en tránsito → media; el resto → baja.
+ */
+export function prioridadIncidencia(i: Pick<Incidencia, "tipo" | "categoria">): PrioridadIncidencia {
+  if (i.tipo === "PERDIDA" || i.tipo === "DANADA") return "alta";
+  if (i.tipo === "ALERTA_AMARILLA" || (i.tipo === "REPORTE_USUARIO" && i.categoria === "PAGO")) return "media";
+  return "baja";
+}
+
+const PESO_PRIORIDAD: Record<PrioridadIncidencia, number> = { alta: 0, media: 1, baja: 2 };
+
+/** Primero la prioridad más alta; dentro de cada una, la más antigua primero. */
+export function ordenarPorPrioridad<T extends Pick<Incidencia, "tipo" | "categoria" | "created_at">>(lista: T[]): T[] {
+  return [...lista].sort(
+    (a, b) =>
+      PESO_PRIORIDAD[prioridadIncidencia(a)] - PESO_PRIORIDAD[prioridadIncidencia(b)] ||
+      a.created_at.localeCompare(b.created_at)
+  );
 }

@@ -5,7 +5,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import type { Tarifa, RouteOption } from "@/lib/types/admin-tarifas";
+import { costoEncomiendaUsd, type Tarifa, type RouteOption } from "@/lib/types/admin-tarifas";
+import { formatCiudad } from "@/lib/ciudades";
 import { formatNumeroVE, formatUsd } from "@/lib/dinero";
 import type { TasaBCV } from "@/lib/types/pagos";
 import { Monto } from "@/components/monto";
@@ -41,9 +42,10 @@ export function Simulador({ tarifa, rutas, tasa = null }: SimuladorProps) {
     const factor_distancia_por_min = tarifa.factor_distancia_por_min;
     const duracion_estimada_min = selectedRoute.duracion_estimada_min;
 
-    const costo_base = peso * tarifa_por_kg;
-    const costo_distancia = costo_base * (factor_distancia_por_min * duracion_estimada_min);
-    const costo_total = costo_base + costo_distancia;
+    const costo_base = Math.round(peso * tarifa_por_kg * 100) / 100;
+    // Mismo redondeo que _costo_encomienda: el total es lo que cobra la taquilla.
+    const costo_total = costoEncomiendaUsd(peso, tarifa, duracion_estimada_min);
+    const costo_distancia = Math.max(0, Math.round((costo_total - costo_base) * 100) / 100);
 
     const formula = `${formatNumeroVE(peso)} kg × USD ${formatNumeroVE(tarifa_por_kg)} × (1 + ${formatNumeroVE(factor_distancia_por_min, 4)} × ${duracion_estimada_min} min)`;
 
@@ -71,50 +73,50 @@ export function Simulador({ tarifa, rutas, tasa = null }: SimuladorProps) {
   };
 
   return (
-    <Card className="transition-all duration-200 hover:shadow-lg border-primary/15 bg-gradient-to-br from-card to-secondary/5">
+    <Card>
       <CardHeader className="pb-3">
         <div className="flex items-center gap-2">
           <div className="flex size-7 items-center justify-center rounded bg-primary/15 text-primary-text">
-            <Calculator className="size-4" />
+            <Calculator className="size-4" aria-hidden />
           </div>
           <div>
-            <CardTitle className="text-lg font-bold tracking-tight">Simulador de Costos</CardTitle>
-            <CardDescription className="text-xs">Prueba de tarifas con pesos y rutas en tiempo real</CardDescription>
+            <CardTitle className="text-lg font-bold tracking-tight">Simulador de costos</CardTitle>
+            <CardDescription className="text-xs">Calcula cuánto cuesta un envío con la tarifa vigente.</CardDescription>
           </div>
         </div>
       </CardHeader>
       
       <CardContent className="space-y-4">
         {!tarifa ? (
-          <div className="flex gap-2.5 p-3 rounded-lg bg-amber-50 border border-amber-600/30 text-amber-950 text-xs dark:bg-amber-400/10 dark:text-amber-100">
-            <Info className="size-4 shrink-0 text-warning-text" aria-hidden />
+          <div className="flex gap-2.5 rounded-lg border border-warning/40 bg-warning-light p-3 text-sm text-warning-deep">
+            <Info className="size-4 shrink-0" aria-hidden />
             <div>
-              Crea una tarifa con «Nueva tarifa» para usar el simulador.
+              Publica una tarifa con «Nueva tarifa» para usar el simulador.
             </div>
           </div>
         ) : (
           <>
             {/* Route Selector */}
             <div className="space-y-1.5">
-              <Label htmlFor="sim-ruta" className="text-xs font-semibold text-muted-foreground">Ruta de envío</Label>
+              <Label htmlFor="sim-ruta" className="text-sm font-medium">Ruta de envío</Label>
               <Select
                 value={selectedRutaId}
                 onValueChange={(val) => setSelectedRutaId(val ?? "")}
                 // Etiqueta de la ruta elegida: sin `items`, el Select mostraría su id.
                 items={Object.fromEntries(
-                  rutas.map((r) => [r.id, `${r.ciudad_origen} → ${r.ciudad_destino} (${r.cooperativa_nombre})`])
+                  rutas.map((r) => [r.id, `${formatCiudad(r.ciudad_origen)} → ${formatCiudad(r.ciudad_destino)} (${r.cooperativa_nombre})`])
                 )}
               >
-                <SelectTrigger id="sim-ruta" className="bg-background border-input text-foreground text-xs h-9">
+                <SelectTrigger id="sim-ruta" className="h-9 w-full bg-background text-sm">
                   <SelectValue placeholder="Elige una ruta activa" />
                 </SelectTrigger>
                 <SelectContent className="bg-popover border text-popover-foreground max-h-[220px]">
                   {rutas.map((ruta) => (
-                    <SelectItem key={ruta.id} value={ruta.id} className="text-xs">
+                    <SelectItem key={ruta.id} value={ruta.id} className="text-sm">
                       <div className="flex items-center gap-1.5 py-0.5">
-                        <span className="font-semibold">{ruta.ciudad_origen}</span>
-                        <ArrowRight className="size-2.5 text-muted-foreground" />
-                        <span className="font-semibold">{ruta.ciudad_destino}</span>
+                        <span className="font-semibold">{formatCiudad(ruta.ciudad_origen)}</span>
+                        <ArrowRight className="size-3 text-muted-foreground" aria-hidden />
+                        <span className="font-semibold">{formatCiudad(ruta.ciudad_destino)}</span>
                         <span className="text-xs text-muted-foreground">({ruta.cooperativa_nombre})</span>
                       </div>
                     </SelectItem>
@@ -126,18 +128,19 @@ export function Simulador({ tarifa, rutas, tasa = null }: SimuladorProps) {
             {/* Weight Inputs */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <Label htmlFor="sim-peso" className="text-xs font-semibold text-muted-foreground">Peso de la Encomienda</Label>
+                <Label htmlFor="sim-peso" className="text-sm font-medium">Peso de la encomienda (kg)</Label>
                 <div className="flex items-center gap-1.5">
                   <Input 
                     id="sim-peso"
                     type="number"
                     step="0.1"
-                    min="0.1"
+                    min="0.5"
+                    max={maxPeso}
                     value={peso === 0 ? "" : Number(peso.toFixed(1))}
                     onChange={(e) => handlePesoChange(parseFloat(e.target.value))}
-                    className="w-20 text-right bg-background border-input text-foreground text-xs h-7 px-2 font-bold focus-visible:ring-orange-500"
+                    className="h-8 w-20 bg-background px-2 text-right text-sm font-semibold tabular-nums"
                   />
-                  <span className="text-xs text-muted-foreground font-semibold">kg</span>
+                  <span className="text-sm text-muted-foreground" aria-hidden>kg</span>
                 </div>
               </div>
 
@@ -149,11 +152,13 @@ export function Simulador({ tarifa, rutas, tasa = null }: SimuladorProps) {
                   step="0.5"
                   value={peso}
                   onChange={handleSliderChange}
-                  className="w-full h-1.5 rounded-lg appearance-none cursor-pointer bg-muted accent-orange-600"
+                  aria-label="Peso de la encomienda"
+                  aria-valuetext={`${formatNumeroVE(peso, 1)} kg`}
+                  className="h-1.5 w-full cursor-pointer appearance-none rounded-lg bg-muted accent-primary"
                 />
                 <div className="flex justify-between text-xs text-muted-foreground font-medium px-1">
-                  <span>0.5 kg</span>
-                  <span>Máx: {maxPeso} kg</span>
+                  <span>0,5 kg</span>
+                  <span>Máximo {formatNumeroVE(maxPeso, 1)} kg</span>
                 </div>
               </div>
             </div>
@@ -163,27 +168,27 @@ export function Simulador({ tarifa, rutas, tasa = null }: SimuladorProps) {
               <div className="rounded-xl border bg-muted/40 p-4 space-y-4">
                 {calculation.exceedsLimit ? (
                   <div className="flex gap-2 p-2.5 rounded-lg bg-destructive/10 border border-destructive/30 text-destructive-text text-xs">
-                    <Warning className="size-4 shrink-0" />
+                    <Warning className="size-4 shrink-0" aria-hidden />
                     <div>
-                      El peso supera el límite máximo de {tarifa.peso_max_kg} kg configurado para esta tarifa.
+                      El peso supera el máximo de la tarifa vigente ({formatNumeroVE(tarifa.peso_max_kg, 1)} kg).
                     </div>
                   </div>
                 ) : (
                   <>
                     <div className="grid grid-cols-2 gap-3 text-xs border-b border-border/40 pb-3">
                       <div className="flex flex-col gap-0.5">
-                        <span className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Costo base</span>
+                        <span className="text-xs font-medium text-muted-foreground">Costo base</span>
                         <span className="font-semibold text-foreground">{formatUsd(calculation.costo_base)}</span>
                       </div>
                       <div className="flex flex-col gap-0.5">
-                        <span className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Recargo por distancia ({selectedRoute?.duracion_estimada_min} min)</span>
+                        <span className="text-xs font-medium text-muted-foreground">Recargo por distancia ({selectedRoute?.duracion_estimada_min} min)</span>
                         <span className="font-semibold text-foreground">{formatUsd(calculation.costo_distancia)}</span>
                       </div>
                     </div>
 
-                    <div className="flex items-baseline justify-between gap-3">
+                    <div className="flex items-baseline justify-between gap-3 rounded-lg bg-primary/15 p-3">
                       <div className="flex flex-col">
-                        <span className="text-xs text-primary-text uppercase font-bold tracking-wider">Costo total simulado</span>
+                        <span className="text-sm font-semibold text-foreground">Costo total</span>
                         <span className="text-xs text-muted-foreground font-mono mt-0.5 font-medium">{calculation.formula}</span>
                       </div>
                       <Monto
@@ -192,7 +197,7 @@ export function Simulador({ tarifa, rutas, tasa = null }: SimuladorProps) {
                         moneda="USD"
                         size="lg"
                         align="right"
-                        className="text-primary-text font-black"
+                        className="text-foreground"
                       />
                     </div>
                     <p className="text-xs text-muted-foreground">

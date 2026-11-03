@@ -2,13 +2,13 @@ export const dynamic = "force-dynamic";
 
 import { fetchUsuarioById } from "@/lib/data/admin-usuarios";
 import { notFound } from "next/navigation";
+import { PageHeader } from "@/components/page-header";
 import { UsuarioDetailTabs } from "@/components/admin/usuarios/usuario-detail-tabs";
 import { UsuarioActions } from "@/components/admin/usuarios/usuario-actions";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft } from "@phosphor-icons/react/dist/ssr";
-import Link from "next/link";
 import { etiquetaRol } from "@/lib/estados";
+import { formatFechaHoraVE } from "@/lib/fechas";
+import { bajaPorCompletar } from "@/lib/types/admin-usuarios";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -24,54 +24,53 @@ export default async function UsuarioDetailPage({ params }: PageProps) {
 
   return (
     <div className="space-y-6">
-      {/* Back Button / Breadcrumb */}
-      <div>
-        <Link 
-          href="/admin/usuarios"
-          className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeft className="h-4 w-4" aria-hidden /> Volver a usuarios
-        </Link>
-      </div>
-
-      {/* Main Header */}
-      <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between bg-card border p-6 rounded-2xl">
-        <div className="flex items-center gap-4">
-          <Avatar className="h-16 w-16 border-2">
-            <AvatarFallback className="bg-muted text-muted-foreground font-semibold text-xl">
-              {usuario.nombre_completo.substring(0, 2).toUpperCase()}
-            </AvatarFallback>
-          </Avatar>
-          <div className="space-y-1">
-            <div className="flex flex-wrap items-center gap-3">
-              <h1 className="text-2xl font-bold tracking-tight">{usuario.nombre_completo}</h1>
+      <PageHeader
+        title={usuario.nombre_completo}
+        migas={[{ label: "Usuarios", href: "/admin/usuarios" }, { label: usuario.nombre_completo }]}
+        description={
+          <div className="mt-1 flex flex-col gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Badge variant="secondary">{etiquetaRol(usuario.role)}</Badge>
-              {usuario.is_banned ? (
-                <Badge variant="outline" className="border-destructive/40 text-destructive-text">
+              {usuario.eliminada_at ? (
+                <Badge variant="secondary" className="bg-muted text-foreground">
+                  Cuenta eliminada
+                </Badge>
+              ) : usuario.is_banned ? (
+                <Badge variant="secondary" className="bg-destructive-light text-destructive-deep">
                   Suspendida
                 </Badge>
               ) : (
                 <Badge variant="outline">Activa</Badge>
               )}
+              <span className="font-mono text-sm">{usuario.email || "Sin correo"}</span>
             </div>
-            <p className="text-sm text-muted-foreground font-mono">
-              {usuario.email || <span className="text-muted-foreground">Sin correo</span>}
-            </p>
+            {usuario.eliminada_at && (
+              <p className="text-sm">
+                Eliminó su cuenta desde la app el {formatFechaHoraVE(usuario.eliminada_at)}.
+                {usuario.baja?.motivo ? ` Motivo: ${usuario.baja.motivo}.` : ""}{" "}
+                {bajaPorCompletar(usuario)
+                  ? "Falta borrar su acceso: usa «Completar baja»."
+                  : usuario.baja?.auth_eliminada_at
+                    ? `Su acceso se borró el ${formatFechaHoraVE(usuario.baja.auth_eliminada_at)}.`
+                    : ""}
+              </p>
+            )}
           </div>
-        </div>
-        
-        {/* Action buttons */}
-        <UsuarioActions 
+        }
+      >
+        <UsuarioActions
           usuarioId={usuario.id}
           nombre={usuario.nombre_completo}
+          email={usuario.email ?? null}
           role={usuario.role}
-          isBanned={usuario.is_banned} 
+          isBanned={usuario.is_banned}
+          bajaPendiente={bajaPorCompletar(usuario)}
+          eliminada={Boolean(usuario.eliminada_at)}
           encomiendasEnviadas={usuario.encomiendas_enviadas}
           encomiendasRecibidas={usuario.encomiendas_recibidas}
         />
-      </div>
+      </PageHeader>
 
-      {/* Detail Tabs */}
       <UsuarioDetailTabs usuario={usuario} />
     </div>
   );

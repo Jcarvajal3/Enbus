@@ -13,6 +13,10 @@ import { formatFechaHoraVE, formatFechaVE } from "@/lib/fechas";
 import { formatCedula, formatTelefono } from "@/lib/ve";
 import { etiquetaMetodoPago, etiquetaRol } from "@/lib/estados";
 import { useTasaBCVAdmin } from "@/components/admin/dashboard/use-tasa-bcv-admin";
+import { useTabEnUrl } from "@/components/admin/use-tab-url";
+import { formatCodigoBoleto } from "@/lib/artefactos.generated";
+
+const PESTANAS = ["perfil", "encomiendas", "boletos", "pagos", "notificaciones"] as const;
 
 interface UsuarioDetailTabsProps {
   usuario: UsuarioDetalle;
@@ -80,10 +84,11 @@ export function UsuarioDetailTabs({ usuario }: UsuarioDetailTabsProps) {
   // Montos en USD de referencia, con el equivalente en Bs a la tasa BCV de hoy.
   const tasa = useTasaBCVAdmin();
   const totalEncomiendas = usuario.encomiendas_enviadas.length + usuario.encomiendas_recibidas.length;
+  const [tab, setTab] = useTabEnUrl(PESTANAS, "perfil");
 
   return (
-    <Tabs defaultValue="perfil" className="w-full space-y-4">
-      <TabsList className="flex h-auto flex-wrap gap-1">
+    <Tabs value={tab} onValueChange={(v) => setTab(String(v))} className="w-full space-y-4">
+      <TabsList className="flex h-auto max-w-full flex-wrap gap-1">
         <TabsTrigger value="perfil">
           <User className="mr-2 h-4 w-4" aria-hidden /> Perfil
         </TabsTrigger>
@@ -315,7 +320,7 @@ export function UsuarioDetailTabs({ usuario }: UsuarioDetailTabsProps) {
                   ) : (
                     usuario.boletos.map((b) => (
                       <TableRow key={b.id}>
-                        <TableCell className="py-3 font-mono text-sm font-semibold">{b.codigo_boleto}</TableCell>
+                        <TableCell className="py-3 font-mono text-sm font-semibold">{formatCodigoBoleto(b.codigo_boleto)}</TableCell>
                         <TableCell className="py-3">{b.viaje_info}</TableCell>
                         <TableCell className="py-3 text-center font-semibold">{b.asiento}</TableCell>
                         <TableCell className="py-3">{b.cooperativa_nombre}</TableCell>
@@ -375,7 +380,7 @@ export function UsuarioDetailTabs({ usuario }: UsuarioDetailTabsProps) {
                           )}
                           {p.boleto_codigo && (
                             <span className="flex items-center gap-1.5 font-mono text-sm">
-                              <Ticket className="h-3.5 w-3.5 text-muted-foreground" aria-hidden /> {p.boleto_codigo}
+                              <Ticket className="h-3.5 w-3.5 text-muted-foreground" aria-hidden /> {formatCodigoBoleto(p.boleto_codigo)}
                             </span>
                           )}
                         </TableCell>
@@ -450,6 +455,10 @@ export function UsuarioDetailTabs({ usuario }: UsuarioDetailTabsProps) {
                         <TableCell className="py-3">
                           {n.estado_envio === "ENVIADO" ? (
                             <Badge variant="secondary">Enviada</Badge>
+                          ) : n.estado_envio === "FALLBACK_SMS" ? (
+                            <Badge variant="secondary">Enviada por SMS (respaldo)</Badge>
+                          ) : n.estado_envio !== "FALLIDO" ? (
+                            <Badge variant="outline">En cola</Badge>
                           ) : (
                             <Badge variant="outline" className="border-destructive/40 text-destructive-text">
                               No se envió

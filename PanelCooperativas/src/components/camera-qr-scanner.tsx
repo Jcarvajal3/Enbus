@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from "react";
 import { Camera, X, ScanSmiley } from "@phosphor-icons/react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { toast } from "sonner";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -71,8 +70,8 @@ export function CameraQRScanner({ onScan, open, onOpenChange }: CameraQRScannerP
       } catch (err: unknown) {
         const message =
           err instanceof DOMException && err.name === "NotAllowedError"
-            ? "Permiso de cámara denegado. Habilítelo en la configuración del navegador."
-            : "No se pudo acceder a la cámara.";
+            ? "El navegador no dio permiso para usar la cámara. Permítelo en la configuración del sitio e intenta de nuevo."
+            : "No pudimos abrir la cámara. Revisa que ninguna otra aplicación la esté usando e intenta de nuevo.";
         setCameraError(message);
       }
     }
@@ -123,8 +122,8 @@ export function CameraQRScanner({ onScan, open, onOpenChange }: CameraQRScannerP
       <DialogContent className="sm:max-w-md p-0 overflow-hidden gap-0">
         <DialogHeader className="px-4 pt-4 pb-0">
           <DialogTitle className="flex items-center gap-2">
-            <ScanSmiley size={22} weight="duotone" />
-            Escanear con Cámara
+            <ScanSmiley size={22} weight="duotone" aria-hidden />
+            Escanear con la cámara
           </DialogTitle>
         </DialogHeader>
 
@@ -150,10 +149,10 @@ export function CameraQRScanner({ onScan, open, onOpenChange }: CameraQRScannerP
                 <span className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-primary rounded-bl-sm" />
                 <span className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-primary rounded-br-sm" />
                 {/* Scan line animation */}
-                <span className="absolute left-2 right-2 h-0.5 bg-primary/80 top-1/2 animate-scan-line" />
+                <span className="absolute left-2 right-2 h-0.5 bg-primary/80 top-1/2 motion-safe:animate-scan-line" />
               </div>
               <p className="absolute bottom-4 text-white text-sm font-medium drop-shadow">
-                Apunte al código QR
+                Apunta la cámara al código QR
               </p>
             </div>
           )}
@@ -161,14 +160,14 @@ export function CameraQRScanner({ onScan, open, onOpenChange }: CameraQRScannerP
           {/* Error state */}
           {cameraError && (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/80 px-6 text-center">
-              <Camera size={40} className="text-destructive" />
+              <Camera size={40} className="text-destructive" aria-hidden />
               <p className="text-white text-sm">{cameraError}</p>
             </div>
           )}
 
           {/* Loading state */}
           {!scanning && !cameraError && (
-            <div className="absolute inset-0 flex items-center justify-center bg-black/60">
+            <div className="absolute inset-0 flex items-center justify-center bg-black/60" role="status" aria-label="Abriendo la cámara">
               <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
             </div>
           )}
@@ -176,7 +175,7 @@ export function CameraQRScanner({ onScan, open, onOpenChange }: CameraQRScannerP
 
         <div className="px-4 py-3 flex justify-end">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            <X size={16} className="mr-2" />
+            <X size={16} className="mr-2" aria-hidden />
             Cancelar
           </Button>
         </div>
@@ -197,9 +196,9 @@ interface CameraQRTriggerProps {
 export function CameraQRTrigger({ onScan, disabled = false }: CameraQRTriggerProps) {
   const [open, setOpen] = useState(false);
 
+  // El resultado lo anuncia la pantalla (panel "Último escaneo" con sonido): sin toast aparte.
   function handleScan(code: string) {
     onScan(code);
-    toast.success(`Código QR detectado: ${code}`);
   }
 
   return (
@@ -214,7 +213,7 @@ export function CameraQRTrigger({ onScan, disabled = false }: CameraQRTriggerPro
         title="Escanear con cámara"
         className="shrink-0 h-12 w-12"
       >
-        <Camera size={20} weight="duotone" />
+        <Camera size={20} weight="duotone" aria-hidden />
       </Button>
       <CameraQRScanner onScan={handleScan} open={open} onOpenChange={setOpen} />
     </>

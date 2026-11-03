@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useId, useState, useTransition } from "react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { ConfirmDialog } from "@/components/confirm-dialog";
-import { Plus, DotsThree, PencilSimple, MapTrifold } from "@phosphor-icons/react";
+import { Plus, DotsThree, PencilSimple, MapTrifold, WarningCircle } from "@phosphor-icons/react";
 import { ESTADOS_VENEZUELA, CIUDADES_POR_ESTADO } from "@/lib/data/venezuela";
 import { guardarRuta, toggleActivaRuta, checkDesactivarRuta } from "./actions";
 import { PageHeader } from "@/components/page-header";
@@ -23,6 +23,29 @@ import { useTasaBCV } from "@/components/tasa-bcv-provider";
 import { formatBs, formatUsd, usdABs } from "@/lib/dinero";
 import { toast } from "sonner";
 import { humanizeError } from "@/lib/errores";
+import { formatDuracion } from "@/lib/fechas";
+import { formatCiudad, mismaCiudad } from "@/lib/ciudades";
+import { cn } from "@/lib/utils";
+import { CeldaEnlace } from "@/components/celda-enlace";
+
+const MSG_MISMA_CIUDAD = "El origen y el destino deben ser ciudades distintas.";
+
+/** "8" → 8; vacío → 0; NaN si no es un entero. */
+function entero(texto: string): number {
+  const t = texto.trim();
+  if (t === "") return 0;
+  return /^\d+$/.test(t) ? Number(t) : NaN;
+}
+
+/** Error de la duración (o null): horas 0–48, minutos 0–59, total mayor que 0. */
+function errorDuracion(horas: string, minutos: string): string | null {
+  const h = entero(horas);
+  const m = entero(minutos);
+  if (!Number.isFinite(h) || h > 48) return "Las horas van de 0 a 48.";
+  if (!Number.isFinite(m) || m > 59) return "Los minutos van de 0 a 59.";
+  if (h * 60 + m <= 0) return "Escribe cuánto dura el viaje, por ejemplo 8 h 30 min.";
+  return null;
+}
 
 /** Por encima de este precio (USD) se pide confirmar que no se escribió en bolívares. */
 const PRECIO_ALTO_USD = 500;
@@ -38,6 +61,17 @@ function leerPrecio(texto: string): number {
 }
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
+function NombreRuta({ ruta }: { ruta: any }) {
+  return (
+    <span className="flex items-center gap-2">
+      <MapTrifold className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+      <span>{formatCiudad(ruta.ciudad_origen)}, {formatCiudad(ruta.estado_origen)}</span>
+      <span className="text-muted-foreground">→</span>
+      <span>{formatCiudad(ruta.ciudad_destino)}, {formatCiudad(ruta.estado_destino)}</span>
+    </span>
+  );
+}
+
 export function RutasClient({
   rutas,
   userRole,
@@ -46,7 +80,8 @@ export function RutasClient({
   userRole: string;
 }) {
   const isAdmin = userRole === "admin_cooperativa";
-  
+  const uid = useId();
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingRuta, setEditingRuta] = useState<any | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -61,6 +96,11 @@ export function RutasClient({
   const [ciudadOrigen, setCiudadOrigen] = useState<string>("");
   const [estadoDestino, setEstadoDestino] = useState<string>("");
   const [ciudadDestino, setCiudadDestino] = useState<string>("");
+  // Duración en dos campos (se guarda en minutos)
+  const [horas, setHoras] = useState<string>("");
+  const [minutos, setMinutos] = useState<string>("");
+  const [formError, setFormError] = useState<string | null>(null);
+  const [errorCampo, setErrorCampo] = useState<"duracion" | "destino" | null>(null);
   // Precio en USD (texto controlado para mostrar el equivalente en Bs mientras se escribe)
   const [precioTexto, setPrecioTexto] = useState<string>("");
   // Formulario en espera de confirmar un precio muy alto (¿escrito en Bs?)
@@ -78,6 +118,10 @@ export function RutasClient({
     setEstadoDestino("");
     setCiudadDestino("");
     setPrecioTexto("");
+    setHoras("");
+    setMinutos("");
+    setFormError(null);
+    setErrorCampo(null);
     setActivaSwitch(true);
     setIsModalOpen(true);
   }
@@ -89,6 +133,11 @@ export function RutasClient({
     setEstadoDestino(ruta.estado_destino);
     setCiudadDestino(ruta.ciudad_destino);
     setPrecioTexto(ruta.precio_pasaje != null ? String(ruta.precio_pasaje) : "");
+    const total = Number(ruta.duracion_estimada_min) || 0;
+    setHoras(total > 0 ? String(Math.floor(total / 60)) : "");
+    setMinutos(total > 0 ? String(total % 60) : "");
+    setFormError(null);
+    setErrorCampo(null);
     setActivaSwitch(ruta.activa);
     setIsModalOpen(true);
   }
@@ -152,18 +201,33 @@ export function RutasClient({
         formData.set("activa", activaSwitch ? "on" : "off");
         const res = await requireOnline(() => guardarRuta(formData, editingRuta?.id))();
         if (res.error) {
-          toast.error(res.error);
+          setFormError(res.error);
+          setErrorCampo("campo" in res && res.campo ? res.campo : null);
         } else {
           toast.success(editingRuta ? "Ruta actualizada." : "Ruta creada.");
           setIsModalOpen(false);
         }
       } catch (err: any) {
-        toast.error(humanizeError(err, "guardar la ruta"));
+        setFormError(humanizeError(err, "guardar la ruta"));
       }
     });
   }
 
   function handleSubmit(formData: FormData) {
+    setFormError(null);
+    setErrorCampo(null);
+    if (ciudadOrigen && ciudadDestino && mismaCiudad(ciudadOrigen, ciudadDestino)) {
+      setFormError(MSG_MISMA_CIUDAD);
+      setErrorCampo("destino");
+      return;
+    }
+    const errDur = errorDuracion(horas, minutos);
+    if (errDur) {
+      setFormError(errDur);
+      setErrorCampo("duracion");
+      document.getElementById(`${uid}-horas`)?.focus();
+      return;
+    }
     const precio = leerPrecio(String(formData.get("precio_pasaje") ?? ""));
     // Un precio muy alto suele ser un monto en bolívares escrito por error: pedir confirmación.
     if (Number.isFinite(precio) && precio > PRECIO_ALTO_USD) {
@@ -179,18 +243,17 @@ export function RutasClient({
     if (formData) guardar(formData);
   }
 
-  function formatCity(val: string | undefined) {
-    if (!val) return "";
-    return val.split("_").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
-  }
+  const formatCity = (val: string | undefined) => formatCiudad(val);
+  const nombreRuta = (ruta: any) => `${formatCity(ruta.ciudad_origen)} → ${formatCity(ruta.ciudad_destino)}`;
+  const mismaSeleccion = Boolean(ciudadOrigen && ciudadDestino && mismaCiudad(ciudadOrigen, ciudadDestino));
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader title="Rutas" description="Gestiona los destinos operativos">
+      <PageHeader title="Rutas" description="Tus rutas con su duración y el precio del pasaje en USD.">
         {isAdmin && (
           <Button onClick={openCreateModal}>
-            <Plus className="mr-2 h-4 w-4" weight="bold" />
-            Crear Ruta
+            <Plus className="mr-2 h-4 w-4" weight="bold" aria-hidden />
+            Crear ruta
           </Button>
         )}
       </PageHeader>
@@ -208,46 +271,43 @@ export function RutasClient({
           </TableHeader>
           <TableBody>
             {rutas.map((ruta) => (
-              <TableRow key={ruta.id} className={!ruta.activa ? "opacity-60" : ""}>
-                <TableCell className="font-medium">
-                  <div className="flex items-center gap-2">
-                    <MapTrifold className="h-4 w-4 text-muted-foreground" />
-                    <span>{formatCity(ruta.ciudad_origen)}, {formatCity(ruta.estado_origen)}</span>
-                    <span className="text-muted-foreground">→</span>
-                    <span>{formatCity(ruta.ciudad_destino)}, {formatCity(ruta.estado_destino)}</span>
-                  </div>
-                </TableCell>
-                <TableCell>
-                  {ruta.duracion_estimada_min > 60 
-                    ? `${Math.floor(ruta.duracion_estimada_min / 60)}h ${ruta.duracion_estimada_min % 60}m`
-                    : `${ruta.duracion_estimada_min} min`}
-                </TableCell>
+              <TableRow key={ruta.id} className={cn(isAdmin && "relative", !ruta.activa && "text-muted-foreground")}>
+                {isAdmin ? (
+                  <CeldaEnlace onAbrir={() => openEditModal(ruta)} etiqueta={`Editar ruta ${nombreRuta(ruta)}`}>
+                    <NombreRuta ruta={ruta} />
+                  </CeldaEnlace>
+                ) : (
+                  <TableCell className="font-medium">
+                    <NombreRuta ruta={ruta} />
+                  </TableCell>
+                )}
+                <TableCell>{formatDuracion(Number(ruta.duracion_estimada_min) || 0)}</TableCell>
                 <TableCell>
                   <Monto usd={Number(ruta.precio_pasaje)} size="sm" />
                 </TableCell>
                 <TableCell>
                   {ruta.activa ? (
-                    <Badge variant="secondary" className="bg-emerald-100 text-emerald-900 dark:bg-emerald-400/15 dark:text-emerald-200">Activa</Badge>
+                    <Badge variant="secondary" className="bg-success-light text-success-deep">Activa</Badge>
                   ) : (
-                    <Badge variant="secondary" className="bg-slate-200 text-slate-800 dark:bg-slate-400/15 dark:text-slate-200">Inactiva</Badge>
+                    <Badge variant="secondary" className="bg-muted text-muted-foreground">Inactiva</Badge>
                   )}
                 </TableCell>
                 
                 {isAdmin && (
                   <TableCell className="text-right">
                     <DropdownMenu>
-                      <DropdownMenuTrigger className="inline-flex h-8 w-8 items-center justify-center rounded-md p-0 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50">
-                        <span className="sr-only">Abrir menú</span>
-                        <DotsThree className="h-4 w-4" weight="bold" />
+                      <DropdownMenuTrigger className="relative z-10 inline-flex h-8 w-8 items-center justify-center rounded-md p-0 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50">
+                        <span className="sr-only">Más acciones de la ruta {nombreRuta(ruta)}</span>
+                        <DotsThree className="h-4 w-4" weight="bold" aria-hidden />
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem onClick={() => openEditModal(ruta)}>
-                          <PencilSimple className="mr-2 h-4 w-4" />
+                          <PencilSimple className="mr-2 h-4 w-4" aria-hidden />
                           Editar
                         </DropdownMenuItem>
                         <DropdownMenuItem 
                           onClick={() => handleToggleRuta(ruta)}
-                          className={ruta.activa ? "text-destructive focus:text-destructive" : ""}
+                          className={ruta.activa ? "text-destructive-text focus:text-destructive-text" : ""}
                         >
                           {ruta.activa ? "Desactivar" : "Reactivar"}
                         </DropdownMenuItem>
@@ -261,10 +321,22 @@ export function RutasClient({
             {rutas.length === 0 && (
               <TableRow>
                 <TableCell colSpan={isAdmin ? 5 : 4} className="h-48 text-center text-muted-foreground p-0">
-                  <EmptyState 
-                    icon={MapTrifold} 
-                    title="Aún no tienes rutas" 
-                    description={isAdmin ? "Crea tu primera ruta con su precio en USD para poder programar viajes." : "Cuando el administrador cree rutas, aparecerán aquí."} 
+                  <EmptyState
+                    icon={MapTrifold}
+                    title="Todavía no tienes rutas."
+                    description={
+                      isAdmin
+                        ? "Crea tu primera ruta con su duración y su precio en USD para poder programar viajes."
+                        : "Cuando el administrador cree rutas, aparecerán aquí."
+                    }
+                    action={
+                      isAdmin ? (
+                        <Button onClick={openCreateModal}>
+                          <Plus className="h-4 w-4" weight="bold" aria-hidden />
+                          Crear tu primera ruta
+                        </Button>
+                      ) : undefined
+                    }
                   />
                 </TableCell>
               </TableRow>
@@ -273,10 +345,10 @@ export function RutasClient({
         </Table>
       </div>
 
-      <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-        <DialogContent className="max-w-xl">
+      <Dialog open={isModalOpen} onOpenChange={(abierto) => !isPending && setIsModalOpen(abierto)}>
+        <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-xl">
           <DialogHeader>
-            <DialogTitle>{editingRuta ? "Editar Ruta" : "Crear Nueva Ruta"}</DialogTitle>
+            <DialogTitle>{editingRuta ? "Editar ruta" : "Crear ruta"}</DialogTitle>
           </DialogHeader>
           
           {/* onSubmit (no `action`): React no reinicia el formulario si hay error o se pide confirmar el precio. */}
@@ -287,20 +359,29 @@ export function RutasClient({
             }}
           >
             <div className="grid gap-6 py-4">
+              {formError && (
+                <div
+                  role="alert"
+                  className="flex items-start gap-2 rounded-xl border border-destructive/40 bg-destructive-light p-3 text-sm text-destructive-deep"
+                >
+                  <WarningCircle className="mt-0.5 size-4 shrink-0" weight="fill" aria-hidden />
+                  <p>{formError}</p>
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-4">
                 <div className="grid gap-2">
-                  <Label>Estado Origen</Label>
+                  <Label htmlFor={`${uid}-estado-origen`}>Estado de origen</Label>
                   <Select name="estado_origen" value={estadoOrigen} onValueChange={(val) => { setEstadoOrigen(val ?? ""); setCiudadOrigen(""); }} required>
-                    <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
+                    <SelectTrigger id={`${uid}-estado-origen`}><SelectValue placeholder="Elige el estado" /></SelectTrigger>
                     <SelectContent>
                       {ESTADOS_VENEZUELA.map(e => <SelectItem key={e.value} value={e.value}>{e.label}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="grid gap-2">
-                  <Label>Ciudad Origen</Label>
-                  <Select name="ciudad_origen" value={ciudadOrigen} onValueChange={(val) => setCiudadOrigen(val ?? "")} disabled={!estadoOrigen} required>
-                    <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
+                  <Label htmlFor={`${uid}-ciudad-origen`}>Ciudad de origen</Label>
+                  <Select name="ciudad_origen" value={ciudadOrigen} onValueChange={(val) => { setCiudadOrigen(val ?? ""); if (errorCampo === "destino") { setFormError(null); setErrorCampo(null); } }} disabled={!estadoOrigen} required>
+                    <SelectTrigger id={`${uid}-ciudad-origen`}><SelectValue placeholder="Elige la ciudad" /></SelectTrigger>
                     <SelectContent>
                       {estadoOrigen && CIUDADES_POR_ESTADO[estadoOrigen]?.map(c => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}
                     </SelectContent>
@@ -310,31 +391,75 @@ export function RutasClient({
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="grid gap-2">
-                  <Label>Estado Destino</Label>
+                  <Label htmlFor={`${uid}-estado-destino`}>Estado de destino</Label>
                   <Select name="estado_destino" value={estadoDestino} onValueChange={(val) => { setEstadoDestino(val ?? ""); setCiudadDestino(""); }} required>
-                    <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
+                    <SelectTrigger id={`${uid}-estado-destino`}><SelectValue placeholder="Elige el estado" /></SelectTrigger>
                     <SelectContent>
                       {ESTADOS_VENEZUELA.map(e => <SelectItem key={e.value} value={e.value}>{e.label}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="grid gap-2">
-                  <Label>Ciudad Destino</Label>
-                  <Select name="ciudad_destino" value={ciudadDestino} onValueChange={(val) => setCiudadDestino(val ?? "")} disabled={!estadoDestino} required>
-                    <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
+                  <Label htmlFor={`${uid}-ciudad-destino`}>Ciudad de destino</Label>
+                  <Select name="ciudad_destino" value={ciudadDestino} onValueChange={(val) => { setCiudadDestino(val ?? ""); if (errorCampo === "destino") { setFormError(null); setErrorCampo(null); } }} disabled={!estadoDestino} required>
+                    <SelectTrigger
+                      id={`${uid}-ciudad-destino`}
+                      aria-invalid={mismaSeleccion || errorCampo === "destino" ? true : undefined}
+                      aria-describedby={mismaSeleccion ? `${uid}-misma-ciudad` : undefined}
+                    >
+                      <SelectValue placeholder="Elige la ciudad" />
+                    </SelectTrigger>
                     <SelectContent>
                       {estadoDestino && CIUDADES_POR_ESTADO[estadoDestino]?.map(c => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
+                {mismaSeleccion && (
+                  <p id={`${uid}-misma-ciudad`} className="col-span-2 -mt-2 text-sm text-destructive-text">
+                    {MSG_MISMA_CIUDAD}
+                  </p>
+                )}
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="grid gap-2">
-                  <Label>Duración (min)</Label>
-                  <Input type="number" name="duracion_estimada_min" defaultValue={editingRuta?.duracion_estimada_min || ""} min={1} required />
+              <fieldset className="grid gap-2">
+                <legend className="mb-2 text-sm font-medium">Duración del viaje</legend>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="grid gap-2">
+                    <Label htmlFor={`${uid}-horas`} className="text-xs text-muted-foreground">Horas</Label>
+                    <Input
+                      id={`${uid}-horas`}
+                      type="number"
+                      inputMode="numeric"
+                      name="duracion_horas"
+                      min={0}
+                      max={48}
+                      value={horas}
+                      onChange={(e) => { setHoras(e.target.value); if (errorCampo === "duracion") { setFormError(null); setErrorCampo(null); } }}
+                      aria-invalid={errorCampo === "duracion" ? true : undefined}
+                      aria-describedby={`${uid}-duracion-ayuda`}
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor={`${uid}-minutos`} className="text-xs text-muted-foreground">Minutos</Label>
+                    <Input
+                      id={`${uid}-minutos`}
+                      type="number"
+                      inputMode="numeric"
+                      name="duracion_minutos"
+                      min={0}
+                      max={59}
+                      value={minutos}
+                      onChange={(e) => { setMinutos(e.target.value); if (errorCampo === "duracion") { setFormError(null); setErrorCampo(null); } }}
+                      aria-invalid={errorCampo === "duracion" ? true : undefined}
+                      aria-describedby={`${uid}-duracion-ayuda`}
+                    />
+                  </div>
                 </div>
-                <div className="grid gap-2">
+                <p id={`${uid}-duracion-ayuda`} className="text-xs text-muted-foreground">Ejemplo: 8 h 30 min</p>
+              </fieldset>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2 col-span-2">
                   <Label htmlFor="precio_pasaje">Precio del pasaje (USD)</Label>
                   <Input
                     id="precio_pasaje"
@@ -342,7 +467,7 @@ export function RutasClient({
                     inputMode="decimal"
                     autoComplete="off"
                     name="precio_pasaje"
-                    placeholder="Ej: 15,00"
+                    placeholder="Ej.: 15,00"
                     value={precioTexto}
                     onChange={(e) => setPrecioTexto(e.target.value)}
                     aria-describedby="precio_pasaje_ayuda"
@@ -361,10 +486,11 @@ export function RutasClient({
 
               <div className="flex items-center justify-between rounded-lg border p-4">
                 <div className="space-y-0.5">
-                  <Label className="text-base">Ruta Activa</Label>
+                  <Label htmlFor={`${uid}-activa`} className="text-base">Ruta activa</Label>
                   <p className="text-sm text-muted-foreground">Las rutas activas pueden ser programadas para viajes.</p>
                 </div>
                 <Switch
+                  id={`${uid}-activa`}
                   name="activa"
                   checked={activaSwitch}
                   onCheckedChange={setActivaSwitch}
@@ -373,8 +499,11 @@ export function RutasClient({
             </div>
 
             <DialogFooter>
-              <Button type="submit" disabled={isPending}>
-                {isPending ? "Guardando..." : "Guardar Ruta"}
+              <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)} disabled={isPending}>
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={isPending || mismaSeleccion} aria-busy={isPending || undefined}>
+                {isPending ? "Guardando…" : "Guardar ruta"}
               </Button>
             </DialogFooter>
           </form>

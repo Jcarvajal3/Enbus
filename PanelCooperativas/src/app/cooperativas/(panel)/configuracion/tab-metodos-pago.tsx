@@ -29,7 +29,8 @@ import { ErrorState } from "@/components/error-state";
 import { humanizeError } from "@/lib/errores";
 import { METODO_PAGO } from "@/lib/estados";
 import { buscarBanco, mostrarBanco, OPCIONES_BANCO, OTRO_BANCO } from "@/lib/bancos";
-import { cedulaValida, formatCedula, formatTelefono, telefonoValido, TELEFONO_PLACEHOLDER } from "@/lib/ve";
+import { cedulaValida, formatCedula, formatTelefono, telefonoValido } from "@/lib/ve";
+import { CedulaField, TelefonoField } from "@/components/ve-fields";
 import { normalizeRif } from "@/lib/rif";
 import { cn } from "@/lib/utils";
 
@@ -419,14 +420,11 @@ export function MetodosPagoTab({ metodos: initialMetodos, errorCarga = null }: M
                 )}
 
                 {form.tipo === "PAGO_MOVIL" && (
-                  <Campo
+                  <TelefonoField
                     id={id("numero_cuenta")}
                     label="Teléfono de Pago Móvil"
                     value={form.numero_cuenta}
                     onChange={(v) => setField("numero_cuenta", v)}
-                    type="tel"
-                    inputMode="tel"
-                    placeholder={TELEFONO_PLACEHOLDER}
                     error={errores.numero_cuenta}
                     disabled={guardando}
                   />
@@ -466,12 +464,12 @@ export function MetodosPagoTab({ metodos: initialMetodos, errorCarga = null }: M
                 )}
 
                 {pideBanco && (
-                  <Campo
+                  <CedulaField
                     id={id("cedula_rif")}
                     label="Cédula o RIF del titular"
                     value={form.cedula_rif}
                     onChange={(v) => setField("cedula_rif", v)}
-                    placeholder="V-12345678 o J-12345678-9"
+                    letras={["V", "E", "J", "G", "P"]}
                     error={errores.cedula_rif}
                     disabled={guardando}
                   />
@@ -540,7 +538,7 @@ export function MetodosPagoTab({ metodos: initialMetodos, errorCarga = null }: M
             {errorGeneral && (
               <div
                 role="alert"
-                className="flex items-start gap-2 rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive-text"
+                className="flex items-start gap-2 rounded-xl border border-destructive/40 bg-destructive-light p-3 text-sm text-destructive-deep"
               >
                 <WarningCircle className="mt-0.5 size-4 shrink-0" weight="fill" aria-hidden />
                 <p>{errorGeneral}</p>

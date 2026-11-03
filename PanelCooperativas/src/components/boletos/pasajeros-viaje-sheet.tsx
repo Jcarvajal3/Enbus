@@ -1,5 +1,7 @@
 "use client";
 
+import { formatCedula } from "@/lib/ve";
+import { formatCodigoBoleto } from "@/lib/artefactos.generated";
 import { useState, useEffect, useMemo, useCallback } from "react";
 import {
   Sheet,
@@ -140,9 +142,9 @@ export function PasajerosViajeSheet({
           </div>
         ) : errorCarga ? (
           <div className="py-8 flex flex-col items-center gap-3 text-center">
-            <p className="text-sm text-destructive">{errorCarga}</p>
+            <p className="text-sm text-destructive-text">{errorCarga}</p>
             <Button variant="outline" onClick={() => void fetchPasajeros()}>
-              <ArrowClockwise className="w-4 h-4 mr-2" />
+              <ArrowClockwise className="w-4 h-4 mr-2" aria-hidden />
               Reintentar
             </Button>
           </div>
@@ -184,7 +186,8 @@ export function PasajerosViajeSheet({
                   <TableBody>
                     {pasajeros.map((p) => {
                       const nombre = p.pasajero_nombre || p.comprador?.nombre_completo || "Sin nombre";
-                      const cedula = p.pasajero_cedula || p.comprador?.cedula_rif || "—";
+                      const cedulaCruda = p.pasajero_cedula || p.comprador?.cedula_rif;
+                      const cedula = cedulaCruda ? formatCedula(cedulaCruda) : "—";
                       const ui = estadoUi(p);
 
                       return (
@@ -192,11 +195,16 @@ export function PasajerosViajeSheet({
                           <TableCell className="font-medium">
                             <Badge variant="outline" className="font-mono">{p.asiento}</Badge>
                           </TableCell>
-                          <TableCell className="truncate max-w-[150px]">{nombre}</TableCell>
+                          <TableCell className="max-w-[180px]">
+                            <span className="block truncate">{nombre}</span>
+                            <span className="block font-mono text-xs text-muted-foreground">
+                              {formatCodigoBoleto(p.codigo_boleto)}
+                            </span>
+                          </TableCell>
                           <TableCell className="text-muted-foreground text-sm">{cedula}</TableCell>
                           <TableCell className="text-right">
                             {ui === "USADO" ? (
-                              <div className="inline-flex flex-col items-end text-green-600 font-medium text-sm">
+                              <div className="inline-flex flex-col items-end text-success-text font-medium text-sm">
                                 <span className="inline-flex items-center">
                                   <CheckCircle className="w-4 h-4 mr-1.5" aria-hidden />
                                   Embarcado
@@ -206,7 +214,7 @@ export function PasajerosViajeSheet({
                                 )}
                               </div>
                             ) : ui === "PAGADO" ? (
-                              <div className="inline-flex items-center text-amber-600 font-medium text-sm">
+                              <div className="inline-flex items-center text-warning-text font-medium text-sm">
                                 <Clock className="w-4 h-4 mr-1.5" aria-hidden />
                                 Por embarcar
                               </div>

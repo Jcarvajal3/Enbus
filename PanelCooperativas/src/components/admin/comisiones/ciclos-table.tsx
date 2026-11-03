@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Warning, ArrowsCounterClockwise, Receipt, Coins } from "@phosphor-icons/react";
 import { StatusBadge } from "@/components/status-badge";
-import { etiquetaCiclo } from "@/lib/estados";
+import { etiquetaCiclo, etiquetaMetodoPago } from "@/lib/estados";
 import { RegistrarPagoCicloDialog } from "./registrar-pago-ciclo-dialog";
 import { ComisionCiclo } from "@/lib/types/admin-comisiones";
 import { ExportCSVButton } from "./export-csv-button";
@@ -22,6 +22,15 @@ import { Monto } from "@/components/monto";
 import { formatFechaVE } from "@/lib/fechas";
 import type { TasaBCV } from "@/lib/types/pagos";
 import { useTasaBCVAdmin } from "@/components/admin/dashboard/use-tasa-bcv-admin";
+
+/** "Pagado el 02/10 · Pago Móvil · ref. 1234" (sin método en ciclos anteriores a la fase 4). */
+export function detallePago(c: Pick<ComisionCiclo, "pagado" | "pagado_at" | "pago_metodo" | "pago_referencia">): string {
+  if (!c.pagado) return "";
+  const partes = [etiquetaCiclo(true, c.pagado_at)];
+  if (c.pago_metodo) partes.push(etiquetaMetodoPago(c.pago_metodo));
+  if (c.pago_referencia) partes.push(`ref. ${c.pago_referencia}`);
+  return partes.join(" · ");
+}
 
 interface CiclosTableProps {
   data: ComisionCiclo[];
@@ -99,15 +108,15 @@ export function CiclosTable({ data, cooperativas, tasa: tasaServidor }: CiclosTa
         </div>
         <div className="bg-card border p-4 rounded-xl flex flex-col justify-between">
           <span className="text-muted-foreground text-xs font-medium flex items-center gap-1">
-            <Coins className="h-3.5 w-3.5" /> Total de comisiones (USD)
+            <Coins className="h-3.5 w-3.5" aria-hidden /> Total de comisiones (USD)
           </span>
           <Monto usd={totals.comisiones} tasa={tasa} moneda="USD" size="lg" className="mt-2 text-foreground" />
         </div>
-        <div className="bg-amber-50 border border-amber-600/30 p-4 rounded-xl flex flex-col justify-between dark:bg-amber-400/10">
-          <span className="text-warning-text text-xs font-medium flex items-center gap-1">
-            <Warning className="h-3.5 w-3.5" /> Pendiente por cobrar (USD)
+        <div className="bg-warning-light border border-warning/40 p-4 rounded-xl flex flex-col justify-between">
+          <span className="text-warning-deep text-xs font-medium flex items-center gap-1">
+            <Warning className="h-3.5 w-3.5" aria-hidden /> Pendiente por cobrar (USD)
           </span>
-          <Monto usd={totals.pendiente} tasa={tasa} moneda="USD" size="lg" className="mt-2 text-warning-text" />
+          <Monto usd={totals.pendiente} tasa={tasa} moneda="USD" size="lg" className="mt-2 text-warning-deep" />
         </div>
       </div>
 
@@ -175,7 +184,7 @@ export function CiclosTable({ data, cooperativas, tasa: tasaServidor }: CiclosTa
                 size="sm"
                 className="text-muted-foreground hover:text-foreground h-9 gap-1"
               >
-                <ArrowsCounterClockwise className="h-3.5 w-3.5" /> Limpiar
+                <ArrowsCounterClockwise className="h-3.5 w-3.5" aria-hidden /> Limpiar filtros
               </Button>
             )}
             <ExportCSVButton data={filteredData} />
@@ -203,7 +212,7 @@ export function CiclosTable({ data, cooperativas, tasa: tasaServidor }: CiclosTa
               <TableRow>
                 <TableCell colSpan={8} className="p-8 text-center text-muted-foreground">
                   <div className="flex flex-col items-center justify-center space-y-2">
-                    <Receipt className="h-8 w-8 text-muted-foreground/60" />
+                    <Receipt className="h-8 w-8 text-muted-foreground" aria-hidden />
                     <p className="text-sm font-medium">No hay ciclos de comisiones con estos filtros</p>
                     <p className="text-xs text-muted-foreground">Cambia los filtros o genera un ciclo nuevo.</p>
                   </div>
@@ -236,10 +245,7 @@ export function CiclosTable({ data, cooperativas, tasa: tasaServidor }: CiclosTa
                   </TableCell>
                   <TableCell className="p-4 text-center">
                     {item.pagado ? (
-                      <Badge
-                        variant="secondary"
-                        className="bg-emerald-100 text-emerald-900 dark:bg-emerald-400/15 dark:text-emerald-200"
-                      >
+                      <Badge variant="secondary" className="bg-success-light text-success-deep">
                         {etiquetaCiclo(true, item.pagado_at)}
                       </Badge>
                     ) : (
@@ -248,11 +254,15 @@ export function CiclosTable({ data, cooperativas, tasa: tasaServidor }: CiclosTa
                   </TableCell>
                   <TableCell className="p-4 text-center">
                     {item.pagado ? (
-                      <span className="text-xs text-muted-foreground">
-                        {item.pago_referencia ? `Ref. ${item.pago_referencia}` : "—"}
-                      </span>
+                      <span className="text-xs text-muted-foreground">{detallePago(item)}</span>
                     ) : (
-                      <Button variant="secondary" size="sm" className="h-8 px-3 text-xs" onClick={() => setAPagar(item)}>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        className="h-8 px-3 text-xs"
+                        aria-label={`Registrar pago de ${item.cooperativa_nombre || "la cooperativa"}`}
+                        onClick={() => setAPagar(item)}
+                      >
                         Registrar pago
                       </Button>
                     )}

@@ -80,9 +80,9 @@ interface DetalleSheetProps {
 type Tono = "exito" | "pendiente" | "peligro" | "neutro";
 
 const TONOS: Record<Tono, string> = {
-  exito: "border-emerald-500/30 bg-emerald-500/10 text-success-text",
-  pendiente: "border-amber-500/40 bg-amber-500/10 text-warning-text",
-  peligro: "border-destructive/30 bg-destructive/10 text-destructive-text",
+  exito: "border-success/40 bg-success-light text-success-deep",
+  pendiente: "border-warning/40 bg-warning-light text-warning-deep",
+  peligro: "border-destructive/40 bg-destructive-light text-destructive-deep",
   neutro: "border-border bg-muted/40 text-muted-foreground",
 };
 
@@ -342,7 +342,7 @@ export function DetalleSheet({ encomienda, isOpen, onClose, onCobrar, onAgregarF
             <div className="flex items-center justify-between gap-2">
               <h4 className="text-sm font-semibold">Fotos del paquete</h4>
               {sinFoto && (
-                <Badge variant="secondary" className="bg-amber-100 text-amber-900 dark:bg-amber-400/15 dark:text-amber-200">
+                <Badge variant="secondary" className="bg-warning-light text-warning-deep">
                   Falta foto
                 </Badge>
               )}

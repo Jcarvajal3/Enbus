@@ -387,10 +387,10 @@ export function RecepcionModal({ encomienda, isOpen, onClose, onSuccess, onRecha
             </div>
           </div>
 
-          <Alert className="border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
-            <WarningCircle className="h-5 w-5 !text-amber-600 dark:!text-amber-400" />
+          <Alert className="border-warning/40 bg-warning-light text-warning-deep">
+            <WarningCircle className="h-5 w-5 !text-warning-deep" aria-hidden />
             <AlertTitle>Revisa el paquete</AlertTitle>
-            <AlertDescription className="text-amber-800 dark:text-amber-300">
+            <AlertDescription className="text-warning-deep">
               Medidas máximas de referencia: 50 × 50 × 50 cm. Míralo antes de recibirlo.
             </AlertDescription>
           </Alert>

@@ -1,77 +1,72 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import type { Tarifa } from "@/lib/types/admin-tarifas";
-import { dateFormatterShort } from "@/lib/utils";
-import { formatUsd } from "@/lib/dinero";
-import { CheckCircle, Clock } from "@phosphor-icons/react/dist/ssr";
+import { ETIQUETA_ESTADO_TARIFA, type EstadoTarifa, type Tarifa } from "@/lib/types/admin-tarifas";
+import { formatNumeroVE, formatUsd } from "@/lib/dinero";
+import { formatFechaHoraVE } from "@/lib/fechas";
+import { Clock } from "@phosphor-icons/react/dist/ssr";
 
 interface HistorialTarifasTableProps {
   tarifas: Tarifa[];
 }
 
+const CLASE_ESTADO: Record<EstadoTarifa, string> = {
+  VIGENTE: "bg-success-light text-success-deep",
+  PROGRAMADA: "bg-info-light text-info-deep",
+  ANTERIOR: "bg-muted text-foreground",
+};
+
 export function HistorialTarifasTable({ tarifas }: HistorialTarifasTableProps) {
   return (
-    <Card className="transition-all duration-200 hover:shadow-md border-border/65">
+    <Card>
       <CardHeader className="pb-3">
-        <CardTitle className="text-lg font-bold tracking-tight">Historial de Tarifas</CardTitle>
-        <CardDescription className="text-xs">Registro histórico de configuraciones y vigencias</CardDescription>
+        <CardTitle className="text-lg font-bold tracking-tight">Historial de tarifas</CardTitle>
+        <CardDescription>Todas las tarifas publicadas, de la más reciente a la más antigua.</CardDescription>
       </CardHeader>
       <CardContent>
         {tarifas.length === 0 ? (
-          <div className="flex h-[200px] flex-col items-center justify-center text-center p-4">
-            <Clock className="size-8 text-muted-foreground mb-2" />
-            <p className="text-sm font-semibold text-muted-foreground">Sin registros</p>
-            <p className="text-xs text-muted-foreground mt-0.5">No se encontraron tarifas en la base de datos.</p>
+          <div className="flex h-[200px] flex-col items-center justify-center p-4 text-center">
+            <Clock className="mb-2 size-8 text-muted-foreground" aria-hidden />
+            <p className="text-sm font-semibold text-foreground">Todavía no hay tarifas</p>
+            <p className="mt-0.5 text-sm text-muted-foreground">Publica la primera con «Nueva tarifa».</p>
           </div>
         ) : (
-          <div className="relative overflow-x-auto rounded-lg border border-border/50">
+          <div className="overflow-x-auto rounded-lg border">
             <Table>
               <TableHeader className="bg-muted/50">
                 <TableRow>
-                  <TableHead className="text-xs font-bold uppercase text-muted-foreground">Tarifa por kg</TableHead>
-                  <TableHead className="text-xs font-bold uppercase text-muted-foreground">Factor Dist.</TableHead>
-                  <TableHead className="text-xs font-bold uppercase text-muted-foreground">Límites (Peso/Dim)</TableHead>
-                  <TableHead className="text-xs font-bold uppercase text-muted-foreground">Vigente Desde</TableHead>
-                  <TableHead className="text-xs font-bold uppercase text-muted-foreground">Creador</TableHead>
-                  <TableHead className="text-xs font-bold uppercase text-muted-foreground text-center">Estado</TableHead>
+                  <TableHead>Precio por kilo</TableHead>
+                  <TableHead>Recargo por minuto</TableHead>
+                  <TableHead>Peso y medida máximos</TableHead>
+                  <TableHead>Desde</TableHead>
+                  <TableHead>Publicada por</TableHead>
+                  <TableHead className="text-center">Estado</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {tarifas.map((tarifa) => {
-                  const fechaVigencia = new Date(tarifa.vigente_desde);
-                  return (
-                    <TableRow key={tarifa.id}>
-                      <TableCell className="font-semibold text-foreground py-3">
-                        {formatUsd(tarifa.tarifa_por_kg)}
-                      </TableCell>
-                      <TableCell className="font-medium text-muted-foreground">
-                        {tarifa.factor_distancia_por_min.toFixed(4)}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground text-xs">
-                        {tarifa.peso_max_kg} kg / {tarifa.dimensiones_max_cm} cm
-                      </TableCell>
-                      <TableCell className="text-muted-foreground text-xs">
-                        {dateFormatterShort.format(fechaVigencia)}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground text-xs truncate max-w-[120px]" title={tarifa.creador_nombre || "Sistema"}>
-                        {tarifa.creador_nombre || "Sistema"}
-                      </TableCell>
-                      <TableCell className="py-3 flex items-center justify-center">
-                        {tarifa.activa ? (
-                          <Badge variant="outline" className="border-transparent bg-emerald-100 text-emerald-900 dark:bg-emerald-400/15 dark:text-emerald-200 flex items-center gap-1 font-semibold">
-                            <CheckCircle weight="fill" className="size-3" />
-                            Vigente
-                          </Badge>
-                        ) : (
-                          <Badge variant="outline" className="bg-muted text-muted-foreground border">
-                            Histórica
-                          </Badge>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
+                {tarifas.map((tarifa) => (
+                  <TableRow key={tarifa.id}>
+                    <TableCell className="py-3 font-semibold tabular-nums">{formatUsd(tarifa.tarifa_por_kg)}</TableCell>
+                    <TableCell className="tabular-nums text-muted-foreground">
+                      {formatNumeroVE(tarifa.factor_distancia_por_min, 4)}
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground tabular-nums">
+                      {formatNumeroVE(tarifa.peso_max_kg, 1)} kg · {formatNumeroVE(tarifa.dimensiones_max_cm, 0)} cm
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {formatFechaHoraVE(tarifa.vigente_desde)}
+                      {tarifa.nota && <span className="block max-w-[220px] text-xs">Nota: {tarifa.nota}</span>}
+                    </TableCell>
+                    <TableCell className="max-w-[140px] truncate text-sm text-muted-foreground">
+                      {tarifa.creador_nombre || "Sistema"}
+                    </TableCell>
+                    <TableCell className="py-3 text-center">
+                      <Badge variant="secondary" className={CLASE_ESTADO[tarifa.estado]}>
+                        {ETIQUETA_ESTADO_TARIFA[tarifa.estado]}
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                ))}
               </TableBody>
             </Table>
           </div>

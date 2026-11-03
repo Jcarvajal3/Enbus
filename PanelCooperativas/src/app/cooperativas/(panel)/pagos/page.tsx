@@ -10,6 +10,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ArrowClockwise, CheckCircle, Info, Receipt, Warning } from "@phosphor-icons/react";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
+import { CeldaEnlace } from "@/components/celda-enlace";
 import { Monto } from "@/components/monto";
 import { VerificarPagoDialog } from "@/components/pagos/verificar-pago-dialog";
 import { Badge } from "@/components/ui/badge";
@@ -20,6 +21,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatBs, formatUsd, type TasaRef } from "@/lib/dinero";
 import { formatFechaVE } from "@/lib/fechas";
 import { humanizeError } from "@/lib/errores";
+import { formatCedula } from "@/lib/ve";
 import { conceptoDePago, type PagadorRol, type PagoPorVerificar } from "@/lib/types/pagos";
 import { cn } from "@/lib/utils";
 import { listarPagosPorVerificar } from "./actions";
@@ -78,7 +80,7 @@ function Diferencia({ pago }: { pago: PagoPorVerificar }) {
   const dif = pago.diferencia ?? pago.declarado - pago.esperado;
   if (Math.abs(dif) < 0.01) {
     return (
-      <span className="inline-flex items-center gap-1 text-sm font-medium text-emerald-700 dark:text-emerald-400">
+      <span className="inline-flex items-center gap-1 text-sm font-medium text-success-text">
         <CheckCircle weight="fill" className="size-4 shrink-0" aria-hidden />
         Coincide
       </span>
@@ -89,7 +91,7 @@ function Diferencia({ pago }: { pago: PagoPorVerificar }) {
     <span
       className={cn(
         "inline-flex items-center gap-1 text-sm font-medium whitespace-nowrap",
-        falta ? "text-amber-700 dark:text-amber-400" : "text-blue-700 dark:text-blue-400"
+        falta ? "text-warning-text" : "text-info-text"
       )}
     >
       {falta ? (
@@ -195,7 +197,7 @@ function BandejaPagos() {
           </div>
         ) : errorCarga && pagos.length === 0 ? (
           <div className="flex h-40 flex-col items-center justify-center gap-3 p-4 text-center">
-            <p className="text-sm text-destructive">{errorCarga}</p>
+            <p className="text-sm text-destructive-text">{errorCarga}</p>
             <Button variant="outline" size="sm" onClick={() => void cargar()}>
               <ArrowClockwise className="mr-2" aria-hidden />
               Reintentar
@@ -211,8 +213,8 @@ function BandejaPagos() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Registrado</TableHead>
                 <TableHead>Cliente</TableHead>
+                <TableHead>Registrado</TableHead>
                 <TableHead>Concepto</TableHead>
                 <TableHead>Método</TableHead>
                 <TableHead>Referencia</TableHead>
@@ -230,24 +232,29 @@ function BandejaPagos() {
                 const viajeSalio =
                   p.tipo_recurso === "boleto" && !!p.viaje_salida && ahora > 0 && new Date(p.viaje_salida).getTime() < ahora;
                 return (
-                  <TableRow key={p.pago_id} className="hover:bg-muted/50 transition-colors">
+                  <TableRow key={p.pago_id} className="relative hover:bg-muted/50 transition-colors">
+                    <CeldaEnlace
+                      onAbrir={() => setPagoAbierto(p.pago_id)}
+                      etiqueta={`Verificar el pago de ${p.cliente_nombre || "Sin nombre"}`}
+                    >
+                      <span className="block">{p.cliente_nombre || "Sin nombre"}</span>
+                      <span className="block text-xs font-normal text-muted-foreground">
+                        {[p.cliente_cedula ? formatCedula(p.cliente_cedula) : null, ROL[p.pagador_rol] ?? null]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </span>
+                    </CeldaEnlace>
                     <TableCell className="whitespace-nowrap">
                       <span className="block text-sm">{ahora > 0 ? haceTiempo(p.creado_at, ahora) : ""}</span>
                       <span className="block text-xs text-muted-foreground">
                         {formatFechaVE(p.creado_at, { day: "2-digit", month: "2-digit", hour: "numeric", minute: "2-digit", hour12: true })}
                       </span>
                     </TableCell>
-                    <TableCell>
-                      <span className="block font-medium">{p.cliente_nombre || "Sin nombre"}</span>
-                      <span className="block text-xs text-muted-foreground">
-                        {[p.cliente_cedula, ROL[p.pagador_rol] ?? null].filter(Boolean).join(" · ")}
-                      </span>
-                    </TableCell>
                     <TableCell className="max-w-[18rem]">
                       <span className="block text-sm">{conceptoDePago(p)}</span>
                       <span className="mt-1 flex flex-wrap gap-1">
                         {viajeSalio && (
-                          <Badge variant="outline" className="border-amber-500/50 text-amber-700 dark:text-amber-400">
+                          <Badge variant="outline" className="border-warning/40 text-warning-text">
                             El viaje ya salió
                           </Badge>
                         )}
@@ -267,7 +274,7 @@ function BandejaPagos() {
                     <TableCell>
                       <span className="font-mono text-sm">{p.numero_referencia || "—"}</span>
                       {p.referencia_repetida && (
-                        <span className="mt-1 flex items-center gap-1 text-xs text-amber-700 dark:text-amber-400">
+                        <span className="mt-1 flex items-center gap-1 text-xs text-warning-text">
                           <Warning weight="fill" className="size-3" aria-hidden />
                           Repetida
                         </span>
@@ -287,7 +294,12 @@ function BandejaPagos() {
                       <Diferencia pago={p} />
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button size="sm" onClick={() => setPagoAbierto(p.pago_id)}>
+                      <Button
+                        size="sm"
+                        className="relative z-10"
+                        onClick={() => setPagoAbierto(p.pago_id)}
+                        aria-label={`Verificar el pago de ${p.cliente_nombre || "Sin nombre"}`}
+                      >
                         Verificar
                       </Button>
                     </TableCell>

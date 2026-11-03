@@ -217,7 +217,7 @@ export function DatosCooperativaTab({ cooperativa, estado }: DatosCooperativaTab
             {errorCampo && (
               <div
                 role="alert"
-                className="flex items-start gap-2 rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive-text"
+                className="flex items-start gap-2 rounded-xl border border-destructive/40 bg-destructive-light p-3 text-sm text-destructive-deep"
               >
                 <WarningCircle className="mt-0.5 size-4 shrink-0" weight="fill" aria-hidden />
                 <p>{errorCampo.mensaje}</p>

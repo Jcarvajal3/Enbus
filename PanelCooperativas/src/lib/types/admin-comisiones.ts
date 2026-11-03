@@ -1,3 +1,7 @@
+/** Métodos con que una cooperativa paga su comisión (chk_comisiones_pago_metodo). */
+export const METODOS_PAGO_COMISION = ["PAGO_MOVIL", "TRANSFERENCIA_BANCARIA", "ZELLE", "EFECTIVO"] as const;
+export type MetodoPagoComision = (typeof METODOS_PAGO_COMISION)[number];
+
 export interface ComisionCiclo {
   id: string;
   cooperativa_id: string;
@@ -9,8 +13,12 @@ export interface ComisionCiclo {
   monto_comision: number;
   pagado: boolean;
   pagado_at: string | null;
-  /** Referencia del pago de la cooperativa (columna pendiente de migración: puede no venir). */
+  /** Referencia del pago de la cooperativa (null en efectivo). */
   pago_referencia?: string | null;
+  /** Cómo pagó la cooperativa (20260721000002). Null en ciclos pagados antes de la fase 4. */
+  pago_metodo?: MetodoPagoComision | null;
+  /** Super admin que registró el pago. */
+  pago_registrado_por?: string | null;
   created_at: string;
 
   // Joined properties

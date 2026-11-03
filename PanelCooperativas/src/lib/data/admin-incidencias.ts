@@ -1,6 +1,6 @@
 import { createClient, createAdminClient } from "@/lib/supabase/server";
 import { humanizeError } from "@/lib/errores";
-import type { Incidencia, FetchIncidenciasFilters } from "../types/admin-incidencias";
+import { ordenarPorPrioridad, type Incidencia, type FetchIncidenciasFilters } from "../types/admin-incidencias";
 
 const SELECT_BASE = `
   *,
@@ -51,9 +51,11 @@ export async function fetchIncidencias(filters: FetchIncidenciasFilters = {}): P
   const supabase = await createClient();
 
   const consultar = (select: string) => {
-    let query = supabase.from("incidencias").select(select).order("created_at", { ascending: false });
+    let query = supabase.from("incidencias").select(select).order("created_at", { ascending: true }).limit(500);
     if (filters.tipo && filters.tipo !== "all") query = query.eq("tipo", filters.tipo);
-    if (filters.estado && filters.estado !== "all") query = query.eq("estado", filters.estado);
+    const estado = filters.estado ?? "pendientes";
+    if (estado === "pendientes") query = query.in("estado", ["ABIERTA", "EN_PROCESO"]);
+    else if (estado === "ABIERTA" || estado === "EN_PROCESO" || estado === "RESUELTA") query = query.eq("estado", estado);
     return query;
   };
 
@@ -65,7 +67,8 @@ export async function fetchIncidencias(filters: FetchIncidenciasFilters = {}): P
     throw new Error(humanizeError(error, "cargar las incidencias"));
   }
 
-  return ((data ?? []) as unknown as FilaIncidencia[]).map(normalizar);
+  // Orden de atención: prioridad y, dentro de cada una, la más antigua primero (AD-19).
+  return ordenarPorPrioridad(((data ?? []) as unknown as FilaIncidencia[]).map(normalizar));
 }
 
 /** Una incidencia con el contacto de quien la reportó (teléfono y correo). null si no existe. */

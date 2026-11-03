@@ -32,7 +32,6 @@ import { humanizeError } from "@/lib/errores";
 import { formatNumeroVE, formatUsd } from "@/lib/dinero";
 import { fechaHoraVEaISO, hoyVE } from "@/lib/fechas";
 import { formatCiudad } from "@/lib/ciudades";
-import { cn } from "@/lib/utils";
 import {
   costoEncomiendaUsd,
   formatFechaProgramada,
@@ -387,7 +386,7 @@ function Formulario({
     disabled: publicando,
   });
 
-  const ErrorCampo = ({ campo }: { campo: Campo }) =>
+  const errorCampo = (campo: Campo) =>
     errores[campo] ? (
       <p id={id(`${campo}-error`)} className="text-xs font-medium text-destructive-text">
         {errores[campo]}
@@ -421,7 +420,7 @@ function Formulario({
             }}
             className="tabular-nums"
           />
-          <ErrorCampo campo="tarifa_por_kg" />
+          {errorCampo("tarifa_por_kg")}
         </div>
 
         <div className="space-y-1.5">
@@ -440,9 +439,7 @@ function Formulario({
             }}
             className="tabular-nums"
           />
-          {errores.factor_distancia_por_min ? (
-            <ErrorCampo campo="factor_distancia_por_min" />
-          ) : (
+          {errores.factor_distancia_por_min ? errorCampo("factor_distancia_por_min") : (
             <p id={id("factor-ayuda")} className="text-xs text-muted-foreground" aria-live="polite">
               {recargo8h === null
                 ? "Se suma al precio base por cada minuto que dura el viaje."
@@ -467,7 +464,7 @@ function Formulario({
             }}
             className="tabular-nums"
           />
-          <ErrorCampo campo="peso_max_kg" />
+          {errorCampo("peso_max_kg")}
         </div>
 
         <div className="space-y-1.5">
@@ -486,9 +483,7 @@ function Formulario({
             }}
             className="tabular-nums"
           />
-          {errores.dimensiones_max_cm ? (
-            <ErrorCampo campo="dimensiones_max_cm" />
-          ) : (
+          {errores.dimensiones_max_cm ? errorCampo("dimensiones_max_cm") : (
             <p id={id("medida-ayuda")} className="text-xs text-muted-foreground">
               El lado más largo del paquete.
             </p>
@@ -561,9 +556,7 @@ function Formulario({
               />
             </div>
             <div className="sm:col-span-2">
-              {errores.vigente_desde ? (
-                <ErrorCampo campo="vigente_desde" />
-              ) : (
+              {errores.vigente_desde ? errorCampo("vigente_desde") : (
                 <p id={id("programar-ayuda")} className="text-xs text-muted-foreground">
                   {programada
                     ? `Empieza a regir el ${programada}. Hasta entonces se cobra la vigente.`
@@ -590,7 +583,7 @@ function Formulario({
         />
       </div>
 
-      <div className={cn("flex justify-end gap-2 border-t pt-4")}>
+      <div className="flex justify-end gap-2 border-t pt-4">
         <Button type="button" variant="outline" onClick={onCerrar} disabled={publicando}>
           Cancelar
         </Button>

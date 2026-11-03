@@ -1,7 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { getUserProfile } from "@/lib/supabase/cached";
 import { redirect } from "next/navigation";
-import Link from "next/link";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PageHeader } from "@/components/page-header";
 import { humanizeError } from "@/lib/errores";
@@ -13,7 +12,7 @@ import type { SucursalGuardada } from "./actions";
 
 export const metadata = {
   title: "Configuración | EnBus Panel",
-  description: "Datos de la cooperativa, métodos de pago, sucursales e impresora",
+  description: "Datos de la cooperativa, métodos de pago y sucursales",
 };
 
 const PESTANAS = ["datos", "metodos-pago", "sucursales"] as const;
@@ -77,7 +76,7 @@ export default async function ConfiguracionPage({
     <div className="flex flex-col gap-6 max-w-4xl mx-auto w-full">
       <PageHeader
         title="Configuración"
-        description="Datos de tu cooperativa, métodos de pago, sucursales e impresora."
+        description="Datos de tu cooperativa, métodos de pago y sucursales."
       />
 
       <Tabs key={defaultTab} defaultValue={defaultTab} className="w-full">
@@ -85,12 +84,6 @@ export default async function ConfiguracionPage({
           <TabsTrigger value="datos">Datos</TabsTrigger>
           <TabsTrigger value="metodos-pago">Métodos de pago</TabsTrigger>
           <TabsTrigger value="sucursales">Sucursales</TabsTrigger>
-          <Link
-            href="/cooperativas/configuracion/hardware"
-            className="relative inline-flex h-[calc(100%-1px)] flex-1 items-center justify-center gap-1.5 rounded-xl border border-transparent px-2 py-1 text-sm font-medium whitespace-nowrap text-foreground/70 transition-all hover:text-foreground"
-          >
-            Impresora y lector
-          </Link>
         </TabsList>
 
         <TabsContent value="datos">

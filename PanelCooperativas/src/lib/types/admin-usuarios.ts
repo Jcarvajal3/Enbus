@@ -15,6 +15,41 @@ export interface Usuario {
   notif_recordatorios: boolean;
   // Expo push token (masked for display — never expose the raw token to the UI)
   has_push_token: boolean;
+  /** La persona eliminó su cuenta desde la app (perfil anonimizado). */
+  eliminada_at: string | null;
+  /** Solicitud de baja (bajas_cuenta). `auth_eliminada_at` null = falta borrar su acceso. */
+  baja: BajaCuenta | null;
+}
+
+export interface BajaCuenta {
+  email: string | null;
+  motivo: string | null;
+  solicitada_at: string;
+  auth_eliminada_at: string | null;
+}
+
+/** true si la cuenta se eliminó desde la app pero su acceso (Auth) sigue sin borrar. */
+export function bajaPorCompletar(u: Pick<Usuario, "eliminada_at" | "baja">): boolean {
+  return Boolean(u.eliminada_at && u.baja && !u.baja.auth_eliminada_at);
+}
+
+export type VistaUsuarios = "todas" | "bajas";
+
+export interface FiltrosUsuarios {
+  q?: string;
+  rol?: string;
+  cooperativa?: string;
+  pagina?: number;
+  vista?: VistaUsuarios;
+}
+
+export interface PaginaUsuarios {
+  usuarios: Usuario[];
+  total: number;
+  pagina: number;
+  porPagina: number;
+  /** Cuentas eliminadas desde la app con el acceso sin borrar (filtro "Bajas por completar"). */
+  bajasPendientes: number;
 }
 
 export interface EncomiendaUsuario {

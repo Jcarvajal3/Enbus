@@ -2,7 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
-import { GenerarCicloInput, CicloPreview } from "@/lib/types/admin-comisiones";
+import { METODOS_PAGO_COMISION, type GenerarCicloInput, type CicloPreview, type MetodoPagoComision } from "@/lib/types/admin-comisiones";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { fechaHoraVEaISO, hoyVE, rangoDiaVE } from "@/lib/fechas";
 import { humanizeError } from "@/lib/errores";
@@ -265,59 +265,51 @@ export async function generarCiclosComision(input: GenerarCicloInput): Promise<{
 }
 
 /**
- * Registra el pago de un ciclo de comisiones: fecha en que la cooperativa pagó y
- * referencia del pago. Idempotente: si otro admin ya lo registró, no sobrescribe
- * la fecha original.
+ * Registra el pago de un ciclo de comisiones: método, referencia (obligatoria salvo
+ * en efectivo) y fecha en que pagó la cooperativa, con quién lo registró. Solo si el
+ * ciclo sigue pendiente: si otro admin ya lo registró, no se sobrescribe.
  */
 export async function marcarCicloComoPagado(
   cicloId: string,
-  pago: { fecha: string; referencia: string }
+  pago: { fecha: string; metodo: MetodoPagoComision; referencia?: string | null }
 ): Promise<{
   success: boolean;
   error?: string;
-  aviso?: string;
+  campo?: "fecha" | "metodo" | "referencia";
 }> {
   try {
     const supabase = await createClient();
-    await checkSuperAdmin(supabase);
+    const user = await checkSuperAdmin(supabase);
 
     if (!cicloId) {
       return { success: false, error: "No encontramos el ciclo. Actualiza la página e intenta de nuevo." };
     }
     const fecha = (pago?.fecha ?? "").trim();
+    const metodo = pago?.metodo;
     const referencia = (pago?.referencia ?? "").trim();
+    if (!metodo || !METODOS_PAGO_COMISION.includes(metodo)) {
+      return { success: false, error: "Elige cómo pagó la cooperativa.", campo: "metodo" };
+    }
+    if (metodo !== "EFECTIVO" && referencia.length < 4) {
+      return { success: false, error: "Escribe la referencia del pago (mínimo 4 caracteres).", campo: "referencia" };
+    }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha) || fecha > hoyVE()) {
-      return { success: false, error: "Elige la fecha en que la cooperativa pagó (no puede ser futura)." };
-    }
-    if (referencia.length < 4) {
-      return { success: false, error: "Escribe la referencia del pago (mínimo 4 caracteres)." };
+      return { success: false, error: "Elige la fecha en que la cooperativa pagó (no puede ser futura).", campo: "fecha" };
     }
 
-    const { data: existing, error: fetchError } = await supabase
+    const { data: actualizados, error } = await supabase
       .from("comisiones_ciclo")
-      .select("id, pagado")
+      .update({
+        pagado: true,
+        pagado_at: fechaHoraVEaISO(fecha, "12:00"),
+        pago_metodo: metodo,
+        pago_referencia: referencia ? referencia.slice(0, 80) : null,
+        pago_registrado_por: user.id,
+      })
       .eq("id", cicloId)
-      .maybeSingle();
+      .eq("pagado", false)
+      .select("id");
 
-    if (fetchError || !existing) {
-      console.error("Error fetching ciclo:", fetchError);
-      return { success: false, error: humanizeError(fetchError ?? { code: "PGRST116" }, "cargar el ciclo") };
-    }
-    if (existing.pagado) {
-      return { success: false, error: "Este ciclo ya tiene un pago registrado. Actualiza la página." };
-    }
-
-    const base = { pagado: true, pagado_at: fechaHoraVEaISO(fecha, "12:00") };
-    const guardar = (cambios: Record<string, unknown>) =>
-      supabase.from("comisiones_ciclo").update(cambios).eq("id", cicloId).eq("pagado", false).select("id");
-
-    let aviso: string | undefined;
-    let { data: actualizados, error } = await guardar({ ...base, pago_referencia: referencia });
-    // Sin la columna pago_referencia (pendiente de migración): se guarda la fecha y se avisa.
-    if (error && (error.code === "PGRST204" || error.code === "42703")) {
-      ({ data: actualizados, error } = await guardar(base));
-      aviso = `Registramos el pago con fecha ${fecha.split("-").reverse().join("/")}, pero la referencia ${referencia} no se pudo guardar. Anótala aparte.`;
-    }
     if (error) {
       console.error("Error registering ciclo payment:", error);
       return { success: false, error: humanizeError(error, "registrar el pago") };
@@ -328,7 +320,7 @@ export async function marcarCicloComoPagado(
 
     revalidatePath("/admin/comisiones");
     revalidatePath("/admin/cooperativas", "layout");
-    return { success: true, aviso };
+    return { success: true };
   } catch (err: unknown) {
     console.error("Error in marcarCicloComoPagado:", err);
     return { success: false, error: humanizeError(err, "registrar el pago") };

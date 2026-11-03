@@ -105,7 +105,7 @@ function Comparacion({ pago }: { pago: PagoPorVerificar }) {
 
   if (Math.abs(dif) < 0.01) {
     return (
-      <p className="flex items-center gap-2 text-sm font-medium text-emerald-700 dark:text-emerald-400">
+      <p className="flex items-center gap-2 text-sm font-medium text-success-text">
         <CheckCircle weight="fill" className="size-4 shrink-0" aria-hidden />
         El monto coincide: el cliente dice que pagó {declarado}.
       </p>
@@ -117,8 +117,8 @@ function Comparacion({ pago }: { pago: PagoPorVerificar }) {
       className={cn(
         "flex items-start gap-2 rounded-xl border px-3 py-2 text-sm",
         falta
-          ? "border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-300"
-          : "border-blue-500/30 bg-blue-500/10 text-blue-800 dark:text-blue-300"
+          ? "border-warning/40 bg-warning-light text-warning-deep"
+          : "border-info/40 bg-info-light text-info-deep"
       )}
     >
       {falta ? (
@@ -144,8 +144,8 @@ function Aviso({ children, tono = "ambar" }: { children: React.ReactNode; tono?:
       className={cn(
         "flex items-start gap-2 rounded-xl border px-3 py-2 text-sm",
         tono === "rojo"
-          ? "border-destructive/30 bg-destructive/10 text-destructive"
-          : "border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-300"
+          ? "border-destructive/40 bg-destructive-light text-destructive-deep"
+          : "border-warning/40 bg-warning-light text-warning-deep"
       )}
     >
       <Warning weight="fill" className="mt-0.5 size-4 shrink-0" aria-hidden />

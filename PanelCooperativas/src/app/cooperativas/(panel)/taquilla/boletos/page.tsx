@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
+import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge } from "@/components/status-badge";
 import { Spinner } from "@/components/ui/spinner";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -14,7 +15,7 @@ import { useUser } from "@/hooks/use-user";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
 import {
-  ArrowClockwise, CheckCircle, Ticket, Users, Warning, XCircle, Clock, Bus,
+  ArrowClockwise, CheckCircle, Ticket, Users, Warning, XCircle, Clock, Bus, Printer,
 } from "@phosphor-icons/react";
 import type { Boleto, EstadoBoleto } from "@/lib/types/boletos";
 import {
@@ -25,14 +26,18 @@ import {
 } from "@/lib/types/pagos";
 import { VentaFlow, CobrarReservaDialog } from "@/components/boletos/venta-flow";
 import { ScanInput } from "@/components/scan-input";
+import { UltimoEscaneo, useUltimoEscaneo, type ResultadoEscaneo } from "@/components/ultimo-escaneo";
+import { useImpresora } from "@/hooks/use-impresora";
 import { PasajerosViajeSheet } from "@/components/boletos/pasajeros-viaje-sheet";
 import { VerificarPagoDialog } from "@/components/pagos/verificar-pago-dialog";
 import { Monto } from "@/components/monto";
 import { requireOnline } from "@/components/connectivity-banner";
 import { Pagination } from "@/components/ui/pagination";
 import { humanizeError } from "@/lib/errores";
-import { formatNumeroVE } from "@/lib/dinero";
 import { formatFechaVE, formatHoraVE, hoyVE, rangoDiaVE } from "@/lib/fechas";
+import { formatCiudad } from "@/lib/ciudades";
+import { formatCedula } from "@/lib/ve";
+import { formatCodigoBoleto, normalizarCodigoBoleto } from "@/lib/artefactos.generated";
 import { cn } from "@/lib/utils";
 import { confirmarEmbarque, validarEmbarque } from "./actions";
 
@@ -104,14 +109,11 @@ function fechaYHora(iso: string) {
 
 /** "V12345678" / "v-12.345.678" -> "V-12.345.678" (para leer en voz alta en el andén). */
 function cedulaLegible(cedula: string | null | undefined) {
-  if (!cedula) return null;
-  const m = /^([VEJGPC]?)(\d+)$/.exec(cedula.toUpperCase().replace(/[^A-Z0-9]/g, ""));
-  if (!m) return cedula;
-  return `${m[1] || "V"}-${formatNumeroVE(Number(m[2]), 0)}`;
+  return cedula ? formatCedula(cedula) : null;
 }
 
 function etiquetaViaje(v: ViajeHoy) {
-  const ruta = v.ruta ? `${v.ruta.ciudad_origen} → ${v.ruta.ciudad_destino}` : "Ruta";
+  const ruta = v.ruta ? `${formatCiudad(v.ruta.ciudad_origen)} → ${formatCiudad(v.ruta.ciudad_destino)}` : "Ruta";
   return `${hora24(v.fecha_hora_salida)} · ${ruta}${v.numero_unidad ? ` · Unidad ${v.numero_unidad}` : ""}`;
 }
 
@@ -120,8 +122,8 @@ function etiquetaViaje(v: ViajeHoy) {
 type Tono = "ok" | "alerta" | "error";
 
 const TONOS: Record<Tono, { clase: string; Icono: typeof CheckCircle }> = {
-  ok: { clase: "text-emerald-700 dark:text-emerald-400", Icono: CheckCircle },
-  alerta: { clase: "text-amber-700 dark:text-amber-400", Icono: Warning },
+  ok: { clase: "text-success-text", Icono: CheckCircle },
+  alerta: { clase: "text-warning-text", Icono: Warning },
   error: { clase: "text-destructive-text", Icono: XCircle },
 };
 
@@ -172,12 +174,12 @@ function ResultadoEmbarqueDialog({
       <p className="text-sm">
         {r.resultado === "NO_ENCONTRADO" ? (
           <>
-            No encontramos ningún boleto con el código <span className="font-mono font-medium">{r.codigo}</span>. Revisa
+            No encontramos ningún boleto con el código <span className="font-mono font-medium">{formatCodigoBoleto(r.codigo)}</span>. Revisa
             que esté completo o escanéalo de nuevo.
           </>
         ) : (
           <>
-            El boleto <span className="font-mono font-medium">{r.codigo}</span> es de otra cooperativa. El pasajero debe
+            El boleto <span className="font-mono font-medium">{formatCodigoBoleto(r.codigo)}</span> es de otra cooperativa. El pasajero debe
             embarcar con esa empresa.
           </>
         )}
@@ -185,7 +187,7 @@ function ResultadoEmbarqueDialog({
     );
   } else if (r && "boleto" in r) {
     const { boleto, viaje, pago } = r;
-    const ruta = `${viaje.origen} → ${viaje.destino}`;
+    const ruta = `${formatCiudad(viaje.origen)} → ${formatCiudad(viaje.destino)}`;
     const pasajero = [boleto.pasajero_nombre || "Sin nombre", cedulaLegible(boleto.pasajero_cedula)].filter(Boolean).join(" · ");
     const resumen = (
       <div className="rounded-xl bg-muted/50 p-3 text-sm space-y-1">
@@ -196,7 +198,7 @@ function ResultadoEmbarqueDialog({
         <p>
           Asiento <strong>{boleto.asiento}</strong> · {pasajero}
         </p>
-        <p className="font-mono text-xs text-muted-foreground">{boleto.codigo_boleto}</p>
+        <p className="font-mono text-xs text-muted-foreground">{formatCodigoBoleto(boleto.codigo_boleto)}</p>
       </div>
     );
 
@@ -217,7 +219,7 @@ function ResultadoEmbarqueDialog({
             <p className="text-lg">
               Asiento <strong className="text-2xl">{boleto.asiento}</strong> · {pasajero}
             </p>
-            <p className="font-mono text-xs text-muted-foreground">{boleto.codigo_boleto}</p>
+            <p className="font-mono text-xs text-muted-foreground">{formatCodigoBoleto(boleto.codigo_boleto)}</p>
           </div>
         );
         acciones = (
@@ -230,7 +232,6 @@ function ResultadoEmbarqueDialog({
               ref={principalRef}
               onClick={() => onConfirmar(boleto.id)}
               disabled={confirmando}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white"
             >
               {confirmando && <Spinner className="mr-2 h-4 w-4" />}
               {confirmando ? "Embarcando…" : "Confirmar embarque"}
@@ -440,9 +441,9 @@ function ResultadoEmbarqueDialog({
         initialFocus={principalRef}
         className={cn(
           "max-h-[92vh] overflow-y-auto sm:max-w-lg",
-          tono === "ok" && "border-emerald-500/30",
+          tono === "ok" && "border-success/40",
           tono === "error" && "border-destructive/40",
-          tono === "alerta" && "border-amber-500/40"
+          tono === "alerta" && "border-warning/40"
         )}
       >
         <DialogHeader>
@@ -463,6 +464,43 @@ function ResultadoEmbarqueDialog({
       </DialogContent>
     </Dialog>
   );
+}
+
+// ─── Último escaneo ─────────────────────────────────────────────────────────
+
+const TITULO_RESULTADO: Record<string, { titulo: string; tono: ResultadoEscaneo["tono"] }> = {
+  NO_ENCONTRADO: { titulo: "Boleto no encontrado", tono: "error" },
+  OTRA_COOPERATIVA: { titulo: "Boleto de otra cooperativa", tono: "error" },
+  OTRO_DIA: { titulo: "Boleto de otro día", tono: "error" },
+  OTRO_VIAJE: { titulo: "Boleto de otro viaje", tono: "error" },
+  PAGO_EN_VERIFICACION: { titulo: "Pago sin verificar", tono: "aviso" },
+  RESERVA_SIN_PAGAR: { titulo: "Reserva sin pagar", tono: "aviso" },
+  PAGO_RECHAZADO: { titulo: "Pago rechazado", tono: "error" },
+  EXPIRADO: { titulo: "Reserva vencida", tono: "error" },
+  CANCELADO: { titulo: "Boleto cancelado", tono: "error" },
+  USADO: { titulo: "Ya embarcó", tono: "error" },
+  VIAJE_CANCELADO: { titulo: "Viaje cancelado", tono: "error" },
+};
+
+/** "Asiento 14 · Ana Pérez" */
+function asientoYPasajero(boleto: { asiento: string; pasajero_nombre: string | null }) {
+  return `Asiento ${boleto.asiento} · ${boleto.pasajero_nombre || "Sin nombre"}`;
+}
+
+/**
+ * Resultado del escaneo para el panel "Último escaneo" (con sonido). Un boleto
+ * válido no se registra aquí: se registra al confirmar el embarque.
+ */
+function escaneoDeResultado(codigo: string, r: ResultadoEmbarque): Omit<ResultadoEscaneo, "at"> | null {
+  if (r.resultado === "VALIDO") return null;
+  const tipo = "boleto" in r && r.resultado === "OTRO_VIAJE" && r.dias_diferencia !== 0 ? "OTRO_DIA" : r.resultado;
+  const { titulo, tono } = TITULO_RESULTADO[tipo] ?? { titulo: "No se puede embarcar", tono: "error" as const };
+  return {
+    codigo: formatCodigoBoleto("boleto" in r ? r.boleto.codigo_boleto : codigo),
+    tono,
+    titulo,
+    detalle: "boleto" in r ? asientoYPasajero(r.boleto) : undefined,
+  };
 }
 
 // ─── Página ─────────────────────────────────────────────────────────────────
@@ -498,7 +536,9 @@ export default function TaquillaBoletosPage() {
   const [validando, setValidando] = useState(false);
   const [revalidando, setRevalidando] = useState(false);
   const [confirmando, setConfirmando] = useState(false);
-  const [ultimoEmbarque, setUltimoEmbarque] = useState<string | null>(null);
+  const { ultimo, registrar } = useUltimoEscaneo();
+  // Reconecta la impresora guardada al abrir la taquilla (#53).
+  const impresora = useImpresora();
   const validandoRef = useRef(false);
 
   const fetchBoletos = useCallback(async () => {
@@ -612,24 +652,35 @@ export default function TaquillaBoletosPage() {
         const res = await requireOnline(() => validarEmbarque(codigo, viajeId))();
         if (res.success) {
           setEscaneo({ codigo, resultado: res.data });
+          if (!esRevalidacion) {
+            const resumen = escaneoDeResultado(codigo, res.data);
+            if (resumen) registrar(resumen);
+          }
         } else {
-          toast.error(res.error);
-          if (esRevalidacion) setEscaneo(null);
+          if (esRevalidacion) {
+            toast.error(res.error);
+            setEscaneo(null);
+          } else {
+            registrar({ codigo: formatCodigoBoleto(codigo), tono: "error", titulo: "No pudimos revisar el boleto", detalle: res.error });
+          }
         }
       } catch (err) {
         console.error(err);
-        toast.error(mensajeExcepcion(err, "revisar el boleto"));
+        const mensaje = mensajeExcepcion(err, "revisar el boleto");
+        if (esRevalidacion) toast.error(mensaje);
+        else registrar({ codigo: formatCodigoBoleto(codigo), tono: "error", titulo: "No pudimos revisar el boleto", detalle: mensaje });
       } finally {
         validandoRef.current = false;
         setValidando(false);
         setRevalidando(false);
       }
     },
-    []
+    [registrar]
   );
 
   const handleCodigo = (codigo: string) => {
-    void validar(codigo, viajeParaValidar);
+    // Con o sin guiones, espacios, minúsculas o "PASS-": la forma guardada (BOL-7CABE4AD).
+    void validar(normalizarCodigoBoleto(codigo), viajeParaValidar);
   };
 
   const revalidar = () => {
@@ -643,17 +694,19 @@ export default function TaquillaBoletosPage() {
       const res = await requireOnline(() => confirmarEmbarque(boletoId, viajeParaValidar))();
       if (res.success) {
         const r = res.data;
-        const texto =
-          "boleto" in r
-            ? `${r.boleto.pasajero_nombre || "Pasajero"} · asiento ${r.boleto.asiento}`
-            : "Pasajero";
-        toast.success(`Embarcado: ${texto}`);
-        setUltimoEmbarque(`${texto} · ${formatHoraVE(new Date())}`);
+        registrar({
+          codigo: formatCodigoBoleto("boleto" in r ? r.boleto.codigo_boleto : escaneo.codigo),
+          tono: "exito",
+          titulo: "Embarcado",
+          detalle: "boleto" in r ? asientoYPasajero(r.boleto) : undefined,
+        });
         setEscaneo(null);
         void fetchBoletos();
       } else if (res.resultado) {
         // Dejó de ser válido entre el escaneo y la confirmación: mostrar la causa.
-        toast.error(res.error);
+        const resumen = escaneoDeResultado(escaneo.codigo, res.resultado);
+        if (resumen) registrar(resumen);
+        else toast.error(res.error);
         setEscaneo({ codigo: escaneo.codigo, resultado: res.resultado });
       } else {
         toast.error(res.error);
@@ -681,10 +734,22 @@ export default function TaquillaBoletosPage() {
   return (
     <div className="space-y-6 flex flex-col h-full animate-in fade-in duration-300">
       <PageHeader title="Taquilla de boletos" description="Vende boletos, cobra reservas de la app y embarca pasajeros.">
-        <Button onClick={() => abrirVenta()}>
-          <Ticket className="w-4 h-4 mr-2" />
-          Vender boletos
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button onClick={() => abrirVenta()}>
+            <Ticket className="w-4 h-4 mr-2" aria-hidden />
+            Vender boletos
+          </Button>
+          {impresora.estado !== "no-soportado" && (
+            <Link href="/cooperativas/hardware" className={buttonVariants({ variant: "outline" })}>
+              <Printer className="w-4 h-4 mr-2" aria-hidden />
+              {impresora.estado === "conectada"
+                ? "Impresora conectada"
+                : impresora.estado === "reconectando"
+                  ? "Reconectando impresora…"
+                  : "Conectar impresora"}
+            </Link>
+          )}
+        </div>
       </PageHeader>
 
       {/* Embarque */}
@@ -742,19 +807,18 @@ export default function TaquillaBoletosPage() {
           </p>
         )}
 
-        <ScanInput onCodigo={handleCodigo} cooperativaId={cooperativaId} mode="boletos" disabled={algunDialogo || validando} />
-
-        <div className="min-h-5 text-sm text-muted-foreground" aria-live="polite">
-          {validando ? (
-            <span className="inline-flex items-center gap-2">
-              <Spinner size="sm" /> Revisando el boleto…
-            </span>
-          ) : ultimoEmbarque ? (
-            <span className="inline-flex items-center gap-1.5">
-              <CheckCircle weight="fill" className="size-4 text-emerald-600" aria-hidden />
-              Último embarque: {ultimoEmbarque}
-            </span>
-          ) : null}
+        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
+          <div className="space-y-2">
+            <ScanInput onCodigo={handleCodigo} cooperativaId={cooperativaId} mode="boletos" disabled={algunDialogo || validando} />
+            <div className="min-h-5 text-sm text-muted-foreground" aria-live="polite">
+              {validando && (
+                <span className="inline-flex items-center gap-2">
+                  <Spinner size="sm" /> Revisando el boleto…
+                </span>
+              )}
+            </div>
+          </div>
+          <UltimoEscaneo resultado={ultimo} />
         </div>
       </section>
 
@@ -841,8 +905,8 @@ export default function TaquillaBoletosPage() {
                 </TableRow>
               ) : (
                 paginatedBoletos.map((boleto) => {
-                  const origen = boleto.viaje?.ruta?.ciudad_origen || "";
-                  const destino = boleto.viaje?.ruta?.ciudad_destino || "";
+                  const origen = formatCiudad(boleto.viaje?.ruta?.ciudad_origen);
+                  const destino = formatCiudad(boleto.viaje?.ruta?.ciudad_destino);
                   const rutaString = origen && destino ? `${origen} → ${destino}` : "Ruta desconocida";
                   const salida = boleto.viaje?.fecha_hora_salida ?? null;
                   const nombrePasajero = boleto.pasajero_nombre || boleto.comprador?.nombre_completo || "Sin nombre";
@@ -852,7 +916,7 @@ export default function TaquillaBoletosPage() {
                   return (
                     <TableRow key={boleto.id} className="hover:bg-muted/50 transition-colors">
                       <TableCell className="font-mono font-medium text-primary-text">
-                        {boleto.codigo_boleto}
+                        {formatCodigoBoleto(boleto.codigo_boleto)}
                       </TableCell>
                       <TableCell>
                         <div className="flex flex-col">
@@ -874,7 +938,7 @@ export default function TaquillaBoletosPage() {
                         <div className="flex flex-col">
                           <span>{nombrePasajero}</span>
                           {boleto.pasajero_cedula && (
-                            <span className="text-xs text-muted-foreground">{boleto.pasajero_cedula}</span>
+                            <span className="text-xs text-muted-foreground">{formatCedula(boleto.pasajero_cedula)}</span>
                           )}
                         </div>
                       </TableCell>

@@ -7,6 +7,7 @@
 //   Transferencia, Zelle) con confirmación antes de registrar el cobro.
 // `CobroEncomiendaForm` también lo usa la entrega en destino (entrega-modal).
 
+import { formatCiudad } from "@/lib/ciudades";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Info, Warning } from "@phosphor-icons/react";
@@ -332,7 +333,7 @@ export function CobroEncomiendaForm({ encomienda, onCobrado, onCambioExterno, di
       )}
 
       {!tasa && !sinCosto && (
-        <p role="alert" className="flex items-start gap-2 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-800 dark:text-amber-300">
+        <p role="alert" className="flex items-start gap-2 rounded-xl border border-warning/40 bg-warning-light px-3 py-2 text-sm text-warning-deep">
           <Warning weight="fill" className="mt-0.5 size-4 shrink-0" aria-hidden />
           No hay tasa BCV registrada hoy, así que no se puede calcular el monto en bolívares. Pídele al administrador
           que la cargue en Tarifas.
@@ -353,11 +354,19 @@ export function CobroEncomiendaForm({ encomienda, onCobrado, onCambioExterno, di
                   autoComplete="off"
                   placeholder={esperado != null ? formatEnMoneda(esperado, moneda) : undefined}
                   value={recibido}
+                  // Al elegir efectivo el foco va al monto; Enter pide confirmar el cobro.
+                  autoFocus
                   aria-invalid={errores.monto ? true : undefined}
                   aria-describedby={errores.monto ? id("recibido-error") : id("vuelto")}
                   onChange={(e) => {
                     setRecibido(e.target.value);
                     limpiarError("monto");
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !enviando && tasa) {
+                      e.preventDefault();
+                      pedirConfirmacion();
+                    }
                   }}
                 />
                 {errores.monto && (
@@ -424,6 +433,12 @@ export function CobroEncomiendaForm({ encomienda, onCobrado, onCambioExterno, di
                     onChange={(e) => {
                       setReferencia(e.target.value);
                       limpiarError("referencia");
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !enviando && tasa) {
+                        e.preventDefault();
+                        pedirConfirmacion();
+                      }
                     }}
                   />
                   {errores.referencia && (
@@ -601,7 +616,7 @@ export function PagoModal({ encomienda, isOpen, onClose, onSuccess }: PagoModalP
     );
   } else if (cobro?.aprobado) {
     cuerpo = (
-      <p className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-success-text">
+      <p className="rounded-xl border border-success/40 bg-success-light px-3 py-2 text-sm text-success-deep">
         Esta encomienda ya está pagada. Actualiza la lista para ver su estado.
       </p>
     );
@@ -630,7 +645,7 @@ export function PagoModal({ encomienda, isOpen, onClose, onSuccess }: PagoModalP
     cuerpo = (
       <div className="flex flex-col gap-4">
         {cobro?.rechazado && (
-          <p className="flex items-start gap-2 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-800 dark:text-amber-300">
+          <p className="flex items-start gap-2 rounded-xl border border-warning/40 bg-warning-light px-3 py-2 text-sm text-warning-deep">
             <Warning weight="fill" className="mt-0.5 size-4 shrink-0" aria-hidden />
             <span>
               El cliente reportó un pago que se rechazó
@@ -654,8 +669,8 @@ export function PagoModal({ encomienda, isOpen, onClose, onSuccess }: PagoModalP
         <DialogHeader>
           <DialogTitle>Cobrar encomienda</DialogTitle>
           <DialogDescription>
-            <span className="font-mono text-foreground">{encomienda.tracking_id}</span> · {encomienda.ciudad_origen} →{" "}
-            {encomienda.ciudad_destino}
+            <span className="font-mono text-foreground">{encomienda.tracking_id}</span> · {formatCiudad(encomienda.ciudad_origen)} →{" "}
+            {formatCiudad(encomienda.ciudad_destino)}
           </DialogDescription>
         </DialogHeader>
 

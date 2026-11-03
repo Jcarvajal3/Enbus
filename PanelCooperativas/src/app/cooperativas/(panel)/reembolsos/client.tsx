@@ -6,7 +6,7 @@
 // dinero por el mismo medio con que pagó el pasajero y lo registra aquí; el
 // servidor marca el reembolso como hecho y le avisa al pasajero.
 
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type FormEvent } from "react";
+import { useCallback, useId, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import {
   ArrowClockwise,
   ArrowCounterClockwise,
@@ -46,7 +46,8 @@ import { formatFechaVE, formatHoraVE } from "@/lib/fechas";
 import { formatCedula, formatTelefono, telefonoWhatsApp } from "@/lib/ve";
 import type { CanceladoPor, MetodoReembolso, Reembolso } from "@/lib/types/reembolsos";
 import { cn } from "@/lib/utils";
-import { listarReembolsos, registrarReembolso } from "./actions";
+import { listarReembolsos, registrarReembolso, type ResultadoAccion } from "./actions";
+import { formatCodigoBoleto } from "@/lib/artefactos.generated";
 import { formatRuta } from "@/lib/ciudades";
 
 type Pestana = "pendientes" | "devueltos";
@@ -145,19 +146,20 @@ function asientosTexto(g: Grupo) {
 function enlaceWhatsApp(g: Grupo, cooperativa: string | null | undefined) {
   const numero = telefonoWhatsApp(g.contactoTelefono);
   if (!numero) return null;
-  const codigos = g.filas.map((f) => f.codigo_boleto).join(", ");
+  const codigos = g.filas.map((f) => formatCodigoBoleto(f.codigo_boleto)).join(", ");
   const texto =
     `Hola ${g.contactoNombre}, te escribimos de ${cooperativa || "la cooperativa"} por el reembolso ` +
     `${g.filas.length === 1 ? "de tu boleto" : "de tus boletos"} ${codigos} (${g.ruta}, ${fechaCorta(g.salida)}).`;
   return `https://wa.me/${numero}?text=${encodeURIComponent(texto)}`;
 }
 
-export function ReembolsosClient() {
+export function ReembolsosClient({ inicial }: { inicial: ResultadoAccion<Reembolso[]> }) {
   const { user } = useUser();
   const [pestana, setPestana] = useState<Pestana>("pendientes");
-  const [filas, setFilas] = useState<Reembolso[]>([]);
-  const [cargando, setCargando] = useState(true);
-  const [errorCarga, setErrorCarga] = useState<string | null>(null);
+  // Primer render con los datos del servidor; "Actualizar" y "Reintentar" los vuelven a pedir.
+  const [filas, setFilas] = useState<Reembolso[]>(inicial.success ? inicial.data : []);
+  const [cargando, setCargando] = useState(false);
+  const [errorCarga, setErrorCarga] = useState<string | null>(inicial.success ? null : inicial.error);
   const [grupoAbierto, setGrupoAbierto] = useState<Grupo | null>(null);
   const [dialogoAbierto, setDialogoAbierto] = useState(false);
   const peticionRef = useRef(0);
@@ -176,17 +178,11 @@ export function ReembolsosClient() {
       }
     } catch (err) {
       if (n !== peticionRef.current) return;
-      console.error(err);
       setErrorCarga(humanizeError(err, "cargar los reembolsos"));
     } finally {
       if (n === peticionRef.current) setCargando(false);
     }
   }, []);
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void cargar();
-  }, [cargar]);
 
   const grupos = useMemo(() => agrupar(filas), [filas]);
   const pendientes = useMemo(
@@ -203,13 +199,13 @@ export function ReembolsosClient() {
   const visibles = pestana === "pendientes" ? pendientes : devueltos;
 
   return (
-    <div className="flex flex-col gap-6 animate-in fade-in duration-300">
+    <div className="flex flex-col gap-6">
       <PageHeader
         title="Reembolsos"
         description="Devoluciones de boletos cancelados. Devuelve el dinero por el mismo medio con que pagó el pasajero y regístralo aquí."
       >
         <Button variant="outline" onClick={() => void cargar()} disabled={cargando}>
-          <ArrowClockwise className={cn("mr-2", cargando && "animate-spin")} aria-hidden />
+          <ArrowClockwise className={cn("mr-2", cargando && "motion-safe:animate-spin")} aria-hidden />
           Actualizar
         </Button>
       </PageHeader>
@@ -295,7 +291,7 @@ export function ReembolsosClient() {
   );
 }
 
-function Dato({ etiqueta, children }: { etiqueta: string; children: React.ReactNode }) {
+function Dato({ etiqueta, children }: { etiqueta: string; children: ReactNode }) {
   return (
     <div className="min-w-0">
       <dt className="text-xs text-muted-foreground">{etiqueta}</dt>
@@ -330,7 +326,7 @@ function TarjetaReembolso({
           <Dato etiqueta={g.filas.length === 1 ? "Boleto" : `${g.filas.length} boletos`}>
             <span className="block">{asientosTexto(g)}</span>
             <span className="block font-mono text-xs text-muted-foreground">
-              {g.filas.map((f) => f.codigo_boleto).join(", ")}
+              {g.filas.map((f) => formatCodigoBoleto(f.codigo_boleto)).join(", ")}
             </span>
           </Dato>
           <Dato etiqueta="Pasajero y contacto">
@@ -376,7 +372,7 @@ function TarjetaReembolso({
             {pagoSinVerificar && (
               <Badge
                 variant="secondary"
-                className="mt-1 bg-amber-100 text-amber-900 dark:bg-amber-400/15 dark:text-amber-200"
+                className="mt-1 bg-warning-light text-warning-deep"
                 title="El pago de este boleto no se aprobó. Confirma en tu banco que el dinero llegó antes de devolverlo."
               >
                 Pago sin verificar
@@ -556,7 +552,7 @@ function FormularioDevolucion({
         {pagoSinVerificar && (
           <div
             role="note"
-            className="flex items-start gap-2 rounded-xl border border-amber-300 bg-amber-100 p-3 text-sm text-amber-950 dark:border-amber-400/30 dark:bg-amber-400/15 dark:text-amber-100"
+            className="flex items-start gap-2 rounded-xl border border-warning/40 bg-warning-light p-3 text-sm text-warning-deep"
           >
             <WarningCircle className="mt-0.5 size-4 shrink-0" weight="fill" aria-hidden />
             <p>El pago de este boleto no está verificado. Antes de devolver, confirma en tu banco que el dinero llegó.</p>
@@ -628,7 +624,7 @@ function FormularioDevolucion({
         {error && (
           <div
             role="alert"
-            className="flex items-start gap-2 rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive-text"
+            className="flex items-start gap-2 rounded-xl border border-destructive/40 bg-destructive-light p-3 text-sm text-destructive-deep"
           >
             <WarningCircle className="mt-0.5 size-4 shrink-0" weight="fill" aria-hidden />
             <p>{error}</p>
@@ -640,7 +636,7 @@ function FormularioDevolucion({
             Cancelar
           </Button>
           <Button type="submit" disabled={enviando} aria-busy={enviando || undefined}>
-            {enviando && <SpinnerIcon className="animate-spin" aria-hidden />}
+            {enviando && <SpinnerIcon className="motion-safe:animate-spin" aria-hidden />}
             {enviando ? "Registrando…" : "Registrar devolución"}
           </Button>
         </DialogFooter>

@@ -5,12 +5,18 @@
 // paga quien envía). Lo mismo para el alta de un cliente sin la app
 // ("Nueva encomienda (sin app)"). El contador "Pagos por verificar" se recarga
 // con los cambios de la tabla `pagos` de la cooperativa (tiempo real).
+// `?encomienda=<id>` (filas del Resumen) abre el detalle de esa encomienda.
 
 import { relativeTimeFormatter, dateFormatterDayMonthTime } from "@/lib/utils";
 
-import { useEffect, useRef, useState, useCallback, useMemo } from "react";
+import { Suspense, useEffect, useRef, useState, useCallback, useMemo } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { PageHeader } from "@/components/page-header";
 import { ScanInput } from "@/components/scan-input";
+import { UltimoEscaneo, useUltimoEscaneo } from "@/components/ultimo-escaneo";
+import { CeldaEnlace } from "@/components/celda-enlace";
+import { useImpresora } from "@/hooks/use-impresora";
+import { formatCiudad } from "@/lib/ciudades";
 import { StatusBadge } from "@/components/status-badge";
 import { ErrorState } from "@/components/error-state";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -62,8 +68,43 @@ type ModalState =
   | { type: "nueva" }
   | { type: "rechazar"; encomienda: Encomienda };
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Qué abre la fila o el escaneo, según el estado. */
+function accionDe(e: Encomienda): "recepcion" | "pago" | "detail" {
+  if (e.estado === "PENDIENTE_DE_ESCANEO" || e.estado === "EN_RECEPCION") return "recepcion";
+  if (e.estado === "POR_PAGAR" && e.modalidad_pago === "ORIGEN") return "pago";
+  return "detail";
+}
+
+const ETIQUETA_ACCION: Record<ReturnType<typeof accionDe>, string> = {
+  recepcion: "Recibir encomienda",
+  pago: "Cobrar encomienda",
+  detail: "Ver encomienda",
+};
+
 export default function TaquillaEncomiendasPage() {
+  // useSearchParams (?encomienda=) necesita un límite de Suspense (Next.js 16).
+  return (
+    <Suspense
+      fallback={
+        <div className="flex h-40 items-center justify-center gap-3 text-muted-foreground">
+          <Spinner size="md" />
+          <span className="font-medium">Cargando encomiendas…</span>
+        </div>
+      }
+    >
+      <TaquillaEncomiendas />
+    </Suspense>
+  );
+}
+
+function TaquillaEncomiendas() {
   const { user } = useUser();
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const encomiendaParam = searchParams.get("encomienda");
   const cooperativaId = user.cooperativa_id!;
   // Stable client instance — not recreated on every render
   const supabase = useMemo(() => createClient(), []);
@@ -79,6 +120,9 @@ export default function TaquillaEncomiendasPage() {
 
   const [modalState, setModalState] = useState<ModalState>({ type: "closed" });
   const cerrarModal = useCallback(() => setModalState({ type: "closed" }), []);
+  const { ultimo, registrar } = useUltimoEscaneo();
+  // Reconecta la impresora guardada al abrir la taquilla (#53).
+  const impresora = useImpresora();
 
   const fetchEncomiendas = useCallback(async () => {
     setLoading(true);
@@ -144,16 +188,58 @@ export default function TaquillaEncomiendasPage() {
   useEncomiendasRealtime(cooperativaId, alCambiar);
 
   const handleRowClick = (encomienda: Encomienda) => {
-    if (encomienda.estado === "PENDIENTE_DE_ESCANEO" || encomienda.estado === "EN_RECEPCION") {
-      // EN_RECEPCION: quedó a medio recibir; se completa pesándola de nuevo.
-      setModalState({ type: "recepcion", encomienda });
-    } else if (encomienda.estado === "POR_PAGAR" && encomienda.modalidad_pago === "ORIGEN") {
-      setModalState({ type: "pago", encomienda });
-    } else {
-      // Paga al retirar: se cobra en destino (el detalle permite cobrar ya si paga quien envía).
-      setModalState({ type: "detail", encomienda });
-    }
+    const accion = accionDe(encomienda);
+    // EN_RECEPCION: quedó a medio recibir; se completa pesándola de nuevo.
+    // Paga al retirar: se cobra en destino (el detalle permite cobrar ya si paga quien envía).
+    setModalState({ type: accion, encomienda });
   };
+
+  /** Código escaneado: suena y dice qué sigue; luego abre el paso que toca. */
+  const alEscanear = (encomienda: Encomienda) => {
+    const accion = accionDe(encomienda);
+    registrar({
+      codigo: encomienda.tracking_id,
+      tono: "exito",
+      titulo: `Encontrada · ${encomienda.tracking_id}`,
+      detalle:
+        accion === "recepcion"
+          ? "Pésala para recibirla."
+          : accion === "pago"
+            ? "Falta cobrar el envío."
+            : `${etiquetaEstado("encomienda", encomienda.estado)} · ${encomienda.receiver_nombre}`,
+    });
+    handleRowClick(encomienda);
+  };
+
+  // ?encomienda=<id>: abre su detalle una sola vez y limpia la URL.
+  const encomiendaParamUsada = useRef<string | null>(null);
+  useEffect(() => {
+    if (!encomiendaParam || encomiendaParamUsada.current === encomiendaParam) return;
+    encomiendaParamUsada.current = encomiendaParam;
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("encomienda");
+    const query = params.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+    if (!UUID_RE.test(encomiendaParam)) return;
+    void (async () => {
+      try {
+        const { data, error } = await supabase
+          .from("encomiendas")
+          .select(SELECT_ENCOMIENDAS)
+          .eq("cooperativa_id", cooperativaId)
+          .eq("id", encomiendaParam)
+          .maybeSingle();
+        if (error) throw error;
+        if (!data) {
+          toast.error("No encontramos esa encomienda en tu cooperativa.");
+          return;
+        }
+        setModalState({ type: "detail", encomienda: data as unknown as Encomienda });
+      } catch (err) {
+        toast.error(humanizeError(err, "abrir la encomienda"));
+      }
+    })();
+  }, [encomiendaParam, searchParams, router, pathname, supabase, cooperativaId]);
 
   /** Recibida (o registrada sin app): sigue la foto y, si paga quien envía, el cobro. */
   const pedirFoto = (encomienda: Encomienda) => {
@@ -166,6 +252,12 @@ export default function TaquillaEncomiendasPage() {
   };
 
   const handleRecepcionOk = (encomienda: Encomienda, r: RecepcionOrigen, pesoKg: number) => {
+    registrar({
+      codigo: encomienda.tracking_id,
+      tono: "exito",
+      titulo: `Recibida · ${encomienda.tracking_id}`,
+      detalle: `${pesoKg.toLocaleString("es-VE")} kg · sigue la foto del paquete.`,
+    });
     void fetchEncomiendas();
     pedirFoto({
       ...encomienda,
@@ -233,14 +325,28 @@ export default function TaquillaEncomiendasPage() {
             <Truck className="w-4 h-4 mr-2" aria-hidden />
             Ir a Despacho
           </Link>
+          {impresora.estado !== "no-soportado" && (
+            <Link href="/cooperativas/hardware" className={buttonVariants({ variant: "outline" })}>
+              <Printer className="w-4 h-4 mr-2" aria-hidden />
+              {impresora.estado === "conectada"
+                ? "Impresora conectada"
+                : impresora.estado === "reconectando"
+                  ? "Reconectando impresora…"
+                  : "Conectar impresora"}
+            </Link>
+          )}
         </div>
       </PageHeader>
 
-      <ScanInput
-        onEncomiendaFound={handleRowClick}
-        cooperativaId={cooperativaId}
-        disabled={modalState.type !== "closed"}
-      />
+      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
+        <ScanInput
+          onEncomiendaFound={alEscanear}
+          onError={(e) => registrar({ codigo: e.codigo, tono: "error", titulo: "No encontrada", detalle: e.mensaje })}
+          cooperativaId={cooperativaId}
+          disabled={modalState.type !== "closed"}
+        />
+        <UltimoEscaneo resultado={ultimo} />
+      </div>
 
       <div className="flex-1 space-y-4">
         <Tabs value={filtroEstado} onValueChange={setFiltroEstado} className="w-full">
@@ -307,34 +413,30 @@ export default function TaquillaEncomiendasPage() {
                     </TableRow>
                   ) : (
                     paginatedEncomiendas.map((encomienda) => (
-                      <TableRow
-                        key={encomienda.id}
-                        className="cursor-pointer hover:bg-muted/50 transition-colors"
-                        onClick={() => handleRowClick(encomienda)}
-                        tabIndex={0}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") handleRowClick(encomienda);
-                        }}
-                      >
-                        <TableCell className="font-mono font-medium text-primary-text">
-                          {encomienda.tracking_id}
-                        </TableCell>
+                      <TableRow key={encomienda.id} className="relative hover:bg-muted/50 transition-colors">
+                        <CeldaEnlace
+                          onAbrir={() => handleRowClick(encomienda)}
+                          etiqueta={`${ETIQUETA_ACCION[accionDe(encomienda)]} ${encomienda.tracking_id}`}
+                          className="font-mono"
+                        >
+                          <span className="text-primary-text">{encomienda.tracking_id}</span>
+                        </CeldaEnlace>
                         <TableCell className="max-w-[150px] truncate">
                           {remitenteDe(encomienda).nombre}
                         </TableCell>
                         <TableCell className="max-w-[150px] truncate">{encomienda.receiver_nombre}</TableCell>
                         <TableCell>
                           <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                            <span className="truncate max-w-[100px]" title={encomienda.ciudad_origen}>
-                              {encomienda.ciudad_origen}
+                            <span className="truncate max-w-[100px]" title={formatCiudad(encomienda.ciudad_origen)}>
+                              {formatCiudad(encomienda.ciudad_origen)}
                             </span>
                             <span aria-hidden>→</span>
                             <span className="sr-only">a</span>
                             <span
                               className="font-medium text-foreground truncate max-w-[100px]"
-                              title={encomienda.ciudad_destino}
+                              title={formatCiudad(encomienda.ciudad_destino)}
                             >
-                              {encomienda.ciudad_destino}
+                              {formatCiudad(encomienda.ciudad_destino)}
                             </span>
                           </div>
                         </TableCell>
@@ -360,7 +462,7 @@ export default function TaquillaEncomiendasPage() {
                         <TableCell className="text-right text-muted-foreground text-sm whitespace-nowrap capitalize">
                           {formatDateRelative(encomienda.created_at)}
                         </TableCell>
-                        <TableCell className="text-center" onClick={(e) => e.stopPropagation()}>
+                        <TableCell className="text-center">
                           {encomienda.estado !== "PENDIENTE_DE_ESCANEO" ? (
                             <RowPrintButton encomiendaId={encomienda.id} trackingId={encomienda.tracking_id} />
                           ) : (
@@ -470,13 +572,13 @@ function RowPrintButton({ encomiendaId, trackingId }: { encomiendaId: string; tr
     <Button
       variant="ghost"
       size="icon"
-      className="h-8 w-8 text-muted-foreground hover:text-foreground"
+      className="relative z-10 h-8 w-8 text-muted-foreground hover:text-foreground"
       onClick={handlePrint}
       disabled={loading}
       title="Reimprimir guía"
       aria-label={`Reimprimir la guía de ${trackingId}`}
     >
-      {loading ? <Spinner className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" aria-hidden />}
+      {loading ? <Spinner className="h-4 w-4" /> : <Printer className="h-4 w-4" aria-hidden />}
     </Button>
   );
 }

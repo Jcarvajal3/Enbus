@@ -2,47 +2,50 @@ export const dynamic = "force-dynamic";
 
 import { fetchUsuarios } from "@/lib/data/admin-usuarios";
 import { fetchCooperativas } from "@/lib/data/admin-cooperativas";
+import { PageHeader } from "@/components/page-header";
 import { UsuariosTable } from "@/components/admin/usuarios/usuarios-table";
+import type { FiltrosUsuarios } from "@/lib/types/admin-usuarios";
 
 interface PageProps {
-  searchParams: Promise<{ 
-    role?: string; 
-    cooperativa_id?: string; 
-    search?: string; 
+  searchParams: Promise<{
+    q?: string;
+    rol?: string;
+    cooperativa?: string;
+    pagina?: string;
+    vista?: string;
+    /** Nombres anteriores de los parámetros (enlaces viejos). */
+    role?: string;
+    cooperativa_id?: string;
+    search?: string;
   }>;
 }
 
 export default async function AdminUsuariosPage({ searchParams }: PageProps) {
   const params = await searchParams;
+  const sinTodos = (v?: string) => (v && v !== "ALL" ? v : undefined);
 
-  // Fetch users with filters
-  const usuarios = await fetchUsuarios({
-    role: params.role,
-    cooperativa_id: params.cooperativa_id,
-    search: params.search,
-  });
+  const filtros: FiltrosUsuarios = {
+    q: (params.q ?? params.search ?? "").trim() || undefined,
+    rol: sinTodos(params.rol ?? params.role),
+    cooperativa: sinTodos(params.cooperativa ?? params.cooperativa_id),
+    pagina: Math.max(1, Number.parseInt(params.pagina ?? "1", 10) || 1),
+    vista: params.vista === "bajas" ? "bajas" : "todas",
+  };
 
-  // Fetch all cooperativas to populate the filter dropdown
-  const allCooperativas = await fetchCooperativas();
-  const cooperativasDropdown = allCooperativas
-    .filter((c) => c.estado === "ACTIVA")
-    .map((c) => ({
-      id: c.id,
-      nombre: c.nombre,
-    }));
+  const [resultado, cooperativas] = await Promise.all([fetchUsuarios(filtros), fetchCooperativas()]);
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Usuarios</h1>
-        <p className="text-muted-foreground mt-1">
-          Administración centralizada de usuarios, taquilleros y administradores de cooperativas.
-        </p>
-      </div>
+      <PageHeader
+        title="Usuarios"
+        description="Pasajeros, taquilleros y administradores de cooperativas. Busca por nombre, cédula o teléfono."
+      />
 
-      {/* Table & Filtering */}
-      <UsuariosTable initialUsuarios={usuarios} cooperativas={cooperativasDropdown} />
+      <UsuariosTable
+        resultado={resultado}
+        filtros={filtros}
+        cooperativas={cooperativas.map((c) => ({ id: c.id, nombre: c.nombre, estado: c.estado }))}
+      />
     </div>
   );
 }

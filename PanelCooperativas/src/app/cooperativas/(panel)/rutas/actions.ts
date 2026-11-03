@@ -3,6 +3,23 @@
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { humanizeError } from "@/lib/errores";
+import { mismaCiudad } from "@/lib/ciudades";
+
+const MSG_MISMA_CIUDAD = "El origen y el destino deben ser ciudades distintas.";
+
+/** Duración en minutos: "Horas" (0–48) + "Minutos" (0–59), o el campo antiguo en minutos. */
+function leerDuracion(formData: FormData): number {
+  const horasTxt = formData.get("duracion_horas");
+  const minutosTxt = formData.get("duracion_minutos");
+  if (horasTxt !== null || minutosTxt !== null) {
+    const horas = String(horasTxt ?? "").trim() === "" ? 0 : Number(horasTxt);
+    const minutos = String(minutosTxt ?? "").trim() === "" ? 0 : Number(minutosTxt);
+    if (!Number.isInteger(horas) || horas < 0 || horas > 48) return NaN;
+    if (!Number.isInteger(minutos) || minutos < 0 || minutos > 59) return NaN;
+    return horas * 60 + minutos;
+  }
+  return parseInt(String(formData.get("duracion_estimada_min") ?? ""), 10);
+}
 
 /** "15,50" | "15.50" | "1.250,00" -> número (NaN si no es válido). */
 function parsePrecio(valor: FormDataEntryValue | null): number {
@@ -28,7 +45,7 @@ export async function guardarRuta(formData: FormData, rutaId?: string) {
   const ciudad_origen = formData.get("ciudad_origen") as string;
   const estado_destino = formData.get("estado_destino") as string;
   const ciudad_destino = formData.get("ciudad_destino") as string;
-  const duracion_estimada_min = parseInt(formData.get("duracion_estimada_min") as string, 10);
+  const duracion_estimada_min = leerDuracion(formData);
   // Precio de referencia en USD: el pasajero paga en Bs a la tasa BCV del día.
   const precio_pasaje = Math.round(parsePrecio(formData.get("precio_pasaje")) * 100) / 100;
   const activa = formData.get("activa") === "on";
@@ -37,13 +54,16 @@ export async function guardarRuta(formData: FormData, rutaId?: string) {
     return { error: "Elige el estado y la ciudad de origen y de destino." };
   }
   if (isNaN(duracion_estimada_min) || duracion_estimada_min <= 0) {
-    return { error: "La duración debe ser un número de minutos mayor a 0." };
+    return {
+      error: "Escribe cuánto dura el viaje: horas de 0 a 48 y minutos de 0 a 59 (por ejemplo, 8 h 30 min).",
+      campo: "duracion" as const,
+    };
   }
   if (isNaN(precio_pasaje) || precio_pasaje <= 0) {
     return { error: "Escribe el precio del pasaje en dólares, por ejemplo 15 o 15,50." };
   }
-  if (estado_origen === estado_destino && ciudad_origen === ciudad_destino) {
-    return { error: "El origen y el destino no pueden ser la misma ciudad." };
+  if (mismaCiudad(ciudad_origen, ciudad_destino)) {
+    return { error: MSG_MISMA_CIUDAD, campo: "destino" as const };
   }
 
   const payload = {
@@ -66,6 +86,7 @@ export async function guardarRuta(formData: FormData, rutaId?: string) {
   }
 
   revalidatePath("/cooperativas/rutas");
+  revalidatePath("/cooperativas/viajes");
   return { success: true };
 }
 

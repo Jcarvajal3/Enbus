@@ -37,7 +37,8 @@ import {
 } from "../../app/cooperativas/(panel)/taquilla/boletos/actions";
 import { printBoleto, imprimirHtml, MSG_VENTANA_BLOQUEADA } from "@/lib/printing/print-helpers";
 import { OPCIONES_BANCO } from "@/lib/bancos";
-import { cedulaParaGuardar, cedulaValida } from "@/lib/ve";
+import { cedulaParaGuardar, cedulaValida, formatCedula } from "@/lib/ve";
+import { formatCodigoBoleto, qrBoleto } from "@/lib/artefactos.generated";
 import { printer } from "@/lib/printing/bluetooth";
 import { requireOnline } from "@/components/connectivity-banner";
 import { humanizeError } from "@/lib/errores";
@@ -565,7 +566,7 @@ function TicketsEmitidos({
             pasajero_cedula: b.cedula,
             asiento: b.asiento,
             precio: precioDe(b.codigo_boleto),
-            qr_embarque_data: b.qr ?? `PASS-${b.codigo_boleto}`,
+            qr_embarque_data: qrBoleto({ codigo_boleto: b.codigo_boleto, qr_embarque_data: b.qr }),
           } as Boleto,
           {
             monto_usd: precioDe(b.codigo_boleto),
@@ -592,8 +593,8 @@ function TicketsEmitidos({
   return (
     <div className="space-y-5 animate-in fade-in zoom-in-95">
       <div className="flex flex-col items-center gap-2 text-center">
-        <div className="w-14 h-14 bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400 rounded-full flex items-center justify-center">
-          <Check className="w-7 h-7" weight="bold" />
+        <div className="w-14 h-14 bg-success-light text-success-deep rounded-full flex items-center justify-center">
+          <Check className="w-7 h-7" weight="bold" aria-hidden />
         </div>
         <h2 className="text-xl font-bold">
           {operacion.impresion.length === 1 ? "Boleto emitido" : `${operacion.impresion.length} boletos emitidos`}
@@ -633,7 +634,7 @@ function TicketsEmitidos({
           <article key={b.codigo_boleto} className="rounded-xl border bg-background p-4 space-y-2">
             <p className="text-xs uppercase tracking-widest text-muted-foreground">Boleto de viaje</p>
             {cooperativa && <p className="text-sm font-semibold">{cooperativa}</p>}
-            <p className="font-mono text-xl font-bold text-primary-text">{b.codigo_boleto}</p>
+            <p className="font-mono text-xl font-bold text-primary-text">{formatCodigoBoleto(b.codigo_boleto)}</p>
             <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
               <dt className="text-muted-foreground">Ruta</dt>
               <dd>{ruta}</dd>
@@ -650,7 +651,7 @@ function TicketsEmitidos({
               {b.cedula && (
                 <>
                   <dt className="text-muted-foreground">Cédula</dt>
-                  <dd>{b.cedula}</dd>
+                  <dd>{formatCedula(b.cedula)}</dd>
                 </>
               )}
               <dt className="text-muted-foreground">Precio</dt>
@@ -662,7 +663,7 @@ function TicketsEmitidos({
             </dl>
             <div className="flex justify-center rounded-lg bg-white p-2">
               <Suspense fallback={<Skeleton className="w-[120px] h-[120px]" />}>
-                <QRCodeSVG value={b.qr || `PASS-${b.codigo_boleto}`} size={120} />
+                <QRCodeSVG value={qrBoleto({ codigo_boleto: b.codigo_boleto, qr_embarque_data: b.qr })} size={120} />
               </Suspense>
             </div>
           </article>
@@ -885,16 +886,16 @@ export function VentaFlow({ isOpen, onClose, viajeIdInicial }: VentaFlowProps) {
   // Rutas únicas para el filtro
   const rutasUnicas = useMemo(() => {
     const set = new Set<string>();
-    viajes.forEach((v) => set.add(`${v.ruta.ciudad_origen} → ${v.ruta.ciudad_destino}`));
+    viajes.forEach((v) => set.add(`${formatCiudad(v.ruta.ciudad_origen)} → ${formatCiudad(v.ruta.ciudad_destino)}`));
     return Array.from(set);
   }, [viajes]);
 
   const viajesFiltrados = useMemo(() => {
     if (filtroRuta === "todas") return viajes;
-    return viajes.filter((v) => `${v.ruta.ciudad_origen} → ${v.ruta.ciudad_destino}` === filtroRuta);
+    return viajes.filter((v) => `${formatCiudad(v.ruta.ciudad_origen)} → ${formatCiudad(v.ruta.ciudad_destino)}` === filtroRuta);
   }, [viajes, filtroRuta]);
 
-  const rutaTexto = selectedViaje ? `${selectedViaje.ruta.ciudad_origen} → ${selectedViaje.ruta.ciudad_destino}` : "";
+  const rutaTexto = selectedViaje ? `${formatCiudad(selectedViaje.ruta.ciudad_origen)} → ${formatCiudad(selectedViaje.ruta.ciudad_destino)}` : "";
   const pasoActual = PASOS.findIndex((p) => p.id === step);
   const totalUsd = selectedViaje ? Number(selectedViaje.ruta.precio_pasaje) * asientos.length : 0;
 
@@ -976,9 +977,10 @@ export function VentaFlow({ isOpen, onClose, viajeIdInicial }: VentaFlowProps) {
                     >
                       <div className="space-y-2">
                         <div className="flex items-center gap-2 font-semibold text-lg">
-                          <span>{viaje.ruta.ciudad_origen}</span>
-                          <ArrowRight className="w-4 h-4 text-muted-foreground" aria-label="a" />
-                          <span>{viaje.ruta.ciudad_destino}</span>
+                          <span>{formatCiudad(viaje.ruta.ciudad_origen)}</span>
+                          <ArrowRight className="w-4 h-4 text-muted-foreground" aria-hidden />
+                          <span className="sr-only">a</span>
+                          <span>{formatCiudad(viaje.ruta.ciudad_destino)}</span>
                         </div>
                         <div className="flex flex-wrap gap-x-4 gap-y-2 text-sm text-muted-foreground">
                           <div className="flex items-center gap-1.5">
@@ -1001,13 +1003,13 @@ export function VentaFlow({ isOpen, onClose, viajeIdInicial }: VentaFlowProps) {
                         <div className="flex items-center gap-2">
                           <div className="flex items-center gap-1 text-sm">
                             <Users className="w-4 h-4 text-muted-foreground" aria-hidden />
-                            <span className={pocosAsientos ? "text-amber-600 font-medium" : sinAsientos ? "text-red-600 font-medium" : ""}>
+                            <span className={pocosAsientos ? "text-warning-text font-medium" : sinAsientos ? "text-destructive-text font-medium" : ""}>
                               {viaje.asientos_disponibles} libres de {viaje.asientos_totales}
                             </span>
                           </div>
                           {sinAsientos && <Badge variant="destructive">Agotado</Badge>}
                           {pocosAsientos && (
-                            <Badge className="bg-amber-500 hover:bg-amber-600 text-white border-transparent">Pocos asientos</Badge>
+                            <Badge variant="secondary" className="border-warning/40 bg-warning-light text-warning-deep">Pocos asientos</Badge>
                           )}
                         </div>
                       </div>
@@ -1212,7 +1214,7 @@ export function CobrarReservaDialog({
         asientos: filas.map((f) => f.asiento).sort((a, b) => Number(a) - Number(b)),
         totalUsd: filas.reduce((s, f) => s + Number(f.precio), 0),
         pasajero: filas.find((f) => f.pasajero_nombre)?.pasajero_nombre ?? null,
-        ruta: v?.ruta ? `${v.ruta.ciudad_origen} → ${v.ruta.ciudad_destino}` : "",
+        ruta: v?.ruta ? `${formatCiudad(v.ruta.ciudad_origen)} → ${formatCiudad(v.ruta.ciudad_destino)}` : "",
         trayecto: v?.ruta ? { origen: v.ruta.ciudad_origen, destino: v.ruta.ciudad_destino } : null,
         salida: v?.fecha_hora_salida ?? null,
         unidad: v?.numero_unidad ?? null,

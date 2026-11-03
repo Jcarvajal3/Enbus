@@ -12,10 +12,16 @@ import { desbloquearPIN, reenviarPIN, toggleUsuarioEstado } from "@/app/admin/(p
 import { humanizeError } from "@/lib/errores";
 import { etiquetaRol } from "@/lib/estados";
 import type { EncomiendaUsuario, Usuario } from "@/lib/types/admin-usuarios";
+import { ConfirmDialogBaja } from "./usuarios-table";
 
 interface UsuarioActionsProps {
   usuarioId: string;
   nombre: string;
+  email?: string | null;
+  /** Eliminó su cuenta desde la app y falta borrar su acceso. */
+  bajaPendiente?: boolean;
+  /** Cuenta eliminada desde la app (ya no se suspende ni reactiva). */
+  eliminada?: boolean;
   role: Usuario["role"];
   isBanned: boolean;
   encomiendasEnviadas: EncomiendaUsuario[];
@@ -27,6 +33,9 @@ const ESTADOS_CERRADOS = ["ENTREGADA", "CANCELADA", "DEVUELTA"];
 export function UsuarioActions({
   usuarioId,
   nombre,
+  email = null,
+  bajaPendiente = false,
+  eliminada = false,
   role,
   isBanned,
   encomiendasEnviadas,
@@ -34,6 +43,7 @@ export function UsuarioActions({
 }: UsuarioActionsProps) {
   const router = useRouter();
   const [estadoOpen, setEstadoOpen] = useState(false);
+  const [bajaOpen, setBajaOpen] = useState(false);
   const [unlockListOpen, setUnlockListOpen] = useState(false);
   const [resendListOpen, setResendListOpen] = useState(false);
   const [aDesbloquear, setADesbloquear] = useState<EncomiendaUsuario | null>(null);
@@ -58,7 +68,8 @@ export function UsuarioActions({
       if (!res.success) {
         toast.error(res.error || "No pudimos reenviar el PIN. Intenta de nuevo.");
       } else if (res.enviado) {
-        toast.success(res.message || "PIN reenviado.");
+        if (res.fallidos && res.fallidos.length > 0) toast.warning(res.message || "PIN reenviado, pero un canal falló.");
+        else toast.success(res.message || "PIN reenviado.");
         setResendListOpen(false);
       } else {
         toast.warning(res.message || "No pudimos enviar el PIN. Dáselo por otro medio.");
@@ -71,41 +82,67 @@ export function UsuarioActions({
     }
   };
 
+  // Motivo visible (no en `title`) de cada botón deshabilitado (AD-22).
+  const motivoDesbloquear = bloqueables.length === 0 ? "No tiene encomiendas con intentos fallidos de PIN." : null;
+  const motivoReenviar = conPin.length === 0 ? "No tiene encomiendas activas con PIN." : null;
+
   return (
-    <div className="flex flex-wrap items-center gap-3">
-      <Button
-        variant="outline"
-        onClick={() => setUnlockListOpen(true)}
-        className="gap-2"
-        disabled={bloqueables.length === 0}
-        title={bloqueables.length === 0 ? "No tiene encomiendas con intentos fallidos de PIN." : undefined}
-      >
-        <Key className="h-4 w-4" aria-hidden /> Desbloquear PIN
-      </Button>
-
-      <Button
-        variant="outline"
-        onClick={() => setResendListOpen(true)}
-        className="gap-2"
-        disabled={conPin.length === 0}
-        title={conPin.length === 0 ? "No tiene encomiendas activas con PIN." : undefined}
-      >
-        <PaperPlaneTilt className="h-4 w-4" aria-hidden /> Reenviar PIN
-      </Button>
-
-      {isBanned ? (
-        <Button className="gap-2" onClick={() => setEstadoOpen(true)}>
-          <UserPlus className="h-4 w-4" aria-hidden /> Reactivar cuenta
-        </Button>
-      ) : (
+    <div className="flex flex-col items-start gap-2 sm:items-end">
+      <div className="flex flex-wrap items-center gap-3">
         <Button
           variant="outline"
-          className="gap-2 border-destructive/40 text-destructive-text hover:bg-destructive/10"
-          onClick={() => setEstadoOpen(true)}
+          onClick={() => setUnlockListOpen(true)}
+          className="gap-2"
+          disabled={bloqueables.length === 0}
+          aria-describedby={motivoDesbloquear ? `${usuarioId}-motivo-desbloquear` : undefined}
         >
-          <UserMinus className="h-4 w-4" aria-hidden /> Suspender cuenta
+          <Key className="h-4 w-4" aria-hidden /> Desbloquear PIN
         </Button>
+
+        <Button
+          variant="outline"
+          onClick={() => setResendListOpen(true)}
+          className="gap-2"
+          disabled={conPin.length === 0}
+          aria-describedby={motivoReenviar ? `${usuarioId}-motivo-reenviar` : undefined}
+        >
+          <PaperPlaneTilt className="h-4 w-4" aria-hidden /> Reenviar PIN
+        </Button>
+
+        {bajaPendiente ? (
+          <Button
+            variant="outline"
+            className="gap-2 border-destructive/40 text-destructive-text hover:bg-destructive-light"
+            onClick={() => setBajaOpen(true)}
+          >
+            <UserMinus className="h-4 w-4" aria-hidden /> Completar baja
+          </Button>
+        ) : eliminada ? null : isBanned ? (
+          <Button className="gap-2" onClick={() => setEstadoOpen(true)}>
+            <UserPlus className="h-4 w-4" aria-hidden /> Reactivar cuenta
+          </Button>
+        ) : (
+          <Button
+            variant="outline"
+            className="gap-2 border-destructive/40 text-destructive-text hover:bg-destructive-light"
+            onClick={() => setEstadoOpen(true)}
+          >
+            <UserMinus className="h-4 w-4" aria-hidden /> Suspender cuenta
+          </Button>
+        )}
+      </div>
+      {(motivoDesbloquear || motivoReenviar) && (
+        <ul className="space-y-0.5 text-xs text-muted-foreground sm:text-right">
+          {motivoDesbloquear && <li id={`${usuarioId}-motivo-desbloquear`}>Desbloquear PIN: {motivoDesbloquear}</li>}
+          {motivoReenviar && <li id={`${usuarioId}-motivo-reenviar`}>Reenviar PIN: {motivoReenviar}</li>}
+        </ul>
       )}
+
+      <ConfirmDialogBaja
+        usuario={bajaOpen ? { id: usuarioId, nombre_completo: nombre, email: email ?? undefined } : null}
+        onClose={() => setBajaOpen(false)}
+        onHecho={() => router.refresh()}
+      />
 
       {/* Suspender / reactivar */}
       {isBanned ? (
@@ -185,6 +222,7 @@ export function UsuarioActions({
                 </div>
                 <Button
                   size="sm"
+                  aria-label={`Desbloquear PIN de ${e.tracking_id}`}
                   onClick={() => {
                     setUnlockListOpen(false);
                     setADesbloquear(e);
@@ -241,10 +279,11 @@ export function UsuarioActions({
                 <Button
                   size="sm"
                   onClick={() => reenviar(e)}
+                  aria-label={`Reenviar PIN de ${e.tracking_id}`}
                   disabled={reenviandoId !== null}
                   aria-busy={reenviandoId === e.id || undefined}
                 >
-                  {reenviandoId === e.id && <SpinnerIcon className="animate-spin" aria-hidden />}
+                  {reenviandoId === e.id && <SpinnerIcon className="motion-safe:animate-spin" aria-hidden />}
                   {reenviandoId === e.id ? "Reenviando…" : "Reenviar PIN"}
                 </Button>
               </li>

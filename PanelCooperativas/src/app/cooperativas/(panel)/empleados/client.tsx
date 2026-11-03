@@ -259,7 +259,7 @@ export function EmpleadosClient({
                           {ahora === 0 ? (
                             ""
                           ) : vencida ? (
-                            <Badge variant="secondary" className="bg-slate-200 text-slate-800 dark:bg-slate-400/15 dark:text-slate-200">
+                            <Badge variant="secondary" className="bg-muted text-muted-foreground">
                               Vencida
                             </Badge>
                           ) : (
@@ -304,7 +304,7 @@ export function EmpleadosClient({
                               onClick={() => void renovar(inv)}
                             >
                               {renovandoId === inv.id ? (
-                                <SpinnerIcon className="animate-spin" aria-hidden />
+                                <SpinnerIcon className="motion-safe:animate-spin" aria-hidden />
                               ) : (
                                 <ArrowClockwise aria-hidden />
                               )}
@@ -373,11 +373,11 @@ export function EmpleadosClient({
                       <TableCell>{formatFechaVE(emp.created_at, { dateStyle: "short" })}</TableCell>
                       <TableCell>
                         {isActive ? (
-                          <Badge variant="secondary" className="bg-emerald-100 text-emerald-900 dark:bg-emerald-400/15 dark:text-emerald-200">
+                          <Badge variant="secondary" className="bg-success-light text-success-deep">
                             Activo
                           </Badge>
                         ) : (
-                          <Badge variant="secondary" className="bg-slate-200 text-slate-800 dark:bg-slate-400/15 dark:text-slate-200">
+                          <Badge variant="secondary" className="bg-muted text-muted-foreground">
                             Desactivado
                           </Badge>
                         )}
@@ -737,7 +737,7 @@ function FormularioInvitacion({
         {errorGeneral && (
           <div
             role="alert"
-            className="flex items-start gap-2 rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive-text"
+            className="flex items-start gap-2 rounded-xl border border-destructive/40 bg-destructive-light p-3 text-sm text-destructive-deep"
           >
             <WarningCircle className="mt-0.5 size-4 shrink-0" weight="fill" aria-hidden />
             <p>{errorGeneral}</p>
@@ -749,7 +749,7 @@ function FormularioInvitacion({
             Cancelar
           </Button>
           <Button type="submit" disabled={enviando} aria-busy={enviando || undefined}>
-            {enviando && <SpinnerIcon className="animate-spin" aria-hidden />}
+            {enviando && <SpinnerIcon className="motion-safe:animate-spin" aria-hidden />}
             {enviando ? "Creando…" : "Crear invitación"}
           </Button>
         </DialogFooter>
