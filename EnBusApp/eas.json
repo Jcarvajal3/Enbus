@@ -5,6 +5,7 @@
   },
   "build": {
     "preview": {
+      "environment": "preview",
       "android": {
         "buildType": "apk",
         "gradleCommand": ":app:assembleRelease"
@@ -12,6 +13,7 @@
       "distribution": "internal"
     },
     "production": {
+      "environment": "production",
       "autoIncrement": true,
       "android": {
         "buildType": "app-bundle"
@@ -21,6 +23,7 @@
       }
     },
     "development": {
+      "environment": "development",
       "developmentClient": true,
       "distribution": "internal"
     }
