@@ -17,7 +17,7 @@ import * as Haptics from 'expo-haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '@/src/utils/supabase';
 import { useAuth } from '@/src/contexts/AuthContext';
-import { esErrorEB, humanizeError, parseDetalleEB } from '@/src/utils/errores';
+import { errorDeFuncion, esErrorEB, humanizeError, parseDetalleEB } from '@/src/utils/errores';
 import { useVolver } from '@/src/hooks/useVolver';
 import { useToast } from '@/src/components/Toast';
 import {
@@ -100,9 +100,17 @@ export default function EliminarCuentaScreen() {
     }
 
     // La baja ya quedó hecha: lo que sigue no puede deshacerla ni debe asustar.
+    /** Texto del servidor si el acceso aún no se cerró del todo (`EB_BAJA_PENDIENTE`). */
+    let avisoPendiente: string | null = null;
     try {
       // Borra la identidad de Auth (necesita el token, antes de cerrar la sesión).
-      await supabase.functions.invoke('eliminar-cuenta', { method: 'POST' });
+      // `invoke` no lanza: devuelve `{ error }` con el cuerpo `{ error, hint }` sin leer.
+      const { error } = await supabase.functions.invoke('eliminar-cuenta', { method: 'POST' });
+      if (error) {
+        const detalle = await errorDeFuncion(error);
+        if (__DEV__) console.warn('[eliminar] eliminar-cuenta:', detalle);
+        if (esErrorEB(detalle, 'EB_BAJA_PENDIENTE')) avisoPendiente = humanizeError(detalle);
+      }
     } catch {
       // Sin la edge function la completa el administrador (Bajas por completar).
     }
@@ -123,7 +131,8 @@ export default function EliminarCuentaScreen() {
     limpiarAvisoSesion();
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     router.replace('/(auth)/login');
-    toast.show('success', 'Eliminamos tu cuenta. Gracias por usar EnBus.');
+    if (avisoPendiente) toast.show('info', avisoPendiente);
+    else toast.show('success', 'Eliminamos tu cuenta. Gracias por usar EnBus.');
   }
 
   const avisoPaleta = StatusPalette.pending;

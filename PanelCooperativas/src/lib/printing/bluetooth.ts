@@ -15,8 +15,12 @@ const CLAVE_ID = "bt_printer_id";
 const CLAVE_NOMBRE = "bt_printer_name";
 /** Esperas entre reintentos tras una desconexión. */
 const REINTENTOS_MS = [2000, 5000, 10000];
-/** Límite de escritura BLE por paquete. */
-const TAMANO_PAQUETE = 512;
+/**
+ * Bytes por escritura BLE. Las impresoras térmicas genéricas (servicio 18F0) suelen
+ * negociar un MTU de 23 a 185 bytes y muchas no aceptan escrituras largas: con 512
+ * algunas imprimían basura o fallaban a mitad del ticket. 180 cabe en un MTU de 185.
+ */
+const TAMANO_PAQUETE = 180;
 
 export type EstadoImpresora = "conectada" | "reconectando" | "desconectada" | "no-soportado";
 export type InstantaneaImpresora = { estado: EstadoImpresora; nombre: string | null };
@@ -201,8 +205,21 @@ class BluetoothPrinter {
     }, REINTENTOS_MS[intento]);
   }
 
-  /** Enviar bytes ESC/POS (en paquetes de 512 bytes). Si se cayó la conexión, intenta reconectar una vez. */
-  async write(data: Uint8Array): Promise<void> {
+  /** Cola de trabajos: dos impresiones a la vez mezclaban sus bytes en el papel. */
+  private cola: Promise<void> = Promise.resolve();
+
+  /**
+   * Enviar bytes ESC/POS (en paquetes de `TAMANO_PAQUETE`). Los trabajos se envían
+   * uno detrás de otro. Si se cayó la conexión, intenta reconectar una vez.
+   */
+  write(data: Uint8Array): Promise<void> {
+    const trabajo = this.cola.then(() => this.escribir(data));
+    // Un trabajo fallido no bloquea los siguientes.
+    this.cola = trabajo.catch(() => undefined);
+    return trabajo;
+  }
+
+  private async escribir(data: Uint8Array): Promise<void> {
     if (!this.characteristic && this.device) {
       this.cancelarReintentos();
       await this.connect();

@@ -1,11 +1,16 @@
-import "@supabase/functions-js/edge-runtime.d.ts"
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.0'
-import { PDFDocument, StandardFonts, rgb } from 'https://esm.sh/pdf-lib@1.17.1'
+// generar-guia-pdf
+// Genera la guía en PDF de una encomienda (con el PIN de retiro) para imprimir en taquilla.
+// Solo el personal de la cooperativa de la encomienda (o el equipo de EnBus) puede generarla.
+// Se guarda en fotos-encomiendas/guias/<cooperativa_id>/<tracking>.pdf (se sobrescribe: una guía
+// por encomienda) y se devuelve un enlace firmado de 1 hora. El QR se dibuja aquí mismo: no se
+// manda el código de seguimiento a servicios externos ni se depende de ellos.
+import '@supabase/functions-js/edge-runtime.d.ts';
+import { PDFDocument, StandardFonts, rgb, type PDFPage } from 'npm:pdf-lib@1.17.1';
+import qrcode from 'npm:qrcode-generator@2.0.4';
+import { ErrorEntrada, errorInterno, esUuid, fallar, filtrarMetodo, leerJson, responder } from '../_shared/http.ts';
+import { clienteAdmin, clienteUsuario, usuarioDelToken } from '../_shared/supabase.ts';
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+const ROLES_STAFF = new Set(['taquillero', 'admin_cooperativa']);
 
 // Glosario: modalidad de pago de la encomienda.
 const MODALIDAD: Record<string, string> = {
@@ -51,40 +56,52 @@ function textoPdf(v: unknown, max: number): string {
   return limpio.length > max ? `${limpio.slice(0, max - 1)}…` : limpio;
 }
 
-Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
+/** Dibuja el QR del código de seguimiento como cuadros (sin imagen externa). */
+function dibujarQr(page: PDFPage, contenido: string, x: number, y: number, lado: number) {
+  const qr = qrcode(0, 'M');
+  qr.addData(contenido);
+  qr.make();
+  const n = qr.getModuleCount();
+  const margen = 2;
+  const celda = lado / (n + margen * 2);
+  page.drawRectangle({ x, y, width: lado, height: lado, color: rgb(1, 1, 1) });
+  for (let r = 0; r < n; r++) {
+    for (let c = 0; c < n; c++) {
+      if (!qr.isDark(r, c)) continue;
+      page.drawRectangle({
+        x: x + (c + margen) * celda,
+        y: y + lado - (r + margen + 1) * celda,
+        width: celda,
+        height: celda,
+        color: rgb(0, 0, 0),
+      });
+    }
   }
+}
+
+Deno.serve(async (req) => {
+  const metodo = filtrarMetodo(req);
+  if (metodo) return metodo;
 
   try {
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: "No authorization" }), { status: 401, headers: corsHeaders });
+    const usuario = await usuarioDelToken(req);
+    if (!usuario) return fallar(401, 'EB_NO_AUTENTICADO', 'Tu sesión expiró. Inicia sesión de nuevo.');
+
+    const body = await leerJson(req, 2048);
+    if (!esUuid(body.encomienda_id)) return fallar(400, 'EB_DATOS_INVALIDOS', 'Falta la encomienda.');
+    const encomiendaId = body.encomienda_id;
+
+    const admin = clienteAdmin();
+    const { data: perfil, error: perfilError } = await admin
+      .from('profiles').select('role, cooperativa_id').eq('id', usuario.id).maybeSingle();
+    if (perfilError) throw new Error(`profiles: ${perfilError.message}`);
+    const esSuperAdmin = perfil?.role === 'super_admin';
+    if (!perfil || (!esSuperAdmin && !(ROLES_STAFF.has(perfil.role) && perfil.cooperativa_id))) {
+      return fallar(403, 'EB_SIN_PERMISO', 'Solo el personal de la cooperativa puede generar la guía.');
     }
 
-    const { encomienda_id } = await req.json();
-
-    if (!encomienda_id) {
-      return new Response(JSON.stringify({ error: "encomienda_id requerido" }), { status: 400, headers: corsHeaders });
-    }
-
-    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
-    const supabaseKey = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
-    
-    // Auth validation with standard client
-    const supabaseAuth = createClient(supabaseUrl, supabaseKey, {
-      global: { headers: { Authorization: authHeader } }
-    });
-
-    const token = authHeader.replace("Bearer ", "");
-    const { data: { user }, error: userError } = await supabaseAuth.auth.getUser(token);
-    if (userError || !user) {
-      throw new Error("Usuario no autenticado: " + (userError?.message || "token inválido o nulo"));
-    }
-
-    // M-10: Traer toda la data necesaria para el PDF
-    const { data: enc, error: encError } = await supabaseAuth
+    // Se lee con el JWT del empleado (RLS) y además se exige que sea de su cooperativa.
+    const { data: enc, error: encError } = await clienteUsuario(usuario.token)
       .from('encomiendas')
       .select(`
         tracking_id,
@@ -106,10 +123,13 @@ Deno.serve(async (req) => {
         sender:profiles!sender_id (nombre_completo, cedula_rif, telefono),
         cooperativas (nombre)
       `)
-      .eq('id', encomienda_id)
-      .single();
-
-    if (encError || !enc) throw new Error("No tienes acceso a esta encomienda");
+      .eq('id', encomiendaId)
+      .maybeSingle();
+    if (encError) throw new Error(`encomiendas: ${encError.message}`);
+    if (!enc || !enc.cooperativa_id || (!esSuperAdmin && enc.cooperativa_id !== perfil.cooperativa_id)) {
+      return fallar(404, 'EB_NO_ENCONTRADO', 'No encontramos esta encomienda en tu cooperativa.');
+    }
+    if (!/^[A-Za-z0-9-]{1,40}$/.test(enc.tracking_id ?? '')) throw new Error('tracking_id inesperado');
 
     // Remitente real: en las altas de taquilla sender_id es el empleado que la recibió.
     const senderData = Array.isArray(enc.sender) ? enc.sender[0] : enc.sender;
@@ -155,52 +175,30 @@ Deno.serve(async (req) => {
       linea(`PIN de retiro: ${String(enc.pin_retiro).trim()} — dáselo solo a quien recibe`, 254, 11, true);
     }
 
-    try {
-        // Generar QR y embedirlo
-        const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(enc.tracking_id)}`;
-        const qrImageBytes = await fetch(qrUrl).then((res) => res.arrayBuffer());
-        const qrImage = await pdfDoc.embedPng(qrImageBytes);
-        const qrDims = qrImage.scale(0.8);
-        page.drawImage(qrImage, {
-            x: 30,
-            y: 100,
-            width: qrDims.width,
-            height: qrDims.height,
-        });
-    } catch (e) {
-        console.error("Error embedding QR:", e);
+    dibujarQr(page, enc.tracking_id, 30, 100, 120);
+
+    const pdfContent = new Uint8Array(await pdfDoc.save());
+
+    // La guía lleva el PIN de retiro: se guarda con el service role (el acceso ya se comprobó arriba)
+    // en guias/<cooperativa_id>/, que solo puede leer el personal de esa cooperativa (migración
+    // 20260721000004). Ruta fija por encomienda: reimprimir no acumula archivos.
+    const rutaGuia = `guias/${enc.cooperativa_id}/${enc.tracking_id}_guia.pdf`;
+    const { error: uploadError } = await admin.storage
+      .from('fotos-encomiendas')
+      .upload(rutaGuia, pdfContent, { contentType: 'application/pdf', upsert: true, cacheControl: '60' });
+    if (uploadError) throw new Error(`Error subiendo PDF: ${uploadError.message}`);
+
+    // createSignedUrl porque fotos-encomiendas es privado (1 hora de validez).
+    const { data: signedData, error: signedError } = await admin.storage
+      .from('fotos-encomiendas')
+      .createSignedUrl(rutaGuia, 3600);
+    if (signedError || !signedData?.signedUrl) {
+      throw new Error(`Error generando URL firmada: ${signedError?.message ?? 'sin URL'}`);
     }
-    
-    const pdfBytes = await pdfDoc.save();
-    const pdfContent = new Uint8Array(pdfBytes);
-    
-    // La guía lleva el PIN de retiro: se guarda en guias/<cooperativa_id>/ con el service role
-    // (el acceso del usuario ya se comprobó arriba con su JWT). Solo el personal de esa cooperativa
-    // puede leer la carpeta (migración 20260721000004); el enlace firmado dura 1 hora.
-    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
-      auth: { persistSession: false, autoRefreshToken: false }
-    });
-    const rutaGuia = `guias/${enc.cooperativa_id ?? 'sin-cooperativa'}/${enc.tracking_id}_guia_${Date.now()}.pdf`;
 
-    const { error: uploadError } = await supabaseAdmin
-      .storage
-      .from('fotos-encomiendas')
-      .upload(rutaGuia, pdfContent, {
-        contentType: 'application/pdf',
-        upsert: false
-      });
-
-    if (uploadError) throw new Error("Error subiendo PDF: " + uploadError.message);
-
-    // M-11: createSignedUrl porque fotos-encomiendas es privado
-    const { data: signedData, error: signedError } = await supabaseAdmin.storage
-      .from('fotos-encomiendas')
-      .createSignedUrl(rutaGuia, 3600); // 1 hora de validez
-      
-    if (signedError) throw new Error("Error generando URL firmada: " + signedError.message);
-
-    return new Response(JSON.stringify({ pdf_url: signedData?.signedUrl || "" }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
-  } catch (error: any) {
-    return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: corsHeaders });
+    return responder(200, { pdf_url: signedData.signedUrl });
+  } catch (e) {
+    if (e instanceof ErrorEntrada) return e.respuesta();
+    return errorInterno('generar-guia-pdf', e);
   }
 });

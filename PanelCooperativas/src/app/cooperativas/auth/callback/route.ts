@@ -8,7 +8,9 @@ import { NextResponse } from "next/server";
  */
 function sanitizeNext(raw: string | null, fallback: string): string {
   if (!raw) return fallback;
-  if (raw.startsWith("/") && !raw.startsWith("//")) return raw;
+  // Solo rutas del panel de cooperativas. Los navegadores tratan la barra invertida como "/".
+  if (raw.includes("\\") || raw.startsWith("//")) return fallback;
+  if (raw === "/cooperativas" || raw.startsWith("/cooperativas/")) return raw;
   return fallback;
 }
 

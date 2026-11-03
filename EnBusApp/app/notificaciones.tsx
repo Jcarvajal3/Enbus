@@ -7,7 +7,7 @@
  * viaje), lo abre; sin recurso solo se marca como leída. Lo no leído se ve con
  * el título en negrita y un punto fijo (sin animación).
  */
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import {
   RefreshControl,
   SectionList,
@@ -86,7 +86,16 @@ export default function NotificacionesScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [markingAll, setMarkingAll] = useState(false);
 
-  const { data: notificaciones, loading, error, setData, refetch, actualizadoAt } = useRealtime<Notificacion>(
+  const {
+    data: notificaciones,
+    loading,
+    error,
+    setData,
+    refetch,
+    actualizadoAt,
+    hayMas,
+    cargarMas,
+  } = useRealtime<Notificacion>(
     'notificaciones_usuario',
     'usuario_id',
     user?.id,
@@ -135,18 +144,29 @@ export default function NotificacionesScreen() {
     [setData]
   );
 
+  /** Un toque doble no abre el detalle dos veces (dos pantallas apiladas). */
+  const abriendoRef = useRef(false);
   const handleOpen = useCallback(
     async (notif: Notificacion) => {
-      const abre = tieneRecurso(notif);
-      if (!notif.leida) {
-        const ok = await marcarLeida(notif);
-        // Con recurso se abre igual: el detalle es lo que la persona buscaba.
-        if (!ok && !abre) {
-          toast.show('error', 'No pudimos marcarla como leída. Revisa tu conexión e intenta de nuevo.');
-          return;
+      if (abriendoRef.current) return;
+      abriendoRef.current = true;
+      try {
+        const abre = tieneRecurso(notif);
+        if (!notif.leida) {
+          const ok = await marcarLeida(notif);
+          // Con recurso se abre igual: el detalle es lo que la persona buscaba.
+          if (!ok && !abre) {
+            toast.show('error', 'No pudimos marcarla como leída. Revisa tu conexión e intenta de nuevo.');
+            return;
+          }
         }
+        if (abre) await abrirRecurso(router, notif, user?.id);
+      } finally {
+        // La navegación ya empezó: se suelta tras la animación de entrada.
+        setTimeout(() => {
+          abriendoRef.current = false;
+        }, 600);
       }
-      if (abre) await abrirRecurso(router, notif, user?.id);
     },
     [marcarLeida, router, toast, user?.id]
   );
@@ -219,6 +239,8 @@ export default function NotificacionesScreen() {
           renderSectionHeader={renderSectionHeader}
           keyExtractor={(item) => item.id}
           stickySectionHeadersEnabled={false}
+          onEndReached={hayMas && !error ? cargarMas : undefined}
+          onEndReachedThreshold={0.5}
           ListHeaderComponent={
             errorCarga ? <StaleBanner actualizadoAt={actualizadoAt} onRetry={() => refetch()} /> : null
           }

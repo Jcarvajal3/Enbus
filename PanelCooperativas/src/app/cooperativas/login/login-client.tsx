@@ -23,7 +23,8 @@ type ErrorLogin = { titulo: string; detalle?: string; conEnlace?: boolean };
 
 const SIN_ACCESO: ErrorLogin = {
   titulo: "Esta cuenta no tiene acceso",
-  detalle: "Entra con la cuenta que te dio tu cooperativa.",
+  detalle:
+    "No pudimos abrir el panel con esta cuenta. Entra con la cuenta que te dio tu cooperativa; si sigue pasando, pide al administrador de tu cooperativa que te invite.",
 };
 
 export default function LoginPageClient({ aviso }: { aviso: AvisoLogin | null }) {
@@ -47,6 +48,8 @@ export default function LoginPageClient({ aviso }: { aviso: AvisoLogin | null })
     if (aviso === "sin-acceso") void supabase.auth.signOut({ scope: "local" });
   }, [aviso, supabase]);
 
+  // cerrarSesion: scope "local", solo esta sesión del navegador (no cierra la de la
+  // app móvil). Sin acceso al panel no se deja una sesión a medias.
   const fallar = async (e: ErrorLogin, cerrarSesion = false) => {
     if (cerrarSesion) await supabase.auth.signOut({ scope: "local" });
     setError(e);
@@ -55,9 +58,19 @@ export default function LoginPageClient({ aviso }: { aviso: AvisoLogin | null })
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loading) return;
     setLoading(true);
     setError(null);
+    try {
+      await iniciarSesion();
+    } catch (err) {
+      // Sin red o respuesta inesperada: el botón no puede quedar bloqueado.
+      setError({ titulo: "No pudiste entrar", detalle: humanizeError(err, "iniciar sesión") });
+      setLoading(false);
+    }
+  };
 
+  const iniciarSesion = async () => {
     const { data: authData, error: authError } = await supabase.auth.signInWithPassword({ email, password });
 
     if (authError || !authData.user) {
@@ -76,6 +89,7 @@ export default function LoginPageClient({ aviso }: { aviso: AvisoLogin | null })
       .single();
 
     if (profileError || !profile) {
+      // Sin perfil no hay acceso: no se deja una sesión a medias.
       return fallar({ titulo: "No pudiste entrar", detalle: humanizeError(profileError, "cargar tu perfil") }, true);
     }
 

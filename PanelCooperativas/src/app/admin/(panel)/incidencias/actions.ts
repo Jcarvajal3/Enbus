@@ -1,7 +1,11 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { requireSuperAdmin } from "@/lib/supabase/auth-guards";
+import { requireSuperAdmin, esUuid } from "@/lib/data/admin-auth";
+
+const NO_ENCONTRADA = "No encontramos la incidencia. Actualiza la página e intenta de nuevo.";
+/** Largo máximo de la resolución y de la descripción (evita guardar textos enormes). */
+const MAX_TEXTO = 2000;
 import { revalidatePath } from "next/cache";
 import { formatUsd } from "@/lib/dinero";
 import { humanizeError } from "@/lib/errores";
@@ -9,6 +13,7 @@ import { humanizeError } from "@/lib/errores";
 export async function tomarCaso(incidenciaId: string) {
   try {
     const admin = await requireSuperAdmin();
+    if (!esUuid(incidenciaId)) return { success: false, error: NO_ENCONTRADA };
     const supabase = await createClient();
 
     // Check if the incident exists
@@ -58,11 +63,16 @@ export async function tomarCaso(incidenciaId: string) {
 export async function resolverIncidencia(incidenciaId: string, formData: FormData) {
   try {
     const admin = await requireSuperAdmin();
+    if (!esUuid(incidenciaId)) return { success: false, error: NO_ENCONTRADA };
     const supabase = await createClient();
 
-    const resolucion = formData.get("resolucion") as string;
+    const valor = formData.get("resolucion");
+    const resolucion = typeof valor === "string" ? valor : "";
     if (!resolucion || resolucion.trim() === "") {
       return { success: false, error: "Cuenta cómo se resolvió la incidencia." };
+    }
+    if (resolucion.trim().length > MAX_TEXTO) {
+      return { success: false, error: `La resolución no puede pasar de ${MAX_TEXTO} caracteres.` };
     }
 
     // Check current incident status
@@ -116,10 +126,32 @@ export async function resolverIncidencia(incidenciaId: string, formData: FormDat
 export async function crearIncidenciaPerdida(encomiendaId: string, descripcion: string) {
   try {
     const admin = await requireSuperAdmin();
+    if (!esUuid(encomiendaId)) {
+      return { success: false, error: "No encontramos la encomienda. Actualiza la página e intenta de nuevo." };
+    }
     const supabase = await createClient();
 
-    if (!descripcion || descripcion.trim() === "") {
+    if (typeof descripcion !== "string" || descripcion.trim() === "") {
       return { success: false, error: "Describe qué pasó con la encomienda." };
+    }
+    if (descripcion.trim().length > MAX_TEXTO) {
+      return { success: false, error: `La descripción no puede pasar de ${MAX_TEXTO} caracteres.` };
+    }
+
+    // Doble clic u otro admin: no se abre una segunda pérdida sobre la misma encomienda.
+    const { data: abiertas, error: abiertasError } = await supabase
+      .from("incidencias")
+      .select("id")
+      .eq("encomienda_id", encomiendaId)
+      .eq("tipo", "PERDIDA")
+      .neq("estado", "RESUELTA")
+      .limit(1);
+    if (abiertasError) {
+      console.error("Error checking open lost incidents:", abiertasError);
+      return { success: false, error: humanizeError(abiertasError, "crear la incidencia") };
+    }
+    if (abiertas && abiertas.length > 0) {
+      return { success: false, error: "Esta encomienda ya tiene una incidencia de pérdida sin resolver." };
     }
 
     const { error: insertError } = await supabase
@@ -148,6 +180,7 @@ export async function crearIncidenciaPerdida(encomiendaId: string, descripcion: 
 export async function activarSeguro(incidenciaId: string) {
   try {
     const admin = await requireSuperAdmin();
+    if (!esUuid(incidenciaId)) return { success: false, error: NO_ENCONTRADA };
     const supabase = await createClient();
 
     // Fetch the incident along with its associated encomienda
@@ -183,7 +216,8 @@ export async function activarSeguro(incidenciaId: string) {
     const encomienda = Array.isArray(embed) ? embed[0] : embed;
     const valorDeclarado = encomienda?.valor_declarado ? Number(encomienda.valor_declarado) : 0;
     // Spec: cobertura del seguro es 3× el valor declarado
-    const montoReembolso = valorDeclarado * 3;
+    // Redondeado al centavo (3 × 10,10 = 30,299999… en float).
+    const montoReembolso = Math.round(valorDeclarado * 3 * 100) / 100;
     if (incidencia.estado !== "EN_PROCESO") {
       return { success: false, error: "Primero toma el caso; después podrás activar el seguro." };
     }
@@ -206,7 +240,7 @@ export async function activarSeguro(incidenciaId: string) {
         updated_at: new Date().toISOString()
       })
       .eq("id", incidenciaId)
-      .neq("estado", "RESUELTA")
+      .eq("estado", "EN_PROCESO")
       .select("id");
 
     if (updateError) {

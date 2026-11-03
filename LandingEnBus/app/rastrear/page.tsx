@@ -29,7 +29,7 @@ export const metadata: Metadata = {
 /** "mar. 3 nov. · 2:30 p. m." (D4, hora de Venezuela); null sin fecha válida. */
 function fechaHora(iso: string | null | undefined): string | null {
   if (!iso) return null
-  return Number.isNaN(new Date(iso).getTime()) ? null : formatDiaHoraVE(iso)
+  return formatDiaHoraVE(iso) || null
 }
 
 const ENLACE = "w-fit font-medium text-info-text underline underline-offset-4"
@@ -161,6 +161,17 @@ function Resultado({ resultado, codigo }: { resultado: EstadoRastreo; codigo: st
           {enlaceAyuda}
         </Aviso>
       )
+    case "limite": {
+      const minutos = Math.max(1, Math.ceil(resultado.reintentarEnSegundos / 60))
+      return (
+        <Aviso titulo="Hiciste muchas búsquedas seguidas.">
+          <p>
+            Intenta de nuevo en {minutos} {minutos === 1 ? "minuto" : "minutos"}.
+          </p>
+          {enlaceAyuda}
+        </Aviso>
+      )
+    }
     case "error":
       return (
         <Aviso titulo="No pudimos consultar el rastreo.">

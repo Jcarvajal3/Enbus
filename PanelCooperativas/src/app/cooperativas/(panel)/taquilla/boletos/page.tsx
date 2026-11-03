@@ -567,7 +567,10 @@ function TaquillaBoletos() {
   const { ultimo, registrar } = useUltimoEscaneo();
   const validandoRef = useRef(false);
 
+  // Última carga: una respuesta vieja (otro filtro) no pisa la de una carga posterior.
+  const cargaRef = useRef(0);
   const fetchBoletos = useCallback(async () => {
+    const carga = ++cargaRef.current;
     setLoading(true);
     setErrorCarga(null);
     try {
@@ -605,6 +608,7 @@ function TaquillaBoletos() {
           .lte("fecha_hora_salida", hasta);
 
         if (viajesError) throw viajesError;
+        if (carga !== cargaRef.current) return;
         const viajeIds = (viajesDia ?? []).map((v: { id: string }) => v.id);
         if (viajeIds.length === 0) {
           setBoletos([]);
@@ -614,6 +618,7 @@ function TaquillaBoletos() {
       }
 
       const { data, error } = await query;
+      if (carga !== cargaRef.current) return;
       if (error) throw error;
       let filas = data as unknown as BoletoRow[];
       // "Reserva sin pagar" y "Pago por verificar" comparten estado en la base: los separa el pago.
@@ -622,9 +627,10 @@ function TaquillaBoletos() {
       }
       setBoletos(filas);
     } catch (err) {
-      setErrorCarga(humanizeError(err, "cargar los boletos"));
+      console.error(err);
+      if (carga === cargaRef.current) setErrorCarga(humanizeError(err, "cargar los boletos"));
     } finally {
-      setLoading(false);
+      if (carga === cargaRef.current) setLoading(false);
     }
   }, [supabase, cooperativaId, filtroEstado, filtroFecha]);
 

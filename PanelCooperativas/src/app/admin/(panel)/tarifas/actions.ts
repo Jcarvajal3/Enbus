@@ -1,7 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { requireSuperAdmin } from "@/lib/supabase/auth-guards";
+import { requireSuperAdmin, esUuid } from "@/lib/data/admin-auth";
 import { revalidatePath } from "next/cache";
 import { humanizeError, parseDetalleEB } from "@/lib/errores";
 import { formatNumeroVE } from "@/lib/dinero";
@@ -95,7 +95,7 @@ export async function cancelarTarifaProgramada(tarifaId: string): Promise<{ succ
   } catch {
     return { success: false, error: "Solo el equipo de EnBus puede cambiar las tarifas." };
   }
-  if (!tarifaId) return { success: false, error: "No encontramos la tarifa programada. Actualiza la página." };
+  if (!esUuid(tarifaId)) return { success: false, error: "No encontramos la tarifa programada. Actualiza la página." };
 
   try {
     const supabase = await createClient();
@@ -117,11 +117,12 @@ export async function simularCosto(pesoKg: number, rutaId: string) {
     await requireSuperAdmin();
     const supabase = await createClient();
 
-    if (!rutaId) {
+    if (!esUuid(rutaId)) {
       return { success: false, error: "Elige una ruta." };
     }
 
-    if (isNaN(pesoKg) || pesoKg <= 0) {
+    pesoKg = Number(pesoKg);
+    if (!Number.isFinite(pesoKg) || pesoKg <= 0) {
       return { success: false, error: "El peso debe ser un número positivo." };
     }
 
@@ -169,9 +170,11 @@ export async function simularCosto(pesoKg: number, rutaId: string) {
     // costo_base = peso_kg * tarifa_por_kg
     // costo_distancia = costo_base * factor_distancia_por_min * duracion_estimada_min
     // total = costo_base * (1 + factor_distancia_por_min * duracion_estimada_min)
-    const costo_base = pesoKg * tarifa_por_kg;
-    const costo_distancia = costo_base * (factor_distancia_por_min * duracion_estimada_min);
-    const costo_total = costo_base + costo_distancia;
+    // Mismo redondeo que _costo_encomienda en la base: round(peso × kg × (1 + factor × min), 2).
+    const redondear = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
+    const costo_total = redondear(pesoKg * tarifa_por_kg * (1 + factor_distancia_por_min * duracion_estimada_min));
+    const costo_base = redondear(pesoKg * tarifa_por_kg);
+    const costo_distancia = redondear(costo_total - costo_base);
 
     const formula = `${formatNumeroVE(pesoKg)} kg × USD ${formatNumeroVE(tarifa_por_kg)} × (1 + ${formatNumeroVE(factor_distancia_por_min, 4)} × ${duracion_estimada_min} min)`;
 

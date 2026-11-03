@@ -174,7 +174,43 @@ export type CodigoEB =
   /** `fn_eliminar_mi_cuenta`: detalle `{boletos, pagos, encomiendas_enviadas, encomiendas_por_recibir, reembolsos}` */
   | 'EB_CUENTA_CON_ACTIVIDAD'
   /** Solo de cliente: lo devuelven las server actions cuando `fn_consumir_limite` dice `permitido:false` */
-  | 'EB_DEMASIADOS_INTENTOS';
+  | 'EB_DEMASIADOS_INTENTOS'
+  /** Edge function `eliminar-cuenta`: la baja quedó hecha pero la identidad de Auth no se borró aún */
+  | 'EB_BAJA_PENDIENTE';
+
+/**
+ * Errores de `supabase.functions.invoke`: llegan como `FunctionsHttpError` con
+ * el mensaje genérico "Edge Function returned a non-2xx status code" y el cuerpo
+ * de la respuesta (`{ error: 'EB_…', hint: '<texto para el usuario>' }`) sin leer
+ * en `error.context` (un `Response`). Esto lo lee y devuelve un error con la
+ * misma forma que el de una RPC (`message` = código, `hint` = texto), para que
+ * `codigoEB` y `humanizeError` funcionen igual. Nunca lanza: si no hay cuerpo
+ * legible devuelve el error original.
+ */
+export async function errorDeFuncion(err: unknown): Promise<unknown> {
+  const contexto = (err as { context?: unknown } | null)?.context as
+    | { json?: () => Promise<unknown>; clone?: () => { json: () => Promise<unknown> }; status?: number }
+    | undefined;
+  if (!contexto || typeof contexto.json !== 'function') return err;
+  try {
+    const cuerpo = (await (contexto.clone ? contexto.clone().json() : contexto.json())) as
+      | { error?: unknown; hint?: unknown; details?: unknown }
+      | null;
+    if (!cuerpo || typeof cuerpo !== 'object') return err;
+    const codigo = typeof cuerpo.error === 'string' ? cuerpo.error : '';
+    const hint = typeof cuerpo.hint === 'string' ? cuerpo.hint : '';
+    if (!codigo && !hint) return err;
+    return {
+      message: codigo || (err as { message?: string }).message || '',
+      hint,
+      details: typeof cuerpo.details === 'string' ? cuerpo.details : '',
+      status: contexto.status,
+      name: 'FunctionsHttpError',
+    };
+  } catch {
+    return err;
+  }
+}
 
 /** `'EB_ASIENTO_OCUPADO'` si `err` es un error de negocio de una RPC; si no, `null`. */
 export function codigoEB(err: unknown): CodigoEB | null {

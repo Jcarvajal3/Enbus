@@ -9,7 +9,7 @@ test.describe("Flujo de Autenticación y Recuperación (F-03)", () => {
     await expect(page.locator("h1")).toContainText("Cooperativas");
     
     // Verificar formulario
-    const cardTitle = page.locator("[data-slot='card-title']:has-text('Iniciar Sesión')");
+    const cardTitle = page.locator("[data-slot='card-title']:has-text('Iniciar sesión')");
     await expect(cardTitle).toBeVisible();
     
     const emailInput = page.locator("input[type='email']");
@@ -21,7 +21,7 @@ test.describe("Flujo de Autenticación y Recuperación (F-03)", () => {
     
     const submitBtn = page.locator("button[type='submit']");
     await expect(submitBtn).toBeVisible();
-    await expect(submitBtn).toContainText("Iniciar Sesión");
+    await expect(submitBtn).toContainText("Iniciar sesión");
   });
 
   test("debe validar credenciales vacías en el login", async ({ page }) => {
@@ -66,15 +66,28 @@ test.describe("Flujo de Autenticación y Recuperación (F-03)", () => {
   test("debe validar la página de restablecer contraseña sin token", async ({ page }) => {
     // Si se accede directamente a /cooperativas/restablecer sin token o sesión activa
     await page.goto("/cooperativas/restablecer");
-    
-    // Debería mostrar un error de sesión inválida/expirada
-    const errorAlert = page.locator("[data-slot='alert-title']:has-text('Sesión Inválida')");
+
+    // Debe decir que el enlace no sirve y ofrecer pedir otro
+    const errorAlert = page.locator("[data-slot='alert-title']:has-text('El enlace venció o ya se usó')");
     await expect(errorAlert).toBeVisible();
-    
-    const loginButton = page.locator("button:has-text('Ir al Login')");
-    await expect(loginButton).toBeVisible();
-    await loginButton.click();
-    
+
+    const otroEnlace = page.locator("button:has-text('Pedir otro enlace')");
+    await expect(otroEnlace).toBeVisible();
+    await otroEnlace.click();
+
+    await expect(page).toHaveURL("/cooperativas/recuperar");
+  });
+
+  test("sin sesión, el panel lleva al login (sin bucle de redirecciones)", async ({ page }) => {
+    const respuesta = await page.goto("/cooperativas/dashboard");
+    expect(respuesta?.ok()).toBe(true);
     await expect(page).toHaveURL("/cooperativas/login");
+    await expect(page.locator("input[type='email']")).toBeVisible();
+  });
+
+  test("el login explica cuando la cuenta no tiene acceso al panel", async ({ page }) => {
+    await page.goto("/cooperativas/login?error=sin-acceso");
+    await expect(page.locator("[data-slot='alert-description']")).toContainText("No pudimos abrir el panel");
+    await expect(page.locator("input[type='email']")).toBeVisible();
   });
 });

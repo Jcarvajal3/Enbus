@@ -22,6 +22,7 @@ import { formatPorcentaje } from "@/components/admin/cooperativas/cooperativas-t
 import { etiquetaMetodoPago } from "@/lib/estados";
 import { formatFechaVE } from "@/lib/fechas";
 import type { ComisionCiclo } from "@/lib/types/admin-comisiones";
+import { formatNumeroVE } from "@/lib/dinero";
 import type { TasaBCV } from "@/lib/types/pagos";
 import { useTasaBCVAdmin } from "@/components/admin/dashboard/use-tasa-bcv-admin";
 import { RegistrarPagoCicloDialog } from "./registrar-pago-ciclo-dialog";
@@ -39,12 +40,14 @@ export function detallePago(c: Pick<ComisionCiclo, "pagado" | "pagado_at" | "pag
 
 interface CiclosTableProps {
   data: ComisionCiclo[];
+  /** true si hay más ciclos que el tope cargado (MAX_CICLOS, los más recientes). */
+  truncado?: boolean;
   cooperativas: { id: string; nombre: string }[];
   /** Tasa BCV de hoy (del servidor). Si no se pasa, se consulta en el navegador. */
   tasa?: TasaBCV | null;
 }
 
-export function CiclosTable({ data, cooperativas, tasa: tasaServidor }: CiclosTableProps) {
+export function CiclosTable({ data, truncado = false, cooperativas, tasa: tasaServidor }: CiclosTableProps) {
   const tasa = useTasaBCVAdmin(tasaServidor);
   const searchParams = useSearchParams();
   const [aPagar, setAPagar] = useState<ComisionCiclo | null>(null);
@@ -70,25 +73,36 @@ export function CiclosTable({ data, cooperativas, tasa: tasaServidor }: CiclosTa
   const { visibles, pagina, paginas, ir } = usePaginacion(filtradas);
 
   // Totales de la selección filtrada.
-  const totales = useMemo(
-    () =>
-      filtradas.reduce(
-        (acc, c) => {
-          acc.boletos += c.total_boletos;
-          acc.encomiendas += c.total_encomiendas;
-          acc.comisiones += c.monto_comision;
-          if (!c.pagado) acc.pendiente += c.monto_comision;
-          return acc;
-        },
-        { boletos: 0, encomiendas: 0, comisiones: 0, pendiente: 0 }
-      ),
-    [filtradas]
-  );
+  // Sumas en centavos enteros: miles de floats acumulan error de redondeo.
+  const totales = useMemo(() => {
+    const cent = (n: number) => Math.round((Number(n) || 0) * 100);
+    const enCentavos = filtradas.reduce(
+      (acc, c) => {
+        acc.boletos += cent(c.total_boletos);
+        acc.encomiendas += cent(c.total_encomiendas);
+        acc.comisiones += cent(c.monto_comision);
+        if (!c.pagado) acc.pendiente += cent(c.monto_comision);
+        return acc;
+      },
+      { boletos: 0, encomiendas: 0, comisiones: 0, pendiente: 0 }
+    );
+    return {
+      boletos: enCentavos.boletos / 100,
+      encomiendas: enCentavos.encomiendas / 100,
+      comisiones: enCentavos.comisiones / 100,
+      pendiente: enCentavos.pendiente / 100,
+    };
+  }, [filtradas]);
 
   const monto = (usd: number) => <Monto usd={usd} tasa={tasa} moneda="USD" size="lg" />;
 
   return (
     <div className="flex flex-col gap-4">
+      {truncado && (
+        <p role="status" className="rounded-xl border border-warning/40 bg-warning-light p-3 text-sm text-warning-deep">
+          Se muestran los {formatNumeroVE(data.length, 0)} ciclos más recientes: los totales no incluyen los más antiguos.
+        </p>
+      )}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <KpiCard title="Ventas de boletos" value={monto(totales.boletos)} icon={Ticket} />
         <KpiCard title="Ventas de encomiendas" value={monto(totales.encomiendas)} icon={Package} />

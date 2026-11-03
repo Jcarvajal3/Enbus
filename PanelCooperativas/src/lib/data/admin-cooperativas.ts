@@ -1,5 +1,7 @@
 import { createClient, createAdminClient } from "@/lib/supabase/server";
 import { humanizeError } from "@/lib/errores";
+import { requireSuperAdmin, esUuid } from "./admin-auth";
+import { aCentavos, deCentavos, enLotes } from "./admin-consultas";
 import type { 
   Cooperativa, 
   CooperativaDetalle, 
@@ -11,6 +13,7 @@ import type {
 } from "@/lib/types/admin-cooperativas";
 
 export async function fetchCooperativas(filters?: { estado?: string; search?: string }): Promise<Cooperativa[]> {
+  await requireSuperAdmin();
   const supabase = await createClient();
   let query = supabase.from("cooperativas").select("*");
 
@@ -19,7 +22,7 @@ export async function fetchCooperativas(filters?: { estado?: string; search?: st
   }
 
   // Sin comas, paréntesis ni comodines: romperían el filtro `or` de PostgREST (?search=a,b → error).
-  const termino = (filters?.search ?? "").replace(/[,()*%\\]/g, " ").trim();
+  const termino = (filters?.search ?? "").replace(/[,()*%\\"]/g, " ").trim().slice(0, 80);
   if (termino) {
     query = query.or(`nombre.ilike.%${termino}%,rif.ilike.%${termino}%`);
   }
@@ -34,7 +37,13 @@ export async function fetchCooperativas(filters?: { estado?: string; search?: st
   return data as Cooperativa[];
 }
 
+/** Reseñas que se cargan en el detalle (las más recientes; el total sale de la cooperativa). */
+export const MAX_CALIFICACIONES_DETALLE = 50;
+
 export async function fetchCooperativaById(id: string): Promise<CooperativaDetalle | null> {
+  // Antes de usar la service role: este detalle muestra métodos de pago y correos.
+  await requireSuperAdmin();
+  if (!esUuid(id)) return null;
   const supabase = await createClient();
   const adminSupabase = createAdminClient();
 
@@ -68,7 +77,12 @@ export async function fetchCooperativaById(id: string): Promise<CooperativaDetal
     adminSupabase.from("metodos_pago_cooperativa").select("*").eq("cooperativa_id", id).order("created_at", { ascending: true }),
     supabase.from("rutas").select("*").eq("cooperativa_id", id).order("created_at", { ascending: false }),
     supabase.from("profiles").select("id, nombre_completo, role, cooperativa_id, telefono, cedula_rif, created_at").eq("cooperativa_id", id).order("created_at", { ascending: false }),
-    supabase.from("calificaciones").select("*, profiles:usuario_id(nombre_completo)").eq("cooperativa_id", id).order("created_at", { ascending: false }),
+    supabase
+      .from("calificaciones")
+      .select("*, profiles:usuario_id(nombre_completo)")
+      .eq("cooperativa_id", id)
+      .order("created_at", { ascending: false })
+      .limit(MAX_CALIFICACIONES_DETALLE),
     supabase.from("comisiones_ciclo").select("monto_comision").eq("cooperativa_id", id).eq("pagado", false),
     supabase
       .from("encomiendas")
@@ -91,8 +105,12 @@ export async function fetchCooperativaById(id: string): Promise<CooperativaDetal
 
   // Fetch auth user data only for the profiles we already have (targeted lookup, not full listUsers)
   const profileIds = (profilesResult.data || []).map((p) => p.id);
-  const authUserResults = await Promise.all(
-    profileIds.map((uid) => adminSupabase.auth.admin.getUserById(uid))
+  // Una petición a Auth por empleado, con a lo sumo 10 a la vez.
+  const authUserResults = await enLotes(profileIds, 10, (uid) =>
+    adminSupabase.auth.admin.getUserById(uid).catch((error: unknown) => {
+      console.error("Error auth user:", error);
+      return { data: { user: null }, error: error as Error };
+    })
   );
   const authUsersMap = new Map(
     authUserResults
@@ -142,7 +160,9 @@ export async function fetchCooperativaById(id: string): Promise<CooperativaDetal
     };
   });
 
-  const comisiones_pendientes = (comisionesResult.data || []).reduce((sum, item) => sum + Number(item.monto_comision), 0);
+  const comisiones_pendientes = deCentavos(
+    (comisionesResult.data || []).reduce((sum, item) => sum + aCentavos(item.monto_comision), 0)
+  );
 
   return {
     ...cooperativa,

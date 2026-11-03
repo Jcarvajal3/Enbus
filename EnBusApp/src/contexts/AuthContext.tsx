@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useCallback, useRef, use
 import { AppState } from 'react-native';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '../utils/supabase';
+import { desvincularPushDeEsteTelefono, limpiarCacheLocal } from '../utils/sesionLocal';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -116,18 +117,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
 
     // ── 2. Live auth state listener (login / logout / token refresh) ──────────
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, s) => {
       if (cancelled) return;
       setSession(s);
       setUser(s?.user ?? null);
       setIsOffline(false); // if we got a state change, we have network
+      // Cualquier cierre (botón, refresh token revocado, cuenta eliminada): la
+      // caché de boletos y envíos no queda para la siguiente persona.
+      if (event === 'SIGNED_OUT') void limpiarCacheLocal();
     });
 
     // ── 3. Refresh session when app comes back from background ────────────────
     // Prevents stale tokens after the device wakes from sleep.
     // PERF-09: Debounced — only refresh if 60+ seconds have passed since the
     // last refresh to avoid unnecessary network requests on rapid app switches.
+    // Recomendación de Supabase para React Native: el refresco automático del
+    // token solo corre en primer plano. En segundo plano los timers se congelan y
+    // un refresco a medias (sin red) puede perder la sesión; al volver se reanuda
+    // y renueva el token antes de la siguiente consulta.
+    if (AppState.currentState === 'active') void supabase.auth.startAutoRefresh();
     const appStateSubscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void supabase.auth.startAutoRefresh();
+      else void supabase.auth.stopAutoRefresh();
       if (state === 'active') {
         const now = Date.now();
         if (now - lastForegroundRefreshRef.current < FOREGROUND_REFRESH_INTERVAL_MS) {
@@ -156,6 +167,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
+  const userIdRef = useRef<string | undefined>(undefined);
+  userIdRef.current = user?.id;
+
   /** Cierra la sesión solo en este teléfono; si hasta eso falla, se olvida en memoria. */
   const cerrarSesionLocal = useCallback(async () => {
     try {
@@ -169,6 +183,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // PERF-03: Stable reference — useCallback prevents consumers from re-rendering
   // when AuthProvider re-renders for unrelated state changes.
   const signOut = useCallback(async () => {
+    // Las push de esta cuenta dejan de llegar a este teléfono (necesita la sesión).
+    await desvincularPushDeEsteTelefono(userIdRef.current);
     // Sin conexión, el cierre global devuelve `{ error }` (o lanza) y deja la
     // sesión en el teléfono: en ese caso se cierra al menos localmente.
     let cerradaGlobal = false;

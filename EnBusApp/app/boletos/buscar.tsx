@@ -58,6 +58,7 @@ import {
   formatDiaVE,
   formatDuracion,
   formatHoraVE,
+  rangoDiaVE,
   toDateKey,
 } from '@/src/utils/formatters';
 import { esErrorEB, humanizeError } from '@/src/utils/errores';
@@ -347,22 +348,31 @@ export default function BuscarBoletoScreen() {
         setErrorFechas(false);
         const { data, error } = await supabase
           .from('viajes')
-          .select('fecha_hora_salida, rutas!inner ( ciudad_origen, ciudad_destino )')
+          .select(
+            'fecha_hora_salida, rutas!inner ( ciudad_origen, ciudad_destino ), cooperativas!inner ( estado )'
+          )
           .eq('estado', 'PROGRAMADO')
           .gt('asientos_disponibles', 0)
           .eq('rutas.ciudad_origen', normalizeCityForDb(origen.ciudad))
           .eq('rutas.ciudad_destino', normalizeCityForDb(destino.ciudad))
-          .gte('fecha_hora_salida', new Date().toISOString());
+          // Lo mismo que exige `fn_reservar_asientos`: ruta activa con precio y
+          // cooperativa activa (si no, la salida se ve pero no se puede comprar).
+          .eq('rutas.activa', true)
+          .gt('rutas.precio_pasaje', 0)
+          .eq('cooperativas.estado', 'ACTIVA')
+          .gte('fecha_hora_salida', new Date().toISOString())
+          .order('fecha_hora_salida', { ascending: true })
+          .limit(1000);
 
         if (error) throw error;
         if (!isMounted) return;
 
+        // El día de la salida en Venezuela (no en la zona del teléfono): es el
+        // mismo día con el que se buscan las salidas abajo (`rangoDiaVE`).
         setActiveDates(
           Array.from(
             new Set(
-              (data ?? []).map((v: { fecha_hora_salida: string }) =>
-                toDateKey(new Date(v.fecha_hora_salida))
-              )
+              (data ?? []).map((v: { fecha_hora_salida: string }) => fechaVE(v.fecha_hora_salida))
             )
           ).sort()
         );
@@ -396,31 +406,32 @@ export default function BuscarBoletoScreen() {
       try {
         setLoadingViajes(true);
         setErrorViajes(null);
-        const startOfDay = new Date(fecha.getFullYear(), fecha.getMonth(), fecha.getDate());
-        const endOfDay = new Date(
-          fecha.getFullYear(),
-          fecha.getMonth(),
-          fecha.getDate(),
-          23,
-          59,
-          59,
-          999
-        );
+        // El día elegido es un día de Venezuela: las horas se muestran en hora de
+        // Venezuela, así que el rango también (un teléfono en otra zona horaria
+        // veía salidas de la noche anterior o le faltaban las del final del día).
+        const { desde, hasta } = rangoDiaVE(toDateKey(fecha));
+        const ahoraIso = new Date().toISOString();
 
         const { data, error } = await supabase
           .from('viajes')
           .select(
             `id, fecha_hora_salida, fecha_hora_llegada_est, asientos_disponibles, asientos_totales,
              rutas!inner ( id, ciudad_origen, ciudad_destino, duracion_estimada_min, precio_pasaje ),
-             cooperativas ( id, nombre, calificacion_promedio )`
+             cooperativas!inner ( id, nombre, calificacion_promedio )`
           )
           .eq('estado', 'PROGRAMADO')
           .gt('asientos_disponibles', 0)
           .eq('rutas.ciudad_origen', normalizeCityForDb(origen.ciudad))
           .eq('rutas.ciudad_destino', normalizeCityForDb(destino.ciudad))
-          .gte('fecha_hora_salida', startOfDay.toISOString())
-          .lte('fecha_hora_salida', endOfDay.toISOString())
-          .order('fecha_hora_salida', { ascending: true });
+          .eq('rutas.activa', true)
+          .gt('rutas.precio_pasaje', 0)
+          .eq('cooperativas.estado', 'ACTIVA')
+          // Hoy: solo las que aún no salieron (el servidor rechaza apartar en una
+          // salida pasada y antes se listaban las de la mañana por la tarde).
+          .gt('fecha_hora_salida', desde > ahoraIso ? desde : ahoraIso)
+          .lte('fecha_hora_salida', hasta)
+          .order('fecha_hora_salida', { ascending: true })
+          .limit(200);
 
         if (error) throw error;
         if (!isMounted) return;
@@ -535,6 +546,17 @@ export default function BuscarBoletoScreen() {
   // (otro pasajero apartó o liberó) vuelve a leer los ocupados.
   useEffect(() => {
     if (!viajeElegidoId || step !== 2) return;
+    // Apartar 3 asientos son 3 UPDATE del viaje (uno por boleto): con muchos
+    // pasajeros mirando la misma salida, una sola relectura por ráfaga.
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const releer = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        timer = null;
+        setAsientosVersion((v) => v + 1);
+      }, 500);
+    };
+    let suscritoAntes = false;
     const channel = supabase
       .channel(`rt:viaje:${viajeElegidoId}:${Math.random().toString(36).slice(2, 8)}`)
       .on(
@@ -545,10 +567,16 @@ export default function BuscarBoletoScreen() {
           table: 'viajes',
           filter: `id=eq.${viajeElegidoId}`,
         },
-        () => setAsientosVersion((v) => v + 1)
+        releer
       )
-      .subscribe();
+      .subscribe((status) => {
+        // Tras una caída del socket, lo que se apartó en el hueco no llegó.
+        if (status !== 'SUBSCRIBED') return;
+        if (suscritoAntes) releer();
+        suscritoAntes = true;
+      });
     return () => {
+      if (timer) clearTimeout(timer);
       supabase.removeChannel(channel);
     };
   }, [viajeElegidoId, step]);

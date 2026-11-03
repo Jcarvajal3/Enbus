@@ -22,7 +22,7 @@ import {
   normalizeCityForDb,
 } from '../utils/venezuela';
 import { ciudadesRecientes, guardarBusquedaReciente } from '../utils/busquedasRecientes';
-import { formatCity, formatDiaVE, toDateKey } from '../utils/formatters';
+import { fechaVE, formatCity, formatDiaVE, toDateKey } from '../utils/formatters';
 import { supabase } from '../utils/supabase';
 import { Colors, Motion, Radius, Sizes, Spacing } from '@/src/theme';
 
@@ -113,18 +113,27 @@ export function SearchForm({
         setFechaAjustada(false);
         const { data, error } = await supabase
           .from('viajes')
-          .select('fecha_hora_salida, rutas!inner ( ciudad_origen, ciudad_destino )')
+          .select(
+            'fecha_hora_salida, rutas!inner ( ciudad_origen, ciudad_destino ), cooperativas!inner ( estado )'
+          )
           .eq('estado', 'PROGRAMADO')
           .gt('asientos_disponibles', 0)
           .eq('rutas.ciudad_origen', normalizeCityForDb(origen.ciudad))
           .eq('rutas.ciudad_destino', normalizeCityForDb(destino.ciudad))
-          .gte('fecha_hora_salida', new Date().toISOString());
+          // Mismas condiciones que la lista de salidas (`boletos/buscar`).
+          .eq('rutas.activa', true)
+          .gt('rutas.precio_pasaje', 0)
+          .eq('cooperativas.estado', 'ACTIVA')
+          .gte('fecha_hora_salida', new Date().toISOString())
+          .order('fecha_hora_salida', { ascending: true })
+          .limit(1000);
 
         if (error) throw error;
         if (!isMounted) return;
 
+        // Día de la salida en Venezuela, igual que la búsqueda de `boletos/buscar`.
         const unique = Array.from(
-          new Set((data ?? []).map((v: { fecha_hora_salida: string }) => toDateKey(new Date(v.fecha_hora_salida))))
+          new Set((data ?? []).map((v: { fecha_hora_salida: string }) => fechaVE(v.fecha_hora_salida)))
         ).sort();
         setActiveDates(unique);
 
@@ -401,10 +410,13 @@ export function SinSalidasRuta({
       try {
         const { data, error } = await supabase
           .from('viajes')
-          .select('rutas!inner ( ciudad_origen, ciudad_destino )')
+          .select('rutas!inner ( ciudad_origen, ciudad_destino ), cooperativas!inner ( estado )')
           .eq('estado', 'PROGRAMADO')
           .gt('asientos_disponibles', 0)
           .eq('rutas.ciudad_origen', claveOrigen)
+          .eq('rutas.activa', true)
+          .gt('rutas.precio_pasaje', 0)
+          .eq('cooperativas.estado', 'ACTIVA')
           .gte('fecha_hora_salida', new Date().toISOString())
           .order('fecha_hora_salida', { ascending: true })
           .limit(200);

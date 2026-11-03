@@ -33,14 +33,20 @@ export function cedulaValida(v: string): boolean {
   return normalizarCedula(v) !== null;
 }
 
-/** "V12345678" → "V-12.345.678"; RIF de 9 dígitos (J, G, C) → "J-12345678-9"; inválida → "—". */
+/**
+ * "V12345678" → "V-12.345.678"; RIF de 9 dígitos (J, G, C) → "J-12345678-9", también con
+ * ceros a la izquierda ("J000123456" → "J-00012345-6", que `normalizarCedula` acorta a
+ * "J123456" para comparar); inválida → "—".
+ */
 export function formatCedula(v: string | null | undefined): string {
   const n = normalizarCedula(v);
   if (!n) return "—";
   const letra = n.charAt(0);
   const numeros = n.slice(1);
-  if ((letra === "J" || letra === "G" || letra === "C") && numeros.length === 9) {
-    return `${letra}-${numeros.slice(0, 8)}-${numeros.slice(8)}`;
+  if (letra === "J" || letra === "G" || letra === "C") {
+    // Los ceros a la izquierda son parte del RIF: se formatea con los dígitos tal como se escribieron.
+    const digitos = (v ?? "").replace(/[^0-9]/g, "");
+    if (digitos.length === 9) return `${letra}-${digitos.slice(0, 8)}-${digitos.slice(8)}`;
   }
   return `${letra}-${numeros.replace(/\B(?=(\d{3})+(?!\d))/g, ".")}`;
 }
@@ -112,8 +118,9 @@ export function telefonoWhatsApp(v: string | null | undefined): string | null {
  */
 export function mascaraTelefono(entrada: string): string {
   let d = (entrada ?? "").replace(/[^0-9]/g, "");
-  if (d.startsWith("58")) d = `0${d.slice(2)}`;
-  else if (d.length > 0 && d.charAt(0) !== "0") d = `0${d}`;
+  if (d.startsWith("58")) d = d.slice(2);
+  // "+58 414…" y "414…" → "0414…"; "+58 0414…" no duplica el 0.
+  if (d.length > 0 && d.charAt(0) !== "0") d = `0${d}`;
   d = d.slice(0, 11);
   if (d.length < 4) return d;
   let salida = `${d.slice(0, 4)}-${d.slice(4, 7)}`;
@@ -129,15 +136,20 @@ export const TELEFONO_ERROR = "Escribe un teléfono venezolano, por ejemplo 0414
 // Acepta el RIF como lo escriba la persona ("j123456789", "J-12345678-9",
 // "J 12.345.678-9") y lo normaliza al formato oficial "J-12345678-9".
 // Letras válidas: J (jurídica), G (gobierno), V (venezolano), E (extranjero),
-// P (pasaporte), C (comunal). No se valida el dígito verificador.
+// P (pasaporte), C (comunal). `normalizeRif` no exige el dígito verificador (para no
+// rechazar RIF reales por una tabla incompleta); `rifDigitoValido` lo comprueba aparte.
+// Los ejemplos usan un RIF con el dígito verificador correcto (J-12345678-4).
 
-export const RIF_PLACEHOLDER = "J-12345678-9";
+export const RIF_PLACEHOLDER = "J-12345678-4";
 
 export const RIF_AYUDA =
-  "Escribe la letra (J, G, V, E, P o C) y los 9 números de tu RIF, con o sin guiones. Ejemplo: J-12345678-9.";
+  "Escribe la letra (J, G, V, E, P o C) y los 9 números de tu RIF, con o sin guiones. Ejemplo: J-12345678-4.";
 
 export const RIF_ERROR =
-  "El RIF no es válido. Debe tener una letra (J, G, V, E, P o C) y 9 números, por ejemplo J-12345678-9.";
+  "El RIF no es válido. Debe tener una letra (J, G, V, E, P o C) y 9 números, por ejemplo J-12345678-4.";
+
+export const RIF_DIGITO_ERROR =
+  "El último número del RIF (dígito verificador) no coincide. Revisa que esté bien escrito.";
 
 const RIF_RE = /^([JGVEPC])(\d{8})(\d)$/;
 
@@ -162,6 +174,36 @@ export const CLAVE_MINIMO = 8;
 export const CLAVE_AYUDA = "Mínimo 8 caracteres.";
 /** Error cuando la contraseña es más corta que `CLAVE_MINIMO`. */
 export const CLAVE_ERROR = "Usa al menos 8 caracteres.";
+/** Valor de la letra en el cálculo del SENIAT. C (comunal) no tiene un valor documentado. */
+const VALOR_LETRA_RIF: Record<string, number> = { V: 1, E: 2, J: 3, P: 4, G: 5 };
+const PESOS_RIF = [3, 2, 7, 6, 5, 4, 3, 2];
+
+/**
+ * Dígito verificador (módulo 11 del SENIAT) de un RIF: "J-12345678" o "J-12345678-?" → 4.
+ * null si el texto no tiene letra y 8 números, o si la letra es C (sin tabla oficial).
+ */
+export function digitoVerificadorRif(input: string | null | undefined): number | null {
+  const limpio = (input ?? "").toUpperCase().replace(/[\s.\-_/]/g, "");
+  const m = limpio.match(/^([JGVEPC])(\d{8})\d?$/);
+  if (!m) return null;
+  const valorLetra = VALOR_LETRA_RIF[m[1]];
+  if (valorLetra === undefined) return null;
+  let suma = valorLetra * 4;
+  for (let i = 0; i < 8; i++) suma += Number(m[2].charAt(i)) * PESOS_RIF[i];
+  const digito = 11 - (suma % 11);
+  return digito >= 10 ? 0 : digito;
+}
+
+/**
+ * true si el RIF es válido y su último número coincide con el dígito verificador.
+ * Un RIF C (comunal) se acepta con cualquier dígito: no hay tabla oficial para calcularlo.
+ */
+export function rifDigitoValido(input: string | null | undefined): boolean {
+  const rif = normalizeRif(input);
+  if (!rif) return false;
+  const esperado = digitoVerificadorRif(rif);
+  return esperado === null || Number(rif.charAt(rif.length - 1)) === esperado;
+}
 
 // ─── Ciudades ────────────────────────────────────────────────────────────────
 
@@ -269,58 +311,25 @@ export function mismaCiudad(a: string | null | undefined, b: string | null | und
 }
 
 // ─── Fechas en hora de Venezuela ─────────────────────────────────────────────
-// Venezuela usa UTC-4 fijo (sin horario de verano). Estos helpers no dependen
-// de la zona horaria del servidor, del navegador ni del teléfono: evitan el desfase
-// de "hoy" después de las 20:00 que produce `new Date().toISOString().slice(0, 10)`.
+// Venezuela usa UTC-4 fijo (sin horario de verano) desde el 1 de mayo de 2016. Estos
+// helpers no dependen de la zona horaria del servidor, del navegador ni del teléfono:
+// evitan el desfase de "hoy" después de las 20:00 que produce
+// `new Date().toISOString().slice(0, 10)`.
 // Las fechas de día viajan como 'YYYY-MM-DD' y las horas como 'HH:mm'.
+//
+// Los formatos por defecto ("03/10/2026", "2:30 p. m.") se calculan a mano con el
+// desfase fijo, sin Intl: así servidor (Node), navegador y Hermes producen exactamente
+// el mismo texto (sin errores de hidratación por espacios distintos según la versión
+// de ICU, ni dependencia del soporte de `timeZone` del motor). Solo `formatFechaVE` con
+// `opciones` usa Intl. (Entre 2007-12-09 y 2016-05-01 Venezuela usó UTC-4:30: las horas
+// de esas fechas antiguas salen corridas 30 minutos.)
 
 export const ZONA_VE = "America/Caracas";
 const OFFSET_VE = "-04:00";
+const OFFSET_VE_MS = -4 * 60 * 60 * 1000;
 
 const FECHA_RE = /^\d{4}-\d{2}-\d{2}$/;
 const HORA_RE = /^\d{2}:\d{2}(:\d{2})?$/;
-
-// Los Intl.DateTimeFormat se crean una sola vez y solo al usarlos (crearlos es caro
-// en React Native y así importar este módulo nunca falla).
-let fmtISO: Intl.DateTimeFormat | null = null;
-let fmtFecha: Intl.DateTimeFormat | null = null;
-let fmtHora: Intl.DateTimeFormat | null = null;
-
-function formatterISO(): Intl.DateTimeFormat {
-  if (!fmtISO) {
-    fmtISO = new Intl.DateTimeFormat("en-CA", {
-      timeZone: ZONA_VE,
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    });
-  }
-  return fmtISO;
-}
-
-function formatterFecha(): Intl.DateTimeFormat {
-  if (!fmtFecha) {
-    fmtFecha = new Intl.DateTimeFormat("es-VE", {
-      timeZone: ZONA_VE,
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-    });
-  }
-  return fmtFecha;
-}
-
-function formatterHora(): Intl.DateTimeFormat {
-  if (!fmtHora) {
-    fmtHora = new Intl.DateTimeFormat("es-VE", {
-      timeZone: ZONA_VE,
-      hour: "numeric",
-      minute: "2-digit",
-      hour12: true,
-    });
-  }
-  return fmtHora;
-}
 
 /** Convierte un ISO, timestamp, Date o 'YYYY-MM-DD' en Date (un día suelto se toma al mediodía en Venezuela). */
 function aDate(valor: string | number | Date): Date {
@@ -331,11 +340,40 @@ function aDate(valor: string | number | Date): Date {
   return new Date(valor);
 }
 
-/** Fecha 'YYYY-MM-DD' de un instante, vista en Venezuela (por defecto, ahora). */
+const dos = (n: number) => (n < 10 ? `0${n}` : String(n));
+
+/** Partes de calendario y reloj de un instante válido, vistas en Venezuela (UTC-4). */
+function partesVE(d: Date): { anio: number; mes: number; dia: number; hora: number; minuto: number } {
+  const v = new Date(d.getTime() + OFFSET_VE_MS);
+  return {
+    anio: v.getUTCFullYear(),
+    mes: v.getUTCMonth() + 1,
+    dia: v.getUTCDate(),
+    hora: v.getUTCHours(),
+    minuto: v.getUTCMinutes(),
+  };
+}
+
+const anio4 = (n: number) => String(n).padStart(4, "0");
+
+/** 14, 30 → "2:30 p. m."; 0, 5 → "12:05 a. m." (mismo texto que Intl es-VE en Node). */
+function hora12(hora: number, minuto: number): string {
+  const h = hora % 12 === 0 ? 12 : hora % 12;
+  return `${h}:${dos(minuto)} ${hora < 12 ? "a. m." : "p. m."}`;
+}
+
+/** "03/10/2026" de un instante válido. */
+function fechaCorta(d: Date): string {
+  const p = partesVE(d);
+  return `${dos(p.dia)}/${dos(p.mes)}/${anio4(p.anio)}`;
+}
+
+/** Fecha 'YYYY-MM-DD' de un instante, vista en Venezuela (por defecto, ahora). Lanza RangeError si es inválido. */
 export function fechaVE(valor: string | number | Date = new Date()): string {
-  const partes = formatterISO().formatToParts(aDate(valor));
-  const get = (tipo: string) => partes.find((p) => p.type === tipo)?.value ?? "";
-  return `${get("year")}-${get("month")}-${get("day")}`;
+  const d = aDate(valor);
+  if (Number.isNaN(d.getTime())) throw new RangeError(`Fecha inválida: "${String(valor)}"`);
+  const p = partesVE(d);
+  return `${anio4(p.anio)}-${dos(p.mes)}-${dos(p.dia)}`;
 }
 
 /** Fecha de hoy en Venezuela, 'YYYY-MM-DD'. */
@@ -380,18 +418,22 @@ export function formatFechaVE(
   if (Number.isNaN(d.getTime())) return "";
   return opciones
     ? new Intl.DateTimeFormat("es-VE", { timeZone: ZONA_VE, ...opciones }).format(d)
-    : formatterFecha().format(d);
+    : fechaCorta(d);
 }
 
 /** Hora legible en Venezuela, p. ej. "2:30 p. m.". Acepta un ISO, Date o una hora 'HH:mm'. */
 export function formatHoraVE(valor: string | number | Date): string {
   if (typeof valor === "string" && HORA_RE.test(valor)) {
     // Hora suelta (columna `time`): se formatea sin convertir de zona.
-    valor = `2000-01-01T${valor.length === 5 ? `${valor}:00` : valor}${OFFSET_VE}`;
+    const hora = Number(valor.slice(0, 2));
+    const minuto = Number(valor.slice(3, 5));
+    const seg = valor.length > 5 ? Number(valor.slice(6, 8)) : 0;
+    return hora > 23 || minuto > 59 || seg > 59 ? "" : hora12(hora, minuto);
   }
   const d = aDate(valor);
   if (Number.isNaN(d.getTime())) return "";
-  return formatterHora().format(d);
+  const p = partesVE(d);
+  return hora12(p.hora, p.minuto);
 }
 
 /** Separador entre fecha y hora en todo EnBus: "03/11/2026 · 2:30 p. m.". */
@@ -401,15 +443,16 @@ const SEPARADOR_FECHA_HORA = " · ";
 export function formatFechaHoraVE(valor: string | number | Date): string {
   const d = aDate(valor);
   if (Number.isNaN(d.getTime())) return "";
-  return `${formatterFecha().format(d)}${SEPARADOR_FECHA_HORA}${formatterHora().format(d)}`;
+  const p = partesVE(d);
+  return `${fechaCorta(d)}${SEPARADOR_FECHA_HORA}${hora12(p.hora, p.minuto)}`;
 }
 
 /** Día y mes con hora (tablas del panel): "03/11 · 2:30 p. m.". Inválido → "". */
 export function formatFechaHoraCortaVE(valor: string | number | Date): string {
   const d = aDate(valor);
   if (Number.isNaN(d.getTime())) return "";
-  const [, m, dd] = fechaVE(d).split("-");
-  return `${dd}/${m}${SEPARADOR_FECHA_HORA}${formatterHora().format(d)}`;
+  const p = partesVE(d);
+  return `${dos(p.dia)}/${dos(p.mes)}${SEPARADOR_FECHA_HORA}${hora12(p.hora, p.minuto)}`;
 }
 
 /**

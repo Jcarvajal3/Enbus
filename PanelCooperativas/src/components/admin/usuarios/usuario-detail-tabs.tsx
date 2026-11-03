@@ -11,7 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import type { EncomiendaUsuario, PagoUsuario, UsuarioDetalle } from "@/lib/types/admin-usuarios";
-import { bajaPorCompletar } from "@/lib/types/admin-usuarios";
+import { MAX_FILAS_DETALLE_USUARIO, bajaPorCompletar } from "@/lib/types/admin-usuarios";
 import { Monto } from "@/components/monto";
 import { StatusBadge, TonoBadge } from "@/components/status-badge";
 import { CeldaEnlace } from "@/components/celda-enlace";
@@ -21,6 +21,7 @@ import { useTasaBCVAdmin } from "@/components/admin/dashboard/use-tasa-bcv-admin
 import { CLASE_PESTANA, ConteoPestana, Dato, TarjetaTabla, Vacio } from "@/components/admin/detalle";
 import { documentoLegible, telefonoOVacio } from "@/components/admin/cooperativas/cooperativa-detail-tabs";
 import { formatFechaHoraVE, formatFechaVE } from "@/lib/fechas";
+import { formatNumeroVE } from "@/lib/dinero";
 import { etiquetaMetodoPago, etiquetaRol } from "@/lib/estados";
 import { formatCodigoBoleto } from "@/lib/artefactos.generated";
 import type { Tono } from "@/lib/estados";
@@ -146,9 +147,18 @@ function TablaEncomiendas({
 export function UsuarioDetailTabs({ usuario }: UsuarioDetailTabsProps) {
   // Montos en USD de referencia, con el equivalente en Bs a la tasa BCV de hoy.
   const tasa = useTasaBCVAdmin();
-  const totalEncomiendas = usuario.encomiendas_enviadas.length + usuario.encomiendas_recibidas.length;
   const [valorTab, setTab] = useParamUrl("tab", "perfil");
   const tab: Pestana = (PESTANAS as readonly string[]).includes(valorTab) ? (valorTab as Pestana) : "perfil";
+  // Contadores con el total real; cada lista trae solo los movimientos más recientes.
+  const { totales } = usuario;
+  const totalEncomiendas = totales.encomiendas_enviadas + totales.encomiendas_recibidas;
+  // Cada lista trae solo los movimientos más recientes: se avisa si hay más.
+  const recortada =
+    totales.encomiendas_enviadas > usuario.encomiendas_enviadas.length ||
+    totales.encomiendas_recibidas > usuario.encomiendas_recibidas.length ||
+    totales.boletos > usuario.boletos.length ||
+    totales.pagos > usuario.pagos.length ||
+    totales.notificaciones > usuario.notificaciones.length;
 
   return (
     <Tabs value={tab} onValueChange={(v) => setTab(String(v))} className="gap-4">
@@ -158,15 +168,20 @@ export function UsuarioDetailTabs({ usuario }: UsuarioDetailTabsProps) {
           Encomiendas <ConteoPestana n={totalEncomiendas} />
         </TabsTrigger>
         <TabsTrigger value="boletos" className={CLASE_PESTANA}>
-          Boletos <ConteoPestana n={usuario.boletos.length} />
+          Boletos <ConteoPestana n={totales.boletos} />
         </TabsTrigger>
         <TabsTrigger value="pagos" className={CLASE_PESTANA}>
-          Pagos <ConteoPestana n={usuario.pagos.length} />
+          Pagos <ConteoPestana n={totales.pagos} />
         </TabsTrigger>
         <TabsTrigger value="notificaciones" className={CLASE_PESTANA}>
-          Notificaciones <ConteoPestana n={usuario.notificaciones.length} />
+          Notificaciones <ConteoPestana n={totales.notificaciones} />
         </TabsTrigger>
       </TabsList>
+      {recortada && (
+        <p className="text-sm text-muted-foreground">
+          Cada lista muestra los {formatNumeroVE(MAX_FILAS_DETALLE_USUARIO, 0)} movimientos más recientes.
+        </p>
+      )}
 
       {/* Perfil */}
       <TabsContent value="perfil">

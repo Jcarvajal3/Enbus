@@ -1,8 +1,9 @@
 "use client";
 
 // ─── Incidencias (AD5-12, AD5-16) ───────────────────────────────────────────
-// Estado y tipo se filtran en el servidor (`?estado=&tipo=`); la búsqueda
-// (`?q=`) filtra la lista cargada. Sin `?estado=`: abiertas y en proceso.
+// Estado, tipo, búsqueda y página se resuelven en el servidor
+// (`?estado=&tipo=&q=&pagina=`), ya ordenadas por prioridad y antigüedad.
+// Sin `?estado=`: abiertas y en proceso.
 
 import { useMemo } from "react";
 import { MagnifyingGlass, Warning } from "@phosphor-icons/react";
@@ -12,13 +13,20 @@ import { StatusBadge } from "@/components/status-badge";
 import { CeldaEnlace } from "@/components/celda-enlace";
 import { FilaVacia } from "@/components/fila-vacia";
 import { BarraFiltros } from "@/components/barra-filtros";
-import { PaginacionTabla, usePaginacion } from "@/components/paginacion-tabla";
-import { useParamUrl } from "@/hooks/use-param-url";
+import { PaginacionTabla } from "@/components/paginacion-tabla";
+import { PARAM_PAGINA, useParamUrl } from "@/hooks/use-param-url";
 import { Vacio } from "@/components/admin/detalle";
 import { CATEGORIA_REPORTE, TIPO_INCIDENCIA, etiquetaEstado, etiquetaTipoIncidencia } from "@/lib/estados";
 import { formatFechaHoraVE, formatHaceTiempo } from "@/lib/fechas";
 import { formatCodigoBoleto } from "@/lib/artefactos.generated";
-import { codigoIncidencia, prioridadIncidencia, type Incidencia } from "@/lib/types/admin-incidencias";
+import { formatNumeroVE } from "@/lib/dinero";
+import {
+  codigoIncidencia,
+  prioridadIncidencia,
+  type FiltroEstadoIncidencia,
+  type Incidencia,
+  type PaginaIncidencias,
+} from "@/lib/types/admin-incidencias";
 
 /** "Reporte de usuario · Pago" o la etiqueta del tipo. */
 export function tipoConCategoria(item: Pick<Incidencia, "tipo" | "categoria">): string {
@@ -33,31 +41,31 @@ export function PrioridadBadge({ incidencia }: { incidencia: Pick<Incidencia, "t
 }
 
 interface IncidenciasTableProps {
-  data: Incidencia[];
+  /** Página ya filtrada, buscada y ordenada en el servidor. */
+  resultado: PaginaIncidencias;
+  /** Filtros aplicados en el servidor (vienen de la URL). */
+  estado: FiltroEstadoIncidencia;
+  tipo: string;
+  /** Búsqueda aplicada (`?q=`), resuelta en el servidor. */
+  q?: string;
   /** Hora del servidor para "hace 3 h" (igual en servidor y navegador). */
   ahora: string;
 }
 
-export function IncidenciasTable({ data, ahora }: IncidenciasTableProps) {
-  const [q] = useParamUrl("q");
+export function IncidenciasTable({ resultado, estado, tipo, q = "", ahora }: IncidenciasTableProps) {
   const fechaAhora = useMemo(() => new Date(ahora), [ahora]);
+  // La página vive en `?pagina=`; cambiarla vuelve a pedir la lista al servidor.
+  const [, setPaginaUrl] = useParamUrl(PARAM_PAGINA, "1");
 
-  const filtradas = useMemo(() => {
-    const query = q.trim().toLowerCase();
-    if (!query) return data;
-    return data.filter((item) => {
-      const campos = [
-        item.descripcion,
-        item.encomienda?.tracking_id,
-        item.boleto?.codigo_boleto,
-        item.boleto ? formatCodigoBoleto(item.boleto.codigo_boleto) : null,
-        codigoIncidencia(item.id),
-        item.reportado_por_profile?.nombre_completo,
-      ];
-      return campos.some((c) => (c ?? "").toLowerCase().includes(query));
-    });
-  }, [data, q]);
-  const { visibles, pagina, paginas, ir } = usePaginacion(filtradas);
+  const { incidencias: data, total, pagina, porPagina } = resultado;
+  const paginas = Math.max(1, Math.ceil(total / porPagina));
+  const desde = total === 0 ? 0 : (pagina - 1) * porPagina + 1;
+  const hasta = Math.min(pagina * porPagina, total);
+  const ir = (p: number) => {
+    const destino = Math.min(Math.max(1, Math.trunc(p)), paginas);
+    setPaginaUrl(destino === 1 ? null : String(destino));
+  };
+  const hayFiltros = estado !== "pendientes" || (tipo !== "" && tipo !== "all") || q !== "";
 
   return (
     <div className="flex flex-col gap-4">
@@ -85,6 +93,14 @@ export function IncidenciasTable({ data, ahora }: IncidenciasTableProps) {
         ]}
       />
 
+      {total > 0 && (
+        <p className="text-sm text-muted-foreground tabular-nums" aria-live="polite">
+          {total <= porPagina
+            ? `${total === 1 ? "1 incidencia" : `${formatNumeroVE(total, 0)} incidencias`} · ordenadas por prioridad y antigüedad`
+            : `Mostrando ${formatNumeroVE(desde, 0)}–${formatNumeroVE(hasta, 0)} de ${formatNumeroVE(total, 0)} · ordenadas por prioridad y antigüedad`}
+        </p>
+      )}
+
       <Card className="gap-0 overflow-hidden p-0">
         <Table>
           <TableHeader>
@@ -99,14 +115,20 @@ export function IncidenciasTable({ data, ahora }: IncidenciasTableProps) {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filtradas.length === 0 ? (
+            {data.length === 0 ? (
               <FilaVacia
                 colSpan={7}
                 icon={q ? MagnifyingGlass : Warning}
-                titulo={q ? "Ninguna incidencia coincide con la búsqueda" : "No hay incidencias con estos filtros"}
+                titulo={
+                  q
+                    ? "Ninguna incidencia coincide con la búsqueda"
+                    : hayFiltros
+                      ? "No hay incidencias con estos filtros"
+                      : "No hay incidencias abiertas ni en proceso"
+                }
               />
             ) : (
-              visibles.map((item) => (
+              data.map((item) => (
                 <TableRow key={item.id} className="relative">
                   <CeldaEnlace
                     href={`/admin/incidencias/${item.id}`}

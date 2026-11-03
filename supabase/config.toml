@@ -404,6 +404,8 @@ s3_secret_key = "env(S3_SECRET_KEY)"
 
 [functions.track-and-trace]
 enabled = true
+# Pública (landing/app con la clave publishable o anon). Límite 30/min por IP con fn_consumir_limite.
+# No devuelve PIN, cédulas, teléfonos, nombres ni notas.
 verify_jwt = true
 import_map = "./functions/track-and-trace/deno.json"
 # Uncomment to specify a custom file path to the entrypoint.
@@ -415,6 +417,7 @@ entrypoint = "./functions/track-and-trace/index.ts"
 
 [functions.calculadora-publica]
 enabled = true
+# Pública (clave publishable o anon). Límite 60/min por IP con fn_consumir_limite.
 verify_jwt = true
 import_map = "./functions/calculadora-publica/deno.json"
 # Uncomment to specify a custom file path to the entrypoint.
@@ -426,6 +429,7 @@ entrypoint = "./functions/calculadora-publica/index.ts"
 
 [functions.calcular-costo-encomienda]
 enabled = true
+# Con el JWT del empleado; delega en fn_cotizar_encomienda / fn_confirmar_recepcion_origen.
 verify_jwt = true
 import_map = "./functions/calcular-costo-encomienda/deno.json"
 # Uncomment to specify a custom file path to the entrypoint.
@@ -437,6 +441,8 @@ entrypoint = "./functions/calcular-costo-encomienda/index.ts"
 
 [functions.enviar-whatsapp]
 enabled = true
+# Interna: exige la service role (la llama el panel de super admin). verify_jwt = true es
+# obligatorio: la función confía en que la pasarela ya validó la firma del JWT o la clave sb_.
 verify_jwt = true
 import_map = "./functions/enviar-whatsapp/deno.json"
 # Uncomment to specify a custom file path to the entrypoint.
@@ -448,6 +454,8 @@ entrypoint = "./functions/enviar-whatsapp/index.ts"
 
 [functions.enviar-push]
 enabled = true
+# Interna: exige la service role (panel de super admin). verify_jwt = true es obligatorio
+# (ver _shared/supabase.ts, esServiceRole).
 verify_jwt = true
 import_map = "./functions/enviar-push/deno.json"
 # Uncomment to specify a custom file path to the entrypoint.
@@ -459,6 +467,7 @@ entrypoint = "./functions/enviar-push/index.ts"
 
 [functions.generar-guia-pdf]
 enabled = true
+# Con el JWT del empleado: solo personal de la cooperativa de la encomienda o super admin.
 verify_jwt = true
 import_map = "./functions/generar-guia-pdf/deno.json"
 # Uncomment to specify a custom file path to the entrypoint.
@@ -470,6 +479,7 @@ entrypoint = "./functions/generar-guia-pdf/index.ts"
 
 [functions.procesar-notificaciones-pendientes]
 enabled = true
+# Interna: la invoca pg_cron cada minuto con la service role (vault). verify_jwt = true es obligatorio.
 verify_jwt = true
 import_map = "./functions/procesar-notificaciones-pendientes/deno.json"
 # Uncomment to specify a custom file path to the entrypoint.
@@ -482,7 +492,7 @@ entrypoint = "./functions/procesar-notificaciones-pendientes/index.ts"
 [functions.actualizar-tasa-bcv]
 enabled = true
 # La invoca pg_cron con la service role key (legacy JWT del vault). La pasarela verifica la firma
-# y la función exige el rol service_role en los claims.
+# y la función exige el rol service_role en los claims (o la clave sb_secret del runtime).
 verify_jwt = true
 import_map = "./functions/actualizar-tasa-bcv/deno.json"
 entrypoint = "./functions/actualizar-tasa-bcv/index.ts"

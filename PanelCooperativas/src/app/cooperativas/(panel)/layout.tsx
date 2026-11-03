@@ -14,11 +14,13 @@ export default async function PanelLayout({
 }) {
   const [user, tasa, almacen] = await Promise.all([getUserProfile(), obtenerTasaBCV(), cookies()]);
 
-  // PN-01: nunca devolver al login "pelado" con sesión abierta (el proxy lo mandaría
-  // de vuelta aquí y no se saldría nunca). El super_admin va a su panel; cualquier otro
-  // caso sin acceso va al login con `motivo`, que cierra la sesión y lo explica.
-  if (user?.role === "super_admin") redirect(INICIO_ADMIN);
-  if (!user || (user.role !== "admin_cooperativa" && user.role !== "taquillero") || !user.cooperativa_id) {
+  // PN-01: sin perfil, con un rol que no es del panel o sin cooperativa_id (invariante
+  // de diseño): al login con el motivo, que cierra la sesión y lo explica. Ni el proxy
+  // ni el login redirigen de vuelta aquí a una cuenta sin acceso (antes eso era un
+  // bucle de redirecciones). El super_admin va a su panel.
+  if (!user) redirect("/cooperativas/login?motivo=sin-acceso");
+  if (user.role === "super_admin") redirect(INICIO_ADMIN);
+  if ((user.role !== "admin_cooperativa" && user.role !== "taquillero") || !user.cooperativa_id) {
     redirect("/cooperativas/login?motivo=sin-acceso");
   }
 

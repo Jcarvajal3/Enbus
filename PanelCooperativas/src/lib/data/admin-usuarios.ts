@@ -4,6 +4,9 @@ import { humanizeError } from "@/lib/errores";
 import { formatFechaHoraVE } from "@/lib/fechas";
 import { cedulaParaGuardar, telefonoParaGuardar } from "@/lib/ve";
 import { formatCiudad } from "@/lib/ciudades";
+import { requireSuperAdmin, esUuid } from "./admin-auth";
+import { enLotes } from "./admin-consultas";
+import { MAX_FILAS_DETALLE_USUARIO } from "@/lib/types/admin-usuarios";
 import type {
   BajaCuenta,
   FiltrosUsuarios,
@@ -51,10 +54,16 @@ type FilaBaja = BajaCuenta & { usuario_id: string };
 async function datosAuth(ids: string[]): Promise<Map<string, User>> {
   const adminSupabase = createAdminClient();
   const mapa = new Map<string, User>();
-  const resultados = await Promise.allSettled(ids.map((id) => adminSupabase.auth.admin.getUserById(id)));
-  resultados.forEach((r, i) => {
-    if (r.status === "fulfilled" && r.value.data?.user) mapa.set(ids[i], r.value.data.user);
-    else if (r.status === "rejected") console.error("[fetchUsuarios] auth:", r.reason);
+  // Una petición a Auth por perfil (no hay consulta por lote): a lo sumo 10 a la vez.
+  const resultados = await enLotes(ids, 10, (id) =>
+    adminSupabase.auth.admin.getUserById(id).then(
+      (r) => ({ ok: true as const, r }),
+      (reason: unknown) => ({ ok: false as const, reason })
+    )
+  );
+  resultados.forEach((x, i) => {
+    if (x.ok && x.r.data?.user) mapa.set(ids[i], x.r.data.user);
+    else if (!x.ok) console.error("[fetchUsuarios] auth:", x.reason);
   });
   return mapa;
 }
@@ -65,24 +74,30 @@ async function datosAuth(ids: string[]): Promise<Map<string, User>> {
  * cuyo acceso falta borrar.
  */
 export async function fetchUsuarios(filtros: FiltrosUsuarios = {}): Promise<PaginaUsuarios> {
+  // Antes de usar la service role (correos y suspensiones de Auth).
+  await requireSuperAdmin();
   const supabase = await createClient();
   const porPagina = USUARIOS_POR_PAGINA;
   const pagina = Math.max(1, Math.floor(Number(filtros.pagina) || 1));
   const desde = (pagina - 1) * porPagina;
 
   // Bajas por completar: conteo para el filtro y, en esa vista, la lista de ids.
-  const { data: bajasPend, error: bajasError } = await supabase
+  // Hasta 300 ids (más alargarían la URL del `.in()` por encima del límite); el
+  // conteo es el total real.
+  const { data: bajasPend, error: bajasError, count: totalBajas } = await supabase
     .from("bajas_cuenta")
-    .select("usuario_id")
+    .select("usuario_id", { count: "exact" })
     .is("auth_eliminada_at", null)
-    .limit(1000);
+    .order("solicitada_at", { ascending: true })
+    .limit(300);
   if (bajasError && !faltaTablaBajas(bajasError)) {
     console.error("Error fetching bajas_cuenta:", bajasError);
   }
   const idsBajas = ((bajasPend ?? []) as { usuario_id: string }[]).map((b) => b.usuario_id);
+  const bajasPendientes = Math.max(totalBajas ?? 0, idsBajas.length);
 
   if (filtros.vista === "bajas" && idsBajas.length === 0) {
-    return { usuarios: [], total: 0, pagina: 1, porPagina, bajasPendientes: 0 };
+    return { usuarios: [], total: 0, pagina: 1, porPagina, bajasPendientes };
   }
 
   let query = supabase
@@ -104,7 +119,7 @@ export async function fetchUsuarios(filtros: FiltrosUsuarios = {}): Promise<Pagi
   if (profilesError) {
     // Una página fuera de rango (PGRST103) no es un error: no hay filas.
     if (profilesError.code === "PGRST103") {
-      return { usuarios: [], total: count ?? 0, pagina, porPagina, bajasPendientes: idsBajas.length };
+      return { usuarios: [], total: count ?? 0, pagina, porPagina, bajasPendientes };
     }
     console.error("Error fetching profiles:", profilesError);
     throw new Error(humanizeError(profilesError, "cargar los usuarios"));
@@ -147,12 +162,15 @@ export async function fetchUsuarios(filtros: FiltrosUsuarios = {}): Promise<Pagi
     };
   });
 
-  return { usuarios, total: count ?? usuarios.length, pagina, porPagina, bajasPendientes: idsBajas.length };
+  return { usuarios, total: count ?? usuarios.length, pagina, porPagina, bajasPendientes };
 }
 
 export async function fetchUsuarioById(id: string): Promise<UsuarioDetalle | null> {
+  await requireSuperAdmin();
+  if (!esUuid(id)) return null;
   const supabase = await createClient();
   const adminSupabase = createAdminClient();
+  const MAX = MAX_FILAS_DETALLE_USUARIO;
 
   // 1. Fetch basic profile data
   const { data: profile, error: profileError } = await supabase
@@ -180,7 +198,14 @@ export async function fetchUsuarioById(id: string): Promise<UsuarioDetalle | nul
     console.error("Error fetching auth user:", err);
   }
 
-  // 3. Fetch all transaction logs in parallel to optimize speed
+  // Recibidas: por usuario vinculado o por su teléfono. El teléfono va entre comillas
+  // dobles: con comas o paréntesis rompería el filtro `or` de PostgREST.
+  const telefono = String(profile.telefono ?? "").replace(/["\\]/g, "");
+  const filtroRecibidas = telefono
+    ? `receiver_user_id.eq.${id},receiver_telefono.eq."${telefono}"`
+    : `receiver_user_id.eq.${id}`;
+
+  // 3. Las listas de movimientos (las más recientes de cada una), en paralelo.
   const [
     enviadasResult,
     recibidasResult,
@@ -191,29 +216,34 @@ export async function fetchUsuarioById(id: string): Promise<UsuarioDetalle | nul
   ] = await Promise.all([
     supabase
       .from("encomiendas")
-      .select("*, cooperativas(nombre)")
+      .select("*, cooperativas(nombre)", { count: "exact" })
       .eq("sender_id", id)
-      .order("created_at", { ascending: false }),
+      .order("created_at", { ascending: false })
+      .limit(MAX),
     supabase
       .from("encomiendas")
-      .select("*, cooperativas(nombre), profiles:sender_id(nombre_completo, telefono)")
-      .or(`receiver_user_id.eq.${id},receiver_telefono.eq.${profile.telefono}`)
-      .order("created_at", { ascending: false }),
+      .select("*, cooperativas(nombre), profiles:sender_id(nombre_completo, telefono)", { count: "exact" })
+      .or(filtroRecibidas)
+      .order("created_at", { ascending: false })
+      .limit(MAX),
     supabase
       .from("boletos")
-      .select("*, cooperativas(nombre), viajes(*, rutas(*))")
+      .select("*, cooperativas(nombre), viajes(*, rutas(*))", { count: "exact" })
       .eq("comprador_id", id)
-      .order("created_at", { ascending: false }),
+      .order("created_at", { ascending: false })
+      .limit(MAX),
     supabase
       .from("pagos")
-      .select("*, encomiendas(tracking_id), boletos!pagos_boleto_id_fkey(codigo_boleto), metodo:metodos_pago_cooperativa(tipo)")
+      .select("*, encomiendas(tracking_id), boletos!pagos_boleto_id_fkey(codigo_boleto), metodo:metodos_pago_cooperativa(tipo)", { count: "exact" })
       .eq("pagador_id", id)
-      .order("created_at", { ascending: false }),
+      .order("created_at", { ascending: false })
+      .limit(MAX),
     supabase
       .from("notificaciones_log")
-      .select("*")
+      .select("*", { count: "exact" })
       .eq("destinatario_id", id)
-      .order("created_at", { ascending: false }),
+      .order("created_at", { ascending: false })
+      .limit(MAX),
     supabase
       .from("bajas_cuenta")
       .select("email, motivo, solicitada_at, auth_eliminada_at")
@@ -239,7 +269,7 @@ export async function fetchUsuarioById(id: string): Promise<UsuarioDetalle | nul
     estado: e.estado,
     peso_kg: e.peso_kg ? Number(e.peso_kg) : null,
     costo_calculado: Number(e.costo_calculado),
-    pin_retiro: e.pin_retiro,
+    tiene_pin: Boolean(e.pin_retiro),
     pin_bloqueado: e.pin_bloqueado,
     intentos_pin: e.intentos_pin,
     cooperativa_nombre: e.cooperativas?.nombre || "N/A",
@@ -258,7 +288,7 @@ export async function fetchUsuarioById(id: string): Promise<UsuarioDetalle | nul
     estado: e.estado,
     peso_kg: e.peso_kg ? Number(e.peso_kg) : null,
     costo_calculado: Number(e.costo_calculado),
-    pin_retiro: e.pin_retiro,
+    tiene_pin: Boolean(e.pin_retiro),
     pin_bloqueado: e.pin_bloqueado,
     intentos_pin: e.intentos_pin,
     cooperativa_nombre: e.cooperativas?.nombre || "N/A",
@@ -337,6 +367,13 @@ export async function fetchUsuarioById(id: string): Promise<UsuarioDetalle | nul
     encomiendas_recibidas,
     boletos,
     pagos,
-    notificaciones
+    notificaciones,
+    totales: {
+      encomiendas_enviadas: enviadasResult.count ?? encomiendas_enviadas.length,
+      encomiendas_recibidas: recibidasResult.count ?? encomiendas_recibidas.length,
+      boletos: boletosResult.count ?? boletos.length,
+      pagos: pagosResult.count ?? pagos.length,
+      notificaciones: notificacionesResult.count ?? notificaciones.length,
+    },
   };
 }

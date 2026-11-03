@@ -12,7 +12,7 @@ import { EmptyState } from "@/components/empty-state";
 import { DesbloquearPinButton } from "@/components/admin/encomiendas/desbloquear-pin-button";
 import { ErrorRefrescar } from "@/components/admin/error-refrescar";
 import { Dato, Vacio } from "@/components/admin/detalle";
-import { requireSuperAdmin } from "@/lib/supabase/auth-guards";
+import { requireSuperAdmin } from "@/lib/data/admin-auth";
 import { formatFechaHoraVE } from "@/lib/fechas";
 import { formatCedula, formatTelefono } from "@/lib/ve";
 import { MODALIDAD_PAGO } from "@/lib/estados";

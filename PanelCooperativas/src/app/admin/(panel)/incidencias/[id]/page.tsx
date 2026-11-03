@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { fetchIncidenciaById } from "@/lib/data/admin-incidencias";
-import { getUserProfile } from "@/lib/supabase/cached";
+import { requireSuperAdmin } from "@/lib/data/admin-auth";
 import { notFound } from "next/navigation";
 import { IncidenciaDetail } from "@/components/admin/incidencias/incidencia-detail";
 
@@ -20,10 +20,10 @@ export default async function IncidenciaDetailPage({ params }: PageProps) {
 
   const [incidencia, user] = await Promise.all([
     fetchIncidenciaById(id),
-    getUserProfile()
+    requireSuperAdmin(),
   ]);
 
-  if (!incidencia || !user) {
+  if (!incidencia) {
     notFound();
   }
 

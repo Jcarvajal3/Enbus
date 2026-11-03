@@ -1,0 +1,14 @@
+{
+  "name": "enbus-shared",
+  "private": true,
+  "type": "module",
+  "description": "Fuente única de tokens y formatos (ver README.md). Sin dependencias.",
+  "scripts": {
+    "generar": "node generar.mjs",
+    "check": "node generar.mjs --check",
+    "test": "node --experimental-strip-types --no-warnings --test \"tests/*.test.ts\""
+  },
+  "engines": {
+    "node": ">=22.6"
+  }
+}

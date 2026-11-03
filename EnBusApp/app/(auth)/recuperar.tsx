@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet } from 'react-native';
 import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -27,9 +27,11 @@ export default function RecuperarPasswordScreen() {
   const [email, setEmail] = useState(typeof params.email === 'string' ? params.email : '');
   const [error, setError] = useState<string | undefined>();
   const [loading, setLoading] = useState(false);
+  /** Anti doble toque: Supabase limita los correos por hora; un segundo envío falla. */
+  const enviandoRef = useRef(false);
 
   async function handleResetPassword() {
-    if (loading) return;
+    if (loading || enviandoRef.current) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
     const correo = email.trim();
@@ -39,6 +41,7 @@ export default function RecuperarPasswordScreen() {
       return;
     }
 
+    enviandoRef.current = true;
     try {
       setLoading(true);
       const { error: resetError } = await supabase.auth.resetPasswordForEmail(correo, {
@@ -55,6 +58,7 @@ export default function RecuperarPasswordScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       toast.show('error', humanizeError(err, 'recuperar'));
     } finally {
+      enviandoRef.current = false;
       setLoading(false);
     }
   }

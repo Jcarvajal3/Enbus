@@ -1,6 +1,9 @@
+import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
-import { fechaVE, hoyVE, rangoDiaVE, sumarDiasVE } from "@/lib/fechas";
+import { hoyVE, rangoDiaVE, sumarDiasVE } from "@/lib/fechas";
 import { formatCiudad } from "@/lib/ciudades";
+import { requireSuperAdmin } from "./admin-auth";
+import { aCentavos, deCentavos, enLotes, leerTodas, rpcNoDisponible } from "./admin-consultas";
 import {
   DashboardKPIs,
   DailyActivity,
@@ -11,10 +14,11 @@ import {
   resumirIngresos,
 } from "../types/admin-dashboard";
 
-/** Inicio (ISO) del día de hace `dias` días en Venezuela. */
-function inicioHaceDiasVE(dias: number): string {
-  return rangoDiaVE(sumarDiasVE(hoyVE(), -dias)).desde;
-}
+/**
+ * Boletos vendidos: PAGADO y también USADO (ya embarcó). Contar solo PAGADO hacía
+ * que el boleto de hoy desapareciera del conteo y del histórico al embarcar.
+ */
+const BOLETO_VENDIDO = ["PAGADO", "USADO"];
 
 type PagoConCooperativa = {
   monto: number | string;
@@ -38,23 +42,31 @@ async function actividadDelDia(
     supabase
       .from("boletos")
       .select("id", { count: "exact", head: true })
-      .eq("estado", "PAGADO")
+      .in("estado", BOLETO_VENDIDO)
       .gte("created_at", rango.desde)
       .lte("created_at", rango.hasta),
     // Por verificado_at: un pago registrado ayer y aprobado hoy es ingreso de hoy.
-    supabase
-      .from("pagos")
-      .select("monto, monto_bs, cooperativa:cooperativas!cooperativa_id(comision_porcentaje)")
-      .eq("verificado", true)
-      .gte("verificado_at", rango.desde)
-      .lte("verificado_at", rango.hasta),
+    // Todas las páginas: PostgREST corta en 1000 filas y la suma saldría de menos.
+    leerTodas<PagoConCooperativa>((desde, hasta) =>
+      supabase
+        .from("pagos")
+        .select("monto, monto_bs, cooperativa:cooperativas!cooperativa_id(comision_porcentaje)")
+        .eq("verificado", true)
+        .gte("verificado_at", rango.desde)
+        .lte("verificado_at", rango.hasta)
+        .order("id", { ascending: true })
+        .range(desde, hasta) as unknown as PromiseLike<{ data: PagoConCooperativa[] | null; error: unknown }>
+    ).then(
+      ({ filas, truncado }) => ({ filas, error: truncado ? new Error("Demasiados pagos en un día") : null }),
+      (error: unknown) => ({ filas: [] as PagoConCooperativa[], error })
+    ),
   ]);
 
   if (encomiendasRes.error) console.error(`[fetchDashboardKPIs] encomiendas (${etiqueta}):`, encomiendasRes.error);
   if (boletosRes.error) console.error(`[fetchDashboardKPIs] boletos (${etiqueta}):`, boletosRes.error);
   if (pagosRes.error) console.error(`[fetchDashboardKPIs] pagos (${etiqueta}):`, pagosRes.error);
 
-  const pagos = (pagosRes.data ?? []) as unknown as PagoConCooperativa[];
+  const pagos = pagosRes.error ? [] : pagosRes.filas;
   const errorPagos = Boolean(pagosRes.error);
   return {
     encomiendas: encomiendasRes.error ? null : encomiendasRes.count ?? 0,
@@ -73,6 +85,7 @@ async function actividadDelDia(
  * guardan `monto_bs`.
  */
 export async function fetchDashboardKPIs(tasaHoy: number | null = null): Promise<DashboardKPIs> {
+  await requireSuperAdmin();
   const supabase = await createClient();
   const hoy = hoyVE();
 
@@ -105,122 +118,168 @@ export async function fetchDashboardKPIs(tasaHoy: number | null = null): Promise
     cooperativas_activas: cooperativasRes.count ?? 0,
     alertas_amarillas_abiertas: alertasRes.count ?? 0,
     solicitudes_pendientes: solicitudesRes.count ?? 0,
+    error_cooperativas: Boolean(cooperativasRes.error),
+    error_alertas: Boolean(alertasRes.error),
+    error_solicitudes: Boolean(solicitudesRes.error),
     ayer: deAyer,
   };
 }
 
-export async function fetchActivityLast30Days(): Promise<DailyActivity[]> {
-  const supabase = await createClient();
+// ─── Actividad de los últimos 30 días ────────────────────────────────────────
+// Con `fn_admin_dashboard_actividad` (conteos agrupados en Postgres, una sola
+// petición) si la base la tiene. Si no, respaldo: conteos por día con HEAD
+// (exactos) y, para el top y las rutas, leer las filas en páginas con un tope.
+// Antes se leía con `.limit(5000/10000)`, que PostgREST corta en 1000 filas:
+// con más de 1000 movimientos al mes las gráficas salían mal sin ningún aviso.
+
+const DIAS_ACTIVIDAD = 30;
+/** Tope de filas del respaldo para el top y las rutas (encima de esto, aproximado). */
+const MAX_FILAS_RESPALDO = 20_000;
+
+type AgregadosActividad = {
+  actividad: DailyActivity[];
+  topCooperativas: TopCooperativa[];
+  rutas: RutaPopular[];
+};
+
+type RespuestaRpcActividad = {
+  actividad?: { fecha: string; encomiendas: number; boletos: number }[];
+  top_cooperativas?: { cooperativa_id: string; nombre: string; total: number }[];
+  rutas?: { ciudad_origen: string; ciudad_destino: string; total: number }[];
+};
+
+function diasActividad(): string[] {
   const hoy = hoyVE();
-  const startUTC = inicioHaceDiasVE(29);
+  return Array.from({ length: DIAS_ACTIVIDAD }, (_, i) => sumarDiasVE(hoy, i - (DIAS_ACTIVIDAD - 1)));
+}
 
-  // Only select created_at — the minimal payload needed for grouping
-  const [encomiendasRes, boletosRes] = await Promise.all([
-    supabase
-      .from("encomiendas")
-      .select("created_at")
-      .gte("created_at", startUTC)
-      .limit(5000), // safety cap; at 5k/day avg this covers 30 days comfortably
-    supabase
-      .from("boletos")
-      .select("created_at")
-      .eq("estado", "PAGADO")
-      .gte("created_at", startUTC)
-      .limit(5000),
+function nombreRuta(origen: string, destino: string): string {
+  return `${formatCiudad(origen)} → ${formatCiudad(destino)}`;
+}
+
+/** Una sola vez por petición aunque la pidan las tres gráficas. */
+const obtenerAgregadosActividad = cache(async (): Promise<AgregadosActividad> => {
+  await requireSuperAdmin();
+  const supabase = await createClient();
+
+  const rpc = await supabase.rpc("fn_admin_dashboard_actividad", { p_dias: DIAS_ACTIVIDAD });
+  if (!rpc.error && rpc.data) {
+    const r = rpc.data as RespuestaRpcActividad;
+    const porDia = new Map((r.actividad ?? []).map((d) => [d.fecha, d]));
+    return {
+      actividad: diasActividad().map((fecha) => ({
+        fecha,
+        encomiendas: Number(porDia.get(fecha)?.encomiendas ?? 0),
+        boletos: Number(porDia.get(fecha)?.boletos ?? 0),
+      })),
+      topCooperativas: (r.top_cooperativas ?? []).map((c) => ({
+        cooperativa_id: c.cooperativa_id,
+        nombre: c.nombre,
+        total_transacciones: Number(c.total ?? 0),
+      })),
+      rutas: (r.rutas ?? []).map((x) => ({ ruta_nombre: nombreRuta(x.ciudad_origen, x.ciudad_destino), total: Number(x.total ?? 0) })),
+    };
+  }
+  if (rpc.error && !rpcNoDisponible(rpc.error)) console.error("[dashboard] fn_admin_dashboard_actividad:", rpc.error);
+
+  const dias = diasActividad();
+  const desde = rangoDiaVE(dias[0]).desde;
+
+  // 1. Actividad por día: dos conteos HEAD por día (exactos, sin traer filas).
+  const actividad = await enLotes(dias, 10, async (fecha) => {
+    const rango = rangoDiaVE(fecha);
+    const [enc, bol] = await Promise.all([
+      supabase.from("encomiendas").select("id", { count: "exact", head: true }).gte("created_at", rango.desde).lte("created_at", rango.hasta),
+      supabase
+        .from("boletos")
+        .select("id", { count: "exact", head: true })
+        .in("estado", BOLETO_VENDIDO)
+        .gte("created_at", rango.desde)
+        .lte("created_at", rango.hasta),
+    ]);
+    if (enc.error) console.error("[fetchActivityLast30Days] encomiendas:", enc.error);
+    if (bol.error) console.error("[fetchActivityLast30Days] boletos:", bol.error);
+    return { fecha, encomiendas: enc.count ?? 0, boletos: bol.count ?? 0 };
+  });
+
+  // 2. Top de cooperativas y rutas: filas mínimas, todas las páginas hasta el tope.
+  type FilaEnc = { cooperativa_id: string | null; ciudad_origen: string | null; ciudad_destino: string | null };
+  const vacio = { filas: [] as never[], truncado: false };
+  const [cooperativasRes, encomiendas, boletos] = await Promise.all([
+    supabase.from("cooperativas").select("id, nombre").not("estado", "in", "(PENDIENTE,RECHAZADA)"),
+    leerTodas<FilaEnc>(
+      (d, h) =>
+        supabase
+          .from("encomiendas")
+          .select("cooperativa_id, ciudad_origen, ciudad_destino")
+          .gte("created_at", desde)
+          .order("id", { ascending: true })
+          .range(d, h) as unknown as PromiseLike<{ data: FilaEnc[] | null; error: unknown }>,
+      { maxFilas: MAX_FILAS_RESPALDO }
+    ).catch((error: unknown) => {
+      console.error("[dashboard] encomiendas 30 días:", error);
+      return vacio;
+    }),
+    leerTodas<{ cooperativa_id: string | null }>(
+      (d, h) =>
+        supabase
+          .from("boletos")
+          .select("cooperativa_id")
+          .in("estado", BOLETO_VENDIDO)
+          .gte("created_at", desde)
+          .order("id", { ascending: true })
+          .range(d, h) as unknown as PromiseLike<{ data: { cooperativa_id: string | null }[] | null; error: unknown }>,
+      { maxFilas: MAX_FILAS_RESPALDO }
+    ).catch((error: unknown) => {
+      console.error("[dashboard] boletos 30 días:", error);
+      return vacio;
+    }),
   ]);
-
-  if (encomiendasRes.error) console.error("[fetchActivityLast30Days] encomiendas:", encomiendasRes.error);
-  if (boletosRes.error) console.error("[fetchActivityLast30Days] boletos:", boletosRes.error);
-
-  const activityMap: Record<string, { fecha: string; encomiendas: number; boletos: number }> = {};
-
-  // Initialize map with last 30 days in Venezuela (ensures all days appear even with 0 activity)
-  for (let i = 29; i >= 0; i--) {
-    const dateStr = sumarDiasVE(hoy, -i);
-    activityMap[dateStr] = { fecha: dateStr, encomiendas: 0, boletos: 0 };
+  if (cooperativasRes.error) console.error("[fetchTop5Cooperativas] cooperativas:", cooperativasRes.error);
+  if (encomiendas.truncado || boletos.truncado) {
+    console.warn(`[dashboard] Más de ${MAX_FILAS_RESPALDO} filas en 30 días: el top y las rutas son aproximados. Aplica fn_admin_dashboard_actividad.`);
   }
 
-  encomiendasRes.data?.forEach((item) => {
-    const dateStr = fechaVE(item.created_at);
-    if (activityMap[dateStr]) activityMap[dateStr].encomiendas++;
-  });
+  const counts: Record<string, number> = {};
+  const routeCounts: Record<string, number> = {};
+  for (const e of encomiendas.filas) {
+    if (e.cooperativa_id) counts[e.cooperativa_id] = (counts[e.cooperativa_id] ?? 0) + 1;
+    if (e.ciudad_origen && e.ciudad_destino) {
+      const ruta = nombreRuta(e.ciudad_origen, e.ciudad_destino);
+      routeCounts[ruta] = (routeCounts[ruta] ?? 0) + 1;
+    }
+  }
+  for (const b of boletos.filas) {
+    if (b.cooperativa_id) counts[b.cooperativa_id] = (counts[b.cooperativa_id] ?? 0) + 1;
+  }
 
-  boletosRes.data?.forEach((item) => {
-    const dateStr = fechaVE(item.created_at);
-    if (activityMap[dateStr]) activityMap[dateStr].boletos++;
-  });
+  return {
+    actividad,
+    topCooperativas: (cooperativasRes.data ?? [])
+      .map((c) => ({ cooperativa_id: c.id as string, nombre: c.nombre as string, total_transacciones: counts[c.id] ?? 0 }))
+      .sort((a, b) => b.total_transacciones - a.total_transacciones)
+      .slice(0, 5),
+    rutas: Object.entries(routeCounts)
+      .map(([ruta_nombre, total]) => ({ ruta_nombre, total }))
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 5),
+  };
+});
 
-  return Object.values(activityMap).sort((a, b) => a.fecha.localeCompare(b.fecha));
+export async function fetchActivityLast30Days(): Promise<DailyActivity[]> {
+  return (await obtenerAgregadosActividad()).actividad;
 }
 
 export async function fetchTop5Cooperativas(): Promise<TopCooperativa[]> {
-  const supabase = await createClient();
-  const startUTC = inicioHaceDiasVE(30);
-
-  const [cooperativasRes, encomiendasRes, boletosRes] = await Promise.all([
-    supabase.from("cooperativas").select("id, nombre"),
-    supabase
-      .from("encomiendas")
-      .select("cooperativa_id")
-      .gte("created_at", startUTC)
-      .limit(10000),
-    supabase
-      .from("boletos")
-      .select("cooperativa_id")
-      .eq("estado", "PAGADO")
-      .gte("created_at", startUTC)
-      .limit(10000),
-  ]);
-
-  if (cooperativasRes.error) console.error("[fetchTop5Cooperativas] cooperativas:", cooperativasRes.error);
-  if (encomiendasRes.error) console.error("[fetchTop5Cooperativas] encomiendas:", encomiendasRes.error);
-  if (boletosRes.error) console.error("[fetchTop5Cooperativas] boletos:", boletosRes.error);
-
-  const counts: Record<string, number> = {};
-  encomiendasRes.data?.forEach((item) => {
-    if (item.cooperativa_id) counts[item.cooperativa_id] = (counts[item.cooperativa_id] ?? 0) + 1;
-  });
-  boletosRes.data?.forEach((item) => {
-    if (item.cooperativa_id) counts[item.cooperativa_id] = (counts[item.cooperativa_id] ?? 0) + 1;
-  });
-
-  return (cooperativasRes.data ?? [])
-    .map((c) => ({
-      cooperativa_id: c.id,
-      nombre: c.nombre,
-      total_transacciones: counts[c.id] ?? 0,
-    }))
-    .sort((a, b) => b.total_transacciones - a.total_transacciones)
-    .slice(0, 5);
+  return (await obtenerAgregadosActividad()).topCooperativas;
 }
 
 export async function fetchRutasPopulares(): Promise<RutaPopular[]> {
-  const supabase = await createClient();
-  const startUTC = inicioHaceDiasVE(30);
-
-  const { data: encomiendas, error } = await supabase
-    .from("encomiendas")
-    .select("ciudad_origen, ciudad_destino")
-    .gte("created_at", startUTC)
-    .limit(10000);
-
-  if (error) console.error("[fetchRutasPopulares]:", error);
-
-  const routeCounts: Record<string, number> = {};
-  encomiendas?.forEach((item) => {
-    if (item.ciudad_origen && item.ciudad_destino) {
-      const routeName = `${formatCiudad(item.ciudad_origen)} → ${formatCiudad(item.ciudad_destino)}`;
-      routeCounts[routeName] = (routeCounts[routeName] ?? 0) + 1;
-    }
-  });
-
-  return Object.entries(routeCounts)
-    .map(([ruta_nombre, total]) => ({ ruta_nombre, total }))
-    .sort((a, b) => b.total - a.total)
-    .slice(0, 5);
+  return (await obtenerAgregadosActividad()).rutas;
 }
 
 export async function fetchIncidenciasRecientes(): Promise<IncidenciaReciente[]> {
+  await requireSuperAdmin();
   const supabase = await createClient();
 
   const { data, error } = await supabase
@@ -258,9 +317,10 @@ export async function fetchIncidenciasRecientes(): Promise<IncidenciaReciente[]>
 }
 
 export async function fetchCooperativasConBalance(): Promise<CooperativaBalance[]> {
+  await requireSuperAdmin();
   const supabase = await createClient();
 
-  // Only fetch unpaid cycles — avoids loading full historical data
+  // Solo los ciclos impagos (filtro sobre el embed): no se trae todo el historial.
   const { data, error } = await supabase
     .from("cooperativas")
     .select(`
@@ -268,7 +328,8 @@ export async function fetchCooperativasConBalance(): Promise<CooperativaBalance[
       nombre,
       comision_porcentaje,
       comisiones_ciclo(monto_comision, pagado)
-    `);
+    `)
+    .eq("comisiones_ciclo.pagado", false);
 
   if (error) console.error("[fetchCooperativasConBalance]:", error);
 
@@ -283,12 +344,13 @@ export async function fetchCooperativasConBalance(): Promise<CooperativaBalance[
   return ((data ?? []) as CooperativaRow[])
     .map((c) => {
       const unpaidCycles = c.comisiones_ciclo?.filter((cc) => !cc.pagado) ?? [];
-      const monto_pendiente = unpaidCycles.reduce((sum, cc) => sum + Number(cc.monto_comision), 0);
+      // En centavos enteros: sumar floats acumula error.
+      const centavos = unpaidCycles.reduce((sum, cc) => sum + aCentavos(cc.monto_comision), 0);
       return {
         cooperativa_id: c.id,
         nombre: c.nombre,
         comision_porcentaje: Number(c.comision_porcentaje),
-        monto_pendiente,
+        monto_pendiente: deCentavos(centavos),
         ciclos_impagos: unpaidCycles.length,
       };
     })

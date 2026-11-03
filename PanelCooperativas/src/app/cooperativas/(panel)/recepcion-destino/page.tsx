@@ -147,7 +147,9 @@ function RecepcionDestino() {
         `)
         .eq("cooperativa_id", cooperativaId)
         .eq("estado", "EN_TRANSITO")
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: false })
+        // Tope explícito (PostgREST corta en 1000). Las que no se listen se reciben escaneando.
+        .limit(1000);
 
       if (error) throw error;
       const lista = (data as unknown as EncomiendaTransito[]) ?? [];

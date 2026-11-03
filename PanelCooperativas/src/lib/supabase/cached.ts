@@ -23,15 +23,16 @@ type CooperativaEmbed = {
 
 export const getUserProfile = cache(async (): Promise<UserProfile | null> => {
   const supabase = await createClient();
-  // Use getSession (reads JWT from cookie, NO network call)
-  // Safe because middleware already validated with getUser()
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session?.user) return null;
+  // getClaims() verifica la firma del JWT de la cookie con las claves públicas del
+  // proyecto (sin llamada de red: JWKS en caché). getSession() no la verifica.
+  const { data: claimsData, error: claimsError } = await supabase.auth.getClaims();
+  const userId = claimsError ? null : claimsData?.claims?.sub;
+  if (typeof userId !== "string" || !userId) return null;
 
   let { data: profile, error } = await supabase
     .from("profiles")
     .select(SELECT_PERFIL)
-    .eq("id", session.user.id)
+    .eq("id", userId)
     .single();
 
   // 42703 = columna inexistente (migración sin aplicar); PGRST200/PGRST201 = relación no encontrada o ambigua.
@@ -39,10 +40,16 @@ export const getUserProfile = cache(async (): Promise<UserProfile | null> => {
     ({ data: profile, error } = await supabase
       .from("profiles")
       .select(SELECT_PERFIL_BASICO)
-      .eq("id", session.user.id)
+      .eq("id", userId)
       .single());
   }
 
+  // PGRST116 = no hay fila (cuenta sin perfil): sin acceso. Cualquier otro error
+  // (red, base caída, JWT rechazado por PostgREST) se registra y también deja sin
+  // acceso, pero se distingue en el log para no confundirlo con "no autenticado".
+  if (error && error.code !== "PGRST116") {
+    console.error("[getUserProfile] No se pudo leer el perfil:", error.code, error.message);
+  }
   if (!profile) return null;
 
   // PostgREST puede devolver el embed como objeto o como arreglo.

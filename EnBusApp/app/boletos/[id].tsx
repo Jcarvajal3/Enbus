@@ -180,6 +180,8 @@ export default function DetalleBoletoScreen() {
   const [submittingRating, setSubmittingRating] = useState(false);
 
   const viewShotRef = useRef<ViewShot>(null);
+  /** Anti doble toque: el estado llega tarde, la ref no (cancelar, calificar). */
+  const enviandoRef = useRef(false);
   const montadoRef = useRef(true);
   useEffect(() => {
     montadoRef.current = true;
@@ -254,6 +256,7 @@ export default function DetalleBoletoScreen() {
   const boletoId = boleto?.id;
   useEffect(() => {
     if (!boletoId) return;
+    let suscritoAntes = false;
     const channel = supabase
       .channel(`rt:boleto:${boletoId}:${Math.random().toString(36).slice(2, 8)}`)
       .on(
@@ -263,7 +266,13 @@ export default function DetalleBoletoScreen() {
           void cargar();
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        // Se volvió a suscribir tras una caída del socket (p. ej. al volver de la
+        // app del banco): lo que cambió en el hueco no llegó por el canal.
+        if (status !== 'SUBSCRIBED') return;
+        if (suscritoAntes) void cargar();
+        suscritoAntes = true;
+      });
     return () => {
       supabase.removeChannel(channel);
     };
@@ -332,7 +341,9 @@ export default function DetalleBoletoScreen() {
     () =>
       compra
         .filter((b) => b.estado === 'RESERVADO')
-        .reduce((sum, b) => sum + (Number(b.precio) || 0), 0),
+        // En centavos: 12.1 + 12.2 da 24.299999… en float y el total en Bs (y el
+        // monto precargado para pagar) podía salir un céntimo distinto del servidor.
+        .reduce((sum, b) => sum + Math.round((Number(b.precio) || 0) * 100), 0) / 100,
     [compra]
   );
   /** Asientos apartados sin nombre o cédula válidos: el checkout los rechazaría. */
@@ -509,7 +520,7 @@ export default function DetalleBoletoScreen() {
   };
 
   const confirmarCancelacion = async () => {
-    if (!boleto || canceling) return;
+    if (!boleto || canceling || enviandoRef.current) return;
     const pagado = estadoUi === 'PAGADO';
 
     let motivoTexto: string | null = null;
@@ -527,6 +538,7 @@ export default function DetalleBoletoScreen() {
       }
     }
 
+    enviandoRef.current = true;
     setCanceling(true);
     setErrorCancelar(null);
     try {
@@ -569,6 +581,7 @@ export default function DetalleBoletoScreen() {
         toast.show('error', `No pudimos cancelar. ${mensaje}`);
       }
     } finally {
+      enviandoRef.current = false;
       if (montadoRef.current) setCanceling(false);
     }
   };
@@ -622,12 +635,14 @@ export default function DetalleBoletoScreen() {
   };
 
   const handleSubmitRating = async () => {
+    if (enviandoRef.current || submittingRating || calificacion) return;
     if (!user || !boleto || estrellas < 1) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
       toast.show('error', 'Selecciona de 1 a 5 estrellas');
       return;
     }
 
+    enviandoRef.current = true;
     try {
       setSubmittingRating(true);
       const { error } = await supabase.from('calificaciones').insert({
@@ -650,7 +665,8 @@ export default function DetalleBoletoScreen() {
         `No pudimos enviar tu calificación. ${humanizeError(err, 'calificacion')}`
       );
     } finally {
-      setSubmittingRating(false);
+      enviandoRef.current = false;
+      if (montadoRef.current) setSubmittingRating(false);
     }
   };
 

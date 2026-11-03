@@ -137,7 +137,7 @@ const ESTADOS_CERRADOS = ["ENTREGADA", "CANCELADA", "DEVUELTA"];
 /** true si la fila de la encomienda tiene alguna acción de PIN. */
 export function tieneAccionPin(e: EncomiendaUsuario): boolean {
   if (ESTADOS_CERRADOS.includes(e.estado)) return false;
-  return e.pin_bloqueado || e.intentos_pin > 0 || Boolean(e.pin_retiro);
+  return e.pin_bloqueado || e.intentos_pin > 0 || e.tiene_pin;
 }
 
 /** "Desbloquear PIN" (con intentos fallidos) o "Reenviar PIN" (con PIN activo) en la fila de una encomienda. */
@@ -199,7 +199,7 @@ export function AccionesPinEncomienda({ encomienda: e }: { encomienda: Encomiend
         </Button>
       )}
       {/* Con intentos fallidos y PIN activo, reenviar queda en "⋯". */}
-      {conIntentos && e.pin_retiro && (
+      {conIntentos && e.tiene_pin && (
         <MenuMas enFila etiqueta={`Más acciones para ${e.tracking_id}`}>
           <DropdownMenuItem onClick={reenviar} disabled={reenviando}>
             <PaperPlaneTilt aria-hidden /> Reenviar PIN

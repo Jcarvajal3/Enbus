@@ -52,7 +52,19 @@ export const FILTROS_ESTADO_INCIDENCIA: readonly FiltroEstadoIncidencia[] = [
 export interface FetchIncidenciasFilters {
   tipo?: string;
   estado?: FiltroEstadoIncidencia | string;
+  /** Búsqueda: descripción, INC-…, EB-…, BOL-… o nombre de quien reportó. */
+  q?: string;
+  /** Página (desde 1). */
+  pagina?: number;
 }
+
+/** Una página de la lista (orden de atención, filtros y búsqueda resueltos en el servidor). */
+export type PaginaIncidencias = {
+  incidencias: Incidencia[];
+  total: number;
+  pagina: number;
+  porPagina: number;
+};
 
 export type PrioridadIncidencia = "alta" | "media" | "baja";
 

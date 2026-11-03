@@ -25,6 +25,10 @@ export type DashboardKPIs = {
   /** true si falló la consulta de encomiendas o boletos de hoy (no se muestra un 0 engañoso). */
   error_encomiendas?: boolean;
   error_boletos?: boolean;
+  /** true si falló el conteo correspondiente (se muestra "—", no un 0 engañoso). */
+  error_cooperativas?: boolean;
+  error_alertas?: boolean;
+  error_solicitudes?: boolean;
 };
 
 // ─── Delta frente a ayer (#54, AD-06) ───────────────────────────────────────

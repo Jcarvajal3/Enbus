@@ -1,106 +1,59 @@
-import "@supabase/functions-js/edge-runtime.d.ts"
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.0'
+// enviar-push
+// Envío directo de un push a un usuario (lo usa el super admin desde el panel, con la service role).
+// La cola (pending_notifications) la procesa procesar-notificaciones-pendientes con el mismo módulo.
+// Solo service role: con la clave pública cualquiera podría mandar avisos falsos a cualquier usuario.
+import '@supabase/functions-js/edge-runtime.d.ts';
+import { ErrorEntrada, errorInterno, esUuid, fallar, filtrarMetodo, leerJson, responder, texto } from '../_shared/http.ts';
+import { clienteAdmin, soloServiceRole } from '../_shared/supabase.ts';
+import { enviarAvisos } from '../_shared/push.ts';
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+const RAZON: Record<string, string> = {
+  PREFERENCIA: 'El usuario desactivó este tipo de notificaciones',
+  SIN_TOKEN: 'El usuario no tiene un dispositivo registrado',
+  FALLIDO: 'Expo rechazó el mensaje',
+  REINTENTAR: 'Expo no respondió; intenta de nuevo más tarde',
 };
 
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
-  }
+  const metodo = filtrarMetodo(req);
+  if (metodo) return metodo;
+  const sinPermiso = soloServiceRole(req);
+  if (sinPermiso) return sinPermiso;
 
   try {
-    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
-    const { user_id, titulo, mensaje, recurso_tipo, recurso_id, sin_bandeja, tipo } = await req.json();
-    // tipo (opcional): BOLETO_CONFIRMADO, VIAJE_REPROGRAMADO, DEVOLUCION_AUTOMATICA… La app elige icono y tono.
-    const tipoNotificacion = typeof tipo === 'string' && tipo.trim() !== '' ? tipo.trim() : null;
-
-    if (!user_id || !titulo || !mensaje) {
-        return new Response(JSON.stringify({ error: "Missing parameters" }), { status: 400, headers: corsHeaders });
+    const body = await leerJson(req);
+    const userId = body.user_id;
+    const titulo = texto(body.titulo, 150);
+    const mensaje = texto(body.mensaje, 1000);
+    const recursoId = body.recurso_id == null || body.recurso_id === '' ? null : body.recurso_id;
+    if (!esUuid(userId) || !titulo || !mensaje || (recursoId !== null && !esUuid(recursoId))) {
+      return fallar(400, 'EB_DATOS_INVALIDOS', 'Faltan user_id, titulo o mensaje, o recurso_id no es válido.');
     }
 
-    // 1. Obtener perfil para ver preferencias y token
-    const { data: profile, error } = await supabase
-      .from('profiles')
-      .select('expo_push_token, notif_encomiendas, notif_boletos, notif_recordatorios')
-      .eq('id', user_id)
-      .single();
+    const { resultado } = await enviarAvisos(clienteAdmin(), [{
+      ref: 'directo',
+      usuarioId: userId,
+      titulo,
+      mensaje,
+      recursoTipo: texto(body.recurso_tipo, 40),
+      recursoId: recursoId as string | null,
+      // tipo (opcional): BOLETO_CONFIRMADO, VIAJE_REPROGRAMADO… La app elige icono y tono.
+      tipo: texto(body.tipo, 60),
+      // sin_bandeja = true: quien llama ya escribió la bandeja in-app.
+      escribirBandeja: body.sin_bandeja !== true,
+    }]);
 
-    if (error || !profile) {
-        // 404 = error permanente: procesar-notificaciones-pendientes no lo reintenta.
-        return new Response(JSON.stringify({ error: "Usuario no encontrado" }), { status: 404, headers: corsHeaders });
+    const r = resultado.get('directo');
+    if (r === 'SIN_USUARIO') {
+      // 404 = error permanente (no se reintenta).
+      return fallar(404, 'EB_NO_ENCONTRADO', 'No encontramos a ese usuario.');
     }
-
-    // Revisar preferencias (ej: si es recurso de encomienda y tiene las notificaciones de encomienda apagadas, no enviar push)
-    if (recurso_tipo === 'encomienda' && !profile.notif_encomiendas) {
-        return new Response(JSON.stringify({ enviado: false, reason: "Preferencias desactivadas para encomiendas" }), { headers: corsHeaders });
+    if (r === 'REINTENTAR') {
+      return responder(503, { enviado: false, error: 'EB_ERROR_INTERNO', hint: RAZON.REINTENTAR });
     }
-    if (recurso_tipo === 'boleto' && !profile.notif_boletos) {
-        return new Response(JSON.stringify({ enviado: false, reason: "Preferencias desactivadas para boletos" }), { headers: corsHeaders });
-    }
-    if (recurso_tipo === 'recordatorio' && !profile.notif_recordatorios) {
-        return new Response(JSON.stringify({ enviado: false, reason: "Preferencias de recordatorios desactivadas" }), { headers: corsHeaders });
-    }
-
-    let pushSent = false;
-
-    // 2. Enviar Push si tiene token
-    if (profile.expo_push_token) {
-        try {
-            const expoResponse = await fetch('https://exp.host/--/api/v2/push/send', {
-                method: 'POST',
-                headers: {
-                    'Accept': 'application/json',
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    to: profile.expo_push_token,
-                    sound: 'default',
-                    title: titulo,
-                    body: mensaje,
-                    data: { recurso_tipo, recurso_id, tipo: tipoNotificacion },
-                }),
-            });
-            const expoData = await expoResponse.json();
-            console.log("Expo Push Response:", expoData);
-            pushSent = true;
-        } catch (e) {
-            console.error("Error enviando push a Expo:", e);
-        }
-    }
-
-    // 3. Registrar en bandeja in-app (notificaciones_usuario).
-    //    sin_bandeja = true: la RPC que encoló el aviso ya la escribió en la misma transacción.
-    if (sin_bandeja !== true) {
-        await supabase.from('notificaciones_usuario').insert({
-            usuario_id: user_id,
-            tipo: tipoNotificacion,
-            titulo: titulo,
-            mensaje: mensaje,
-            recurso_tipo: recurso_tipo,
-            recurso_id: recurso_id
-        });
-    }
-
-    // 4. Logear en notificaciones_log (con service_role bypass)
-    await supabase.from('notificaciones_log').insert({
-        destinatario_id: user_id,
-        destinatario_contacto: "push " + (profile.expo_push_token || 'no_token'),
-        canal: 'PUSH',
-        titulo: titulo,
-        contenido: mensaje,
-        estado_envio: pushSent ? 'ENVIADO' : 'FALLIDO',
-        recurso_tipo: recurso_tipo,
-        recurso_id: recurso_id
-    });
-
-    return new Response(JSON.stringify({ enviado: pushSent }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
-  } catch (error: any) {
-    return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: corsHeaders });
+    return responder(200, r === 'ENVIADO' ? { enviado: true } : { enviado: false, reason: RAZON[r ?? 'FALLIDO'] });
+  } catch (e) {
+    if (e instanceof ErrorEntrada) return e.respuesta();
+    return errorInterno('enviar-push', e);
   }
 });

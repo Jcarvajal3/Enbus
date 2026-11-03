@@ -43,6 +43,7 @@ import { supabase } from '@/src/utils/supabase';
 import { useAuth } from '@/src/contexts/AuthContext';
 import { useToast } from '@/src/components/Toast';
 import { uploadEvidencePhoto } from '@/src/utils/storage';
+import { nuevaClaveIdempotencia } from '@/src/utils/ids';
 import { codigoEB, humanizeError } from '@/src/utils/errores';
 import { useWizardBack } from '@/src/hooks/useWizardBack';
 import { usePerfil } from '@/src/hooks/usePerfil';
@@ -198,6 +199,14 @@ export default function NuevaEncomiendaWizard() {
   const [pedirDatos, setPedirDatos] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const submittingRef = useRef(false);
+  /**
+   * Una clave por envío que se está creando (índice único `sender_id +
+   * idempotency_key`): si el insert llegó a la base pero la respuesta se perdió
+   * (red), el reintento no crea un segundo envío, abre el que ya existe.
+   */
+  const idemKeyRef = useRef(nuevaClaveIdempotencia());
+  /** Foto ya subida en un intento anterior (no se sube dos veces). */
+  const fotoSubidaRef = useRef<{ uri: string; ruta: string } | null>(null);
 
   // Atrás (header, botón de Android o gesto) retrocede un paso; en el paso 1
   // pide confirmación si ya hay datos del envío. Mientras se guarda, no se sale.
@@ -230,10 +239,13 @@ export default function NuevaEncomiendaWizard() {
         setErrorRutas(null);
         const { data, error } = await supabase
           .from('rutas')
-          .select('id, precio_pasaje, cooperativa_id, cooperativas ( id, nombre, calificacion_promedio )')
+          .select('id, precio_pasaje, cooperativa_id, cooperativas!inner ( id, nombre, calificacion_promedio )')
           .eq('ciudad_origen', normalizeCityForDb(origen.ciudad))
           .eq('ciudad_destino', normalizeCityForDb(destino.ciudad))
-          .eq('activa', true);
+          .eq('activa', true)
+          // Una cooperativa suspendida o pendiente no recibe envíos.
+          .eq('cooperativas.estado', 'ACTIVA')
+          .limit(50);
 
         if (error) throw error;
         if (isMounted) {
@@ -421,9 +433,12 @@ export default function NuevaEncomiendaWizard() {
     try {
       // La foto va a la carpeta del usuario en el bucket privado; se guarda la ruta.
       let fotoRuta: string | null = null;
-      if (foto) {
+      if (foto && fotoSubidaRef.current?.uri === foto) {
+        fotoRuta = fotoSubidaRef.current.ruta;
+      } else if (foto) {
         try {
           fotoRuta = await uploadEvidencePhoto(foto, user.id);
+          fotoSubidaRef.current = { uri: foto, ruta: fotoRuta };
         } catch (err) {
           if (__DEV__) console.warn('[nueva] No se pudo subir la foto:', err);
           toast.show(
@@ -448,18 +463,35 @@ export default function NuevaEncomiendaWizard() {
         estado: 'PENDIENTE_DE_ESCANEO',
         modalidad_pago: modalidadPago,
         cooperativa_id: ruta.cooperativas?.id,
+        idempotency_key: idemKeyRef.current,
       };
       // Solo con foto: así un envío sin foto no depende de la columna nueva.
       if (fotoRuta) payload.foto_cliente_path = fotoRuta;
       if (valorDeclarado.trim()) payload.valor_declarado = leerDecimal(valorDeclarado);
 
-      const { data, error } = await supabase
+      const { data: creada, error } = await supabase
         .from('encomiendas')
         .insert(payload)
         .select('id')
         .single();
 
-      if (error) throw error;
+      let data = creada;
+      if (error) {
+        // Ya existe un envío con esta clave: el intento anterior sí se guardó.
+        const repetido =
+          error.code === '23505' &&
+          `${error.message ?? ''} ${error.details ?? ''}`.includes('idempotencia');
+        if (!repetido) throw error;
+        const { data: previa, error: errPrevia } = await supabase
+          .from('encomiendas')
+          .select('id')
+          .eq('sender_id', user.id)
+          .eq('idempotency_key', idemKeyRef.current)
+          .maybeSingle();
+        if (errPrevia || !previa) throw errPrevia ?? error;
+        data = previa;
+      }
+      if (!data) throw new Error('Encomienda sin id');
 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       allowLeave();

@@ -27,6 +27,7 @@ export function PinInput({ encomiendaId, initialIntentos, initialBloqueado, onVa
   const inputRef = useRef<HTMLInputElement>(null);
   const [pin, setPin] = useState("");
   const [isValidating, setIsValidating] = useState(false);
+  const validandoRef = useRef(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [intentosRestantes, setIntentosRestantes] = useState(Math.max(0, MAX_INTENTOS - initialIntentos));
@@ -39,6 +40,9 @@ export function PinInput({ encomiendaId, initialIntentos, initialBloqueado, onVa
 
   const handleValidate = useCallback(
     async (pinCode: string) => {
+      // Cada intento fallido cuenta en el servidor: nunca dos validaciones a la vez.
+      if (validandoRef.current) return;
+      validandoRef.current = true;
       setIsValidating(true);
       setErrorMsg("");
 
@@ -74,6 +78,7 @@ export function PinInput({ encomiendaId, initialIntentos, initialBloqueado, onVa
         );
         setPin("");
       } finally {
+        validandoRef.current = false;
         setIsValidating(false);
       }
     },

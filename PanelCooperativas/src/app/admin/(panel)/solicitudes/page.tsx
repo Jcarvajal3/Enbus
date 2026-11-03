@@ -1,7 +1,7 @@
 import { PageHeader } from "@/components/page-header";
 import { fetchSolicitudes } from "@/lib/data/admin-solicitudes";
 import { SolicitudesTable } from "@/components/admin/solicitudes/solicitudes-table";
-import { requireSuperAdmin } from "@/lib/supabase/auth-guards";
+import { requireSuperAdmin } from "@/lib/data/admin-auth";
 
 export const dynamic = "force-dynamic";
 

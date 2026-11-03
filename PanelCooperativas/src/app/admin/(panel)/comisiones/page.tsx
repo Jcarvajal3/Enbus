@@ -7,7 +7,7 @@ import { PageHeader } from "@/components/page-header";
 import { obtenerTasaBCV } from "@/lib/tasa-bcv";
 
 export default async function AdminComisionesPage() {
-  const [ciclos, cooperativas, tasa] = await Promise.all([
+  const [{ ciclos, truncado }, cooperativas, tasa] = await Promise.all([
     fetchCiclosComisiones(),
     fetchCooperativasList(),
     obtenerTasaBCV(),
@@ -19,7 +19,7 @@ export default async function AdminComisionesPage() {
         <GenerarCicloDialog cooperativas={cooperativas} tasa={tasa} />
       </PageHeader>
 
-      <CiclosTable data={ciclos} cooperativas={cooperativas} tasa={tasa} />
+      <CiclosTable data={ciclos} truncado={truncado} cooperativas={cooperativas} tasa={tasa} />
     </div>
   );
 }

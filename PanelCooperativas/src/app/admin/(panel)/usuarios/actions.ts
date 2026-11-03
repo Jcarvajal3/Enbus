@@ -1,12 +1,17 @@
 "use server";
 
 import { createClient, createAdminClient } from "@/lib/supabase/server";
-import { requireSuperAdmin } from "@/lib/supabase/auth-guards";
+import { requireSuperAdmin, esUuid } from "@/lib/data/admin-auth";
 import { revalidatePath } from "next/cache";
 import { humanizeError } from "@/lib/errores";
 import { desbloquearPinEncomienda } from "@/app/admin/(panel)/encomiendas/actions";
 
 const MINIMO_MOTIVO = 5;
+/** Encomiendas cerradas: no se reenvía el PIN. */
+const ESTADOS_CERRADOS = ["ENTREGADA", "CANCELADA", "DEVUELTA"];
+/** Reenvíos de PIN permitidos por encomienda en la ventana. */
+const MAX_REENVIOS_PIN = 3;
+const VENTANA_REENVIOS_PIN = 15 * 60;
 
 /**
  * Desbloquea el PIN de retiro con fn_desbloquear_pin (misma acción que "Buscar
@@ -26,6 +31,9 @@ export async function desbloquearPIN(encomiendaId: string, motivo: string) {
 export async function reenviarPIN(encomiendaId: string) {
   try {
     await requireSuperAdmin();
+    if (!esUuid(encomiendaId)) {
+      return { success: false, error: "No encontramos la encomienda. Actualiza la página e intenta de nuevo." };
+    }
     // Use admin client for Edge Function invocations from server-side admin actions
     const adminSupabase = createAdminClient();
     const supabase = await createClient();
@@ -33,17 +41,39 @@ export async function reenviarPIN(encomiendaId: string) {
     // 1. Obtener la encomienda y los datos necesarios
     const { data: e, error: fetchError } = await supabase
       .from("encomiendas")
-      .select("id, tracking_id, pin_retiro, receiver_nombre, receiver_telefono, receiver_user_id")
+      .select("id, tracking_id, estado, pin_retiro, receiver_nombre, receiver_telefono, receiver_user_id")
       .eq("id", encomiendaId)
-      .single();
+      .maybeSingle();
 
     if (fetchError || !e) {
       console.error("Error fetching encomienda for PIN resend:", fetchError);
       return { success: false, error: humanizeError(fetchError ?? { code: "PGRST116" }, "cargar la encomienda") };
     }
 
+    if (ESTADOS_CERRADOS.includes(e.estado)) {
+      return { success: false, error: "Esta encomienda ya está cerrada: no hace falta reenviar el PIN." };
+    }
     if (!e.pin_retiro) {
       return { success: false, error: "Esta encomienda todavía no tiene PIN: se genera cuando la taquilla la recibe." };
+    }
+
+    // Límite de reenvíos por encomienda (doble clic, varios admins o un abuso):
+    // cada reenvío es un WhatsApp pagado y un mensaje más al destinatario.
+    const { data: limite, error: limiteError } = await adminSupabase.rpc("fn_consumir_limite", {
+      p_clave: `reenviar_pin:${e.id}`,
+      p_maximo: MAX_REENVIOS_PIN,
+      p_ventana_segundos: VENTANA_REENVIOS_PIN,
+    });
+    if (limiteError) {
+      // Sin la RPC (o con un fallo técnico) no se bloquea el reenvío; queda en el log.
+      console.warn("[reenviarPIN] No se pudo consultar el límite de reenvíos:", limiteError);
+    } else if ((limite as { permitido?: boolean } | null)?.permitido === false) {
+      const segundos = Number((limite as { reintentar_en_segundos?: number }).reintentar_en_segundos ?? 0);
+      const minutos = Math.max(1, Math.ceil(segundos / 60));
+      return {
+        success: false,
+        error: `Ya reenviamos este PIN ${MAX_REENVIOS_PIN} veces hace poco. Espera ${minutos} ${minutos === 1 ? "minuto" : "minutos"} o dáselo por otro medio.`,
+      };
     }
 
     // 2. Invocar Edge Function de WhatsApp — el PIN completo se envía aquí
@@ -81,8 +111,9 @@ export async function reenviarPIN(encomiendaId: string) {
     // NOTA DE SEGURIDAD: El mensaje Push NO incluye el PIN en texto claro porque la
     // notificación se persiste en la tabla notificaciones_usuario. El PIN real ya fue
     // enviado por WhatsApp. El push sólo notifica que deben revisar su WhatsApp.
+    // Solo se avisa por push si el WhatsApp salió: el texto dice que se envió por WhatsApp.
     let pushEnviado = false;
-    if (e.receiver_user_id) {
+    if (e.receiver_user_id && waEnviado) {
       try {
         const { data: pushData, error: pushError } = await adminSupabase.functions.invoke("enviar-push", {
           body: {
@@ -130,10 +161,13 @@ export async function reenviarPIN(encomiendaId: string) {
 export async function toggleUsuarioEstado(userId: string, currentIsBanned: boolean, motivo?: string) {
   try {
     const superAdmin = await requireSuperAdmin();
+    if (!esUuid(userId)) {
+      return { success: false, error: "No encontramos la cuenta. Actualiza la página." };
+    }
     if (superAdmin.id === userId) {
       return { success: false, error: "No puedes suspender tu propia cuenta." };
     }
-    const motivoLimpio = (motivo ?? "").trim();
+    const motivoLimpio = String(motivo ?? "").trim().slice(0, 500);
     if (!currentIsBanned && motivoLimpio.length < MINIMO_MOTIVO) {
       return { success: false, error: `Escribe el motivo de la suspensión (mínimo ${MINIMO_MOTIVO} caracteres).` };
     }
@@ -153,6 +187,13 @@ export async function toggleUsuarioEstado(userId: string, currentIsBanned: boole
     if (error) {
       console.error(`Error changing user ban state for ${userId}:`, error);
       return { success: false, error: humanizeError(error, currentIsBanned ? "reactivar la cuenta" : "suspender la cuenta") };
+    }
+
+    if (!currentIsBanned) {
+      // El ban no invalida las sesiones abiertas: se cierran para que la suspensión
+      // tenga efecto ya y no al caducar el token. Mejor esfuerzo.
+      const { error: sesionesError } = await adminSupabase.rpc("fn_cerrar_sesiones_usuario", { p_usuario_id: userId });
+      if (sesionesError) console.warn(`No se pudieron cerrar las sesiones de ${userId}:`, sesionesError);
     }
 
     // Revalidate both list and detail pages
@@ -177,7 +218,7 @@ export async function completarBajaCuenta(usuarioId: string): Promise<{ success:
   } catch {
     return { success: false, error: "Solo el equipo de EnBus puede completar bajas de cuenta." };
   }
-  if (!usuarioId) return { success: false, error: "No encontramos la cuenta. Actualiza la página." };
+  if (!esUuid(usuarioId)) return { success: false, error: "No encontramos la cuenta. Actualiza la página." };
 
   try {
     const adminSupabase = createAdminClient();

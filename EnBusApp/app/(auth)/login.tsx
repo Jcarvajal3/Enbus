@@ -93,6 +93,8 @@ export default function LoginScreen() {
   const confirmRef = useRef<TextInput>(null);
 
   const busy = loading || googleLoading;
+  /** Anti doble toque: el estado `busy` llega un render tarde; la ref no. */
+  const enCursoRef = useRef(false);
 
   // Fase 4 (#50): por qué se cerró la sesión sin pedirlo ("Esta cuenta fue
   // eliminada."). Se copia aquí y se limpia del contexto para no repetirlo.
@@ -133,7 +135,7 @@ export default function LoginScreen() {
   };
 
   async function handleSubmit() {
-    if (busy) return;
+    if (busy || enCursoRef.current) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     if (!validate()) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
@@ -141,6 +143,7 @@ export default function LoginScreen() {
     }
 
     const email = form.email.trim();
+    enCursoRef.current = true;
     setLoading(true);
     try {
       if (mode === 'login') {
@@ -188,13 +191,15 @@ export default function LoginScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       toast.show('error', humanizeError(err, mode === 'login' ? 'login' : 'registro'));
     } finally {
+      enCursoRef.current = false;
       setLoading(false);
     }
   }
 
   async function handleGoogleSignIn() {
-    if (busy) return;
+    if (busy || enCursoRef.current) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    enCursoRef.current = true;
     setGoogleLoading(true);
     try {
       const redirectTo = redirectAuth('google');
@@ -227,6 +232,7 @@ export default function LoginScreen() {
         isNetworkError(err) || codigoEB(err) ? humanizeError(err, 'login') : ERROR_GOOGLE
       );
     } finally {
+      enCursoRef.current = false;
       setGoogleLoading(false);
     }
   }

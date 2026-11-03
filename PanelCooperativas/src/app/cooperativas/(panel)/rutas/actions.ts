@@ -6,6 +6,10 @@ import { humanizeError } from "@/lib/errores";
 import { mismaCiudad } from "@/lib/ciudades";
 
 const MSG_MISMA_CIUDAD = "El origen y el destino deben ser ciudades distintas.";
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const MSG_RUTA_NO_ENCONTRADA = "No encontramos esa ruta en tu cooperativa. Actualiza la página.";
+/** Tope razonable del pasaje en USD (evita un error de tipeo como 1500 en vez de 15,00). */
+const PRECIO_MAXIMO_USD = 1000;
 
 /** Duración en minutos: "Horas" (0–48) + "Minutos" (0–59), o el campo antiguo en minutos. */
 function leerDuracion(formData: FormData): number {
@@ -32,19 +36,22 @@ function parsePrecio(valor: FormDataEntryValue | null): number {
 }
 
 export async function guardarRuta(formData: FormData, rutaId?: string) {
+  if (rutaId !== undefined && !UUID_RE.test(rutaId ?? "")) return { error: MSG_RUTA_NO_ENCONTRADA };
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Tu sesión expiró. Inicia sesión de nuevo." };
 
   const { data: profile } = await supabase.from("profiles").select("cooperativa_id, role").eq("id", user.id).single();
-  if (!profile || profile.role !== "admin_cooperativa") {
+  if (!profile || profile.role !== "admin_cooperativa" || !profile.cooperativa_id) {
     return { error: "Solo el administrador de la cooperativa puede crear o editar rutas." };
   }
 
-  const estado_origen = formData.get("estado_origen") as string;
-  const ciudad_origen = formData.get("ciudad_origen") as string;
-  const estado_destino = formData.get("estado_destino") as string;
-  const ciudad_destino = formData.get("ciudad_destino") as string;
+  // Claves de lib/data/venezuela.ts ("carabobo", "valencia"): texto corto, sin espacios raros.
+  const clave = (k: string) => String(formData.get(k) ?? "").trim().slice(0, 80);
+  const estado_origen = clave("estado_origen");
+  const ciudad_origen = clave("ciudad_origen");
+  const estado_destino = clave("estado_destino");
+  const ciudad_destino = clave("ciudad_destino");
   const duracion_estimada_min = leerDuracion(formData);
   // Precio de referencia en USD: el pasajero paga en Bs a la tasa BCV del día.
   const precio_pasaje = Math.round(parsePrecio(formData.get("precio_pasaje")) * 100) / 100;
@@ -59,7 +66,7 @@ export async function guardarRuta(formData: FormData, rutaId?: string) {
       campo: "duracion" as const,
     };
   }
-  if (isNaN(precio_pasaje) || precio_pasaje <= 0) {
+  if (isNaN(precio_pasaje) || precio_pasaje <= 0 || precio_pasaje > PRECIO_MAXIMO_USD) {
     return { error: "Escribe el precio del pasaje en dólares, por ejemplo 15 o 15,50." };
   }
   if (mismaCiudad(ciudad_origen, ciudad_destino)) {
@@ -78,8 +85,14 @@ export async function guardarRuta(formData: FormData, rutaId?: string) {
   };
 
   if (rutaId) {
-    const { error } = await supabase.from("rutas").update(payload).eq("id", rutaId).eq("cooperativa_id", profile.cooperativa_id);
+    const { data: filas, error } = await supabase
+      .from("rutas")
+      .update(payload)
+      .eq("id", rutaId)
+      .eq("cooperativa_id", profile.cooperativa_id)
+      .select("id");
     if (error) return { error: humanizeError(error, "actualizar la ruta") };
+    if (!filas || filas.length === 0) return { error: MSG_RUTA_NO_ENCONTRADA };
   } else {
     const { error } = await supabase.from("rutas").insert(payload);
     if (error) return { error: humanizeError(error, "crear la ruta") };
@@ -91,13 +104,18 @@ export async function guardarRuta(formData: FormData, rutaId?: string) {
 }
 
 export async function checkDesactivarRuta(rutaId: string) {
+  if (!UUID_RE.test(rutaId ?? "")) return { error: MSG_RUTA_NO_ENCONTRADA };
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Tu sesión expiró. Inicia sesión de nuevo." };
 
+  const { data: profile } = await supabase.from("profiles").select("cooperativa_id, role").eq("id", user.id).single();
+  if (!profile?.cooperativa_id) return { error: MSG_RUTA_NO_ENCONTRADA };
+
   const { count, error } = await supabase
     .from("viajes")
     .select("id", { count: "exact", head: true })
+    .eq("cooperativa_id", profile.cooperativa_id)
     .eq("ruta_id", rutaId)
     .eq("estado", "PROGRAMADO")
     .gt("fecha_hora_salida", new Date().toISOString());
@@ -107,6 +125,7 @@ export async function checkDesactivarRuta(rutaId: string) {
 }
 
 export async function toggleActivaRuta(rutaId: string, activa: boolean) {
+  if (!UUID_RE.test(rutaId ?? "")) return { error: MSG_RUTA_NO_ENCONTRADA };
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Tu sesión expiró. Inicia sesión de nuevo." };
@@ -116,9 +135,16 @@ export async function toggleActivaRuta(rutaId: string, activa: boolean) {
     return { error: "Solo el administrador de la cooperativa puede activar o desactivar rutas." };
   }
 
-  const { error } = await supabase.from("rutas").update({ activa }).eq("id", rutaId).eq("cooperativa_id", profile.cooperativa_id);
+  const { data: filas, error } = await supabase
+    .from("rutas")
+    .update({ activa: activa === true })
+    .eq("id", rutaId)
+    .eq("cooperativa_id", profile.cooperativa_id)
+    .select("id");
   if (error) return { error: humanizeError(error, "cambiar el estado de la ruta") };
+  if (!filas || filas.length === 0) return { error: MSG_RUTA_NO_ENCONTRADA };
 
   revalidatePath("/cooperativas/rutas");
+  revalidatePath("/cooperativas/viajes");
   return { success: true };
 }

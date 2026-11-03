@@ -87,7 +87,8 @@ export function CooperativaDetailTabs({ cooperativa }: CooperativaDetailTabsProp
           Empleados <ConteoPestana n={cooperativa.empleados.length} />
         </TabsTrigger>
         <TabsTrigger value="calificaciones" className={CLASE_PESTANA}>
-          Calificaciones <ConteoPestana n={cooperativa.calificaciones.length} />
+          Calificaciones{" "}
+          <ConteoPestana n={Math.max(cooperativa.total_calificaciones ?? 0, cooperativa.calificaciones.length)} />
         </TabsTrigger>
         <TabsTrigger value="balance" className={CLASE_PESTANA}>Balance</TabsTrigger>
       </TabsList>
@@ -356,6 +357,11 @@ export function CooperativaDetailTabs({ cooperativa }: CooperativaDetailTabsProp
                 </li>
               ))}
             </ul>
+            {cooperativa.calificaciones.length < (cooperativa.total_calificaciones ?? 0) && (
+              <p className="border-t border-border px-6 py-3 text-xs text-muted-foreground">
+                Se muestran las {formatNumeroVE(cooperativa.calificaciones.length, 0)} reseñas más recientes.
+              </p>
+            )}
           </Card>
         )}
       </TabsContent>

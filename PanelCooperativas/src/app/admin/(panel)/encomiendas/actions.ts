@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { requireSuperAdmin } from "@/lib/supabase/auth-guards";
+import { requireSuperAdmin, esUuid } from "@/lib/data/admin-auth";
 import { humanizeError } from "@/lib/errores";
 
 const MINIMO_MOTIVO = 5;
@@ -57,7 +57,7 @@ function uno<T>(v: T | T[] | null | undefined): T | null {
 export async function buscarEncomiendaAdmin(codigo: string): Promise<ResultadoBusqueda> {
   try {
     await requireSuperAdmin();
-    const tracking = normalizarCodigo(codigo ?? "");
+    const tracking = normalizarCodigo(String(codigo ?? "").slice(0, 40));
     if (!tracking) return { estado: "no_encontrada", codigo: "" };
 
     const supabase = await createClient();
@@ -133,7 +133,10 @@ export async function buscarEncomiendaAdmin(codigo: string): Promise<ResultadoBu
 export async function desbloquearPinEncomienda(encomiendaId: string, motivo: string) {
   try {
     await requireSuperAdmin();
-    const motivoLimpio = (motivo ?? "").trim();
+    if (!esUuid(encomiendaId)) {
+      return { success: false, error: "No encontramos la encomienda. Actualiza la página e intenta de nuevo." };
+    }
+    const motivoLimpio = String(motivo ?? "").trim().slice(0, 500);
     if (motivoLimpio.length < MINIMO_MOTIVO) {
       return { success: false, error: `Escribe por qué desbloqueas el PIN (mínimo ${MINIMO_MOTIVO} caracteres).` };
     }

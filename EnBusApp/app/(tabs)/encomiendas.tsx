@@ -69,6 +69,8 @@ export default function EncomiendasScreen() {
     error,
     actualizadoAt,
     refetch,
+    hayMas,
+    cargarMas,
   } = useEncomiendas(user?.id, {
     enabled: isFocused && !!user?.id,
     limit: 30,
@@ -258,6 +260,8 @@ export default function EncomiendasScreen() {
                   tintColor={Colors.mutedForeground}
                 />
               }
+              onEndReached={hayMas && !error ? cargarMas : undefined}
+              onEndReachedThreshold={0.5}
               removeClippedSubviews
               maxToRenderPerBatch={10}
               windowSize={5}

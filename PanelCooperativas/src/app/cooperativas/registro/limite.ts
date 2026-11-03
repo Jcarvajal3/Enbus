@@ -24,7 +24,10 @@ let avisoSinRpc = false;
 /** Hash de la IP de quien llama (32 caracteres hex), o null si no se conoce. */
 async function hashIpCliente(): Promise<string | null> {
   const h = await headers();
-  const ip = (h.get("x-forwarded-for")?.split(",")[0] ?? h.get("x-real-ip") ?? "").trim();
+  // x-real-ip primero: lo fija la plataforma (Vercel). El primer valor de
+  // x-forwarded-for lo puede escribir el cliente si hay un proxy que lo concatena,
+  // y con él se saltaría el límite cambiando la cabecera en cada intento.
+  const ip = (h.get("x-real-ip") ?? h.get("x-forwarded-for")?.split(",")[0] ?? "").trim();
   const secreto = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!ip || !secreto) return null;
   return createHmac("sha256", secreto).update(`ip:${ip}`).digest("hex").slice(0, 32);

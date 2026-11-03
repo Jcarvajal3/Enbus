@@ -132,12 +132,14 @@ export function MenuUsuario({ nombre, rol, login }: { nombre: string; rol: strin
 
   const cerrarSesion = async () => {
     // Sin red, signOut falla y la sesión sigue abierta: decirlo en vez de ir al login.
-    const { error } = await createClient().auth.signOut();
+    // scope "local": cierra solo este equipo. El global también tumbaba la sesión de la
+    // misma cuenta en las otras taquillas (a mitad de una venta) y en la app móvil.
+    const { error } = await createClient().auth.signOut({ scope: "local" });
     if (error) {
       avisarError(humanizeError(error, "cerrar la sesión"));
       return;
     }
-    router.push(login);
+    router.replace(login);
     router.refresh();
   };
 
