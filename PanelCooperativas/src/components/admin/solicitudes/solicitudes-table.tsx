@@ -119,7 +119,7 @@ export function SolicitudesTable({ solicitudes }: SolicitudesTableProps) {
             <TableRow>
               <TableHead>Cooperativa</TableHead>
               <TableHead className="hidden lg:table-cell">Representante</TableHead>
-              <TableHead>Recibida</TableHead>
+              <TableHead className="hidden sm:table-cell">Recibida</TableHead>
               <TableHead className="hidden lg:table-cell">Cuenta</TableHead>
               {rechazadas && <TableHead className="hidden md:table-cell">Estado</TableHead>}
               <TableHead className="text-right">Acciones</TableHead>
@@ -151,7 +151,7 @@ export function SolicitudesTable({ solicitudes }: SolicitudesTableProps) {
                     <span className="block">{sol.representante || <Vacio />}</span>
                     <span className="block text-xs text-muted-foreground">{sol.email || "Sin correo"}</span>
                   </TableCell>
-                  <TableCell className="text-muted-foreground tabular-nums">{formatFechaVE(sol.created_at)}</TableCell>
+                  <TableCell className="hidden text-muted-foreground tabular-nums sm:table-cell">{formatFechaVE(sol.created_at)}</TableCell>
                   <TableCell className="hidden lg:table-cell">
                     <CuentaBadge cuenta={sol.cuenta} />
                   </TableCell>

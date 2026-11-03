@@ -1,21 +1,18 @@
 import { Skeleton } from "@/components/ui/skeleton";
+import { TablaSkeleton } from "@/components/tabla-skeleton";
 
+// Misma forma que la página: encabezado + embarque + pestañas + tabla (PU-13).
 export default function BoletosLoading() {
   return (
-    <div className="space-y-6 flex flex-col h-full">
-      <div>
-        <Skeleton className="h-8 w-48 mb-2" />
-        <Skeleton className="h-4 w-40" />
+    <div className="flex flex-col gap-6">
+      <div className="flex items-center justify-between gap-4" aria-hidden>
+        <Skeleton className="h-8 w-56" />
+        <Skeleton className="h-9 w-36 rounded-full" />
       </div>
-      <Skeleton className="h-12 w-full" />
-      <div className="flex gap-4">
-        <Skeleton className="h-10 w-[200px]" />
-        <Skeleton className="h-10 w-[200px]" />
-      </div>
-      <div className="flex-1 rounded-md border bg-card p-4 space-y-3">
-        {Array.from({ length: 6 }).map((_, i) => (
-          <Skeleton key={i} className="h-12 w-full" />
-        ))}
+      <Skeleton className="h-48 w-full rounded-md" />
+      <div className="flex flex-col gap-4">
+        <Skeleton className="h-10 w-full max-w-xl rounded-full" />
+        <TablaSkeleton columnas={7} />
       </div>
     </div>
   );

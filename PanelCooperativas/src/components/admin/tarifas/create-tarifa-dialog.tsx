@@ -96,6 +96,11 @@ function horaSugerida(): string {
   return `${String(h).padStart(2, "0")}:00`;
 }
 
+/** "… 3:00 a. m." → "… 3:00 a. m" para cerrar la frase con un solo punto. */
+function sinPunto(texto: string): string {
+  return texto.replace(/\.$/, "");
+}
+
 /** "Paso 1 de 2" sobre el título del diálogo (AD5-38, D22). */
 function Paso({ n }: { n: 1 | 2 }) {
   return <p className="text-xs font-medium text-muted-foreground tabular-nums">Paso {n} de 2</p>;
@@ -278,7 +283,7 @@ function Formulario({
           <DialogTitle>Revisa los cambios</DialogTitle>
           <DialogDescription>
             {programada
-              ? `Empieza a regir el ${programada}. Hasta entonces se cobra la vigente.`
+              ? `Empieza a regir el ${sinPunto(programada)}. Hasta entonces se cobra la vigente.`
               : vigente
                 ? "Reemplaza a la vigente al publicarla; la actual pasa a «Anterior»."
                 : "Será la primera tarifa: las cooperativas podrán cobrar encomiendas al publicarla."}
@@ -381,7 +386,7 @@ function Formulario({
           <Button type="button" variant="outline" onClick={() => setPaso(1)} disabled={publicando}>
             <ArrowLeft aria-hidden /> Atrás
           </Button>
-          <Button type="button" onClick={publicar} disabled={publicando} aria-busy={publicando || undefined} autoFocus>
+          <Button type="button" onClick={publicar} disabled={publicando} aria-busy={publicando || undefined}>
             {publicando && <Spinner size="sm" aria-hidden />}
             {publicando
               ? programada
@@ -525,7 +530,7 @@ function Formulario({
                 ? errorCampo("vigente_desde")
                 : programada && (
                     <FieldDescription id={id("programar-ayuda")}>
-                      Empieza a regir el {programada}. Hasta entonces se cobra la vigente.
+                      Empieza a regir el {sinPunto(programada)}. Hasta entonces se cobra la vigente.
                     </FieldDescription>
                   )}
             </div>

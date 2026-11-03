@@ -102,7 +102,7 @@ export function CooperativasTable({ initialCooperativas, estado = "", q = "" }: 
               <TableHead>Nombre</TableHead>
               <TableHead className="hidden md:table-cell">RIF</TableHead>
               <TableHead>Estado</TableHead>
-              <TableHead className="text-right">Comisión</TableHead>
+              <TableHead className="hidden text-right sm:table-cell">Comisión</TableHead>
               <TableHead className="hidden lg:table-cell">Calificación</TableHead>
               <TableHead className="hidden lg:table-cell">Registro</TableHead>
             </TableRow>
@@ -137,7 +137,7 @@ export function CooperativasTable({ initialCooperativas, estado = "", q = "" }: 
                   <TableCell>
                     <StatusBadge status={coop.estado} dominio="cooperativa" />
                   </TableCell>
-                  <TableCell className="text-right tabular-nums">{formatPorcentaje(coop.comision_porcentaje)}</TableCell>
+                  <TableCell className="hidden text-right tabular-nums sm:table-cell">{formatPorcentaje(coop.comision_porcentaje)}</TableCell>
                   <TableCell className="hidden lg:table-cell">
                     <Calificacion promedio={coop.calificacion_promedio} total={coop.total_calificaciones} />
                   </TableCell>

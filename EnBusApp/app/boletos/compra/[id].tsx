@@ -83,6 +83,13 @@ interface BoletoDeCompra {
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+/** Hora de llegada estimada (salida + duración de la ruta), si se conocen ambas. */
+function llegadaEstimada(salida: string | undefined, minutos: number): string | undefined {
+  const t = salida ? Date.parse(salida) : NaN;
+  if (Number.isNaN(t) || !(minutos > 0)) return undefined;
+  return formatHora(new Date(t + minutos * 60_000).toISOString()) || undefined;
+}
+
 const unico = <T,>(v: T | T[] | null | undefined): T | null =>
   Array.isArray(v) ? (v[0] ?? null) : (v ?? null);
 
@@ -285,6 +292,7 @@ export default function CompraScreen() {
             destino={ruta?.ciudad_destino}
             duration={minutos > 0 ? formatDuracion(minutos) : undefined}
             horaSalida={formatHora(viaje?.fecha_hora_salida) || undefined}
+            horaLlegada={llegadaEstimada(viaje?.fecha_hora_salida, minutos)}
           />
           <Divider spacing={Spacing.lg} />
           <View style={s.resumenFila}>

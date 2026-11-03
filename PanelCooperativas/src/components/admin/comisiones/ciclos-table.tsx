@@ -18,7 +18,6 @@ import { KpiCard } from "@/components/kpi-card";
 import { BarraFiltros } from "@/components/barra-filtros";
 import { PaginacionTabla, usePaginacion } from "@/components/paginacion-tabla";
 import { Monto } from "@/components/monto";
-import { Vacio } from "@/components/admin/detalle";
 import { formatPorcentaje } from "@/components/admin/cooperativas/cooperativas-table";
 import { etiquetaMetodoPago } from "@/lib/estados";
 import { formatFechaVE } from "@/lib/fechas";
@@ -134,19 +133,18 @@ export function CiclosTable({ data, cooperativas, tasa: tasaServidor }: CiclosTa
             <TableRow>
               <TableHead>Cooperativa</TableHead>
               <TableHead>Período</TableHead>
-              <TableHead className="hidden text-right lg:table-cell">Boletos</TableHead>
-              <TableHead className="hidden text-right lg:table-cell">Encomiendas</TableHead>
-              <TableHead className="hidden text-right md:table-cell">Comisión %</TableHead>
+              <TableHead className="hidden text-right xl:table-cell">Boletos</TableHead>
+              <TableHead className="hidden text-right xl:table-cell">Encomiendas</TableHead>
+              <TableHead className="hidden text-right xl:table-cell">Comisión %</TableHead>
               <TableHead className="text-right">Comisión</TableHead>
               <TableHead>Estado</TableHead>
-              <TableHead className="hidden xl:table-cell">Pago</TableHead>
               <TableHead className="text-right">Acciones</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {filtradas.length === 0 ? (
               <FilaVacia
-                colSpan={9}
+                colSpan={8}
                 icon={hayFiltros ? MagnifyingGlass : Receipt}
                 titulo={hayFiltros ? "Ningún ciclo coincide con los filtros" : "Todavía no hay ciclos de comisiones"}
               />
@@ -162,13 +160,13 @@ export function CiclosTable({ data, cooperativas, tasa: tasaServidor }: CiclosTa
                   <TableCell className="text-muted-foreground tabular-nums">
                     {formatFechaVE(item.periodo_inicio)} – {formatFechaVE(item.periodo_fin)}
                   </TableCell>
-                  <TableCell className="hidden text-right lg:table-cell">
+                  <TableCell className="hidden text-right xl:table-cell">
                     <Monto usd={item.total_boletos} tasa={tasa} moneda="USD" size="sm" align="right" />
                   </TableCell>
-                  <TableCell className="hidden text-right lg:table-cell">
+                  <TableCell className="hidden text-right xl:table-cell">
                     <Monto usd={item.total_encomiendas} tasa={tasa} moneda="USD" size="sm" align="right" />
                   </TableCell>
-                  <TableCell className="hidden text-right tabular-nums md:table-cell">
+                  <TableCell className="hidden text-right tabular-nums xl:table-cell">
                     {formatPorcentaje(item.comision_porcentaje)}
                   </TableCell>
                   <TableCell className="text-right">
@@ -176,9 +174,9 @@ export function CiclosTable({ data, cooperativas, tasa: tasaServidor }: CiclosTa
                   </TableCell>
                   <TableCell>
                     <StatusBadge status={String(item.pagado)} dominio="ciclo" />
-                  </TableCell>
-                  <TableCell className="hidden text-muted-foreground xl:table-cell">
-                    {item.pagado ? detallePago(item) || <Vacio /> : <Vacio />}
+                    {item.pagado && detallePago(item) && (
+                      <span className="mt-1 block text-xs text-muted-foreground tabular-nums">{detallePago(item)}</span>
+                    )}
                   </TableCell>
                   <TableCell className="text-right">
                     {!item.pagado && (

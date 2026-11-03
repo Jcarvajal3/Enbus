@@ -9,9 +9,11 @@
 // - Sonido: "Sonar al escanear" (lib/sonido, preferencia de este equipo) y pruebas.
 
 import { useEffect, useId, useRef, useState, useSyncExternalStore, type ChangeEvent, type KeyboardEvent } from "react";
-import { CheckCircle, Info, Printer, Scan, SpeakerHigh, WarningCircle } from "@phosphor-icons/react";
-import { toast } from "sonner";
+import { CheckCircle, Info, Scan, SpeakerHigh, WarningCircle } from "@phosphor-icons/react";
 import { PageHeader } from "@/components/page-header";
+import { GrupoOpciones, OpcionTile } from "@/components/opcion-tile";
+import { avisarError, avisarExito } from "@/lib/avisos";
+import { ICONO_SECCION } from "@/lib/navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -83,9 +85,9 @@ function SeccionImpresora() {
           papel,
         })
       );
-      toast.success("Enviamos el ticket de prueba a la impresora.");
+      avisarExito("Enviamos el ticket de prueba a la impresora.");
     } catch (err) {
-      toast.error(mensajeErrorImpresora(err) ?? "No se imprimió el ticket de prueba. Intenta de nuevo.");
+      avisarError(mensajeErrorImpresora(err) ?? "No se imprimió el ticket de prueba. Intenta de nuevo.");
     } finally {
       setImprimiendo(false);
     }
@@ -104,13 +106,13 @@ function SeccionImpresora() {
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <Printer size={24} weight="duotone" aria-hidden />
+          <ICONO_SECCION.impresora className="size-5 text-muted-foreground" aria-hidden />
           Impresora
         </CardTitle>
-        <CardDescription>Impresora térmica de tickets por Bluetooth.</CardDescription>
+        <CardDescription>Térmica de tickets, por Bluetooth.</CardDescription>
       </CardHeader>
-      <CardContent className="space-y-6">
-        <div className="flex items-center gap-3 rounded-lg border bg-muted/50 p-4" role="status" aria-live="polite">
+      <CardContent className="flex flex-col gap-6">
+        <div className="flex items-center gap-3 rounded-md bg-muted/50 p-4" role="status" aria-live="polite">
           <span
             className={cn(
               "size-3 shrink-0 rounded-full",
@@ -118,7 +120,7 @@ function SeccionImpresora() {
             )}
             aria-hidden
           />
-          <div className="min-w-0">
+          <div className="flex min-w-0 flex-col gap-0.5">
             <p className="font-medium">{textoEstado}</p>
             {!conectada && soportado && nombre && (
               <p className="text-sm text-muted-foreground">Última impresora: {nombre}</p>
@@ -142,40 +144,28 @@ function SeccionImpresora() {
             </Button>
           </div>
         ) : (
-          <p className="text-sm text-muted-foreground">
-            Sin impresora Bluetooth, los boletos y las guías salen por la ventana de impresión del navegador.
-          </p>
+          <p className="text-sm text-muted-foreground">Los boletos y las guías salen por la impresión del navegador.</p>
         )}
 
-        <fieldset className="space-y-2">
-          <legend className="text-sm font-medium">Ancho del papel</legend>
-          <div className="flex gap-3">
+        <div className="flex flex-col gap-2">
+          <p id={`${uid}-papel`} className="text-sm font-medium">
+            Ancho del papel
+          </p>
+          <GrupoOpciones etiqueta="Ancho del papel" className="grid grid-cols-2 gap-2">
             {(["58", "80"] as const).map((ancho) => (
-              <label
+              <OpcionTile
                 key={ancho}
-                htmlFor={`${uid}-papel-${ancho}`}
-                className={cn(
-                  "flex flex-1 cursor-pointer items-center gap-2 rounded-lg border p-3 text-sm transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring",
-                  papel === ancho ? "border-foreground bg-muted/60 font-medium" : "hover:bg-muted/40"
-                )}
-              >
-                <input
-                  id={`${uid}-papel-${ancho}`}
-                  type="radio"
-                  name={`${uid}-papel`}
-                  value={ancho}
-                  checked={papel === ancho}
-                  onChange={() => guardarPapel(ancho)}
-                  className="accent-foreground"
-                />
-                {ancho} mm
-              </label>
+                seleccionado={papel === ancho}
+                onSelect={() => guardarPapel(ancho)}
+                titulo={`${ancho} mm`}
+                detalle={`${caracteresPorLinea(ancho)} caracteres`}
+              />
             ))}
-          </div>
-        </fieldset>
+          </GrupoOpciones>
+        </div>
 
         <p className="flex items-start gap-2 rounded-md bg-info-light p-3 text-sm text-info-deep">
-          <Info size={20} className="mt-0.5 shrink-0" aria-hidden />
+          <Info className="mt-0.5 size-4 shrink-0 text-info-text" weight="fill" aria-hidden />
           Al abrir el panel intentamos reconectarla sola.
         </p>
       </CardContent>
@@ -227,44 +217,41 @@ function SeccionLector() {
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <Scan size={24} weight="duotone" aria-hidden />
+          <Scan className="size-5 text-muted-foreground" aria-hidden />
           Lector
         </CardTitle>
-        <CardDescription>Lector de códigos USB o Bluetooth. Pruébalo antes de empezar a atender.</CardDescription>
+        <CardDescription>De códigos, USB o Bluetooth.</CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="space-y-2">
+      <CardContent className="flex flex-col gap-4">
+        <div className="flex flex-col gap-2">
           <Label htmlFor={`${uid}-lector`}>Prueba el lector aquí</Label>
           <Input
             id={`${uid}-lector`}
             autoComplete="off"
             spellCheck={false}
-            placeholder="Haz clic aquí y escanea cualquier código"
             value={valor}
             onChange={alEscribir}
             onKeyDown={alTecla}
-            className="py-6 font-mono text-lg"
+            className="font-mono"
           />
         </div>
 
-        <div className="flex min-h-[88px] flex-col justify-center rounded-lg border bg-muted/50 p-4" role="status" aria-live="polite">
+        <div className="flex min-h-20 flex-col justify-center rounded-md bg-muted/50 p-4" role="status" aria-live="polite">
           {prueba?.tipo === "lector" ? (
-            <div className="flex items-start gap-3 text-success-text">
-              <CheckCircle size={28} weight="fill" className="shrink-0" aria-hidden />
-              <div className="min-w-0">
-                <p className="font-semibold">El lector funciona ({prueba.ms} ms).</p>
-                <p className="mt-1 truncate font-mono text-sm text-foreground">{prueba.codigo}</p>
+            <div className="flex items-start gap-3">
+              <CheckCircle className="size-5 shrink-0 text-success-text" weight="fill" aria-hidden />
+              <div className="flex min-w-0 flex-col gap-1">
+                <p className="font-semibold text-success-text">El lector funciona ({prueba.ms} ms)</p>
+                <p className="truncate font-mono text-sm text-foreground">{prueba.codigo}</p>
               </div>
             </div>
           ) : prueba?.tipo === "mano" ? (
-            <div className="flex items-start gap-3 text-warning-text">
-              <WarningCircle size={28} weight="fill" className="shrink-0" aria-hidden />
-              <p className="text-sm font-medium">
-                Eso parece escrito a mano: un lector escribe todo el código en menos de medio segundo.
-              </p>
+            <div className="flex items-start gap-3">
+              <WarningCircle className="size-5 shrink-0 text-warning-text" weight="fill" aria-hidden />
+              <p className="text-sm font-medium text-warning-deep">Parece escrito a mano: un lector tarda menos de medio segundo.</p>
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground">Escanea un código para comprobar que el lector funciona.</p>
+            <p className="text-sm text-muted-foreground">Escanea un código para probarlo.</p>
           )}
         </div>
       </CardContent>
@@ -280,12 +267,12 @@ function SeccionSonido() {
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <SpeakerHigh size={24} weight="duotone" aria-hidden />
+          <SpeakerHigh className="size-5 text-muted-foreground" aria-hidden />
           Sonido
         </CardTitle>
-        <CardDescription>Un tono corto confirma cada escaneo sin mirar la pantalla. Se guarda en este equipo.</CardDescription>
+        <CardDescription>Un tono confirma cada escaneo. Se guarda en este equipo.</CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="flex flex-col gap-4">
         <div className="flex items-center gap-3">
           <Switch id={`${uid}-sonido`} checked={activado} onCheckedChange={(v) => setSonidoActivado(Boolean(v))} />
           <Label htmlFor={`${uid}-sonido`}>Sonar al escanear</Label>
@@ -306,8 +293,8 @@ function SeccionSonido() {
 
 export default function ImpresoraYLectorPage() {
   return (
-    <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
-      <PageHeader title="Impresora y lector" description="Prepara la impresora de tickets y el lector de esta computadora." />
+    <div className="flex w-full max-w-4xl flex-col gap-6">
+      <PageHeader title="Impresora y lector" description="La impresora y el lector de este equipo." />
       <div className="grid gap-6 lg:grid-cols-2">
         <SeccionImpresora />
         <div className="flex flex-col gap-6">

@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
-import { Barcode } from "@phosphor-icons/react";
-import { toast } from "sonner";
+import { avisarError } from "@/lib/avisos";
+import { ICONO_SECCION } from "@/lib/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { humanizeError, isNetworkError } from "@/lib/errores";
 import { reproducirSonido } from "@/lib/sonido";
@@ -91,7 +91,7 @@ export function ScanInput({
         onError(error);
         return;
       }
-      toast.error(error.mensaje);
+      avisarError(error.mensaje);
       if (sonido) reproducirSonido("error");
     },
     [onError, sonido]
@@ -234,10 +234,10 @@ export function ScanInput({
   const texto = placeholder ?? PLACEHOLDER[mode];
 
   return (
-    <div className="flex items-center gap-2 w-full">
+    <div className="flex w-full items-center gap-2">
       <div className="relative flex-1">
-        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-          <Barcode size={24} weight="regular" className="text-muted-foreground" aria-hidden />
+        <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5">
+          <ICONO_SECCION.escanear className="size-5 text-muted-foreground" aria-hidden />
         </div>
         <Input
           ref={inputRef}
@@ -256,7 +256,7 @@ export function ScanInput({
           onKeyDown={handleManualKeyDown}
           disabled={disabled || isSearching}
           aria-busy={isSearching || undefined}
-          className="pl-11 h-12 text-lg shadow-sm transition-shadow"
+          className="h-12 pl-11 text-base md:text-base"
           autoFocus
         />
       </div>

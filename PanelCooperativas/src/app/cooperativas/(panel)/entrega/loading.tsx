@@ -1,18 +1,18 @@
 import { Skeleton } from "@/components/ui/skeleton";
+import { TablaSkeleton } from "@/components/tabla-skeleton";
 
+// Misma forma que la página: encabezado + escáner + tabla (PU-13).
 export default function EntregaLoading() {
   return (
-    <div className="space-y-6 flex flex-col h-full">
-      <div>
-        <Skeleton className="h-8 w-56 mb-2" />
-        <Skeleton className="h-4 w-96" />
+    <div className="flex flex-col gap-6">
+      <div className="flex items-center justify-between gap-4" aria-hidden>
+        <Skeleton className="h-8 w-56" />
       </div>
-      <Skeleton className="h-10 w-full max-w-md" />
-      <div className="flex-1 rounded-md border bg-card p-4 space-y-3">
-        {Array.from({ length: 5 }).map((_, i) => (
-          <Skeleton key={i} className="h-14 w-full" />
-        ))}
+      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_340px]" aria-hidden>
+        <Skeleton className="h-12 w-full rounded-full" />
+        <Skeleton className="h-24 w-full rounded-md" />
       </div>
+      <TablaSkeleton columnas={6} conFiltros />
     </div>
   );
 }

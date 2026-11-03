@@ -764,7 +764,7 @@ function TaquillaBoletos() {
 
       {/* Embarque */}
       <Card role="region" aria-labelledby="titulo-embarque" className="gap-4 p-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <h2 id="titulo-embarque" className="flex items-center gap-2 text-lg font-semibold">
             <IconoEmbarque className="size-5 text-muted-foreground" aria-hidden />
             Embarque

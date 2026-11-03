@@ -7,10 +7,11 @@
 // qué pasó sin mirar la pantalla.
 
 import { useCallback, useEffect, useState } from "react";
-import { CheckCircle, Warning, XCircle, Barcode, type Icon } from "@phosphor-icons/react";
+import { CheckCircle, Warning, XCircle, type Icon } from "@phosphor-icons/react";
 import { reproducirSonido } from "@/lib/sonido";
 import { formatHoraVE } from "@/lib/fechas";
 import { cn } from "@/lib/utils";
+import { ICONO_SECCION } from "@/lib/navigation";
 
 export type ResultadoEscaneo = {
   codigo: string;
@@ -37,19 +38,19 @@ const TONOS: Record<ResultadoEscaneo["tono"], { icono: Icon; caja: string; icon:
   exito: {
     icono: CheckCircle,
     caja: "border-success/40 bg-success-light text-success-deep",
-    icon: "text-success-deep",
+    icon: "text-success-text",
     lector: "Correcto",
   },
   error: {
     icono: XCircle,
     caja: "border-destructive/40 bg-destructive-light text-destructive-deep",
-    icon: "text-destructive-deep",
+    icon: "text-destructive-text",
     lector: "Error",
   },
   aviso: {
     icono: Warning,
     caja: "border-warning/40 bg-warning-light text-warning-deep",
-    icon: "text-warning-deep",
+    icon: "text-warning-text",
     lector: "Atención",
   },
 };
@@ -89,19 +90,19 @@ export function UltimoEscaneo({
 }) {
   const ahora = useAhora(Boolean(resultado), resultado?.at);
   const estilo = resultado ? TONOS[resultado.tono] : null;
-  const Icono = estilo?.icono ?? Barcode;
+  const Icono = estilo?.icono ?? ICONO_SECCION.escanear;
 
   return (
     <section
       aria-label="Último escaneo"
       className={cn(
-        "rounded-xl border p-3 text-sm",
+        "rounded-md border p-3 text-sm",
         estilo ? estilo.caja : "border-dashed border-border bg-muted/40 text-muted-foreground",
         className
       )}
     >
       {/* La hora relativa queda fuera de la región viva: no se anuncia cada segundo. */}
-      <p className="mb-1.5 text-xs font-medium opacity-90">
+      <p className="mb-1.5 text-xs font-medium">
         Último escaneo
         {resultado && ahora > 0 && <span> · {haceCuanto(resultado.at, ahora)}</span>}
       </p>
@@ -119,7 +120,7 @@ export function UltimoEscaneo({
               </p>
               {resultado.detalle && <p className="leading-snug">{resultado.detalle}</p>}
               {resultado.codigo && (
-                <p className="mt-1 truncate font-mono text-xs tracking-wide" title={resultado.codigo}>
+                <p className="mt-1 truncate font-mono text-xs" title={resultado.codigo}>
                   <span className="sr-only">Código: </span>
                   {resultado.codigo}
                 </p>

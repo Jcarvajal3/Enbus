@@ -4,10 +4,11 @@
 // Estado de la impresora Bluetooth para cualquier pantalla. Al montarse intenta
 // reconectar la impresora guardada en este equipo (sin abrir el selector), así el
 // taquillero no tiene que pasar por "Impresora y lector" cada vez que abre el panel.
-// Se monta en taquilla de boletos, taquilla de encomiendas e "Impresora y lector".
+// Lo monta el chip de la barra superior del shell (en todas las pantallas) e
+// "Impresora y lector": la reconexión automática se intenta una vez por carga.
 
 import { useCallback, useEffect, useSyncExternalStore } from "react";
-import { toast } from "sonner";
+import { avisarError, avisarExito } from "@/lib/avisos";
 import {
   IMPRESORA_SERVIDOR,
   mensajeErrorImpresora,
@@ -18,6 +19,9 @@ import {
 export type { EstadoImpresora };
 
 const servidor = () => IMPRESORA_SERVIDOR;
+
+/** La reconexión silenciosa se intenta una sola vez por carga de la página. */
+let reconexionIntentada = false;
 
 export function useImpresora(): {
   estado: EstadoImpresora;
@@ -31,18 +35,21 @@ export function useImpresora(): {
   const { estado, nombre } = useSyncExternalStore(printer.suscribir, printer.estadoActual, servidor);
 
   useEffect(() => {
-    // Reconexión silenciosa al abrir la pantalla: si no se puede, queda "Sin conectar".
+    // Reconexión silenciosa al abrir el panel: si no se puede, queda "Sin conectar".
+    // Las desconexiones posteriores las reintenta lib/printing/bluetooth.
+    if (reconexionIntentada) return;
+    reconexionIntentada = true;
     void printer.reconectar();
   }, []);
 
   const conectar = useCallback(async () => {
     try {
       const { name } = await printer.pair();
-      toast.success(`Impresora conectada: ${name}.`);
+      avisarExito(`Impresora conectada: ${name}.`);
       return true;
     } catch (err) {
       const mensaje = mensajeErrorImpresora(err);
-      if (mensaje) toast.error(mensaje);
+      if (mensaje) avisarError(mensaje);
       return false;
     }
   }, []);

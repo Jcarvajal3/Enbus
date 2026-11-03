@@ -67,7 +67,7 @@ export function IncidenciasTable({ data, ahora }: IncidenciasTableProps) {
           {
             param: "estado",
             etiqueta: "Estado",
-            todas: "Abiertas y en proceso",
+            todas: "Sin resolver",
             opciones: [
               ...(["ABIERTA", "EN_PROCESO", "RESUELTA"] as const).map((e) => ({
                 valor: e,

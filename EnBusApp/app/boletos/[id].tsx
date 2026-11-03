@@ -785,7 +785,7 @@ export default function DetalleBoletoScreen() {
       <View style={s.ticketDetails}>
         <TicketField label="Asiento" value={boleto.asiento ?? '—'} highlight />
         {/* Con la tarjeta "Salida" arriba, la fecha no se repite aquí (AU-18). */}
-        {!vigente ? <TicketField label="Salida" value={formatSalidaCorta(salidaIso)} /> : null}
+        {!vigente ? <TicketField label="Salida" value={formatSalidaCorta(salidaIso)} completo /> : null}
         <TicketField label="Pasajero" value={pasajero} />
         <TicketField label="Cédula" value={cedula} />
         <TicketField label="Unidad" value={boleto.viajes?.numero_unidad ?? 'Por asignar'} />
@@ -1089,14 +1089,11 @@ export default function DetalleBoletoScreen() {
           hapticType="selection"
           style={s.ayuda}
           accessibilityRole="link"
-          accessibilityLabel="¿Problemas con este boleto? Reportar un problema"
+          accessibilityLabel="Reportar un problema con este boleto"
         >
-          <Lifebuoy size={Sizes.icon.md} color={Colors.mutedForeground} weight="bold" />
-          <Text variant="secondary" color="muted">
-            {'¿Problemas con este boleto? '}
-            <Text variant="label" color="link" style={s.enlace}>
-              Reportar un problema
-            </Text>
+          <Lifebuoy size={Sizes.icon.md} color={Colors.link} weight="bold" />
+          <Text variant="label" color="link" style={s.enlace}>
+            Reportar un problema
           </Text>
         </PressableScale>
       </ScrollView>
@@ -1342,14 +1339,17 @@ function TicketField({
   value,
   hint,
   highlight,
+  completo,
 }: {
   label: string;
   value: string;
   hint?: string;
   highlight?: boolean;
+  /** A todo el ancho (la fecha y hora no caben en media columna a 360 pt) */
+  completo?: boolean;
 }) {
   return (
-    <View style={s.ticketField}>
+    <View style={[s.ticketField, completo && s.ticketFieldCompleto]}>
       <Text variant="caption" color="muted">
         {label}
       </Text>
@@ -1487,6 +1487,9 @@ const s = StyleSheet.create({
     paddingRight: Spacing.md,
     marginBottom: Spacing.lg,
     gap: Spacing.xs,
+  },
+  ticketFieldCompleto: {
+    width: '100%',
   },
   ticketPie: {
     paddingHorizontal: Spacing.xl,

@@ -4,9 +4,9 @@
 // Irreversible y con impacto en el cliente: ConfirmDialog con motivo
 // obligatorio (se le envía al cliente) → fn_rechazar_encomienda_origen.
 
-import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { requireOnline } from "@/components/connectivity-banner";
+import { avisarExito } from "@/lib/avisos";
 import { humanizeError } from "@/lib/errores";
 import type { Encomienda } from "@/lib/types/encomiendas";
 import { rechazarEncomienda } from "@/app/cooperativas/(panel)/taquilla/encomiendas/actions";
@@ -41,28 +41,27 @@ export function RechazarEncomiendaDialog({ encomienda, open, onOpenChange, onRec
       open={open}
       onOpenChange={onOpenChange}
       titulo={`¿No recibir la encomienda ${encomienda.tracking_id}?`}
-      descripcion="Úsalo cuando el paquete no puede salir desde tu taquilla. No se puede deshacer."
+      descripcion="No se puede deshacer."
       impacto={[
-        "La encomienda queda cancelada y no se podrá despachar ni cobrar.",
+        "Queda cancelada: no se podrá despachar ni cobrar.",
         presencial
           ? "Explícale el motivo al cliente antes de que se vaya."
           : "Le avisaremos al cliente en la app con el motivo que escribas.",
       ]}
       motivo={{
         etiqueta: "¿Por qué no la recibes?",
-        placeholder: "Por ejemplo: no tenemos ruta a Maturín.",
+        placeholder: "Ej. No tenemos ruta a Maturín",
         minimo: 5,
         chips,
       }}
       verbo="No recibir la encomienda"
       verboCargando="Cancelando…"
       tono="destructive"
-      textoCancelar="Volver"
       onConfirm={async (motivo) => {
         try {
           const res = await requireOnline(() => rechazarEncomienda(encomienda.id, motivo ?? ""))();
           if (!res.success) return { ok: false, error: res.error };
-          toast.success(
+          avisarExito(
             res.data.ya_procesado
               ? "Esta encomienda ya estaba cancelada."
               : presencial

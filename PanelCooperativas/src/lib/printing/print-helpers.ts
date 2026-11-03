@@ -1,7 +1,7 @@
 import { printer } from "./bluetooth";
 import { buildTicket } from "./escpos";
 import { fechaTasaCorta, formatBs, formatUsd, usdABs } from "@/lib/dinero";
-import { formatFechaVE } from "@/lib/fechas";
+import { formatFechaVE, formatHoraVE } from "@/lib/fechas";
 import { MODALIDAD_PAGO } from "@/lib/estados";
 import { formatCedula, formatTelefono } from "@/lib/ve";
 import type { Encomienda } from "@/lib/types/encomiendas";
@@ -41,10 +41,10 @@ function referenciaUsd(usd: number, tasaFecha?: string | null) {
   return tasaFecha ? `${formatUsd(usd)} BCV ${fechaTasaCorta(tasaFecha)}` : formatUsd(usd);
 }
 
-/** "04/10 08:30 a. m." en hora de Venezuela. */
+/** "04/10 8:30 a. m." en hora de Venezuela (sin "·": no todas las térmicas lo imprimen). */
 export function salidaTicket(iso: string): string {
   const fecha = formatFechaVE(iso, { day: "2-digit", month: "2-digit" });
-  const hora = formatFechaVE(iso, { hour: "2-digit", minute: "2-digit", hour12: true });
+  const hora = formatHoraVE(iso);
   return [fecha, hora].filter(Boolean).join(" ");
 }
 

@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useRef, useTransition, useId, type FormEv
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
-import { Bus, DotsThree, Eye, FlagCheckered, Info, PencilSimple, Plus, XCircle, WarningCircle } from "@phosphor-icons/react";
+import { DotsThree, Eye, Info, PencilSimple, Plus, XCircle, WarningCircle } from "@phosphor-icons/react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -909,7 +909,7 @@ export function ViajesClient({
                 <TableRow>
                   <TableHead>Ruta</TableHead>
                   <TableHead>Salida</TableHead>
-                  <TableHead className="hidden lg:table-cell">Llegada estimada</TableHead>
+                  <TableHead className="hidden 2xl:table-cell">Llegada estimada</TableHead>
                   <TableHead className="text-right">Asientos libres</TableHead>
                   <TableHead className="hidden text-right lg:table-cell">Precio</TableHead>
                   <TableHead>Estado</TableHead>
@@ -928,7 +928,7 @@ export function ViajesClient({
                           {rutaViaje(viaje)}
                         </CeldaEnlace>
                         <TableCell className="tabular-nums">{formatFechaHoraCortaVE(viaje.fecha_hora_salida)}</TableCell>
-                        <TableCell className="hidden tabular-nums lg:table-cell">
+                        <TableCell className="hidden tabular-nums 2xl:table-cell">
                           {viaje.fecha_hora_llegada_est ? formatFechaHoraCortaVE(viaje.fecha_hora_llegada_est) : "—"}
                         </TableCell>
                         <TableCell className="text-right tabular-nums">
@@ -949,13 +949,11 @@ export function ViajesClient({
                           <div className="flex items-center justify-end gap-2">
                             {viaje.estado === "PROGRAMADO" && (
                               <Button variant="outline" size="sm" className="relative z-10" onClick={() => abrirMarcarSalida(viaje)}>
-                                <Bus aria-hidden />
                                 Marcar salida
                               </Button>
                             )}
                             {viaje.estado === "EN_CURSO" && (
                               <Button variant="outline" size="sm" className="relative z-10" onClick={() => abrirLlegada(viaje)}>
-                                <FlagCheckered aria-hidden />
                                 Marcar llegada
                               </Button>
                             )}

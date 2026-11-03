@@ -12,10 +12,13 @@ import Link from "next/link";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "sonner";
+import { AvisoError } from "@/components/aviso-error";
+import { avisarError, avisarExito } from "@/lib/avisos";
 import { Prohibit, WarningCircle } from "@phosphor-icons/react";
 import { createClient } from "@/lib/supabase/client";
 import type { Encomienda } from "@/lib/types/encomiendas";
@@ -61,7 +64,7 @@ function tasaDe(tasa: number | null | undefined, fecha: string | null | undefine
 /** Abre la guía en PDF; si el navegador bloquea la ventana, lo dice. */
 function abrirPdf(url: string) {
   const ventana = window.open(url, "_blank");
-  if (!ventana) toast.error(MSG_VENTANA_BLOQUEADA);
+  if (!ventana) avisarError(MSG_VENTANA_BLOQUEADA);
 }
 
 export function RecepcionModal({ encomienda, isOpen, onClose, onSuccess, onRechazada }: RecepcionModalProps) {
@@ -89,6 +92,7 @@ export function RecepcionModal({ encomienda, isOpen, onClose, onSuccess, onRecha
   const [pesoCotizado, setPesoCotizado] = useState<number | null>(null);
 
   const [submitting, setSubmitting] = useState(false);
+  const [errorEnvio, setErrorEnvio] = useState<string | null>(null);
 
   const recibible = ESTADOS_RECIBIBLES.includes(encomienda.estado);
   const aMedias = encomienda.estado === "EN_RECEPCION";
@@ -96,7 +100,7 @@ export function RecepcionModal({ encomienda, isOpen, onClose, onSuccess, onRecha
   // Si la encomienda ya no se puede recibir (otro compañero la procesó), se avisa y se cierra.
   useEffect(() => {
     if (!isOpen || recibible) return;
-    toast.error("Esta encomienda ya fue recibida. Actualiza la lista para ver su estado actual.");
+    avisarError("Esta encomienda ya fue recibida. Actualiza la lista para ver su estado.");
     onClose();
   }, [isOpen, recibible, onClose]);
 
@@ -162,7 +166,6 @@ export function RecepcionModal({ encomienda, isOpen, onClose, onSuccess, onRecha
         setPesoCotizado(pesoNum);
       } catch (err) {
         if (!vigente) return;
-        console.error("Error calculando el costo:", err);
         setCotizacion(null);
         setErrorCotizacion(humanizeError(err, "calcular el costo"));
       } finally {
@@ -185,6 +188,7 @@ export function RecepcionModal({ encomienda, isOpen, onClose, onSuccess, onRecha
     if (pesoNum == null || pesoNum <= 0 || !listoParaConfirmar) return;
 
     setSubmitting(true);
+    setErrorEnvio(null);
     try {
       const res = await requireOnline(() => confirmarRecepcion(encomienda.id, pesoNum))();
 
@@ -195,17 +199,13 @@ export function RecepcionModal({ encomienda, isOpen, onClose, onSuccess, onRecha
         } else if (res.codigo === "EB_SIN_RUTA") {
           setSinRuta(true);
         } else {
-          toast.error(res.error);
+          setErrorEnvio(res.error);
         }
         return;
       }
 
       const recepcion = res.data;
-      toast.success(
-        recepcion.modalidad_pago === "DESTINO"
-          ? "Encomienda recibida. Toma la foto del paquete; el envío se cobra al retirar."
-          : "Encomienda recibida. Toma la foto del paquete y luego cobra el envío."
-      );
+      avisarExito("Encomienda recibida.");
 
       // Impresión automática de la guía por Bluetooth si hay impresora conectada (M-02).
       if (printer.isConnected) {
@@ -215,9 +215,9 @@ export function RecepcionModal({ encomienda, isOpen, onClose, onSuccess, onRecha
             peso_kg: pesoNum,
             costo_calculado: Number(recepcion.costo_usd),
           });
-          toast.success("Guía enviada a la impresora Bluetooth.");
-        } catch (printErr) {
-          console.error("Error al imprimir la guía por Bluetooth:", printErr);
+          avisarExito("Guía enviada a la impresora.");
+        } catch {
+          // Sin Bluetooth, la guía queda en PDF (botón en el aviso).
           const pdf = res.pdfUrl;
           toast.warning("La encomienda quedó recibida, pero no se pudo imprimir la guía por Bluetooth.", {
             action: pdf ? { label: "Abrir guía en PDF", onClick: () => abrirPdf(pdf) } : undefined,
@@ -236,7 +236,7 @@ export function RecepcionModal({ encomienda, isOpen, onClose, onSuccess, onRecha
 
       onSuccess(recepcion, pesoNum);
     } catch (err) {
-      toast.error(humanizeError(err, "recibir la encomienda"));
+      setErrorEnvio(humanizeError(err, "recibir la encomienda"));
     } finally {
       setSubmitting(false);
     }
@@ -255,34 +255,31 @@ export function RecepcionModal({ encomienda, isOpen, onClose, onSuccess, onRecha
 
   return (
     <Dialog open={isOpen && recibible} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-[650px]">
+      <DialogContent tamano="flujo" showCloseButton={!submitting}>
         <DialogHeader>
-          <DialogTitle>Recibir encomienda</DialogTitle>
-          <DialogDescription>
-            Revisa los datos del envío y escribe el peso. El costo se calcula con la tarifa vigente.
-          </DialogDescription>
+          <DialogTitle>
+            Recibir <span className="font-mono">{encomienda.tracking_id}</span>
+          </DialogTitle>
+          <DialogDescription>Revisa el paquete (máx. 50 × 50 × 50 cm) y escribe el peso.</DialogDescription>
         </DialogHeader>
 
-        <div className="grid gap-6 py-2">
+        <div className="grid gap-6">
           {aMedias && (
             <Alert>
-              <WarningCircle className="h-5 w-5" />
-              <AlertTitle>Esta encomienda quedó a medio recibir</AlertTitle>
-              <AlertDescription>Pésala de nuevo y confirma para terminar la recepción.</AlertDescription>
+              <WarningCircle aria-hidden />
+              <AlertTitle>Quedó a medio recibir</AlertTitle>
+              <AlertDescription>Pésala de nuevo para terminar la recepción.</AlertDescription>
             </Alert>
           )}
 
           {sinRuta && (
-            <Alert variant="destructive">
-              <WarningCircle className="h-5 w-5" />
-              <AlertTitle>Tu cooperativa no tiene una ruta activa hacia {formatCiudad(encomienda.ciudad_destino)}.</AlertTitle>
-              <AlertDescription>
+            <AvisoError>
+              <div className="flex flex-col gap-3">
                 <p>
-                  {esAdmin
-                    ? "Crea la ruta para poder recibirla, o no la recibas y le avisamos al cliente."
-                    : "Pídele al administrador que cree la ruta, o no la recibas y le avisamos al cliente."}
+                  <span className="font-semibold">Sin ruta activa hacia {formatCiudad(encomienda.ciudad_destino)}.</span>{" "}
+                  {esAdmin ? "Crea la ruta o no la recibas." : "Pídele al administrador que la cree, o no la recibas."}
                 </p>
-                <div className="mt-3 flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-2">
                   {esAdmin && (
                     <Link href="/cooperativas/rutas" className={buttonVariants({ variant: "outline", size: "sm" })}>
                       Crear ruta
@@ -292,54 +289,48 @@ export function RecepcionModal({ encomienda, isOpen, onClose, onSuccess, onRecha
                     No recibir la encomienda
                   </Button>
                 </div>
-              </AlertDescription>
-            </Alert>
+              </div>
+            </AvisoError>
           )}
 
           {/* Datos del envío */}
-          <div className="grid grid-cols-2 gap-4 rounded-lg border bg-muted/40 p-4 text-sm">
-            <div>
-              <p className="mb-1 font-medium text-muted-foreground">Código de seguimiento</p>
-              <p className="font-mono font-medium text-foreground">{encomienda.tracking_id}</p>
-            </div>
-            <div>
-              <p className="mb-1 font-medium text-muted-foreground">Quién paga</p>
-              <Badge variant="secondary">{MODALIDAD_PAGO[encomienda.modalidad_pago]?.largo ?? "Sin definir"}</Badge>
-            </div>
-            <div>
-              <p className="mb-1 font-medium text-muted-foreground">Ruta</p>
-              <p className="font-medium text-foreground">
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-3 rounded-md bg-muted/50 p-4 text-sm">
+            <div className="flex flex-col gap-0.5">
+              <dt className="text-xs text-muted-foreground">Ruta</dt>
+              <dd className="font-medium">
                 {formatCiudad(encomienda.ciudad_origen)} → {formatCiudad(encomienda.ciudad_destino)}
-              </p>
+              </dd>
             </div>
-            <div>
-              <p className="mb-1 font-medium text-muted-foreground">Remitente</p>
-              <p className="font-medium text-foreground">{remitente.nombre}</p>
+            <div className="flex flex-col gap-0.5">
+              <dt className="text-xs text-muted-foreground">Quién paga</dt>
+              <dd className="font-medium">{MODALIDAD_PAGO[encomienda.modalidad_pago]?.largo ?? "Sin definir"}</dd>
             </div>
-            <div className="col-span-2">
-              <p className="mb-1 font-medium text-muted-foreground">Destinatario</p>
-              <p className="font-medium text-foreground">
-                {encomienda.receiver_nombre}
-                {encomienda.receiver_telefono ? ` (${formatTelefono(encomienda.receiver_telefono)})` : ""}
-              </p>
+            <div className="flex min-w-0 flex-col gap-0.5">
+              <dt className="text-xs text-muted-foreground">Remitente</dt>
+              <dd className="truncate font-medium">{remitente.nombre}</dd>
             </div>
-            <div className="col-span-2">
-              <p className="mb-1 font-medium text-muted-foreground">Contenido declarado</p>
-              <p className="text-foreground">{encomienda.descripcion_contenido || "Sin descripción"}</p>
+            <div className="flex min-w-0 flex-col gap-0.5">
+              <dt className="text-xs text-muted-foreground">Destinatario</dt>
+              <dd className="truncate font-medium">{encomienda.receiver_nombre}</dd>
+              {encomienda.receiver_telefono && (
+                <dd className="text-xs text-muted-foreground tabular-nums">{formatTelefono(encomienda.receiver_telefono)}</dd>
+              )}
             </div>
-          </div>
+            <div className="col-span-2 flex flex-col gap-0.5">
+              <dt className="text-xs text-muted-foreground">Contenido declarado</dt>
+              <dd>{encomienda.descripcion_contenido || "Sin descripción"}</dd>
+            </div>
+          </dl>
 
-          <div className="grid grid-cols-1 items-start gap-6 sm:grid-cols-2">
+          <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2">
             {/* Peso */}
-            <div className="space-y-3">
-              <label htmlFor="peso" className="text-sm leading-none font-medium">
-                Peso (kg)
-              </label>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="peso">Peso (kg)</Label>
               <Input
                 id="peso"
                 inputMode="decimal"
                 autoComplete="off"
-                placeholder="0,00"
+                placeholder="Ej. 2,5"
                 value={peso}
                 autoFocus
                 onChange={(e) => setPeso(e.target.value)}
@@ -348,77 +339,58 @@ export function RecepcionModal({ encomienda, isOpen, onClose, onSuccess, onRecha
                 }}
                 aria-invalid={pesoError ? true : undefined}
                 aria-describedby={pesoError ? "peso-error" : "peso-ayuda"}
-                className={pesoError ? "border-destructive focus-visible:ring-destructive" : ""}
               />
               {pesoError ? (
-                <p id="peso-error" className="text-sm font-medium text-destructive-text animate-in fade-in">
+                <p id="peso-error" className="text-sm text-destructive-text">
                   {pesoError}
                 </p>
               ) : (
-                <p id="peso-ayuda" className="text-xs text-muted-foreground">
-                  {pesoMax != null ? `Máximo ${pesoMax} kg.` : "Pesa el paquete y escribe el peso en kilos."}
+                <p id="peso-ayuda" className="text-sm text-muted-foreground">
+                  {pesoMax != null ? `Máximo ${pesoMax} kg.` : "En kilos."}
                 </p>
               )}
             </div>
 
             {/* Costo */}
-            <div
-              aria-live="polite"
-              className="flex h-full min-h-[100px] flex-col items-center justify-center rounded-lg border bg-muted/50 p-4 text-center"
-            >
-              <p className="mb-1 text-sm font-medium text-muted-foreground">Costo del envío</p>
+            <div aria-live="polite" className="flex min-h-24 flex-col justify-center gap-1 rounded-md bg-muted/50 p-4">
+              <p className="text-xs font-medium text-muted-foreground">Costo del envío</p>
               {calculating || esperandoCotizacion ? (
-                <div className="mt-2">
-                  <Spinner size="md" aria-label="Calculando el costo" />
-                </div>
+                <Skeleton className="h-7 w-36" aria-label="Calculando el costo" />
               ) : cotizacionVigente ? (
                 <Monto
                   usd={Number(cotizacionVigente.costo_usd)}
                   bs={cotizacionVigente.costo_bs != null ? Number(cotizacionVigente.costo_bs) : null}
                   tasa={tasaCotizacion}
                   size="lg"
-                  className="items-center text-center"
                 />
               ) : errorCotizacion ? (
-                <p className="mt-2 text-sm text-destructive-text">{errorCotizacion}</p>
+                <p className="text-sm text-destructive-text">{errorCotizacion}</p>
               ) : (
-                <p className="mt-2 text-sm text-muted-foreground">Escribe el peso para calcularlo</p>
+                <p className="text-sm text-muted-foreground">Escribe el peso para calcularlo.</p>
               )}
             </div>
           </div>
 
-          <Alert className="border-warning/40 bg-warning-light text-warning-deep">
-            <WarningCircle className="h-5 w-5 !text-warning-deep" aria-hidden />
-            <AlertTitle>Revisa el paquete</AlertTitle>
-            <AlertDescription className="text-warning-deep">
-              Medidas máximas de referencia: 50 × 50 × 50 cm. Míralo antes de recibirlo.
-            </AlertDescription>
-          </Alert>
+          {errorEnvio && <AvisoError>{errorEnvio}</AvisoError>}
         </div>
 
         <DialogFooter className="sm:justify-between">
           <Button
-            variant="ghost"
+            variant="outline"
             className="text-destructive-text"
             onClick={() => setRechazarOpen(true)}
             disabled={submitting}
           >
-            <Prohibit className="mr-1.5 h-4 w-4" aria-hidden />
+            <Prohibit aria-hidden />
             No recibir
           </Button>
           <div className="flex flex-col-reverse gap-2 sm:flex-row">
             <Button variant="outline" onClick={onClose} disabled={submitting}>
               Cancelar
             </Button>
-            <Button onClick={() => void handleSubmit()} disabled={!listoParaConfirmar}>
-              {submitting ? (
-                <>
-                  <Spinner className="mr-2" size="sm" />
-                  Recibiendo…
-                </>
-              ) : (
-                "Confirmar recepción"
-              )}
+            <Button onClick={() => void handleSubmit()} disabled={!listoParaConfirmar} aria-busy={submitting || undefined}>
+              {submitting && <Spinner size="sm" />}
+              {submitting ? "Recibiendo…" : "Recibir encomienda"}
             </Button>
           </div>
         </DialogFooter>

@@ -25,7 +25,7 @@ import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { AvisoError } from "@/components/aviso-error";
-import { useTasaBCV } from "@/components/tasa-bcv-provider";
+import { useTasaBCVAdmin } from "@/components/admin/dashboard/use-tasa-bcv-admin";
 import { MenuMas } from "@/components/admin/menu-mas";
 import { normalizeRif, RIF_AYUDA, RIF_PLACEHOLDER } from "@/lib/rif";
 import { humanizeError } from "@/lib/errores";
@@ -52,7 +52,7 @@ function plural(n: number, uno: string, varios: string) {
 
 export function CooperativaActions({ cooperativa }: CooperativaActionsProps) {
   const router = useRouter();
-  const tasa = useTasaBCV();
+  const tasa = useTasaBCVAdmin();
 
   const [editOpen, setEditOpen] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);

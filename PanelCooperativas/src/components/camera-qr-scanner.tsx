@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Camera, X, ScanSmiley } from "@phosphor-icons/react";
+import { Camera } from "@phosphor-icons/react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
+import { ICONO_SECCION } from "@/lib/navigation";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -119,19 +121,19 @@ export function CameraQRScanner({ onScan, open, onOpenChange }: CameraQRScannerP
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md p-0 overflow-hidden gap-0">
-        <DialogHeader className="px-4 pt-4 pb-0">
+      <DialogContent tamano="confirmar" showCloseButton={false} className="gap-0 overflow-hidden p-0">
+        <DialogHeader className="p-4 pr-4">
           <DialogTitle className="flex items-center gap-2">
-            <ScanSmiley size={22} weight="duotone" aria-hidden />
+            <ICONO_SECCION.escanear className="size-5 text-muted-foreground" aria-hidden />
             Escanear con la cámara
           </DialogTitle>
         </DialogHeader>
 
-        <div className="relative bg-black aspect-video overflow-hidden">
+        <div className="relative aspect-video overflow-hidden bg-black">
           {/* Video stream */}
           <video
             ref={videoRef}
-            className="w-full h-full object-cover"
+            className="size-full object-cover"
             playsInline
             muted
           />
@@ -142,12 +144,12 @@ export function CameraQRScanner({ onScan, open, onOpenChange }: CameraQRScannerP
           {/* Scanning overlay */}
           {scanning && (
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <div className="relative w-52 h-52">
+              <div className="relative size-52">
                 {/* Corner brackets */}
-                <span className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-primary rounded-tl-sm" />
-                <span className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-primary rounded-tr-sm" />
-                <span className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-primary rounded-bl-sm" />
-                <span className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-primary rounded-br-sm" />
+                <span className="absolute top-0 left-0 size-8 rounded-tl-sm border-t-4 border-l-4 border-primary" />
+                <span className="absolute top-0 right-0 size-8 rounded-tr-sm border-t-4 border-r-4 border-primary" />
+                <span className="absolute bottom-0 left-0 size-8 rounded-bl-sm border-b-4 border-l-4 border-primary" />
+                <span className="absolute right-0 bottom-0 size-8 rounded-br-sm border-r-4 border-b-4 border-primary" />
                 {/* Scan line animation */}
                 <span className="absolute left-2 right-2 h-0.5 bg-primary/80 top-1/2 motion-safe:animate-scan-line" />
               </div>
@@ -160,7 +162,7 @@ export function CameraQRScanner({ onScan, open, onOpenChange }: CameraQRScannerP
           {/* Error state */}
           {cameraError && (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/80 px-6 text-center">
-              <Camera size={40} className="text-destructive" aria-hidden />
+              <Camera className="size-10 text-destructive-text" aria-hidden />
               <p className="text-white text-sm">{cameraError}</p>
             </div>
           )}
@@ -168,14 +170,13 @@ export function CameraQRScanner({ onScan, open, onOpenChange }: CameraQRScannerP
           {/* Loading state */}
           {!scanning && !cameraError && (
             <div className="absolute inset-0 flex items-center justify-center bg-black/60" role="status" aria-label="Abriendo la cámara">
-              <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+              <Spinner size="lg" className="text-white" />
             </div>
           )}
         </div>
 
-        <div className="px-4 py-3 flex justify-end">
+        <div className="flex justify-end p-4">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            <X size={16} className="mr-2" aria-hidden />
             Cancelar
           </Button>
         </div>
@@ -211,9 +212,9 @@ export function CameraQRTrigger({ onScan, disabled = false }: CameraQRTriggerPro
         onClick={() => setOpen(true)}
         aria-label="Escanear con cámara"
         title="Escanear con cámara"
-        className="shrink-0 h-12 w-12"
+        className="size-12 shrink-0"
       >
-        <Camera size={20} weight="duotone" aria-hidden />
+        <Camera className="size-5" aria-hidden />
       </Button>
       <CameraQRScanner onScan={handleScan} open={open} onOpenChange={setOpen} />
     </>

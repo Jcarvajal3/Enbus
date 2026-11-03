@@ -173,8 +173,8 @@ export function AccionesPinEncomienda({ encomienda: e }: { encomienda: Encomiend
   };
 
   return (
-    <div className="relative z-10 flex flex-wrap justify-end gap-2">
-      {conIntentos && (
+    <div className="relative z-10 flex items-center justify-end gap-2">
+      {conIntentos ? (
         <Button
           type="button"
           size="sm"
@@ -184,8 +184,7 @@ export function AccionesPinEncomienda({ encomienda: e }: { encomienda: Encomiend
         >
           <Key aria-hidden /> Desbloquear PIN
         </Button>
-      )}
-      {e.pin_retiro && (
+      ) : (
         <Button
           type="button"
           size="sm"
@@ -198,6 +197,14 @@ export function AccionesPinEncomienda({ encomienda: e }: { encomienda: Encomiend
           {reenviando ? <Spinner size="sm" aria-hidden /> : <PaperPlaneTilt aria-hidden />}
           {reenviando ? "Reenviando…" : "Reenviar PIN"}
         </Button>
+      )}
+      {/* Con intentos fallidos y PIN activo, reenviar queda en "⋯". */}
+      {conIntentos && e.pin_retiro && (
+        <MenuMas enFila etiqueta={`Más acciones para ${e.tracking_id}`}>
+          <DropdownMenuItem onClick={reenviar} disabled={reenviando}>
+            <PaperPlaneTilt aria-hidden /> Reenviar PIN
+          </DropdownMenuItem>
+        </MenuMas>
       )}
 
       <ConfirmDialog
