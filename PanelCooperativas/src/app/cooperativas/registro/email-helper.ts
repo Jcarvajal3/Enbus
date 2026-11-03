@@ -1,4 +1,4 @@
-import { resend } from "@/lib/email";
+import { REMITENTE_CORREO, resend } from "@/lib/email";
 
 // Correo con el enlace para completar el registro de una cooperativa (flujo de
 // invitación de solicitudes antiguas). Nunca devuelve el texto técnico del
@@ -35,7 +35,7 @@ export async function sendInvitationEmail({
 
   try {
     const { data, error } = await resend.emails.send({
-      from: "EnBus <onboarding@resend.dev>",
+      from: REMITENTE_CORREO,
       to: [email],
       subject: `Completa el registro de ${cooperativaNombre} en EnBus`,
       html: `

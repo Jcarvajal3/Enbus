@@ -1,6 +1,34 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
+/** Rutas del panel de cooperativas que se ven sin sesión. */
+const PUBLICAS_COOPERATIVAS = [
+  "/cooperativas/login",
+  "/cooperativas/registro",
+  "/cooperativas/invite",
+  "/cooperativas/recuperar",
+  "/cooperativas/restablecer",
+  "/cooperativas/auth/callback",
+];
+
+/** Rutas del super admin que se ven sin sesión. */
+const PUBLICAS_ADMIN = ["/admin/login", "/admin/auth/callback"];
+
+/** true si `pathname` es `ruta` o una subruta suya ("/cooperativas/login" no incluye "/cooperativas/loginx"). */
+function dentroDe(pathname: string, ruta: string) {
+  return pathname === ruta || pathname.startsWith(`${ruta}/`);
+}
+
+/** Redirección que conserva las cookies de sesión renovadas en esta misma petición. */
+function redirigir(request: NextRequest, respuesta: NextResponse, pathname: string) {
+  const url = request.nextUrl.clone();
+  url.pathname = pathname;
+  url.search = "";
+  const redireccion = NextResponse.redirect(url);
+  respuesta.cookies.getAll().forEach((cookie) => redireccion.cookies.set(cookie));
+  return redireccion;
+}
+
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
 
@@ -25,54 +53,30 @@ export async function updateSession(request: NextRequest) {
     }
   );
 
-  // getSession() reads the JWT from HttpOnly cookies — NO network call.
-  // Only contacts Supabase when the access token is expired (to refresh).
-  // Safe because: 1) cookies are HttpOnly 2) JWT is HMAC-signed 3) can't be tampered client-side
-  const { data: { session } } = await supabase.auth.getSession();
+  // getClaims() renueva el token si venció (igual que getSession) y además VERIFICA
+  // la firma del JWT con las claves públicas del proyecto (ES256, en caché global):
+  // una cookie alterada o vencida no cuenta como sesión. Sin llamada de red por petición.
+  let autenticado = false;
+  try {
+    const { data } = await supabase.auth.getClaims();
+    autenticado = typeof data?.claims?.sub === "string";
+  } catch (err) {
+    console.error("[proxy] No se pudo verificar la sesión:", err);
+  }
 
   const pathname = request.nextUrl.pathname;
 
-  if (pathname.startsWith("/admin/")) {
-    // --- SUPER ADMIN ROUTES ---
-    const adminPublicPaths = ["/admin/login", "/admin/auth/callback"];
-    const isAdminPublic = adminPublicPaths.some((p) => pathname.startsWith(p));
-
-    if (!session && !isAdminPublic) {
-      const url = request.nextUrl.clone();
-      url.pathname = "/admin/login";
-      return NextResponse.redirect(url);
-    }
-    if (session && pathname === "/admin/login") {
-      const url = request.nextUrl.clone();
-      url.pathname = "/admin/dashboard";
-      return NextResponse.redirect(url);
-    }
+  // Solo se exige sesión. El ROL (y la cooperativa) lo comprueba cada layout con el
+  // perfil, y cada server action / RPC de nuevo. Aquí no se redirige "del login al
+  // panel" con sesión: con una sesión sin acceso al panel (pasajero, cuenta sin
+  // cooperativa, super admin en /cooperativas o empleado en /admin) eso creaba un
+  // bucle login → panel → login. Lo decide la página de login con el perfil.
+  if (dentroDe(pathname, "/admin")) {
+    const publica = PUBLICAS_ADMIN.some((p) => dentroDe(pathname, p));
+    if (!autenticado && !publica) return redirigir(request, supabaseResponse, "/admin/login");
   } else {
-    // --- COOPERATIVAS ROUTES (lógica actual sin cambios) ---
-    const publicPaths = [
-      "/cooperativas/login",
-      "/cooperativas/registro",
-      "/cooperativas/invite",
-      "/cooperativas/recuperar",
-      "/cooperativas/restablecer",
-      "/cooperativas/auth/callback"
-    ];
-    const isPublicPath = publicPaths.some((path) =>
-      pathname.startsWith(path)
-    );
-
-    if (!session && !isPublicPath) {
-      const url = request.nextUrl.clone();
-      url.pathname = "/cooperativas/login";
-      return NextResponse.redirect(url);
-    }
-
-    // Si está autenticado y va a login, redirigir al dashboard
-    if (session && pathname === "/cooperativas/login") {
-      const url = request.nextUrl.clone();
-      url.pathname = "/cooperativas/dashboard";
-      return NextResponse.redirect(url);
-    }
+    const publica = PUBLICAS_COOPERATIVAS.some((p) => dentroDe(pathname, p));
+    if (!autenticado && !publica) return redirigir(request, supabaseResponse, "/cooperativas/login");
   }
 
   return supabaseResponse;

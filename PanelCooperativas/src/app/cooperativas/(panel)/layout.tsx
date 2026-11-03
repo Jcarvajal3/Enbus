@@ -12,10 +12,13 @@ export default async function PanelLayout({
 }) {
   const [user, tasa] = await Promise.all([getUserProfile(), obtenerTasaBCV()]);
 
-  // Redirigir si no hay sesión, si el rol no es de cooperativa,
-  // o si no tiene cooperativa_id asignada (invariante de diseño).
-  if (!user || user.role === "super_admin" || !user.cooperativa_id) {
-    redirect("/cooperativas/login");
+  // Sin perfil, con un rol que no es del panel o sin cooperativa_id (invariante de
+  // diseño): al login con el motivo. El login no redirige de vuelta aquí si la
+  // cuenta no tiene acceso (antes eso era un bucle de redirecciones).
+  if (!user) redirect("/cooperativas/login?error=sin-acceso");
+  if (user.role === "super_admin") redirect("/admin/dashboard");
+  if ((user.role !== "admin_cooperativa" && user.role !== "taquillero") || !user.cooperativa_id) {
+    redirect("/cooperativas/login?error=sin-acceso");
   }
 
   return (

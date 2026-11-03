@@ -102,6 +102,27 @@ export default async function DashboardPage() {
     return res.error?.code === "42703" ? consulta(SELECT_RECIENTES_BASICO) : res;
   };
 
+  const leerPagosDelDia = async () => {
+    const PAGINA = 1000;
+    const MAX_PAGINAS = 50;
+    const filas: { monto: number | string | null; monto_bs: number | string | null }[] = [];
+    for (let pagina = 0; pagina < MAX_PAGINAS; pagina++) {
+      const { data, error } = await supabase
+        .from("pagos")
+        .select("id, monto, monto_bs")
+        .eq("cooperativa_id", cooperativaId)
+        .eq("verificado", true)
+        .gte("verificado_at", hoyInicio)
+        .lte("verificado_at", hoyFin)
+        .order("id", { ascending: true })
+        .range(pagina * PAGINA, pagina * PAGINA + PAGINA - 1);
+      if (error) return { data: null, error };
+      filas.push(...(data ?? []));
+      if ((data ?? []).length < PAGINA) break;
+    }
+    return { data: filas, error: null };
+  };
+
   // ── Todas las consultas en paralelo ────────────────────────────────────
   const [
     kpiRecibidas,
@@ -136,19 +157,16 @@ export default async function DashboardPage() {
       .from("boletos")
       .select("id", { count: "exact", head: true })
       .eq("cooperativa_id", cooperativaId)
-      .eq("estado", "PAGADO")
+      // Un boleto embarcado pasa a USADO: sigue siendo una venta del día.
+      .in("estado", ["PAGADO", "USADO"])
       .gte("created_at", hoyInicio)
       .lte("created_at", hoyFin),
 
     // KPI 4 — Ingresos del día: pagos verificados HOY (por verificado_at, no por la fecha
     // en que el cliente los registró), en USD de referencia y Bs a la tasa de cada pago.
-    supabase
-      .from("pagos")
-      .select("monto, monto_bs")
-      .eq("cooperativa_id", cooperativaId)
-      .eq("verificado", true)
-      .gte("verificado_at", hoyInicio)
-      .lte("verificado_at", hoyFin),
+    // PostgREST devuelve como máximo 1000 filas por consulta: se lee por páginas para
+    // que un día con más de 1000 pagos no muestre un total recortado sin avisar.
+    leerPagosDelDia(),
 
     // Encomiendas recientes
     cargarRecientes(),
@@ -174,7 +192,7 @@ export default async function DashboardPage() {
                   .from("boletos")
                   .select("id", { count: "exact", head: true })
                   .eq("cooperativa_id", cooperativaId)
-                  .eq("estado", "PAGADO")
+                  .in("estado", ["PAGADO", "USADO"])
                   .gte("created_at", start)
                   .lte("created_at", end),
               ]);

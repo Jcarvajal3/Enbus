@@ -14,7 +14,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { codigoEB, humanizeError, parseDetalleEB, type DetalleEB } from "@/lib/errores";
+import { codigoEB, errorDeFuncion, humanizeError, parseDetalleEB, type DetalleEB } from "@/lib/errores";
 import { aprobarPago } from "@/app/cooperativas/(panel)/pagos/actions";
 import { cedulaParaGuardar, telefonoParaGuardar } from "@/lib/ve";
 import { rutaDeFoto } from "@/lib/fotos";
@@ -103,11 +103,13 @@ export async function confirmarRecepcion(
     const { data: pdfData, error: pdfError } = await supabase.functions.invoke("generar-guia-pdf", {
       body: { encomienda_id: encomiendaId },
     });
-    if (pdfError) throw pdfError;
+    if (pdfError) throw await errorDeFuncion(pdfError);
     pdfUrl = pdfData?.pdf_url || null;
+    if (!pdfUrl) throw new Error("generar-guia-pdf respondió sin pdf_url");
   } catch (pdfError) {
     console.error("Error al generar el PDF de la guía:", pdfError);
-    avisoGuia = "La encomienda quedó recibida, pero la guía en PDF no se pudo generar. Reimprímela desde la lista.";
+    const motivo = codigoEB(pdfError) ? ` ${humanizeError(pdfError, "generar la guía")}` : "";
+    avisoGuia = `La encomienda quedó recibida, pero la guía en PDF no se pudo generar.${motivo} Reimprímela desde la lista.`;
   }
 
   revalidarPantallasDeEncomienda();
@@ -427,7 +429,8 @@ export async function guardarFotoEncomienda(
   let cambios: { foto_evidencia_url?: string; foto_omitida_motivo: string | null };
   if ("ruta" in foto) {
     const ruta = rutaDeFoto(foto.ruta);
-    if (!ruta || !ruta.startsWith(`${encomiendaId}/`)) {
+    // Solo "<encomiendaId>/<archivo>": sin ".." ni subcarpetas que apunten a la foto de otra encomienda.
+    if (!ruta || !ruta.startsWith(`${encomiendaId}/`) || !/^[0-9a-f-]{36}\/[\w.-]{1,80}$/i.test(ruta) || ruta.includes("..")) {
       return { success: false, error: "No pudimos subir la foto. Intenta de nuevo o súbela después desde el detalle." };
     }
     cambios = { foto_evidencia_url: ruta, foto_omitida_motivo: null };
@@ -454,13 +457,17 @@ export async function guardarFotoEncomienda(
 // ─── Guía PDF ────────────────────────────────────────────────────────────────
 
 export async function obtenerPdfGuia(encomiendaId: string) {
+  if (!UUID_RE.test(encomiendaId ?? "")) return { success: false, error: MSG_NO_ENCONTRADA };
   const supabase = await createClient();
   const { data, error } = await supabase.functions.invoke("generar-guia-pdf", {
     body: { encomienda_id: encomiendaId },
   });
   if (error) {
-    console.error("Error al obtener PDF de guía:", error);
-    return { success: false, error: humanizeError(error, "obtener la guía en PDF") };
+    const detalle = await errorDeFuncion(error);
+    console.error("Error al obtener PDF de guía:", detalle);
+    return { success: false, error: humanizeError(detalle, "obtener la guía en PDF") };
   }
-  return { success: true, pdfUrl: data?.pdf_url || null };
+  const pdfUrl: string | null = data?.pdf_url || null;
+  if (!pdfUrl) return { success: false, error: "No pudimos obtener la guía en PDF. Intenta de nuevo en un momento." };
+  return { success: true, pdfUrl };
 }

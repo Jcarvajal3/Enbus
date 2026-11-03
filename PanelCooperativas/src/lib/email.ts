@@ -5,6 +5,13 @@ const resendApiKey = process.env.RESEND_API_KEY;
 
 export const resend = resendApiKey ? new Resend(resendApiKey) : null;
 
+/**
+ * Remitente de los correos. `onboarding@resend.dev` es el remitente de pruebas de
+ * Resend: solo entrega al correo dueño de la cuenta de Resend. En producción hay que
+ * definir RESEND_FROM con un dominio verificado (p. ej. "EnBus <no-responder@enbus.app>").
+ */
+export const REMITENTE_CORREO = process.env.RESEND_FROM?.trim() || "EnBus <onboarding@resend.dev>";
+
 /** Texto para la persona cuando el correo no sale; el detalle técnico va al log. */
 export const ERROR_CORREO = "No pudimos enviar el correo.";
 
@@ -67,7 +74,7 @@ async function enviar(para: string, asunto: string, html: string, contexto: stri
   }
   try {
     const { data, error } = await resend.emails.send({
-      from: "EnBus <onboarding@resend.dev>",
+      from: REMITENTE_CORREO,
       to: [para],
       subject: asunto,
       html,

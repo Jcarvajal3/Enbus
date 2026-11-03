@@ -25,6 +25,7 @@ const MSG_INVITACION_INVALIDA =
 
 type FilaInvitacion = {
   email: string;
+  creado_por: string | null;
   role: string;
   cooperativa_id: string;
   sucursal_id: string | null;
@@ -33,6 +34,39 @@ type FilaInvitacion = {
   revocada_at?: string | null;
   cooperativas: unknown;
 };
+
+const ROLES_INVITABLES = ["taquillero", "admin_cooperativa"];
+
+/**
+ * true si la invitación es de un rol del panel, la creó un administrador de esa
+ * misma cooperativa (o el equipo de EnBus) y su sucursal es de esa cooperativa.
+ */
+async function invitacionLegitima(
+  supabase: ReturnType<typeof createAdminClient>,
+  inv: FilaInvitacion
+): Promise<boolean> {
+  if (!ROLES_INVITABLES.includes(inv.role) || !inv.cooperativa_id || !inv.creado_por) return false;
+
+  const [creador, sucursal] = await Promise.all([
+    supabase.from("profiles").select("role, cooperativa_id").eq("id", inv.creado_por).maybeSingle(),
+    inv.sucursal_id
+      ? supabase.from("sucursales").select("cooperativa_id").eq("id", inv.sucursal_id).maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
+  ]);
+  if (creador.error || sucursal.error) {
+    console.error("[validateInviteToken] Error al revisar la invitación:", creador.error ?? sucursal.error);
+    return false;
+  }
+  const c = creador.data as { role?: string; cooperativa_id?: string | null } | null;
+  const creadorValido =
+    c?.role === "super_admin" || (c?.role === "admin_cooperativa" && c.cooperativa_id === inv.cooperativa_id);
+  if (!creadorValido) return false;
+  if (inv.sucursal_id) {
+    const suc = sucursal.data as { cooperativa_id?: string } | null;
+    if (!suc || suc.cooperativa_id !== inv.cooperativa_id) return false;
+  }
+  return true;
+}
 
 export async function validateInviteToken(token: string) {
   if (typeof token !== "string" || !/^[0-9a-f]{16,128}$/i.test(token)) {
@@ -43,11 +77,11 @@ export async function validateInviteToken(token: string) {
   const consulta = (select: string) =>
     supabase.from("invitaciones").select(select).eq("token", token).maybeSingle();
   let res = await consulta(
-    "email, role, cooperativa_id, sucursal_id, usado, expira_at, revocada_at, cooperativas(nombre)"
+    "email, role, cooperativa_id, sucursal_id, usado, expira_at, revocada_at, creado_por, cooperativas(nombre)"
   );
   // 42703: la columna revocada_at aún no existe (migración 20260720000002 sin aplicar).
   if (res.error?.code === "42703") {
-    res = await consulta("email, role, cooperativa_id, sucursal_id, usado, expira_at, cooperativas(nombre)");
+    res = await consulta("email, role, cooperativa_id, sucursal_id, usado, expira_at, creado_por, cooperativas(nombre)");
   }
 
   if (res.error) {
@@ -62,6 +96,20 @@ export async function validateInviteToken(token: string) {
     invitacion.revocada_at ||
     new Date(invitacion.expira_at).getTime() < Date.now()
   ) {
+    return { error: MSG_INVITACION_INVALIDA, invalida: true as const };
+  }
+
+  // La política RLS de INSERT en `invitaciones` solo exige que quien inserta sea
+  // admin_cooperativa o super_admin: no limita el rol ni la cooperativa de la fila.
+  // Como este flujo crea la cuenta con el cliente de servicio, aquí se exige que la
+  // invitación sea coherente antes de aceptarla (si no, un administrador podría
+  // crearse una invitación de super_admin o de otra cooperativa desde la API).
+  if (!(await invitacionLegitima(supabase, invitacion))) {
+    console.error("[validateInviteToken] Invitación incoherente rechazada:", {
+      role: invitacion.role,
+      cooperativa_id: invitacion.cooperativa_id,
+      creado_por: invitacion.creado_por,
+    });
     return { error: MSG_INVITACION_INVALIDA, invalida: true as const };
   }
 

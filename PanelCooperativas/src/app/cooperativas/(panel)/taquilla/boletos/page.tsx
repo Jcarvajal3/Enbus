@@ -541,7 +541,10 @@ export default function TaquillaBoletosPage() {
   const impresora = useImpresora();
   const validandoRef = useRef(false);
 
+  // Última carga: una respuesta vieja (otro filtro) no pisa la de una carga posterior.
+  const cargaRef = useRef(0);
   const fetchBoletos = useCallback(async () => {
+    const carga = ++cargaRef.current;
     setLoading(true);
     setErrorCarga(null);
     setCurrentPage(1);
@@ -580,6 +583,7 @@ export default function TaquillaBoletosPage() {
           .lte("fecha_hora_salida", hasta);
 
         if (viajesError) throw viajesError;
+        if (carga !== cargaRef.current) return;
         const viajeIds = (viajesDia ?? []).map((v: { id: string }) => v.id);
         if (viajeIds.length === 0) {
           setBoletos([]);
@@ -589,13 +593,14 @@ export default function TaquillaBoletosPage() {
       }
 
       const { data, error } = await query;
+      if (carga !== cargaRef.current) return;
       if (error) throw error;
       setBoletos(data as unknown as BoletoRow[]);
     } catch (err) {
       console.error(err);
-      setErrorCarga(humanizeError(err, "cargar los boletos"));
+      if (carga === cargaRef.current) setErrorCarga(humanizeError(err, "cargar los boletos"));
     } finally {
-      setLoading(false);
+      if (carga === cargaRef.current) setLoading(false);
     }
   }, [supabase, cooperativaId, filtroEstado, filtroFecha]);
 

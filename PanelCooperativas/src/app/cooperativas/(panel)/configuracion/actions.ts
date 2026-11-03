@@ -38,6 +38,15 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const LOGO_MAX_BYTES = 2 * 1024 * 1024;
 const LOGO_TIPOS = ["image/png", "image/jpeg", "image/webp"];
 
+/** Tipo real de la imagen según sus primeros bytes (PNG, JPEG o WebP), o null. */
+function tipoDeImagen(b: Uint8Array): string | null {
+  if (b.length >= 8 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) return "image/png";
+  if (b.length >= 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return "image/jpeg";
+  const ascii = (desde: number, hasta: number) => String.fromCharCode(...b.slice(desde, hasta));
+  if (b.length >= 12 && ascii(0, 4) === "RIFF" && ascii(8, 12) === "WEBP") return "image/webp";
+  return null;
+}
+
 async function requireAdmin(): Promise<AdminOk | { ok: false; error: string }> {
   const user = await getUserProfile();
   if (!user) return { ok: false, error: "Tu sesión expiró. Inicia sesión de nuevo para continuar." };
@@ -72,13 +81,19 @@ export async function uploadLogo(formData: FormData): Promise<ResultadoConfig<{ 
   const admin = await requireAdmin();
   if (!admin.ok) return admin;
 
-  const file = formData.get("logo") as File | null;
+  const entrada = formData.get("logo");
+  const file = entrada instanceof File ? entrada : null;
   if (!file || file.size === 0) return { ok: false, error: "Elige una imagen para el logo." };
   if (!LOGO_TIPOS.includes(file.type)) {
     return { ok: false, error: "El logo debe ser una imagen PNG, JPG o WebP." };
   }
   if (file.size > LOGO_MAX_BYTES) {
     return { ok: false, error: "La imagen pesa más de 2 MB. Usa una más liviana." };
+  }
+  // El tipo lo declara el navegador: se confirma con la firma del archivo (el bucket es público).
+  const cabecera = new Uint8Array(await file.slice(0, 12).arrayBuffer());
+  if (tipoDeImagen(cabecera) !== file.type) {
+    return { ok: false, error: "El logo debe ser una imagen PNG, JPG o WebP." };
   }
 
   const supabase = await createClient();
@@ -96,14 +111,16 @@ export async function uploadLogo(formData: FormData): Promise<ResultadoConfig<{ 
   const { data } = supabase.storage.from("logos-cooperativas").getPublicUrl(path);
   const url = `${data.publicUrl}?t=${Date.now()}`; // evita la caché del navegador
 
-  const { error: updateError } = await supabase
+  const { data: filas, error: updateError } = await supabase
     .from("cooperativas")
     .update({ logo_url: url })
-    .eq("id", admin.cooperativaId);
+    .eq("id", admin.cooperativaId)
+    .select("id");
   if (updateError) {
     console.error("[uploadLogo] Error al guardar la URL:", updateError);
     return fallo(updateError, "guardar el logo");
   }
+  if (!filas || filas.length === 0) return { ok: false, error: SIN_PERMISO };
 
   revalidatePath("/cooperativas/configuracion");
   return { ok: true, data: { url } };
@@ -289,15 +306,18 @@ export async function actualizarMetodoPago(
   if (!preparado.ok) return preparado;
 
   const supabase = await createClient();
-  const { error } = await supabase
+  const { data: filas, error } = await supabase
     .from("metodos_pago_cooperativa")
     .update(preparado.data)
     .eq("id", id)
-    .eq("cooperativa_id", admin.cooperativaId);
+    .eq("cooperativa_id", admin.cooperativaId)
+    .select("id");
   if (error) {
     console.error("[actualizarMetodoPago] Error:", error);
     return fallo(error, "guardar el método de pago");
   }
+  // Sin filas: el método no existe o no es de esta cooperativa (nunca un éxito falso).
+  if (!filas || filas.length === 0) return { ok: false, error: "No encontramos ese método. Actualiza la página." };
 
   revalidatePath("/cooperativas/configuracion");
   return { ok: true, data: preparado.data };
@@ -310,15 +330,17 @@ export async function cambiarActivoMetodoPago(id: string, activo: boolean): Prom
   if (!UUID_RE.test(id ?? "")) return { ok: false, error: "No encontramos ese método. Actualiza la página." };
 
   const supabase = await createClient();
-  const { error } = await supabase
+  const { data: filas, error } = await supabase
     .from("metodos_pago_cooperativa")
     .update({ activo })
     .eq("id", id)
-    .eq("cooperativa_id", admin.cooperativaId);
+    .eq("cooperativa_id", admin.cooperativaId)
+    .select("id");
   if (error) {
     console.error("[cambiarActivoMetodoPago] Error:", error);
     return fallo(error, activo ? "activar el método de pago" : "desactivar el método de pago");
   }
+  if (!filas || filas.length === 0) return { ok: false, error: "No encontramos ese método. Actualiza la página." };
 
   revalidatePath("/cooperativas/configuracion");
   return { ok: true, data: null };
@@ -330,11 +352,12 @@ export async function eliminarMetodoPago(id: string): Promise<ResultadoConfig> {
   if (!UUID_RE.test(id ?? "")) return { ok: false, error: "No encontramos ese método. Actualiza la página." };
 
   const supabase = await createClient();
-  const { error } = await supabase
+  const { data: filas, error } = await supabase
     .from("metodos_pago_cooperativa")
     .delete()
     .eq("id", id)
-    .eq("cooperativa_id", admin.cooperativaId);
+    .eq("cooperativa_id", admin.cooperativaId)
+    .select("id");
   if (error) {
     if (error.code === "23503") {
       return {
@@ -346,6 +369,7 @@ export async function eliminarMetodoPago(id: string): Promise<ResultadoConfig> {
     console.error("[eliminarMetodoPago] Error:", error);
     return fallo(error, "eliminar el método de pago");
   }
+  if (!filas || filas.length === 0) return { ok: false, error: "No encontramos ese método. Actualiza la página." };
 
   revalidatePath("/cooperativas/configuracion");
   return { ok: true, data: null };
@@ -472,15 +496,17 @@ export async function cambiarActivaSucursal(id: string, activa: boolean): Promis
   if (!UUID_RE.test(id ?? "")) return { ok: false, error: "No encontramos esa sucursal. Actualiza la página." };
 
   const supabase = await createClient();
-  const { error } = await supabase
+  const { data: filas, error } = await supabase
     .from("sucursales")
     .update({ activa })
     .eq("id", id)
-    .eq("cooperativa_id", admin.cooperativaId);
+    .eq("cooperativa_id", admin.cooperativaId)
+    .select("id");
   if (error) {
     console.error("[cambiarActivaSucursal] Error:", error);
     return fallo(error, activa ? "activar la sucursal" : "desactivar la sucursal");
   }
+  if (!filas || filas.length === 0) return { ok: false, error: "No encontramos esa sucursal. Actualiza la página." };
 
   revalidatePath("/cooperativas/configuracion");
   return { ok: true, data: null };
@@ -506,16 +532,18 @@ export async function eliminarSucursal(id: string): Promise<ResultadoConfig> {
   }
   if ((count ?? 0) > 0) return { ok: false, error: MSG_RELACIONES, codigo: "TIENE_RELACIONES" };
 
-  const { error } = await supabase
+  const { data: filas, error } = await supabase
     .from("sucursales")
     .delete()
     .eq("id", id)
-    .eq("cooperativa_id", admin.cooperativaId);
+    .eq("cooperativa_id", admin.cooperativaId)
+    .select("id");
   if (error) {
     if (error.code === "23503") return { ok: false, error: MSG_RELACIONES, codigo: "TIENE_RELACIONES" };
     console.error("[eliminarSucursal] Error:", error);
     return fallo(error, "eliminar la sucursal");
   }
+  if (!filas || filas.length === 0) return { ok: false, error: "No encontramos esa sucursal. Actualiza la página." };
 
   revalidatePath("/cooperativas/configuracion");
   revalidatePath("/cooperativas/empleados");

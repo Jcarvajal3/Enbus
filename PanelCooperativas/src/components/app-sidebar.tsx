@@ -50,12 +50,15 @@ export function AppSidebar() {
 
   const handleSignOut = async () => {
     // Sin red, signOut falla y la sesión sigue abierta: decirlo en vez de ir al login.
-    const { error } = await supabase.auth.signOut();
+    // scope "local": cierra solo este equipo. El global también tumbaba la sesión de la
+    // misma cuenta en las otras taquillas (a mitad de una venta).
+    const { error } = await supabase.auth.signOut({ scope: "local" });
     if (error) {
       toast.error(humanizeError(error, "cerrar la sesión"));
       return;
     }
-    router.push("/cooperativas/login");
+    router.replace("/cooperativas/login");
+    router.refresh();
   };
 
   const filteredNavItems = NAV_ITEMS.filter(

@@ -743,7 +743,10 @@ export function VentaFlow({ isOpen, onClose, viajeIdInicial }: VentaFlowProps) {
         .eq("estado", "PROGRAMADO")
         // El servidor acepta ventas hasta 30 minutos después de la hora de salida.
         .gt("fecha_hora_salida", new Date(Date.now() - 30 * 60 * 1000).toISOString())
-        .order("fecha_hora_salida", { ascending: true });
+        .order("fecha_hora_salida", { ascending: true })
+        // Con salidas recurrentes puede haber miles programadas: se listan las 300 más
+        // próximas (sin tope, PostgREST corta en 1000 sin avisar).
+        .limit(300);
 
       if (error) throw error;
       const lista = (data as unknown) as ViajeParaVenta[];

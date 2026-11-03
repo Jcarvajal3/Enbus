@@ -1,3 +1,4 @@
+import type { User } from "@supabase/supabase-js";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
 import { getUserProfile } from "@/lib/supabase/cached";
 import { redirect } from "next/navigation";
@@ -54,7 +55,8 @@ export default async function EmpleadosPage() {
       .select("id, nombre_completo, role, created_at, telefono, sucursal_id")
       .eq("cooperativa_id", user.cooperativa_id)
       .in("role", ["taquillero", "admin_cooperativa"])
-      .order("created_at", { ascending: false }),
+      .order("created_at", { ascending: false })
+      .limit(500),
     supabase
       .from("sucursales")
       .select("id, nombre, activa")
@@ -69,13 +71,19 @@ export default async function EmpleadosPage() {
 
   // Correo y bloqueo de cada empleado, uno por uno (sin listar todos los usuarios de EnBus).
   const perfiles = perfilesResult.data ?? [];
-  const cuentas = await Promise.all(
-    perfiles.map(async (p) => {
-      const { data, error } = await adminSupabase.auth.admin.getUserById(p.id);
-      if (error) console.error(`[EmpleadosPage] cuenta ${p.id}:`, error);
-      return data?.user ?? null;
-    })
-  );
+  // De a 10 en paralelo: con muchos empleados, cientos de llamadas simultáneas a la API
+  // de Auth chocaban con su límite de frecuencia y la lista salía sin correos.
+  const cuentas: (User | null)[] = [];
+  for (let i = 0; i < perfiles.length; i += 10) {
+    const lote = await Promise.all(
+      perfiles.slice(i, i + 10).map(async (p) => {
+        const { data, error } = await adminSupabase.auth.admin.getUserById(p.id);
+        if (error) console.error(`[EmpleadosPage] cuenta ${p.id}:`, error);
+        return data?.user ?? null;
+      })
+    );
+    cuentas.push(...lote);
+  }
   const empleados: Empleado[] = perfiles.map((p, i) => {
     const cuenta = cuentas[i];
     return {

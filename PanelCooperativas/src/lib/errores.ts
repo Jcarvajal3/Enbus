@@ -202,6 +202,35 @@ export function isNetworkError(err: unknown): boolean {
   );
 }
 
+/**
+ * Error de `supabase.functions.invoke` listo para `humanizeError` / `codigoEB`.
+ * Con un status distinto de 2xx, supabase-js devuelve un `FunctionsHttpError`
+ * cuyo mensaje es genérico ("Edge Function returned a non-2xx status code") y el
+ * cuerpo JSON de la función (`{ error: "EB_*", hint, details }`) queda en
+ * `error.context` (la Response). Aquí se lee ese cuerpo para que el `hint` llegue
+ * al usuario. Si no hay cuerpo JSON, devuelve el error tal cual (nunca lanza).
+ */
+export async function errorDeFuncion(error: unknown): Promise<unknown> {
+  const respuesta = error && typeof error === "object" ? (error as { context?: unknown }).context : null;
+  if (!respuesta || typeof (respuesta as Response).json !== "function") return error;
+  try {
+    const r = respuesta as Response;
+    const cuerpo: unknown = await (typeof r.clone === "function" ? r.clone() : r).json();
+    if (!cuerpo || typeof cuerpo !== "object" || Array.isArray(cuerpo)) return error;
+    const c = cuerpo as Record<string, unknown>;
+    const candidatos = [c.code, c.error, c.message].filter((v): v is string => typeof v === "string");
+    const codigo = candidatos.find((v) => v.startsWith("EB_")) ?? null;
+    const hint = typeof c.hint === "string" ? c.hint.trim() : "";
+    const details = c.details === undefined ? "" : c.details;
+    if (codigo) return { message: codigo, hint, details, status: r.status };
+    // Sin código EB_* pero con texto para el usuario: se muestra el hint tal cual.
+    if (hint) return { message: "EB_ERROR_FUNCION", hint, details, status: r.status };
+    return error;
+  } catch {
+    return error;
+  }
+}
+
 /** `details` del error como objeto (vacío si no es JSON válido). */
 export function parseDetalleEB(err: unknown): DetalleEB {
   if (!err || typeof err !== "object") return {};

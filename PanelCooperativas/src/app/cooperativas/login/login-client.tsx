@@ -13,19 +13,29 @@ import { Bus, WarningCircle } from "@phosphor-icons/react";
 import Link from "next/link";
 import { humanizeError } from "@/lib/errores";
 
-export default function LoginPage() {
+export default function LoginPage({ errorInicial = null }: { errorInicial?: string | null }) {
   const router = useRouter();
   const supabase = createClient();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(errorInicial);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loading) return;
     setLoading(true);
     setError(null);
+    try {
+      await iniciarSesion();
+    } catch (err) {
+      // Sin red o respuesta inesperada: el botón no puede quedar bloqueado.
+      setError(humanizeError(err, "iniciar sesión"));
+      setLoading(false);
+    }
+  };
 
+  const iniciarSesion = async () => {
     const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
       email,
       password,
@@ -48,20 +58,23 @@ export default function LoginPage() {
       .single();
 
     if (profileError || !profile) {
+      // Sin perfil no hay acceso: no se deja una sesión a medias.
+      await supabase.auth.signOut({ scope: "local" });
       setError(humanizeError(profileError, "cargar tu perfil"));
       setLoading(false);
       return;
     }
 
     if (profile.role !== "taquillero" && profile.role !== "admin_cooperativa") {
-      await supabase.auth.signOut();
+      // scope "local": solo esta sesión del navegador (no cierra la de la app móvil).
+      await supabase.auth.signOut({ scope: "local" });
       setError("Tu cuenta no tiene acceso al panel de cooperativas. Si eres administrador o taquillero, pide al administrador de tu cooperativa que te invite.");
       setLoading(false);
       return;
     }
 
     if (!profile.cooperativa_id) {
-      await supabase.auth.signOut();
+      await supabase.auth.signOut({ scope: "local" });
       setError("Tu cuenta no está vinculada a ninguna cooperativa. Pide al administrador de tu cooperativa que te envíe una invitación.");
       setLoading(false);
       return;

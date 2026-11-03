@@ -5,6 +5,8 @@ import { ADMIN_NAV_ITEMS } from "@/lib/admin-navigation";
 import { etiquetaRol } from "@/lib/estados";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { toast } from "sonner";
+import { humanizeError } from "@/lib/errores";
 import { SignOut, Sun, Moon, Monitor } from "@phosphor-icons/react";
 import { useTheme } from "next-themes";
 import { useState, useEffect, useMemo } from "react";
@@ -84,8 +86,15 @@ export function AdminSidebar() {
   }, [supabase]);
 
   const handleSignOut = async () => {
-    await supabase.auth.signOut();
-    router.push("/admin/login");
+    // Sin red, signOut falla y la sesión sigue abierta: decirlo en vez de ir al login.
+    // scope "local": cierra solo este equipo.
+    const { error } = await supabase.auth.signOut({ scope: "local" });
+    if (error) {
+      toast.error(humanizeError(error, "cerrar la sesión"));
+      return;
+    }
+    router.replace("/admin/login");
+    router.refresh();
   };
 
   return (

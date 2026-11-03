@@ -34,8 +34,12 @@ export async function guardarViaje(
     .single();
   if (!profile || profile.role !== "admin_cooperativa") return { error: "Solo el administrador de la cooperativa puede programar viajes." };
 
-  const rutaId = payload.ruta_id;
-  if (!rutaId) return { error: "Elige la ruta del viaje." };
+  const rutaId = payload?.ruta_id;
+  if (!rutaId || !UUID_RE.test(rutaId)) return { error: "Elige la ruta del viaje." };
+  if (!profile.cooperativa_id) return { error: "Solo el administrador de la cooperativa puede programar viajes." };
+  // Textos libres: sin espacios sobrantes y con un largo razonable.
+  const numeroUnidad = String(payload.numero_unidad ?? "").trim().slice(0, 40) || null;
+  const nombreChofer = String(payload.nombre_chofer ?? "").trim().replace(/\s+/g, " ").slice(0, 120) || null;
 
   const { data: ruta } = await supabase
     .from("rutas")
@@ -48,8 +52,8 @@ export async function guardarViaje(
   if (!ruta.activa) return { error: "Esa ruta está desactivada. Reactívala en Rutas o elige otra." };
 
   // Parse numeric fields — FormData always delivers strings
-  const asientosTotales = parseInt(payload.asientos_totales);
-  if (isNaN(asientosTotales) || asientosTotales < 1 || asientosTotales > 80) {
+  const asientosTotales = Number(payload.asientos_totales);
+  if (!Number.isInteger(asientosTotales) || asientosTotales < 1 || asientosTotales > 80) {
     return { error: "El bus debe tener entre 1 y 80 asientos." };
   }
 
@@ -72,8 +76,8 @@ export async function guardarViaje(
       fecha_hora_llegada_est: llegadaEstimada(salida, ruta.duracion_estimada_min),
       asientos_totales: asientosTotales,
       asientos_disponibles: asientosTotales,
-      numero_unidad: payload.numero_unidad || null,
-      nombre_chofer: payload.nombre_chofer || null,
+      numero_unidad: numeroUnidad,
+      nombre_chofer: nombreChofer,
       estado: "PROGRAMADO",
     }));
 
@@ -104,8 +108,8 @@ export async function guardarViaje(
       fecha_hora_llegada_est: llegadaEstimada(salida, ruta.duracion_estimada_min),
       asientos_totales: asientosTotales,
       asientos_disponibles: asientosTotales,
-      numero_unidad: payload.numero_unidad || null,
-      nombre_chofer: payload.nombre_chofer || null,
+      numero_unidad: numeroUnidad,
+      nombre_chofer: nombreChofer,
       estado: "PROGRAMADO",
     });
 

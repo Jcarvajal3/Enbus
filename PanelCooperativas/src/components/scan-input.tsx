@@ -56,6 +56,18 @@ function focoLibre() {
   return !activo || activo === document.body;
 }
 
+/**
+ * Columnas que usan las pantallas al escanear (tipo `Encomienda`). Sin `select("*")`:
+ * así no viajan al navegador el PIN de retiro ni la clave de idempotencia.
+ */
+const COLUMNAS_ESCANEO =
+  "id, tracking_id, sender_id, receiver_nombre, receiver_telefono, receiver_cedula_rif, receiver_user_id, " +
+  "cooperativa_id, estado_origen, ciudad_origen, estado_destino, ciudad_destino, sucursal_origen_id, " +
+  "sucursal_destino_id, viaje_id, descripcion_contenido, peso_kg, costo_calculado, modalidad_pago, estado, " +
+  "foto_evidencia_url, qr_data, created_at, updated_at, valor_declarado, intentos_pin, pin_bloqueado, " +
+  "origen_registro, remitente_nombre, remitente_cedula, remitente_telefono, foto_cliente_path, " +
+  "foto_omitida_motivo, entregada_at, retiro_tercero, retiro_nombre, retiro_cedula, entrega_sin_pin_motivo";
+
 export function ScanInput({
   onEncomiendaFound,
   onCodigo,
@@ -131,7 +143,7 @@ export function ScanInput({
 
       const { data, error } = await supabase
         .from("encomiendas")
-        .select("*")
+        .select(COLUMNAS_ESCANEO)
         .eq("cooperativa_id", cooperativaId)
         .or(condiciones.join(","))
         .limit(1)

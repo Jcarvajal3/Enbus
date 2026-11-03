@@ -1,11 +1,16 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { humanizeError } from "@/lib/errores";
 import { formatCiudad } from "@/lib/ciudades";
 import { vaASucursal, type SucursalRecepcion } from "./sucursal";
 
 type SupabaseServer = Awaited<ReturnType<typeof createClient>>;
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** Máximo por lote: cada id va en la URL de `in()` (200 ≈ 7,5 KB, dentro del límite del gateway). */
+const MAX_LOTE = 200;
 
 type Alcance =
   | { ok: true; cooperativaId: string; sucursal: SucursalRecepcion | null }
@@ -46,6 +51,12 @@ async function obtenerAlcance(supabase: SupabaseServer): Promise<Alcance> {
   return { ok: true, cooperativaId: profile.cooperativa_id, sucursal };
 }
 
+function revalidarRecepcion() {
+  revalidatePath("/cooperativas/recepcion-destino");
+  revalidatePath("/cooperativas/entrega");
+  revalidatePath("/cooperativas/dashboard");
+}
+
 /** Sucursal en la que recibe el usuario actual (null = toda la cooperativa). */
 export async function obtenerSucursalRecepcion() {
   const supabase = await createClient();
@@ -74,6 +85,9 @@ function mensajeOtraSucursal(encomiendas: EncomiendaDestino[], sucursal: Sucursa
 }
 
 export async function recibirEncomienda(encomiendaId: string) {
+  if (!UUID_RE.test(encomiendaId ?? "")) {
+    return { success: false, error: "No encontramos esta encomienda en tu cooperativa. Revisa el código e intenta de nuevo." };
+  }
   try {
     const supabase = await createClient();
     const alcance = await obtenerAlcance(supabase);
@@ -118,6 +132,7 @@ export async function recibirEncomienda(encomiendaId: string) {
       return { success: false, error: "Esta encomienda ya fue recibida. Actualiza la lista." };
     }
 
+    revalidarRecepcion();
     return { success: true };
   } catch (err) {
     console.error("Error inesperado en recibirEncomienda:", err);
@@ -127,8 +142,14 @@ export async function recibirEncomienda(encomiendaId: string) {
 
 export async function recibirLote(encomiendaIds: string[]) {
   try {
-    if (!encomiendaIds.length) {
+    const idsPedidos = Array.from(
+      new Set((Array.isArray(encomiendaIds) ? encomiendaIds : []).filter((id) => UUID_RE.test(id ?? "")))
+    );
+    if (!idsPedidos.length) {
       return { success: false, count: 0, error: "Selecciona al menos una encomienda." };
+    }
+    if (idsPedidos.length > MAX_LOTE) {
+      return { success: false, count: 0, error: `Recibe como máximo ${MAX_LOTE} encomiendas a la vez.` };
     }
 
     const supabase = await createClient();
@@ -138,7 +159,8 @@ export async function recibirLote(encomiendaIds: string[]) {
     const { data: encomiendas, error: lecturaError } = await supabase
       .from("encomiendas")
       .select("id, tracking_id, estado, cooperativa_id, sucursal_destino_id, ciudad_destino")
-      .in("id", encomiendaIds);
+      .eq("cooperativa_id", alcance.cooperativaId)
+      .in("id", idsPedidos);
 
     if (lecturaError) {
       console.error("Error al leer el lote a recibir:", lecturaError);
@@ -171,6 +193,7 @@ export async function recibirLote(encomiendaIds: string[]) {
       return { success: false, count: 0, error: humanizeError(error, "recibir el lote") };
     }
 
+    revalidarRecepcion();
     return { success: true, count: recibidas?.length ?? 0 };
   } catch (err) {
     console.error("Error inesperado en recibirLote:", err);

@@ -124,7 +124,11 @@ function TaquillaEncomiendas() {
   // Reconecta la impresora guardada al abrir la taquilla (#53).
   const impresora = useImpresora();
 
+  // Número de la última carga: una respuesta vieja (otro filtro, o una recarga en tiempo
+  // real que tardó más) no pisa la lista de una carga posterior.
+  const cargaRef = useRef(0);
   const fetchEncomiendas = useCallback(async () => {
+    const carga = ++cargaRef.current;
     setLoading(true);
     setErrorCarga(null);
     try {
@@ -140,14 +144,15 @@ function TaquillaEncomiendas() {
       }
 
       const { data, error } = await query;
+      if (carga !== cargaRef.current) return;
 
       if (error) throw error;
       setEncomiendas(data as unknown as Encomienda[]);
       setCurrentPage(1);
     } catch (err) {
-      setErrorCarga(humanizeError(err, "cargar las encomiendas"));
+      if (carga === cargaRef.current) setErrorCarga(humanizeError(err, "cargar las encomiendas"));
     } finally {
-      setLoading(false);
+      if (carga === cargaRef.current) setLoading(false);
     }
   }, [supabase, cooperativaId, filtroEstado]);
 
