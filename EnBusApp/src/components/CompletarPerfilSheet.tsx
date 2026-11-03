@@ -17,6 +17,8 @@ import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, TextInput, View
 import * as Haptics from 'expo-haptics';
 import { WhatsappLogo } from 'phosphor-react-native';
 import { BottomSheet, Button, Field, Text } from '@/src/components/ui';
+import { CedulaField } from '@/src/components/CedulaField';
+import { TelefonoField } from '@/src/components/TelefonoField';
 import { usePerfil } from '@/src/hooks/usePerfil';
 import { humanizeError } from '@/src/utils/errores';
 import { SOPORTE_WHATSAPP, abrirSoporteWhatsApp } from '@/src/utils/soporte';
@@ -119,7 +121,6 @@ export function CompletarPerfilSheet({
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       onCompletado(guardado);
     } catch (err) {
-      if (__DEV__) console.warn('[CompletarPerfilSheet] guardar:', err);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       setErrorGeneral(humanizeError(err, 'perfil'));
     } finally {
@@ -170,37 +171,27 @@ export function CompletarPerfilSheet({
             editable={!guardando}
           />
 
-          <Field
+          <CedulaField
             ref={cedulaRef}
-            label="Cédula"
-            placeholder="V-12345678"
             value={cedula}
             onChangeText={(v) => {
               setCedula(v);
               limpiarError('cedula');
             }}
             error={errores.cedula}
-            autoCapitalize="characters"
-            autoCorrect={false}
             returnKeyType="next"
-            submitBehavior="submit"
             onSubmitEditing={() => telefonoRef.current?.focus()}
             editable={!guardando}
           />
 
-          <Field
+          <TelefonoField
             ref={telefonoRef}
-            label="Teléfono"
-            placeholder="0414-1234567"
             value={telefono}
             onChangeText={(v) => {
               setTelefono(v);
               limpiarError('telefono');
             }}
             error={errores.telefono}
-            keyboardType="phone-pad"
-            autoComplete="tel"
-            textContentType="telephoneNumber"
             returnKeyType="done"
             onSubmitEditing={handleGuardar}
             editable={!guardando}

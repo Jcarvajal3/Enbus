@@ -8,6 +8,8 @@
  *   const { completo, faltan, guardar } = usePerfil();
  *
  * `perfil` ya viene limpio: los marcadores `PENDIENTE-…` se ven como vacíos.
+ * Trae también las preferencias de aviso (`notif_*`; `null` = sin elegir, se
+ * tratan como activadas) y `guardarNotificaciones` para cambiarlas (#50).
  * Todas las instancias del hook se actualizan cuando una guarda.
  */
 
@@ -50,9 +52,20 @@ export interface UsePerfil {
    * Devuelve el perfil guardado (quien solo espera `Promise<void>` lo ignora).
    */
   guardar: (d: DatosPerfil) => Promise<PerfilUsuario>;
+  /**
+   * Guarda una o varias preferencias de aviso (`notif_*`, #50). Lanza un
+   * `AppError` con el texto para el usuario si no se pudo; la pantalla vuelve
+   * el interruptor a como estaba.
+   */
+  guardarNotificaciones: (cambios: PreferenciasNotificacion) => Promise<PerfilUsuario>;
 }
 
-const COLUMNAS = 'id, nombre_completo, cedula_rif, telefono, created_at';
+/** Columnas `notif_*` de `profiles` que el usuario edita en Perfil › Notificaciones. */
+export type PreferenciaNotificacion = 'notif_boletos' | 'notif_encomiendas' | 'notif_recordatorios';
+export type PreferenciasNotificacion = Partial<Record<PreferenciaNotificacion, boolean>>;
+
+const COLUMNAS =
+  'id, nombre_completo, cedula_rif, telefono, notif_boletos, notif_encomiendas, notif_recordatorios, created_at';
 
 export const MENSAJE_CEDULA_USADA =
   'Esa cédula ya está registrada en otra cuenta. Si es tuya, entra con esa cuenta o escríbenos por WhatsApp.';
@@ -64,12 +77,16 @@ function limpiarPerfil(fila: Record<string, unknown>, email?: string | null): Pe
   const texto = (v: unknown) => (typeof v === 'string' && v.trim() ? v : undefined);
   const cedula = texto(fila.cedula_rif);
   const telefono = texto(fila.telefono);
+  const bandera = (v: unknown) => (typeof v === 'boolean' ? v : null);
   return {
     id: String(fila.id),
     email: email ?? undefined,
     nombre_completo: texto(fila.nombre_completo),
     cedula_rif: cedula && normalizarCedula(cedula) ? cedula : undefined,
     telefono: telefono && normalizarTelefono(telefono) ? telefono : undefined,
+    notif_boletos: bandera(fila.notif_boletos),
+    notif_encomiendas: bandera(fila.notif_encomiendas),
+    notif_recordatorios: bandera(fila.notif_recordatorios),
     created_at: String(fila.created_at ?? ''),
   };
 }
@@ -170,6 +187,30 @@ export function usePerfil(): UsePerfil {
     [userId, email]
   );
 
+  const guardarNotificaciones = useCallback(
+    async (cambios: PreferenciasNotificacion): Promise<PerfilUsuario> => {
+      if (!userId) throw new AppError('Tu sesión expiró. Inicia sesión de nuevo.');
+      const fila: PreferenciasNotificacion = {};
+      (['notif_boletos', 'notif_encomiendas', 'notif_recordatorios'] as const).forEach((k) => {
+        if (typeof cambios[k] === 'boolean') fila[k] = cambios[k];
+      });
+      if (Object.keys(fila).length === 0) throw new AppError('No hay cambios que guardar.');
+
+      const { data, error: err } = await supabase
+        .from('profiles')
+        .update(fila)
+        .eq('id', userId)
+        .select(COLUMNAS)
+        .single();
+      if (err) throw new AppError(humanizeError(err, 'perfil'));
+
+      const guardado = limpiarPerfil(data, email);
+      oyentes.forEach((oyente) => oyente(guardado));
+      return guardado;
+    },
+    [userId, email]
+  );
+
   const faltan = useMemo(() => camposFaltantes(perfil), [perfil]);
 
   return {
@@ -180,5 +221,6 @@ export function usePerfil(): UsePerfil {
     error,
     recargar,
     guardar,
+    guardarNotificaciones,
   };
 }

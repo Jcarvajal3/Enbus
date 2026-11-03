@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Image, ScrollView, StyleSheet, View } from 'react-native';
+import { Image, ScrollView, StyleSheet, View, type TextInput } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
   Camera,
@@ -19,6 +19,8 @@ import { LocationSelector } from '@/src/components/LocationSelector';
 import { PressableScale } from '@/src/components/PressableScale';
 import { StaggerItem } from '@/src/components/StaggerItem';
 import { CompletarPerfilSheet } from '@/src/components/CompletarPerfilSheet';
+import { CedulaField } from '@/src/components/CedulaField';
+import { TelefonoField } from '@/src/components/TelefonoField';
 import {
   Badge,
   BottomSheet,
@@ -168,6 +170,8 @@ export default function NuevaEncomiendaWizard() {
   const [nombre, setNombre] = useState('');
   const [cedula, setCedula] = useState('');
   const [telefono, setTelefono] = useState('');
+  const cedulaRef = useRef<TextInput>(null);
+  const telefonoRef = useRef<TextInput>(null);
   const [descripcion, setDescripcion] = useState('');
   const [pesoKg, setPesoKg] = useState('');
   const [valorDeclarado, setValorDeclarado] = useState('');
@@ -726,24 +730,27 @@ export default function NuevaEncomiendaWizard() {
                 value={nombre}
                 onChangeText={(v) => setNombre(v.slice(0, 80))}
                 error={errors.nombre}
+                autoCapitalize="words"
+                returnKeyType="next"
+                submitBehavior="submit"
+                onSubmitEditing={() => cedulaRef.current?.focus()}
               />
-              <Field
-                label="Cédula"
-                placeholder="V-12345678"
-                autoCapitalize="characters"
+              <CedulaField
+                ref={cedulaRef}
                 value={cedula}
-                onChangeText={(v) => setCedula(v.slice(0, 14))}
+                onChangeText={setCedula}
                 error={errors.cedula}
+                letras={['V', 'E', 'J', 'P']}
+                returnKeyType="next"
+                onSubmitEditing={() => telefonoRef.current?.focus()}
               />
-              <Field
-                label="Teléfono"
-                placeholder="0414-1234567"
-                keyboardType="phone-pad"
+              <TelefonoField
+                ref={telefonoRef}
                 value={telefono}
-                onChangeText={(v) => setTelefono(v.slice(0, 16))}
+                onChangeText={setTelefono}
                 error={errors.telefono}
                 helper="Lo usamos para avisarle y para que vea el envío en su app."
-                containerStyle={s.lastField}
+                returnKeyType="done"
               />
             </Card>
 
@@ -1270,9 +1277,6 @@ const s = StyleSheet.create({
     paddingTop: Spacing.sm,
     borderTopWidth: Sizes.hairline,
     borderTopColor: Colors.border,
-  },
-  lastField: {
-    marginBottom: 0,
   },
   linkRow: {
     flexDirection: 'row',

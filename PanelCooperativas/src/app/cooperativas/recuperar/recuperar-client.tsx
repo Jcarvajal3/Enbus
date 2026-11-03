@@ -46,7 +46,7 @@ export default function RecuperarPage() {
   return (
     <div className="flex min-h-screen">
       {/* Panel Izquierdo Decorativo (Oculto en mobile) */}
-      <div className="hidden w-3/5 flex-col justify-between bg-slate-950 p-12 text-white lg:flex">
+      <div className="hidden w-3/5 flex-col justify-between dark bg-background p-12 text-foreground lg:flex">
         <div className="flex items-center gap-2">
           <div className="flex size-10 items-center justify-center rounded-lg bg-primary">
             <Bus weight="fill" className="size-6 text-primary-foreground" />
@@ -57,14 +57,14 @@ export default function RecuperarPage() {
         <div className="flex flex-col gap-4">
           <h1 className="text-5xl font-bold leading-tight">
             Restablecer <br />
-            <span className="text-amber-300">contraseña</span>
+            <span className="text-primary">contraseña</span>
           </h1>
-          <p className="text-xl text-slate-400">
+          <p className="text-xl text-muted-foreground">
             Recupera el acceso a tu panel operativo de forma segura.
           </p>
         </div>
         
-        <p className="text-sm text-slate-400">
+        <p className="text-sm text-muted-foreground">
           &copy; {new Date().getFullYear()} EnBus. Todos los derechos reservados.
         </p>
       </div>
@@ -86,7 +86,7 @@ export default function RecuperarPage() {
           <CardContent>
             {success ? (
               <div className="flex flex-col gap-6">
-                <Alert variant="default" className="border-emerald-600/30 bg-emerald-50 text-success-text dark:bg-emerald-400/10">
+                <Alert variant="default" className="border-success/40 bg-success-light text-success-deep">
                   <CheckCircle className="size-4 text-success-text" data-icon="inline-start" />
                   <AlertTitle>Enlace enviado</AlertTitle>
                   <AlertDescription>

@@ -10,8 +10,9 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { normalizeRif, RIF_ERROR } from "@/lib/rif";
-import { humanizeError } from "@/lib/errores";
+import { humanizeError, textoDemasiadosIntentos } from "@/lib/errores";
 import { telefonoParaGuardar, TELEFONO_ERROR } from "@/lib/ve";
+import { consumirLimitePorIp, LIMITE_REGISTRO, LIMITE_VERIFICAR_CORREO } from "./limite";
 
 export type CampoRegistro =
   | "nombre"
@@ -30,6 +31,8 @@ export interface ActionState {
   campo?: CampoRegistro;
   /** Errores por campo. */
   errores?: Partial<Record<CampoRegistro, string>>;
+  /** EB_DEMASIADOS_INTENTOS: se alcanzó el límite de registros por hora desde esta conexión. */
+  codigo?: "EB_DEMASIADOS_INTENTOS";
 }
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -45,14 +48,28 @@ function validarCuenta(d: { nombre: string; email: string; password: string; con
   return errores;
 }
 
+export type ResultadoVerificarCorreo =
+  | { registrado: boolean | null; codigo?: undefined; error?: undefined }
+  /** Demasiadas consultas desde esta conexión (10 cada 10 minutos). */
+  | { registrado: null; codigo: "EB_DEMASIADOS_INTENTOS"; error: string };
+
 /**
  * ¿Ya hay una cuenta con este correo? Se consulta al salir del paso 1 para no
  * pedir los datos de la cooperativa en vano. `null` = no se pudo verificar (el
- * registro lo vuelve a comprobar al crear la cuenta).
+ * registro lo vuelve a comprobar al crear la cuenta). Como revela si un correo
+ * tiene cuenta, se limita a 10 consultas cada 10 minutos por IP.
  */
-export async function verificarCorreoRegistro(email: string): Promise<{ registrado: boolean | null }> {
+export async function verificarCorreoRegistro(email: string): Promise<ResultadoVerificarCorreo> {
   const limpio = (email ?? "").trim().toLowerCase();
   if (!EMAIL_RE.test(limpio)) return { registrado: null };
+  const limite = await consumirLimitePorIp(LIMITE_VERIFICAR_CORREO);
+  if (!limite.permitido) {
+    return {
+      registrado: null,
+      codigo: "EB_DEMASIADOS_INTENTOS",
+      error: textoDemasiadosIntentos(limite.reintentarEnSegundos),
+    };
+  }
   const { data, error } = await createAdminClient().rpc("fn_email_registrado", { p_email: limpio });
   if (error) {
     console.error("[verificarCorreoRegistro] Error:", error);
@@ -88,6 +105,12 @@ export async function registrarCooperativa(
   const primero = orden.find((c) => errores[c]);
   if (primero) {
     return { error: "Revisa los campos marcados.", campo: primero, errores };
+  }
+
+  // Límite de frecuencia (5 registros por hora por IP): solo cuenta los intentos con datos válidos.
+  const limite = await consumirLimitePorIp(LIMITE_REGISTRO);
+  if (!limite.permitido) {
+    return { error: textoDemasiadosIntentos(limite.reintentarEnSegundos), codigo: "EB_DEMASIADOS_INTENTOS" };
   }
 
   const supabase = createAdminClient();

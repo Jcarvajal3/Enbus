@@ -6,9 +6,13 @@
  * encomiendas/nueva). They shared the exact anatomy — badge row, title,
  * subtitle, and a tall letter pill on the right — but differed in radius,
  * padding, background and pill colour. This is that anatomy, once.
+ *
+ * La píldora con la inicial es opcional (APP-58): sin `initial` no se dibuja,
+ * y con `chevron` se muestra una flecha que dice "esto abre algo".
  */
 import React, { memo } from 'react';
 import { StyleSheet, View } from 'react-native';
+import { CaretRight } from 'phosphor-react-native';
 import { PressableScale } from '../PressableScale';
 import { Text } from './Text';
 import {
@@ -41,9 +45,13 @@ export interface EntityCardProps {
   badge?: React.ReactNode;
   /** Trailing element of the top row — a code, a price, a seat count */
   meta?: React.ReactNode;
-  /** Letter shown in the tall pill on the right */
-  initial: string;
+  /** Letra de la píldora de la derecha. Sin ella no se dibuja la píldora. */
+  initial?: string;
   tone?: PillTone;
+  /** Flecha a la derecha (la tarjeta abre o avanza a otra pantalla). */
+  chevron?: boolean;
+  /** Líneas máximas del subtítulo (por defecto 1). */
+  subtitleLines?: number;
   /** Selectable variant: draws an accent outline when picked */
   selectable?: boolean;
   selected?: boolean;
@@ -58,6 +66,8 @@ export const EntityCard = memo(function EntityCard({
   meta,
   initial,
   tone = 'accent',
+  chevron = false,
+  subtitleLines = 1,
   selectable = false,
   selected = false,
   onPress,
@@ -99,17 +109,23 @@ export const EntityCard = memo(function EntityCard({
         </Text>
 
         {subtitle ? (
-          <Text variant="secondary" color="muted" numberOfLines={1}>
+          <Text variant="secondary" color="muted" numberOfLines={subtitleLines}>
             {subtitle}
           </Text>
         ) : null}
       </View>
 
-      <View style={[s.pill, { backgroundColor: pill.bg }]}>
-        <Text variant="heading" size="2xl" weight="bold" color={pill.fg} compact>
-          {initial}
-        </Text>
-      </View>
+      {initial ? (
+        <View style={[s.pill, { backgroundColor: pill.bg }]}>
+          <Text variant="heading" size="2xl" weight="bold" color={pill.fg} compact>
+            {initial}
+          </Text>
+        </View>
+      ) : chevron ? (
+        <View style={s.chevron}>
+          <CaretRight size={Sizes.icon.sm} color={Colors.mutedForeground} weight="bold" />
+        </View>
+      ) : null}
     </PressableScale>
   );
 });
@@ -143,6 +159,9 @@ const s = StyleSheet.create({
   title: {
     marginTop: Spacing.sm,
     marginBottom: Spacing.xs,
+  },
+  chevron: {
+    marginLeft: Spacing.md,
   },
   pill: {
     width: PILL_WIDTH,

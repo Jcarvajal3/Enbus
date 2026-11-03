@@ -1,15 +1,16 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Image, ScrollView, StatusBar, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useFocusEffect } from '@react-navigation/native';
-import { Bell, CaretRight, Package, Ticket, UserCircle } from 'phosphor-react-native';
+import { CaretRight, Package, Ticket } from 'phosphor-react-native';
 import { useAuth } from '@/src/contexts/AuthContext';
 import { useActivity } from '@/src/contexts/ActivityContext';
-import { useRealtime } from '@/src/hooks/useRealtime';
+import { useProximoViaje } from '@/src/hooks/useProximoViaje';
 import { SearchForm } from '@/src/components/SearchForm';
 import { StaggerItem } from '@/src/components/StaggerItem';
 import { PressableScale } from '@/src/components/PressableScale';
-import { IconButton, Screen, Text } from '@/src/components/ui';
+import { HeaderActions } from '@/src/components/HeaderActions';
+import { ProximoViajeCard } from '@/src/components/ProximoViajeCard';
+import { Screen, Text } from '@/src/components/ui';
 import { supabase } from '@/src/utils/supabase';
 import { nombreValido } from '@/src/utils/validation';
 import { Colors, Layout, Motion, Radius, Shadows, Sizes, Spacing } from '@/src/theme';
@@ -18,14 +19,7 @@ export default function HomeScreen() {
   const { user } = useAuth();
   const router = useRouter();
   const { boletosActivos, encomiendasActivas } = useActivity();
-
-  const [isFocused, setIsFocused] = useState(true);
-  useFocusEffect(
-    useCallback(() => {
-      setIsFocused(true);
-      return () => setIsFocused(false);
-    }, [])
-  );
+  const { proximo } = useProximoViaje();
 
   // ── Nombre real para el saludo ─────────────────────────────────────────────
   const [profileName, setProfileName] = useState<string | null>(null);
@@ -50,20 +44,6 @@ export default function HomeScreen() {
 
   const displayName = profileName || (user?.email ? user.email.split('@')[0] : '');
 
-  // ── Badge de notificaciones ────────────────────────────────────────────────
-  const { data: notificaciones } = useRealtime<{ id: string; leida: boolean }>(
-    'notificaciones_usuario',
-    'usuario_id',
-    user?.id,
-    'id, leida',
-    { enabled: isFocused && !!user?.id, limit: 50 }
-  );
-
-  const unreadCount = useMemo(
-    () => (notificaciones ?? []).filter((n) => !n.leida).length,
-    [notificaciones]
-  );
-
   const greeting = useMemo(() => {
     const h = new Date().getHours();
     if (h < 12) return 'Buenos días';
@@ -87,20 +67,8 @@ export default function HomeScreen() {
           </Text>
         </View>
 
-        <View style={s.headerActions}>
-          <IconButton
-            icon={Bell}
-            label={unreadCount > 0 ? `Notificaciones, ${unreadCount} sin leer` : 'Notificaciones'}
-            badgeCount={unreadCount}
-            onPress={() => router.push('/notificaciones')}
-          />
-          <IconButton
-            icon={UserCircle}
-            iconWeight="fill"
-            label="Mi perfil"
-            onPress={() => router.push('/perfil')}
-          />
-        </View>
+        {/* El contador de no leídas sale de ActivityContext (un solo canal). */}
+        <HeaderActions />
       </View>
 
       <ScrollView
@@ -108,6 +76,21 @@ export default function HomeScreen() {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
+        {/* ── Tu próximo viaje (APP-16) ──────────────────────────────────── */}
+        {proximo ? (
+          <View style={s.proximo}>
+            <ProximoViajeCard
+              proximo={proximo}
+              onVerPase={() =>
+                router.push({
+                  pathname: '/boletos/[id]',
+                  params: { id: proximo.codigo || proximo.boletoId },
+                })
+              }
+            />
+          </View>
+        ) : null}
+
         {/* ── Hero: saludo + buscador ─────────────────────────────────────── */}
         <View style={s.hero}>
           <Image
@@ -254,7 +237,11 @@ function ActivityTile({
   );
 }
 
-const HERO_SPACER = Spacing['5xl'] * 2;
+/**
+ * Separación entre el saludo y el buscador. Con 96 pt el botón "Buscar viaje"
+ * quedaba bajo el pliegue en 360 × 640 (APP-17).
+ */
+const HERO_SPACER = Spacing['2xl'];
 
 const s = StyleSheet.create({
   header: {
@@ -279,16 +266,15 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.xs,
-  },
 
   scroll: {
     paddingHorizontal: Layout.screenPaddingCompact,
     paddingTop: Spacing.md,
     paddingBottom: Layout.scrollBottomInset,
+  },
+
+  proximo: {
+    marginBottom: Spacing.lg,
   },
 
   hero: {

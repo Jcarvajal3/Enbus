@@ -8,6 +8,7 @@ import { useRealtime } from '@/src/hooks/useRealtime';
 import { TransactionCard } from '@/src/components/TransactionCard';
 import { CardSkeleton } from '@/src/components/CardSkeleton';
 import { StaggerItem } from '@/src/components/StaggerItem';
+import { HeaderActions } from '@/src/components/HeaderActions';
 import {
   Button,
   EmptyState,
@@ -70,6 +71,37 @@ function subtituloBoleto(b: BoletoRow): string {
   if (b.asiento) partes.push(`Asiento ${b.asiento}`);
   partes.push(salida ? `Sale ${formatSalidaCorta(salida)}` : 'Salida por confirmar');
   return partes.join(' · ');
+}
+
+/** Milisegundos de la salida, o `null` si el boleto no la trae (o no se puede leer). */
+function salidaMs(b: BoletoRow): number | null {
+  const v = b.viajes?.fecha_hora_salida;
+  if (!v) return null;
+  const t = Date.parse(v);
+  return Number.isNaN(t) ? null : t;
+}
+
+const creadoMs = (b: BoletoRow) => {
+  const t = Date.parse(b.created_at);
+  return Number.isNaN(t) ? 0 : t;
+};
+
+/** Activos: la salida más cercana primero; sin salida, al final (APP-36). */
+function ordenActivos(a: BoletoRow, b: BoletoRow): number {
+  const sa = salidaMs(a);
+  const sb = salidaMs(b);
+  if (sa !== null && sb !== null && sa !== sb) return sa - sb;
+  if (sa === null && sb !== null) return 1;
+  if (sa !== null && sb === null) return -1;
+  return creadoMs(b) - creadoMs(a);
+}
+
+/** Historial: la salida más reciente primero; sin salida, por fecha de compra. */
+function ordenHistorial(a: BoletoRow, b: BoletoRow): number {
+  const ta = salidaMs(a) ?? creadoMs(a);
+  const tb = salidaMs(b) ?? creadoMs(b);
+  if (ta !== tb) return tb - ta;
+  return creadoMs(b) - creadoMs(a);
 }
 
 /** Estado de la insignia: el de la reserva/pago, o el del reembolso si se canceló pagado. */
@@ -145,7 +177,9 @@ export default function BoletosScreen() {
     if (!historial) return [];
     const target =
       activeTab === 'activos' ? BOLETO_ESTADOS_ACTIVOS : BOLETO_ESTADOS_HISTORIAL;
-    return historial.filter((b) => (target as readonly string[]).includes(b.estado));
+    return historial
+      .filter((b) => (target as readonly string[]).includes(b.estado))
+      .sort(activeTab === 'activos' ? ordenActivos : ordenHistorial);
   }, [historial, activeTab]);
 
   const renderItem = useCallback<ListRenderItem<BoletoRow>>(
@@ -208,7 +242,11 @@ export default function BoletosScreen() {
 
   return (
     <Screen>
-      <ScreenHeader title="Mis boletos" subtitle="Tus pasajes, reservas y pases de abordaje" />
+      <ScreenHeader
+        title="Mis boletos"
+        subtitle="Tus pasajes, reservas y pases de abordaje"
+        right={<HeaderActions />}
+      />
 
       <Gutter style={{ paddingBottom: Spacing.lg }}>
         <SegmentedControl<TabType>

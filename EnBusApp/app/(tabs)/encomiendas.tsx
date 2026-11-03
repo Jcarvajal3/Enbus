@@ -9,6 +9,7 @@ import { usePerfil } from '@/src/hooks/usePerfil';
 import { TransactionCard } from '@/src/components/TransactionCard';
 import { CardSkeleton } from '@/src/components/CardSkeleton';
 import { CompletarPerfilSheet } from '@/src/components/CompletarPerfilSheet';
+import { HeaderActions } from '@/src/components/HeaderActions';
 import { StaggerItem } from '@/src/components/StaggerItem';
 import {
   Button,
@@ -171,7 +172,11 @@ export default function EncomiendasScreen() {
 
   return (
     <Screen>
-      <ScreenHeader title="Mis encomiendas" subtitle="Sigue lo que envías y lo que te envían" />
+      <ScreenHeader
+        title="Mis encomiendas"
+        subtitle="Sigue lo que envías y lo que te envían"
+        right={<HeaderActions />}
+      />
 
       <Gutter style={{ paddingBottom: Spacing.lg }}>
         <SegmentedControl<BuzonTab>

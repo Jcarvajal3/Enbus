@@ -2,7 +2,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 export default function PanelLoading() {
   return (
-    <div className="flex flex-col gap-6 w-full max-w-6xl mx-auto animate-in fade-in duration-500">
+    <div className="flex flex-col gap-6 w-full max-w-6xl mx-auto motion-safe:animate-in motion-safe:fade-in motion-safe:duration-500">
       <div className="space-y-2">
         <Skeleton className="h-10 w-64" />
         <Skeleton className="h-4 w-96" />

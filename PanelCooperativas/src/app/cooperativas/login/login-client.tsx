@@ -78,7 +78,7 @@ export default function LoginPage() {
   return (
     <div className="flex min-h-screen">
       {/* Panel Izquierdo Decorativo (Oculto en mobile) */}
-      <div className="hidden w-3/5 flex-col justify-between bg-slate-950 p-12 text-white lg:flex">
+      <div className="hidden w-3/5 flex-col justify-between dark bg-background p-12 text-foreground lg:flex">
         <div className="flex items-center gap-2">
           <div className="flex size-10 items-center justify-center rounded-lg bg-primary">
             <Bus weight="fill" className="size-6 text-primary-foreground" />
@@ -89,14 +89,14 @@ export default function LoginPage() {
         <div className="flex flex-col gap-4">
           <h1 className="text-5xl font-bold leading-tight">
             Panel de <br />
-            <span className="text-amber-300">Cooperativas</span>
+            <span className="text-primary">Cooperativas</span>
           </h1>
-          <p className="text-xl text-slate-400">
+          <p className="text-xl text-muted-foreground">
             Gestión operativa de rutas, taquilla y despacho.
           </p>
         </div>
         
-        <p className="text-sm text-slate-400">
+        <p className="text-sm text-muted-foreground">
           &copy; {new Date().getFullYear()} EnBus. Todos los derechos reservados.
         </p>
       </div>

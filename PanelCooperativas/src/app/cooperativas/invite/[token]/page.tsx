@@ -26,6 +26,11 @@ export default function InvitePage() {
 
   const [estado, setEstado] = useState<EstadoToken>({ tipo: "cargando" });
   const [sinConexion, setSinConexion] = useState(false);
+  // Campos controlados: si el servidor responde con un error (p. ej. contraseña débil),
+  // React 19 reinicia el formulario de una acción; así lo escrito se conserva.
+  const [nombre, setNombre] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
 
   const [state, formAction, isPending] = useActionState(completeOnboarding, { error: null as string | null, success: false });
 
@@ -92,7 +97,7 @@ export default function InvitePage() {
   return (
     <div className="flex min-h-screen">
       {/* Panel izquierdo decorativo (siempre oscuro) */}
-      <div className="hidden w-3/5 flex-col justify-between bg-slate-950 p-12 text-white lg:flex">
+      <div className="hidden w-3/5 flex-col justify-between dark bg-background p-12 text-foreground lg:flex">
         <div className="flex items-center gap-2">
           <div className="flex size-10 items-center justify-center rounded-lg bg-primary">
             <Bus weight="fill" className="size-6 text-primary-foreground" aria-hidden />
@@ -103,14 +108,14 @@ export default function InvitePage() {
         <div className="flex flex-col gap-4">
           <h1 className="text-5xl font-bold leading-tight">
             Bienvenido a <br />
-            <span className="text-amber-300">{estado.cooperativa || "tu cooperativa"}</span>
+            <span className="text-primary">{estado.cooperativa || "tu cooperativa"}</span>
           </h1>
-          <p className="text-xl text-slate-300">
+          <p className="text-xl text-muted-foreground">
             Crea tu cuenta para entrar al panel de la cooperativa.
           </p>
         </div>
 
-        <p className="text-sm text-slate-400">
+        <p className="text-sm text-muted-foreground">
           &copy; {new Date().getFullYear()} EnBus. Todos los derechos reservados.
         </p>
       </div>
@@ -181,6 +186,8 @@ export default function InvitePage() {
                     placeholder="Ej.: Juan Pérez"
                     autoComplete="name"
                     required
+                    value={nombre}
+                    onChange={(e) => setNombre(e.target.value)}
                     disabled={isPending}
                   />
                 </Field>
@@ -194,6 +201,8 @@ export default function InvitePage() {
                     autoComplete="new-password"
                     required
                     minLength={8}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
                     disabled={isPending}
                   />
                 </Field>
@@ -206,6 +215,8 @@ export default function InvitePage() {
                     autoComplete="new-password"
                     required
                     minLength={8}
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
                     disabled={isPending}
                   />
                 </Field>

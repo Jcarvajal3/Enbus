@@ -3,7 +3,8 @@
 import { useActionState, useEffect, useRef, useState, type FormEvent } from "react";
 import { registrarCooperativa, verificarCorreoRegistro, type ActionState, type CampoRegistro } from "./actions";
 import { normalizeRif, RIF_AYUDA, RIF_PLACEHOLDER } from "@/lib/rif";
-import { telefonoValido, TELEFONO_ERROR, TELEFONO_PLACEHOLDER } from "@/lib/ve";
+import { telefonoValido, TELEFONO_ERROR } from "@/lib/ve";
+import { TelefonoField } from "@/components/ve-fields";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,6 +21,14 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MSG_EMAIL_USADO = "Ya existe una cuenta con este correo. Inicia sesión o usa otro correo.";
 
 type Errores = Partial<Record<CampoRegistro, string>>;
+
+/** Sitio público de EnBus (términos y privacidad). Sin la variable, el enlace no se muestra. */
+const SITIO_URL = (process.env.NEXT_PUBLIC_SITIO_URL ?? "").trim().replace(/\/+$/, "") || null;
+
+/** Enfoca el campo por su ref o, si no la tiene (TelefonoField), por su id. */
+function enfocarCampo(el: HTMLInputElement | HTMLTextAreaElement | null | undefined, campo: CampoRegistro) {
+  (el ?? (document.getElementById(campo) as HTMLInputElement | null))?.focus();
+}
 
 /** Mismas reglas que el servidor (registro/actions.ts). */
 function validarPaso1(d: { nombre: string; email: string; password: string; confirmPassword: string }): Errores {
@@ -64,7 +73,7 @@ export default function RegistroCooperativaPage() {
   const enfocar = (campo?: CampoRegistro) => {
     if (!campo) return;
     // Espera a que el paso correspondiente esté montado.
-    window.setTimeout(() => refs.current[campo]?.focus(), 0);
+    window.setTimeout(() => enfocarCampo(refs.current[campo], campo), 0);
   };
 
   // Respuesta nueva del servidor: errores por campo y vuelta al paso donde está el problema.
@@ -76,7 +85,7 @@ export default function RegistroCooperativaPage() {
   }
   // Foco en el primer campo con error que devolvió el servidor.
   useEffect(() => {
-    if (state?.campo) refs.current[state.campo]?.focus();
+    if (state?.campo) enfocarCampo(refs.current[state.campo], state.campo);
   }, [state]);
   // Error general (sin campo) del servidor: se muestra arriba del formulario.
   const errorGeneral = state?.error && !state?.errores ? state.error : null;
@@ -102,8 +111,14 @@ export default function RegistroCooperativaPage() {
     // El correo se verifica aquí para no pedir los datos de la cooperativa en vano.
     setVerificandoCorreo(true);
     try {
-      const { registrado } = await verificarCorreoRegistro(email);
-      if (registrado) {
+      const res = await verificarCorreoRegistro(email);
+      if (res.codigo === "EB_DEMASIADOS_INTENTOS") {
+        // Límite de consultas desde esta conexión: no se avanza para no revelar correos.
+        setErrores({ email: res.error });
+        enfocar("email");
+        return;
+      }
+      if (res.registrado) {
         setErrores({ email: MSG_EMAIL_USADO });
         enfocar("email");
         return;
@@ -131,7 +146,7 @@ export default function RegistroCooperativaPage() {
   return (
     <div className="flex min-h-screen">
       {/* Panel izquierdo decorativo (siempre oscuro) */}
-      <div className="hidden w-3/5 flex-col justify-between bg-slate-950 p-12 text-white lg:flex">
+      <div className="hidden w-3/5 flex-col justify-between dark bg-background p-12 text-foreground lg:flex">
         <div className="flex items-center gap-2">
           <div className="flex size-10 items-center justify-center rounded-lg bg-primary">
             <Bus weight="fill" className="size-6 text-primary-foreground" aria-hidden />
@@ -142,28 +157,28 @@ export default function RegistroCooperativaPage() {
         <div className="flex flex-col gap-4">
           <h1 className="text-5xl font-bold leading-tight">
             Registra tu <br />
-            <span className="text-amber-300">cooperativa</span>
+            <span className="text-primary">cooperativa</span>
           </h1>
-          <p className="text-xl text-slate-300">
+          <p className="text-xl text-muted-foreground">
             Configura tu panel mientras revisamos tu solicitud (24 a 48 horas hábiles).
           </p>
-          <ul className="mt-6 space-y-3 text-slate-300">
+          <ul className="mt-6 space-y-3 text-muted-foreground">
             <li className="flex items-start gap-3">
-              <CheckCircle className="size-5 text-amber-300 shrink-0 mt-0.5" weight="fill" aria-hidden />
+              <CheckCircle className="size-5 text-primary shrink-0 mt-0.5" weight="fill" aria-hidden />
               <span>Entras al panel apenas creas tu cuenta</span>
             </li>
             <li className="flex items-start gap-3">
-              <CheckCircle className="size-5 text-amber-300 shrink-0 mt-0.5" weight="fill" aria-hidden />
+              <CheckCircle className="size-5 text-primary shrink-0 mt-0.5" weight="fill" aria-hidden />
               <span>Carga tus sucursales, rutas, métodos de pago y taquilleros</span>
             </li>
             <li className="flex items-start gap-3">
-              <CheckCircle className="size-5 text-amber-300 shrink-0 mt-0.5" weight="fill" aria-hidden />
+              <CheckCircle className="size-5 text-primary shrink-0 mt-0.5" weight="fill" aria-hidden />
               <span>Tus viajes aparecen en la app cuando aprobemos tu solicitud</span>
             </li>
           </ul>
         </div>
 
-        <p className="text-sm text-slate-400">
+        <p className="text-sm text-muted-foreground">
           &copy; {new Date().getFullYear()} EnBus. Todos los derechos reservados.
         </p>
       </div>
@@ -344,23 +359,16 @@ export default function RegistroCooperativaPage() {
                     )}
                   </Field>
 
-                  <Field data-invalid={errores.telefono ? true : undefined}>
-                    <FieldLabel htmlFor="telefono">Teléfono de contacto</FieldLabel>
-                    <Input
-                      id="telefono"
-                      ref={(el) => { refs.current.telefono = el; }}
-                      name="telefono"
-                      type="tel"
-                      placeholder={TELEFONO_PLACEHOLDER}
-                      autoComplete="tel"
-                      aria-invalid={errores.telefono ? true : undefined}
-                      aria-describedby={ayuda("telefono")}
-                      value={telefono}
-                      onChange={(e) => { setTelefono(e.target.value); limpiar("telefono"); }}
-                      disabled={isPending}
-                    />
-                    <FieldError id="telefono-error" className="text-destructive-text">{errores.telefono}</FieldError>
-                  </Field>
+                  <TelefonoField
+                    id="telefono"
+                    name="telefono"
+                    label="Teléfono de contacto"
+                    value={telefono}
+                    onChange={(v) => { setTelefono(v); limpiar("telefono"); }}
+                    error={errores.telefono}
+                    required
+                    disabled={isPending}
+                  />
 
                   <Field data-invalid={errores.representante ? true : undefined}>
                     <FieldLabel htmlFor="representante">Representante legal</FieldLabel>
@@ -414,6 +422,30 @@ export default function RegistroCooperativaPage() {
                     {isPending ? "Creando tu cuenta…" : "Crear cuenta y registrar"}
                   </Button>
                 </div>
+
+                {SITIO_URL && (
+                  <p className="text-center text-xs text-muted-foreground">
+                    Al registrarte aceptas los{" "}
+                    <a
+                      href={`${SITIO_URL}/terminos`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-medium text-foreground underline underline-offset-4"
+                    >
+                      Términos y condiciones
+                    </a>{" "}
+                    y la{" "}
+                    <a
+                      href={`${SITIO_URL}/privacidad`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-medium text-foreground underline underline-offset-4"
+                    >
+                      Política de privacidad
+                    </a>{" "}
+                    de EnBus.
+                  </p>
+                )}
 
                 <p className="text-center text-sm text-muted-foreground">
                   ¿Ya tienes cuenta?{" "}

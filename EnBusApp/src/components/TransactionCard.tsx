@@ -82,7 +82,8 @@ export const TransactionCard = memo(function TransactionCard({
         </Text>
 
         {subtitulo ? (
-          <Text variant="secondary" color="muted" numberOfLines={1}>
+          // Hasta 2 líneas: "Asiento 14 · Sale vie. 04/10 · 8:30 a. m." no cabe en 360 pt.
+          <Text variant="secondary" color="muted" numberOfLines={2}>
             {subtitulo}
           </Text>
         ) : null}

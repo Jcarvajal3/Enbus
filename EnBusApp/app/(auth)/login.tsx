@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -8,10 +8,11 @@ import {
   View,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { GoogleLogo } from 'phosphor-react-native';
+import { GoogleLogo, WarningCircle, X } from 'phosphor-react-native';
 import * as Haptics from 'expo-haptics';
 import * as WebBrowser from 'expo-web-browser';
 import { supabase } from '@/src/utils/supabase';
+import { useAuth } from '@/src/contexts/AuthContext';
 import { codigoEB, humanizeError, isNetworkError } from '@/src/utils/errores';
 import { completarSesionDesdeUrl, redirectAuth } from '@/src/utils/authLinks';
 import {
@@ -27,10 +28,13 @@ import {
 import { useToast } from '@/src/components/Toast';
 import { PressableScale } from '@/src/components/PressableScale';
 import { StaggerItem } from '@/src/components/StaggerItem';
+import { CedulaField } from '@/src/components/CedulaField';
+import { TelefonoField } from '@/src/components/TelefonoField';
 import {
   Button,
   Card,
   Field,
+  IconButton,
   Screen,
   SegmentedControl,
   Text,
@@ -74,6 +78,16 @@ export default function LoginScreen() {
   const confirmRef = useRef<TextInput>(null);
 
   const busy = loading || googleLoading;
+
+  // Fase 4 (#50): por qué se cerró la sesión sin pedirlo ("Esta cuenta fue
+  // eliminada."). Se copia aquí y se limpia del contexto para no repetirlo.
+  const { avisoSesion, limpiarAvisoSesion } = useAuth();
+  const [aviso, setAviso] = useState<string | null>(avisoSesion);
+  useEffect(() => {
+    if (!avisoSesion) return;
+    setAviso(avisoSesion);
+    limpiarAvisoSesion();
+  }, [avisoSesion, limpiarAvisoSesion]);
 
   const update = (key: keyof typeof EMPTY_FORM, value: string) => {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -229,6 +243,25 @@ export default function LoginScreen() {
             </Text>
           </StaggerItem>
 
+          {aviso ? (
+            <View
+              style={s.aviso}
+              accessibilityRole="alert"
+              accessibilityLiveRegion="polite"
+            >
+              <WarningCircle color={Colors.warningText} weight="fill" size={Sizes.icon.lg} />
+              <Text variant="secondary" style={s.avisoTexto}>
+                {aviso}
+              </Text>
+              <IconButton
+                icon={X}
+                label="Cerrar aviso"
+                onPress={() => setAviso(null)}
+                color={Colors.mutedForeground}
+              />
+            </View>
+          ) : null}
+
           <StaggerItem index={2}>
             <Card tone="sunken" padding="md" elevated={false}>
               <SegmentedControl<Mode>
@@ -261,32 +294,21 @@ export default function LoginScreen() {
                     onSubmitEditing={() => cedulaRef.current?.focus()}
                     editable={!busy}
                   />
-                  <Field
+                  <CedulaField
                     ref={cedulaRef}
-                    label="Cédula"
-                    placeholder="V-12345678"
                     value={form.cedula_rif}
                     onChangeText={(v) => update('cedula_rif', v)}
                     error={errors.cedula_rif}
-                    autoCapitalize="characters"
-                    autoCorrect={false}
                     returnKeyType="next"
-                    submitBehavior="submit"
                     onSubmitEditing={() => telefonoRef.current?.focus()}
                     editable={!busy}
                   />
-                  <Field
+                  <TelefonoField
                     ref={telefonoRef}
-                    label="Teléfono"
-                    placeholder="0414-1234567"
-                    keyboardType="phone-pad"
                     value={form.telefono}
                     onChangeText={(v) => update('telefono', v)}
                     error={errors.telefono}
-                    autoComplete="tel"
-                    textContentType="telephoneNumber"
                     returnKeyType="next"
-                    submitBehavior="submit"
                     onSubmitEditing={() => emailRef.current?.focus()}
                     editable={!busy}
                   />
@@ -433,6 +455,19 @@ const s = StyleSheet.create({
   },
   tagline: {
     marginTop: Spacing.xs,
+  },
+  aviso: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+    paddingLeft: Spacing.lg,
+    paddingVertical: Spacing.xs,
+    marginBottom: Spacing.lg,
+    borderRadius: Radius.lg,
+    backgroundColor: Colors.warningLight,
+  },
+  avisoTexto: {
+    flex: 1,
   },
   modeToggle: {
     marginBottom: Spacing.xl,

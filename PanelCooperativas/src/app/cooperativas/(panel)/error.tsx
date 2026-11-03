@@ -33,8 +33,8 @@ export default function PanelError({
 
   return (
     <div role="alert" className="flex h-full flex-col items-center justify-center gap-4 py-20 text-center">
-      <div className="rounded-full bg-destructive/10 p-4">
-        <CloudWarning size={48} className="text-destructive-text" weight="duotone" aria-hidden />
+      <div className="rounded-full bg-destructive-light p-4">
+        <CloudWarning size={48} className="text-destructive-deep" weight="duotone" aria-hidden />
       </div>
       <h2 className="text-2xl font-bold">No pudimos cargar esta sección</h2>
       <p className="max-w-md text-muted-foreground">
@@ -49,7 +49,7 @@ export default function PanelError({
       </p>
       <div className="mt-4 flex flex-wrap justify-center gap-3">
         <Button onClick={reintentar} disabled={reintentando} aria-busy={reintentando || undefined}>
-          {reintentando ? <SpinnerIcon className="animate-spin" aria-hidden /> : <ArrowClockwise aria-hidden />}
+          {reintentando ? <SpinnerIcon className="motion-safe:animate-spin" aria-hidden /> : <ArrowClockwise aria-hidden />}
           {reintentando ? "Reintentando…" : "Reintentar"}
         </Button>
         <Link href="/cooperativas/dashboard" className={buttonVariants({ variant: "outline" })}>
