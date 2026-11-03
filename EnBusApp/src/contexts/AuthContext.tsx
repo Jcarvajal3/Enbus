@@ -11,7 +11,15 @@ type AuthContextType = {
   initialized: boolean;
   isOffline: boolean;
   signOut: () => Promise<void>;
+  /**
+   * Motivo por el que se cerró la sesión sin que el usuario lo pidiera (p. ej.
+   * "Esta cuenta fue eliminada."). `login.tsx` lo muestra y lo limpia.
+   */
+  avisoSesion: string | null;
+  limpiarAvisoSesion: () => void;
 };
+
+export const AVISO_CUENTA_ELIMINADA = 'Esta cuenta fue eliminada.';
 
 // ─── Context ──────────────────────────────────────────────────────────────────
 
@@ -21,6 +29,8 @@ const AuthContext = createContext<AuthContextType>({
   initialized: false,
   isOffline: false,
   signOut: async () => { },
+  avisoSesion: null,
+  limpiarAvisoSesion: () => { },
 });
 
 // ─── Provider ─────────────────────────────────────────────────────────────────
@@ -42,12 +52,20 @@ const AuthContext = createContext<AuthContextType>({
  *
  * PERF-09: `getSession()` on foreground is debounced with a 60-second minimum
  * interval to avoid hammering the network on rapid app switches.
+ *
+ * Fase 4 (#50): con cada sesión nueva (y al volver a primer plano) se mira
+ * `profiles.eliminada_at`. Si la cuenta se dio de baja, se cierra la sesión en
+ * este teléfono y `avisoSesion` explica por qué ("Esta cuenta fue eliminada.").
+ * Así una identidad de Auth que aún no se borró no puede seguir usando la app.
  */
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [initialized, setInitialized] = useState(false);
   const [isOffline, setIsOffline] = useState(false);
+  const [avisoSesion, setAvisoSesion] = useState<string | null>(null);
+  /** Sube al volver a primer plano: vuelve a mirar si la cuenta sigue activa. */
+  const [revisionCuenta, setRevisionCuenta] = useState(0);
 
   // Ref semáforo para el timeout de inicialización.
   // Un useState normal crea un closure stale dentro del setTimeout — el valor
@@ -121,6 +139,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setSession(s);
             setUser(s?.user ?? null);
             setIsOffline(false);
+            setRevisionCuenta((n) => n + 1);
           }
         }).catch(() => {
           // No network on wake — keep current state, mark offline
@@ -137,32 +156,69 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
+  /** Cierra la sesión solo en este teléfono; si hasta eso falla, se olvida en memoria. */
+  const cerrarSesionLocal = useCallback(async () => {
+    try {
+      await supabase.auth.signOut({ scope: 'local' });
+    } catch {
+      setSession(null);
+      setUser(null);
+    }
+  }, []);
+
   // PERF-03: Stable reference — useCallback prevents consumers from re-rendering
   // when AuthProvider re-renders for unrelated state changes.
   const signOut = useCallback(async () => {
     // Sin conexión, el cierre global devuelve `{ error }` (o lanza) y deja la
     // sesión en el teléfono: en ese caso se cierra al menos localmente.
+    let cerradaGlobal = false;
     try {
       const { error } = await supabase.auth.signOut();
-      if (!error) return;
-      console.warn('[Auth] signOut global falló, se cierra localmente:', error);
-    } catch (e) {
-      console.warn('[Auth] signOut global falló, se cierra localmente:', e);
+      cerradaGlobal = !error;
+    } catch {
+      cerradaGlobal = false;
     }
-    try {
-      await supabase.auth.signOut({ scope: 'local' });
-    } catch (e) {
-      console.warn('[Auth] signOut local falló:', e);
-    }
-  }, []);
+    if (cerradaGlobal) return;
+    await cerrarSesionLocal();
+  }, [cerrarSesionLocal]);
+
+  const limpiarAvisoSesion = useCallback(() => setAvisoSesion(null), []);
+
+  // ── Cuenta eliminada: cerrar la sesión en este teléfono ────────────────────
+  const userId = user?.id;
+  useEffect(() => {
+    if (!userId) return;
+    let vigente = true;
+    (async () => {
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('eliminada_at')
+          .eq('id', userId)
+          .maybeSingle();
+        // Sin red (o sin la columna, antes de la migración) no se decide nada:
+        // se vuelve a mirar con la próxima sesión o al volver a primer plano.
+        if (error || !vigente) return;
+        if ((data as { eliminada_at?: string | null } | null)?.eliminada_at) {
+          setAvisoSesion(AVISO_CUENTA_ELIMINADA);
+          await cerrarSesionLocal();
+        }
+      } catch {
+        // Igual que arriba: se reintenta en la próxima revisión.
+      }
+    })();
+    return () => {
+      vigente = false;
+    };
+  }, [userId, revisionCuenta, cerrarSesionLocal]);
 
   // PERF-03: Memoize the context value object so its reference only changes
   // when one of the auth state values actually changes. Without this, every
   // render of AuthProvider creates a new object and forces ALL consumers
   // (screens, hooks, components) to re-render unnecessarily.
   const value = useMemo(() => ({
-    session, user, initialized, isOffline, signOut,
-  }), [session, user, initialized, isOffline, signOut]);
+    session, user, initialized, isOffline, signOut, avisoSesion, limpiarAvisoSesion,
+  }), [session, user, initialized, isOffline, signOut, avisoSesion, limpiarAvisoSesion]);
 
   return (
     <AuthContext.Provider value={value}>

@@ -127,8 +127,12 @@ Deno.serve(async (req) => {
     const negrita = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
     const page = pdfDoc.addPage([400, 560]);
     const gris = rgb(0.35, 0.35, 0.35);
-    const linea = (texto: string, y: number, size = 10, bold = false, color = rgb(0, 0, 0)) =>
-      page.drawText(textoPdf(texto, 60), { x: 30, y, size, font: bold ? negrita : fuente, color });
+    const linea = (texto: string, y: number, size = 10, bold = false, color = rgb(0, 0, 0)) => {
+      const font = bold ? negrita : fuente;
+      let t = textoPdf(texto, 90);
+      while (t.length > 2 && font.widthOfTextAtSize(t, size) > 340) t = `${t.slice(0, -2)}…`;   // ancho útil
+      page.drawText(t, { x: 30, y, size, font, color });
+    };
 
     linea('EnBus · Guía de encomienda', 525, 12, true, gris);
     linea('Código de seguimiento', 500, 9, false, gris);

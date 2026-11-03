@@ -13,12 +13,29 @@ no de la pantalla.
 ## 1. Arquitectura
 
 ```
-src/theme.ts                 ← todos los tokens (única fuente de verdad)
+../shared/tokens.json        ← colores, radios y duraciones (común a app, panel y landing)
+src/tokens.generated.ts      ← copia generada de tokens.json (no editar)
+src/theme.ts                 ← todos los tokens de la app (lo único que se importa)
 src/utils/estados.ts         ← estado de dominio → etiqueta + tono semántico
 src/components/ui/           ← kit de UI (lo único que las pantallas importan)
 src/components/*.tsx         ← componentes de dominio (SearchForm, SeatSelector…)
 app/**                       ← pantallas: composición, datos y navegación
 ```
+
+**`shared/` es la fuente común** de la app, el panel y la landing (ver
+[`shared/README.md`](../shared/README.md)):
+
+- Los colores (`palette`), `Radius` y `Motion.duration` de `theme.ts` vienen de
+  `shared/tokens.json`. Para cambiar un color se edita el JSON y se ejecuta
+  `node shared/generar.mjs` desde la raíz del repo; `--check` comprueba que los
+  `*.generated.*` estén al día. **Nunca se edita un `*.generated.*` a mano.**
+- Cédula, teléfono, RIF, ciudades ("Mérida", "San Juan de los Morros"), fechas en hora
+  de Venezuela y duraciones vienen de `shared/ve.ts` (copiado en
+  `src/utils/ve.generated.ts`); se importan, como siempre, desde
+  `src/utils/validation.ts` y `src/utils/formatters.ts`.
+- Código de boleto, QR, código de seguimiento y PIN vienen de `shared/artefactos.ts`
+  (copiado en `src/utils/artefactos.generated.ts`); se importan desde
+  `src/utils/codigos.ts`. Reglas: `Specs/00_General/Artefactos_Compartidos.md`.
 
 ---
 
@@ -26,7 +43,8 @@ app/**                       ← pantallas: composición, datos y navegación
 
 ### 🎨 Colores (`Colors`)
 
-Prohibido escribir `#HEX` o `rgba()` en pantallas o componentes. Para
+Prohibido escribir `#HEX` o `rgba()` en pantallas o componentes (ESLint lo marca
+como error fuera de `src/theme.ts` y `src/tokens.generated.ts`). Para
 transparencias usa el helper `alpha(color, 0.12)`.
 
 | Token | Uso |
@@ -35,6 +53,7 @@ transparencias usa el helper `alpha(color, 0.12)`.
 | `secondary` `#FF7648` | Acento cálido. Badges de envío, precios. |
 | `accent` `#4A7FF8` | CTA principal, selección, links. |
 | `background` / `surface` / `surfaceDark` | Blanco / beige / beige oscuro. |
+| `border` / `borderStrong` | Separadores / borde de controles (`#8C8C8C`, ≥ 3:1). |
 | `foreground` / `mutedForeground` | Texto principal / secundario. |
 | `success` `warning` `info` `destructive` | Semántica. Nunca decorativos. |
 | `scrim` / `scrimStrong` | Fondos de modal y bottom sheet. |

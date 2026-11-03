@@ -1,7 +1,16 @@
+/**
+ * CalendarModal — selector de fecha (APP-18).
+ *
+ * Por defecto un toque en un día lo elige y cierra (`seleccionRapida`). Arriba,
+ * atajos "Hoy", "Mañana" y los siguientes días con salida; un punto bajo cada
+ * día con salida (`activeDates`); no se puede ir a meses anteriores al de
+ * `minimumDate` ni posteriores al de `maximumDate`. Con
+ * `seleccionRapida={false}` se elige y luego se toca "Confirmar fecha".
+ */
 import React, { useEffect, useMemo, useState } from 'react';
-import { Modal, Pressable, StyleSheet, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { CaretLeft, CaretRight, X } from 'phosphor-react-native';
-import { Button, IconButton, Text } from '@/src/components/ui';
+import { Button, Chip, IconButton, Text } from '@/src/components/ui';
 import { Colors, Layout, Opacity, Radius, Shadows, Sizes, Spacing } from '@/src/theme';
 
 interface CalendarModalProps {
@@ -16,13 +25,25 @@ interface CalendarModalProps {
   activeDates?: string[];
   /** Sheet title. Defaults to "Seleccionar fecha". */
   title?: string;
+  /**
+   * `true` (por defecto): tocar un día (o un atajo) lo elige y cierra, sin
+   * "Confirmar fecha". `false`: se elige y se confirma con el botón.
+   */
+  seleccionRapida?: boolean;
 }
 
 const WEEKDAYS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+const WEEKDAYS_SHORT = ['dom.', 'lun.', 'mar.', 'mié.', 'jue.', 'vie.', 'sáb.'];
+const WEEKDAYS_LONG = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
 const MONTHS = [
   'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
   'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
 ];
+
+/** "Hoy", "Mañana" y los siguientes días con salida: como mucho 6 atajos. */
+const MAX_ATAJOS = 6;
+/** Hasta dónde se buscan días con salida para los atajos. */
+const DIAS_BUSQUEDA_ATAJOS = 90;
 
 function dateKey(date: Date): string {
   const y = date.getFullYear();
@@ -31,12 +52,34 @@ function dateKey(date: Date): string {
   return `${y}-${m}-${d}`;
 }
 
+function startOfDay(date: Date): Date {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+/** Meses desde el año 0, para comparar meses sin mirar el día. */
+function monthIndex(date: Date): number {
+  return date.getFullYear() * 12 + date.getMonth();
+}
+
+function firstOfMonth(date: Date): Date {
+  const d = startOfDay(date);
+  d.setDate(1);
+  return d;
+}
+
 function sameDay(a: Date, b: Date): boolean {
   return (
     a.getDate() === b.getDate() &&
     a.getMonth() === b.getMonth() &&
     a.getFullYear() === b.getFullYear()
   );
+}
+
+/** "sábado 5 de octubre" */
+function longDay(date: Date): string {
+  return `${WEEKDAYS_LONG[date.getDay()]} ${date.getDate()} de ${MONTHS[date.getMonth()].toLowerCase()}`;
 }
 
 export function CalendarModal({
@@ -48,6 +91,7 @@ export function CalendarModal({
   maximumDate,
   activeDates,
   title = 'Seleccionar fecha',
+  seleccionRapida = true,
 }: CalendarModalProps) {
   // Defensive: callers have passed an undefined `value` before, which produced
   // an Invalid Date and a grid full of NaN.
@@ -56,34 +100,28 @@ export function CalendarModal({
     [value]
   );
 
-  const minDate = useMemo(() => {
-    const d = minimumDate ? new Date(minimumDate) : new Date();
-    d.setHours(0, 0, 0, 0);
-    return d;
-  }, [minimumDate]);
+  const minDate = useMemo(
+    () => startOfDay(minimumDate ? new Date(minimumDate) : new Date()),
+    [minimumDate]
+  );
 
-  const maxDate = useMemo(() => {
-    if (!maximumDate) return null;
-    const d = new Date(maximumDate);
-    d.setHours(0, 0, 0, 0);
-    return d;
-  }, [maximumDate]);
+  const maxDate = useMemo(
+    () => (maximumDate ? startOfDay(new Date(maximumDate)) : null),
+    [maximumDate]
+  );
+
+  const activeSet = useMemo(() => (activeDates ? new Set(activeDates) : null), [activeDates]);
 
   const [selected, setSelected] = useState(() => new Date(safeValue));
-  const [cursor, setCursor] = useState(() => {
-    const d = new Date(safeValue);
-    d.setDate(1);
-    return d;
-  });
+  const [cursor, setCursor] = useState(() => firstOfMonth(safeValue));
 
-  // Re-sync when the sheet is reopened with a different value.
+  // Re-sync when the sheet is reopened with a different value, never showing a
+  // month before `minimumDate`'s.
   useEffect(() => {
     if (!visible) return;
     setSelected(new Date(safeValue));
-    const first = new Date(safeValue);
-    first.setDate(1);
-    setCursor(first);
-  }, [visible, safeValue]);
+    setCursor(firstOfMonth(monthIndex(safeValue) < monthIndex(minDate) ? minDate : safeValue));
+  }, [visible, safeValue, minDate]);
 
   const year = cursor.getFullYear();
   const month = cursor.getMonth();
@@ -96,22 +134,58 @@ export function CalendarModal({
     return cells;
   }, [year, month]);
 
-  const isDisabled = (date: Date) => {
-    const d = new Date(date);
-    d.setHours(0, 0, 0, 0);
-    if (d.getTime() < minDate.getTime()) return true;
-    if (maxDate && d.getTime() > maxDate.getTime()) return true;
-    if (activeDates) return !activeDates.includes(dateKey(date));
-    return false;
-  };
+  const isDisabled = useMemo(
+    () => (date: Date) => {
+      const d = startOfDay(date);
+      if (d.getTime() < minDate.getTime()) return true;
+      if (maxDate && d.getTime() > maxDate.getTime()) return true;
+      if (activeSet) return !activeSet.has(dateKey(d));
+      return false;
+    },
+    [minDate, maxDate, activeSet]
+  );
+
+  const canGoBack = monthIndex(cursor) > monthIndex(minDate);
+  const canGoForward = !maxDate || monthIndex(cursor) < monthIndex(maxDate);
 
   const shiftMonth = (delta: number) => {
+    if ((delta < 0 && !canGoBack) || (delta > 0 && !canGoForward)) return;
     setCursor((prev) => {
       const d = new Date(prev);
+      d.setDate(1);
       d.setMonth(d.getMonth() + delta);
       return d;
     });
   };
+
+  const choose = (date: Date) => {
+    if (isDisabled(date)) return;
+    if (seleccionRapida) {
+      onChange(date);
+      onClose();
+      return;
+    }
+    setSelected(date);
+    setCursor(firstOfMonth(date));
+  };
+
+  // "Hoy" y "Mañana" (si se pueden elegir) y, con `activeDates`, los siguientes
+  // días con salida ("sáb. 5").
+  const shortcuts = useMemo(() => {
+    const today = startOfDay(new Date());
+    const out: { date: Date; label: string; a11y: string }[] = [];
+    for (let i = 0; i < DIAS_BUSQUEDA_ATAJOS && out.length < MAX_ATAJOS; i += 1) {
+      const d = new Date(today);
+      d.setDate(today.getDate() + i);
+      if (maxDate && d.getTime() > maxDate.getTime()) break;
+      if (i > 1 && !activeSet) break;
+      if (isDisabled(d)) continue;
+      if (i === 0) out.push({ date: d, label: 'Hoy', a11y: `Hoy, ${longDay(d)}` });
+      else if (i === 1) out.push({ date: d, label: 'Mañana', a11y: `Mañana, ${longDay(d)}` });
+      else out.push({ date: d, label: `${WEEKDAYS_SHORT[d.getDay()]} ${d.getDate()}`, a11y: longDay(d) });
+    }
+    return out;
+  }, [activeSet, maxDate, isDisabled]);
 
   const availableThisMonth = useMemo(() => {
     if (!activeDates) return null;
@@ -135,12 +209,32 @@ export function CalendarModal({
             <IconButton icon={X} label="Cerrar calendario" onPress={onClose} size="md" />
           </View>
 
+          {shortcuts.length > 0 && (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={s.shortcuts}
+              accessibilityLabel="Fechas rápidas"
+            >
+              {shortcuts.map((sc) => (
+                <Chip
+                  key={dateKey(sc.date)}
+                  label={sc.label}
+                  selected={sameDay(sc.date, selected)}
+                  onPress={() => choose(sc.date)}
+                  accessibilityLabel={sc.a11y}
+                />
+              ))}
+            </ScrollView>
+          )}
+
           <View style={s.calendar}>
             <View style={s.monthRow}>
               <IconButton
                 icon={CaretLeft}
                 label="Mes anterior"
                 onPress={() => shiftMonth(-1)}
+                disabled={!canGoBack}
                 size="md"
                 variant="inverse"
               />
@@ -151,6 +245,7 @@ export function CalendarModal({
                 icon={CaretRight}
                 label="Mes siguiente"
                 onPress={() => shiftMonth(1)}
+                disabled={!canGoForward}
                 size="md"
                 variant="inverse"
               />
@@ -171,17 +266,25 @@ export function CalendarModal({
                 const active = sameDay(date, selected);
                 const disabled = isDisabled(date);
                 const today = sameDay(date, new Date());
+                const conSalida = !!activeSet && !disabled;
+
+                const a11y = [
+                  longDay(date),
+                  today ? 'hoy' : '',
+                  conSalida ? 'con salidas' : '',
+                  disabled ? (activeDates ? 'sin viajes' : 'no disponible') : '',
+                ]
+                  .filter(Boolean)
+                  .join(', ');
 
                 return (
                   <Pressable
                     key={dateKey(date)}
-                    onPress={() => !disabled && setSelected(date)}
+                    onPress={() => choose(date)}
                     disabled={disabled}
                     style={s.cell}
                     accessibilityRole="button"
-                    accessibilityLabel={`${date.getDate()} de ${MONTHS[month]}${
-                      disabled ? (activeDates ? ', sin viajes' : ', no disponible') : ''
-                    }`}
+                    accessibilityLabel={a11y}
                     accessibilityState={{ disabled, selected: active }}
                   >
                     <View
@@ -200,6 +303,7 @@ export function CalendarModal({
                       >
                         {String(date.getDate())}
                       </Text>
+                      {conSalida ? <View style={[s.dot, active && s.dotActive]} /> : null}
                     </View>
                   </Pressable>
                 );
@@ -213,19 +317,23 @@ export function CalendarModal({
             )}
           </View>
 
-          <View style={s.footer}>
-            <Button
-              variant="accent"
-              fullWidth
-              disabled={isDisabled(selected)}
-              onPress={() => {
-                onChange(selected);
-                onClose();
-              }}
-            >
-              Confirmar fecha
-            </Button>
-          </View>
+          {seleccionRapida ? (
+            <View style={s.footerSpacer} />
+          ) : (
+            <View style={s.footer}>
+              <Button
+                variant="accent"
+                fullWidth
+                disabled={isDisabled(selected)}
+                onPress={() => {
+                  onChange(selected);
+                  onClose();
+                }}
+              >
+                Confirmar fecha
+              </Button>
+            </View>
+          )}
         </View>
       </View>
     </Modal>
@@ -254,6 +362,11 @@ const s = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: Spacing.xl,
     paddingTop: Spacing.lg,
+    paddingBottom: Spacing.md,
+  },
+  shortcuts: {
+    gap: Spacing.sm,
+    paddingHorizontal: Spacing.lg,
     paddingBottom: Spacing.md,
   },
   calendar: {
@@ -303,10 +416,25 @@ const s = StyleSheet.create({
   dayDisabled: {
     opacity: Opacity.disabled,
   },
+  /** Punto bajo los días con salida */
+  dot: {
+    position: 'absolute',
+    bottom: Spacing.xs,
+    width: Spacing.xs,
+    height: Spacing.xs,
+    borderRadius: Radius.full,
+    backgroundColor: Colors.accent,
+  },
+  dotActive: {
+    backgroundColor: Colors.white,
+  },
   hint: {
     marginTop: Spacing.md,
   },
   footer: {
     padding: Spacing.xl,
+  },
+  footerSpacer: {
+    height: Spacing.lg,
   },
 });

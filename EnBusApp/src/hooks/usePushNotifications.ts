@@ -1,23 +1,31 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import { useRouter } from 'expo-router';
 import Constants from 'expo-constants';
 import { supabase } from '@/src/utils/supabase';
+import { Colors } from '@/src/theme';
 
 // ── Configurar handler global de notificaciones ───────────────────────────────
 // Determina cómo se muestran las notificaciones cuando la app está en PRIMER PLANO.
 // Esta llamada es idempotente y debe hacerse fuera del hook para que solo
 // se ejecute una vez al importar el módulo, no en cada render.
+//
+// #49: en primer plano la app muestra su propio aviso con "Ver" (ver
+// `app/_layout.tsx`), así que no se muestra además el banner del sistema; la
+// notificación queda en el centro de notificaciones y suena.
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldShowAlert: true,
+    shouldShowAlert: false,
     shouldPlaySound: true,
     shouldSetBadge: true,
-    shouldShowBanner: true,
+    shouldShowBanner: false,
     shouldShowList: true,
   }),
 });
+
+/** Estado del registro del token en este teléfono. */
+export type EstadoRegistroPush = 'sin-usuario' | 'registrando' | 'activo' | 'denegado' | 'error';
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -46,12 +54,17 @@ export interface PushNotificationHandlers {
  *
  * @param userId   ID del usuario autenticado. El hook no hace nada si es undefined.
  * @param handlers Callbacks opcionales para recibir/responder notificaciones.
+ * @returns `estadoRegistro`: si este teléfono quedó registrado para recibir
+ *          avisos ('activo'), si el usuario no dio permiso ('denegado') o si
+ *          falló ('error': sin red o sin `projectId`; se reintenta con la
+ *          próxima sesión).
  */
 export function usePushNotifications(
   userId: string | undefined,
   handlers: PushNotificationHandlers = {}
-) {
+): { estadoRegistro: EstadoRegistroPush } {
   const router = useRouter();
+  const [estadoRegistro, setEstadoRegistro] = useState<EstadoRegistroPush>('sin-usuario');
 
   // Usar refs para los handlers para que los listeners no queden con closures stale
   // si los callbacks cambian entre renders (ej. si el consumidor pasa lambdas inline).
@@ -62,7 +75,12 @@ export function usePushNotifications(
 
   // ── Registro de token push ──────────────────────────────────────────────────
   useEffect(() => {
-    if (!userId) return;
+    if (!userId) {
+      setEstadoRegistro('sin-usuario');
+      return;
+    }
+    let vigente = true;
+    setEstadoRegistro('registrando');
 
     async function registerForPushNotificationsAsync() {
       try {
@@ -71,7 +89,7 @@ export function usePushNotifications(
             name: 'default',
             importance: Notifications.AndroidImportance.MAX,
             vibrationPattern: [0, 250, 250, 250],
-            lightColor: '#e2b714',
+            lightColor: Colors.primary,
           });
         }
 
@@ -84,7 +102,7 @@ export function usePushNotifications(
         }
 
         if (finalStatus !== 'granted') {
-          console.warn('[Push] Permiso para notificaciones push denegado.');
+          if (vigente) setEstadoRegistro('denegado');
           return;
         }
 
@@ -94,7 +112,6 @@ export function usePushNotifications(
         }
 
         const token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
-        console.log('[Push] Token obtenido:', token);
 
         // Guardar token en perfiles de Supabase
         const { error } = await supabase
@@ -103,12 +120,19 @@ export function usePushNotifications(
           .eq('id', userId);
 
         if (error) throw error;
-      } catch (err: any) {
-        console.warn('[Push] Error al registrar notificaciones push:', err.message);
+        if (vigente) setEstadoRegistro('activo');
+      } catch (err: unknown) {
+        if (vigente) setEstadoRegistro('error');
+        if (__DEV__) {
+          console.warn('[Push] Error al registrar notificaciones push:', err instanceof Error ? err.message : err);
+        }
       }
     }
 
     registerForPushNotificationsAsync();
+    return () => {
+      vigente = false;
+    };
   }, [userId]);
 
   // ── Listeners de notificaciones en primer plano y respuesta del usuario ──────
@@ -125,7 +149,6 @@ export function usePushNotifications(
     // Listener A: notificación recibida mientras la app está ACTIVA (primer plano)
     const receivedSubscription = Notifications.addNotificationReceivedListener(
       (notification) => {
-        console.log('[Push] Notificación recibida en primer plano:', notification.request.identifier);
         onReceivedRef.current?.(notification);
       }
     );
@@ -133,8 +156,6 @@ export function usePushNotifications(
     // Listener B: usuario tocó la notificación (desde primer plano, segundo plano, o cerrada)
     const responseSubscription = Notifications.addNotificationResponseReceivedListener(
       (response) => {
-        console.log('[Push] Usuario interactuó con notificación:', response.notification.request.identifier);
-
         // Navegación por defecto: ir a /notificaciones si no hay handler personalizado
         if (onResponseRef.current) {
           onResponseRef.current(response);
@@ -158,4 +179,6 @@ export function usePushNotifications(
       responseSubscription.remove();
     };
   }, [router]);
+
+  return { estadoRegistro };
 }
