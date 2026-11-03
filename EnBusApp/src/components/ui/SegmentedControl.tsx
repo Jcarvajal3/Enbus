@@ -156,7 +156,7 @@ const s = StyleSheet.create({
     justifyContent: 'center',
     gap: Spacing.xs,
     minHeight: Sizes.control.sm,
-    paddingHorizontal: Spacing.sm,
+    paddingHorizontal: Spacing.xs,
     borderRadius: Radius.full,
     zIndex: 1,
   },

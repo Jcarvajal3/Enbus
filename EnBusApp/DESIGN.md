@@ -49,16 +49,24 @@ transparencias usa el helper `alpha(color, 0.12)`.
 
 | Token | Uso |
 |:---|:---|
-| `primary` `#FFC757` | Marca. Botones primarios, estrellas, destacados. |
-| `secondary` `#FF7648` | Acento cálido. Badges de envío, precios. |
-| `accent` `#4A7FF8` | CTA principal, selección, links. |
+| `primary` `#FFC757` | Marca y **acción principal** (botón `primary` con texto `ink`, 10,5:1). Caja de monto con `primaryLight`. |
+| `accentStrong` `#2F5FD0` | **Selección y estado activo**: chip, asiento, opción, casilla, interruptor, foco, pestaña activa, contador activo. Texto blanco encima (5,7:1). |
+| `accent` `#4A7FF8` | Solo tintes, puntos y bordes. Nunca relleno bajo texto blanco (3,7:1). |
+| `link` (= `infoText`) | Enlaces (`TextLink`): semibold y subrayados. |
+| `secondary` `#FF7648` | Coral: solo el dominio de encomiendas. Nunca relleno con texto blanco. |
 | `background` / `surface` / `surfaceDark` | Blanco / beige / beige oscuro. |
 | `border` / `borderStrong` | Separadores / borde de controles (`#8C8C8C`, ≥ 3:1). |
 | `foreground` / `mutedForeground` | Texto principal / secundario. |
-| `success` `warning` `info` `destructive` | Semántica. Nunca decorativos. |
+| `success` `warning` `info` `destructive` | Semántica. Nunca decorativos. Como texto, sus `…Text`. |
 | `scrim` / `scrimStrong` | Fondos de modal y bottom sheet. |
 
-Cada color semántico tiene su variante `…Light` (fondo) y `…Border`.
+Cada color semántico tiene su variante `…Light` (fondo) y `…Border`. Ningún
+texto sobre `primary`, `secondary` o `accent` que no sea `ink`.
+
+**Tonos de estado** (`StatusPalette`, vía `getEstadoVisual`): `success` hecho ·
+`pending` espera algo de alguien · `progress` en curso · `danger` rechazado o
+bloqueado · `done` terminado sin incidencia (relleno `surfaceDark`, "Viaje
+realizado", "Vencido", "Devuelta") · `neutral` anulado (contorno, "Cancelado").
 
 ### 🔠 Tipografía (`Typography`)
 
@@ -70,18 +78,19 @@ Fuente única: **Roobert**. Nunca escribas `fontFamily`, `fontSize` ni
 | Variant | Uso |
 |:---|:---|
 | `display` | Cifras monumentales (montos, PIN). |
-| `title` | Título de pantalla. |
-| `heading` | Título de sección o modal. |
-| `subheading` | Título de tarjeta. |
+| `title` | Título de pestaña (30): "Mis boletos", "Mis encomiendas". |
+| `heading` | Título de detalle, paso de asistente y hoja (20). |
+| `subheading` | Título de tarjeta y de estado vacío (17). |
 | `body` / `bodyStrong` | Cuerpo / cuerpo enfatizado. |
 | `secondary` | Texto de apoyo. |
 | `label` | Etiquetas de formulario, texto fuerte pequeño. |
 | `caption` | Metadatos, timestamps. |
-| `overline` | Antetítulo en mayúsculas. |
+| `overline` | Solo en `SectionLabel` (sustantivo, nunca pregunta). |
 | `button` | Texto dentro de botones. |
 
-Escala (`Typography.sizes`): `micro 9` · `xs 11` · `sm 13` · `base 15` ·
-`lg 17` · `xl 20` · `2xl 24` · `3xl 30` · `4xl 36`.
+Escala (`Typography.sizes`): `micro 9` · `xs 11` · `badge 12` · `sm 13` · `base 15` ·
+`lg 17` · `xl 20` · `2xl 24` · `3xl 30` · `4xl 36`. 24 solo para cifras. Sin
+`capitalize`: en español solo va mayúscula inicial.
 Cada tamaño trae su `lineHeight` calculado; usa `compact` para desactivarlo.
 
 ### 📐 Espaciado (`Spacing`) vs. Dimensiones (`Sizes`)
@@ -101,8 +110,8 @@ Están separados a propósito.
 
 `xs 6 · sm 10 · md 16 · lg 20 · xl 24 · 2xl 28 · 3xl 36 · full 999`
 
-Convención: inputs y botones de una línea son **pill** (`full`); tarjetas usan
-`lg`/`xl`; sheets usan `3xl`.
+Por rol: control de una línea y chip `full`; tarjeta y fila de lista `xl`;
+bloque dentro de una tarjeta (aviso, caja de monto, grupo) `lg`; hoja `3xl`.
 
 ### 🎞️ Movimiento (`Motion`)
 
@@ -115,7 +124,8 @@ Toda animación lee de aquí. No hay duraciones sueltas.
 - `stagger`: `step 45`, `maxIndex 7`
 
 Principios: lo que entra es más lento que lo que sale; sólo se animan `opacity`
-y `transform`.
+y `transform`; **toda animación comprueba `useReducedMotion()`** y, con
+"reducir movimiento", el elemento aparece ya en su sitio.
 
 ### 📱 Layout (`Layout`)
 
@@ -131,22 +141,73 @@ Nunca escribas `paddingBottom: 128` ni `bottom: 110` — vienen de
 
 ---
 
-## 3. Kit de UI (`@/src/components/ui`)
+### 🧱 Superficies y estructura
+
+Pantalla blanca (`Screen`) → `ScreenHeader` → contenido con margen
+`Layout.screenPadding` (24, Inicio incluido), secciones a 24, dentro de tarjeta
+12–16 → `FloatingBar` si hay acción de paso o de pantalla. Tarjeta de contenido
+`sunken` sin sombra; la sombra es solo de lo que flota (barra de pestañas,
+`FloatingBar`, toast, hoja). Solo tokens de `Spacing`, sin `± n`.
+
+---
+
+## 3. Navegación
+
+- Pestañas **Inicio · Boletos · Encomiendas** (Boletos siempre antes que
+  Encomiendas). Cabecera de pestaña: `ScreenHeader` `large` con título y
+  `HeaderActions`, sin subtítulo ("Mis boletos", "Mis encomiendas"). Inicio usa
+  el mismo `ScreenHeader` con `<BrandMark conNombre />` como título.
+- Detalle: `ScreenHeader` `compact` con ← (`useVolver(padre)`), ceja = nombre
+  del objeto, título = código (nunca recortado) y el estado en `status`. `right`
+  solo para `IconButton`.
+- ← nunca muerta: `useVolver('/(tabs)/boletos')`. Es el único sitio que llama
+  a `router.back()`. Padres: boleto, compra, viaje → `/(tabs)/boletos`;
+  encomienda → `/(tabs)/encomiendas?vista=enviadas|para-mi`; perfil,
+  notificaciones, ayuda → `/(tabs)`; `cuenta/*` → `/perfil`.
+- Pantalla empujada = `slide_from_right`. Lo que sube desde abajo es una hoja
+  (`BottomSheet`): selectores, tareas cortas y confirmaciones.
+- Asistentes: `ScreenHeader` `steps` ("Paso 2 de 4" + título del paso) y la
+  acción del paso en `FloatingBar` con `resumen` de una línea.
+- Confirmar: `useConfirm()` (hoja común). Cero `Alert.alert`. Confirmar = verbo
+  + objeto ("Cancelar envío"); salir = "Volver" tras "Cancelar …", si no
+  "Cancelar". Salir de un asistente: "¿Salir sin terminar?" · "Salir sin
+  guardar" / "Seguir editando".
+- Sin sesión: `/login?volver=<ruta>`; tras entrar, `app/_layout.tsx` lleva a
+  `volver` (solo rutas internas).
+
+---
+
+## 4. Kit de UI (`@/src/components/ui`)
 
 | Componente | Reemplaza a |
 |:---|:---|
-| `Text` | Todo bloque `fontFamily/fontSize/fontWeight`. |
-| `Button` | Los ~12 botones distintos que existían. |
+| `Text` · `TextLink` | Todo bloque `fontFamily/fontSize/fontWeight`; `TextLink` es el único enlace (≥ 44 pt). |
+| `Button` | `primary` (uno por pantalla, por defecto) · `secondary` · `outline` · `ghost` · `danger` (solo en la confirmación) · `dangerGhost` (abre la confirmación). Deshabilitado = relleno `surfaceDark`, sin opacidad. |
+| `ConfirmSheet` · `ConfirmProvider` · `useConfirm` | La única confirmación (hoja inferior). |
 | `IconButton` | Botones circulares de icono (garantiza 44pt). |
 | `Card` · `SectionLabel` · `Divider` · `InfoRow` | Contenedores y filas etiqueta/valor. |
 | `Badge` · `StatusBadge` · `CountPill` · `Chip` | Pastillas y estados. |
 | `SegmentedControl` | Los 4 toggles animados duplicados. |
 | `ScreenHeader` · `StepIndicator` | Las 4 cabeceras distintas y los steppers. |
-| `Screen` · `Gutter` · `FloatingBar` · `EmptyState` · `LoadingState` · `scrollContent` | Chrome de pantalla. |
-| `EntityCard` | Las 4 variantes de fila de lista. |
-| `RouteSummary` | El bloque ORIGEN ──●── DESTINO. |
-| `BottomSheet` | Los 3 sheets con PanResponder propio. |
-| `Field` · `SelectField` | Los 5 inputs distintos. |
+| `Screen` · `Gutter` · `FloatingBar` · `EmptyState` · `ErrorState` · `StaleBanner` · `scrollContent` | Chrome de pantalla. Vacío: título sin punto + 1 línea + 1 acción. |
+| `EntityCard` | La fila de lista: insignia + código, título, subtítulo, flecha si abre algo; `selectable` = borde `accentStrong` + check. |
+| `RouteSummary` | El bloque origen ──── destino (glifos neutros). |
+| `BottomSheet` | Toda hoja; `onBack` para subpasos; pie con área segura. |
+| `Field` · `SelectField` | Los inputs. Etiqueta, texto y ayuda al mismo borde; marcador solo "Ej. …". |
+
+Componentes de dominio comunes (`src/components`): `BrandMark` (bloque "EB"),
+`RouteField` (origen/destino en Inicio, compra y envío), `LocationSelector`,
+`CalendarModal` (sobre `BottomSheet`), `CedulaField` · `TelefonoField`,
+`TransactionCard` (sobre `EntityCard`), `ScreenSkeleton` (`lista` · `detalle` ·
+`perfil`: la espera con la forma de la pantalla; el spinner solo va en botones).
+
+**Alias retirados (D25)**, se borran en la integración: `Button`
+`accent`/`gradient`/`dangerSoft`/`glow`, `Text color` `accent`/`secondary`/`danger`,
+`EntityCard` `initial`/`tone`, `Badge icon`, `PageTransition`, `LoadingState`.
+ESLint los marca (`warn`) junto con el resto del barrido de la app:
+`Alert.alert`, `router.back()`, `capitalize`, formateadores de fecha sueltos,
+`right={<StatusBadge…>}`, `Spacing.x ± n`, "Desde"/"Hacia", "Sí, …" y
+marcadores que no empiezan por "Ej. ".
 
 ### Estados de dominio
 
@@ -162,7 +223,7 @@ a etiqueta, tono y explicación para el usuario.
 
 ---
 
-## 4. Reglas para desarrollo
+## 5. Reglas para desarrollo
 
 1. **Sin estilos inline** salvo que dependan de estado en tiempo de render.
    Todo lo demás va en un `StyleSheet.create` al final del archivo.
