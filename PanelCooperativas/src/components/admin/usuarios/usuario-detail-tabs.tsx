@@ -80,10 +80,10 @@ function TablaEncomiendas({
         <TableRow>
           <TableHead>Código de seguimiento</TableHead>
           <TableHead className="hidden md:table-cell">{tipo === "enviadas" ? "Destinatario" : "Remitente"}</TableHead>
-          <TableHead className="hidden xl:table-cell">Cooperativa</TableHead>
+          <TableHead className="hidden 2xl:table-cell">Cooperativa</TableHead>
           <TableHead>Estado</TableHead>
           <TableHead className="hidden text-right sm:table-cell">Costo</TableHead>
-          <TableHead className="hidden xl:table-cell">Fecha</TableHead>
+          <TableHead className="hidden 2xl:table-cell">Fecha</TableHead>
           {conAcciones && <TableHead className="text-right">Acciones</TableHead>}
         </TableRow>
       </TableHeader>
@@ -115,7 +115,7 @@ function TablaEncomiendas({
                   </>
                 )}
               </TableCell>
-              <TableCell className="hidden xl:table-cell">{e.cooperativa_nombre}</TableCell>
+              <TableCell className="hidden 2xl:table-cell">{e.cooperativa_nombre}</TableCell>
               <TableCell>
                 <span className="flex flex-wrap items-center gap-1.5">
                   <StatusBadge status={e.estado} dominio="encomienda" />
@@ -129,7 +129,7 @@ function TablaEncomiendas({
                   <Vacio texto="Por calcular" />
                 )}
               </TableCell>
-              <TableCell className="hidden text-muted-foreground tabular-nums xl:table-cell">{formatFechaVE(e.created_at)}</TableCell>
+              <TableCell className="hidden text-muted-foreground tabular-nums 2xl:table-cell">{formatFechaVE(e.created_at)}</TableCell>
               {conAcciones && (
                 <TableCell>
                   <AccionesPinEncomienda encomienda={e} />

@@ -133,7 +133,7 @@ export function SolicitudAcciones({
   const rechazada = solicitud.estado === "RECHAZADA";
 
   return (
-    <div className="flex flex-wrap items-center justify-end gap-2">
+    <div className={enFila ? "flex items-center justify-end gap-1" : "flex flex-wrap items-center justify-end gap-2"}>
       {rechazada ? (
         <ReabrirSolicitudButton solicitud={solicitud} enFila={enFila} onHecho={onHecho} />
       ) : (

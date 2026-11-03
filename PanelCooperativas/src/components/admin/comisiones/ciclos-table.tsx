@@ -133,9 +133,9 @@ export function CiclosTable({ data, cooperativas, tasa: tasaServidor }: CiclosTa
             <TableRow>
               <TableHead>Cooperativa</TableHead>
               <TableHead className="hidden md:table-cell">Período</TableHead>
-              <TableHead className="hidden text-right xl:table-cell">Boletos</TableHead>
-              <TableHead className="hidden text-right xl:table-cell">Encomiendas</TableHead>
-              <TableHead className="hidden text-right xl:table-cell">Comisión %</TableHead>
+              <TableHead className="hidden text-right 2xl:table-cell">Boletos</TableHead>
+              <TableHead className="hidden text-right 2xl:table-cell">Encomiendas</TableHead>
+              <TableHead className="hidden text-right 2xl:table-cell">Comisión %</TableHead>
               <TableHead className="text-right">Comisión</TableHead>
               <TableHead>Estado</TableHead>
               <TableHead className="text-right">Acciones</TableHead>
@@ -160,13 +160,13 @@ export function CiclosTable({ data, cooperativas, tasa: tasaServidor }: CiclosTa
                   <TableCell className="hidden text-muted-foreground tabular-nums md:table-cell">
                     {formatFechaVE(item.periodo_inicio)} – {formatFechaVE(item.periodo_fin)}
                   </TableCell>
-                  <TableCell className="hidden text-right xl:table-cell">
+                  <TableCell className="hidden text-right 2xl:table-cell">
                     <Monto usd={item.total_boletos} tasa={tasa} moneda="USD" size="sm" align="right" />
                   </TableCell>
-                  <TableCell className="hidden text-right xl:table-cell">
+                  <TableCell className="hidden text-right 2xl:table-cell">
                     <Monto usd={item.total_encomiendas} tasa={tasa} moneda="USD" size="sm" align="right" />
                   </TableCell>
-                  <TableCell className="hidden text-right tabular-nums xl:table-cell">
+                  <TableCell className="hidden text-right tabular-nums 2xl:table-cell">
                     {formatPorcentaje(item.comision_porcentaje)}
                   </TableCell>
                   <TableCell className="text-right">
