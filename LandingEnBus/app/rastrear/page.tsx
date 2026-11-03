@@ -14,12 +14,14 @@ import {
   nombreLocalidad,
   normalizarCodigoSeguimiento,
 } from "@/lib/estados"
-import { soporteWhatsApp } from "@/lib/urls"
+import { sitioUrl, soporteWhatsApp } from "@/lib/urls"
 import { cn } from "@/lib/utils"
 
 export const metadata: Metadata = {
   title: "Rastrear encomienda",
   description: "Consulta en qué va tu encomienda con su código de seguimiento (EB-AAMMDD-NNNNN).",
+  // Sin ?codigo=: cada búsqueda no es una página distinta para los buscadores.
+  ...(sitioUrl() ? { alternates: { canonical: "/rastrear" } } : {}),
 }
 
 // ─── Formato ─────────────────────────────────────────────────────────────────
@@ -110,7 +112,7 @@ function LineaDeTiempo({ pasos }: { pasos: Paso[] }) {
               className={cn(
                 "size-6 shrink-0",
                 paso.estado === "pendiente" ? "text-muted-foreground" : "text-foreground",
-                paso.estado === "actual" && "text-amber-700"
+                paso.estado === "actual" && "text-warning-text"
               )}
             />
             <div className="flex flex-col">
@@ -139,8 +141,8 @@ function LineaDeTiempo({ pasos }: { pasos: Paso[] }) {
 
 function Aviso({ titulo, children }: { titulo: string; children: React.ReactNode }) {
   return (
-    <div role="alert" className="flex items-start gap-3 rounded-sm border border-amber-300 bg-amber-50 p-4 text-sm">
-      <WarningCircle className="mt-0.5 size-5 shrink-0 text-amber-800" aria-hidden />
+    <div role="alert" className="flex items-start gap-3 rounded-sm border border-warning/40 bg-warning-light p-4 text-sm">
+      <WarningCircle className="mt-0.5 size-5 shrink-0 text-warning-deep" aria-hidden />
       <div className="flex flex-col gap-1 text-foreground">
         <p className="font-semibold">{titulo}</p>
         {children}

@@ -27,6 +27,12 @@ export interface PerfilUsuario {
   cedula_rif?: string;
   telefono?: string;
   avatar_url?: string;
+  /** Preferencias de aviso (columnas `notif_*` de `profiles`) */
+  notif_boletos?: boolean | null;
+  notif_encomiendas?: boolean | null;
+  notif_recordatorios?: boolean | null;
+  /** Fase 4: la cuenta se dio de baja (`fn_eliminar_mi_cuenta`); `AuthContext` cierra la sesión */
+  eliminada_at?: string | null;
   created_at: string;
 }
 
@@ -227,11 +233,31 @@ export interface Boleto {
 
 // ─── Notificaciones ───────────────────────────────────────────────────────────
 
-export type RecursoTipo = 'boleto' | 'encomienda';
+export type RecursoTipo = 'boleto' | 'encomienda' | 'viaje';
+
+/**
+ * Tipos conocidos de `notificaciones_usuario.tipo` (fase 4, §3.2). Hay más (los
+ * cambios de estado de encomienda que encola el trigger) y las filas antiguas
+ * tienen `null`: `iconoNotificacion` cae entonces en `recurso_tipo`.
+ */
+export type TipoNotificacion =
+  | 'BOLETO_CONFIRMADO'
+  | 'PAGO_APROBADO'
+  | 'PAGO_RECHAZADO'
+  | 'PAGO_EN_VERIFICACION'
+  | 'RESERVA_SIN_PAGAR'
+  | 'VIAJE_CANCELADO'
+  | 'VIAJE_REPROGRAMADO'
+  | 'REEMBOLSO_ENVIADO'
+  | 'ENCOMIENDA_PARA_TI'
+  | 'ENCOMIENDA_RECHAZADA'
+  | 'DEVOLUCION_AUTOMATICA';
 
 export interface Notificacion {
   id: string;
   usuario_id: string;
+  /** Fase 4: elige icono y tono (`iconoNotificacion`); `null` en filas antiguas */
+  tipo?: TipoNotificacion | (string & {}) | null;
   titulo: string;
   mensaje?: string;
   leida: boolean;
@@ -239,6 +265,34 @@ export interface Notificacion {
   recurso_id?: string;
   created_at: string;
 }
+
+// ─── Fase 4: próximo viaje y baja de cuenta (§3.4) ───────────────────────────
+
+/** El boleto PAGADO que sale antes (de ahora − 30 min a ahora + 48 h), con los asientos de su compra. */
+export type ProximoViaje = {
+  /** Primer boleto de la compra (orden natural de asiento) */
+  boletoId: string;
+  /** `codigo_boleto` de ese boleto, tal como se guarda ("BOL-7CABE4AD") */
+  codigo: string;
+  compraId: string | null;
+  /** Asientos de la misma compra en orden natural ("9", "14", "15") */
+  asientos: string[];
+  /** ISO de `viajes.fecha_hora_salida` */
+  salida: string;
+  /** ISO de `viajes.fecha_hora_llegada_est` */
+  llegada: string | null;
+  /** Ya legibles ("Mérida", "Puerto La Cruz") */
+  ciudadOrigen: string;
+  ciudadDestino: string;
+  /** Nombre de la cooperativa ('' si no viene) */
+  cooperativa: string;
+};
+
+/** `fn_eliminar_mi_cuenta(p_motivo)` */
+export type ResultadoEliminarCuenta = { eliminada_at: string; ya_procesado?: boolean };
+
+/** Códigos `EB_*` de las RPC (incluye los de la fase 4). Fuente: `src/utils/errores.ts`. */
+export type { CodigoEB } from '@/src/utils/errores';
 
 // ─── Pagos ────────────────────────────────────────────────────────────────────
 

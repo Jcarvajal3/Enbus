@@ -7,7 +7,13 @@ import { CalculatorCTA } from "@/components/calculator-cta"
 import { AppDownload } from "@/components/app-download"
 import { CooperativaCTA } from "@/components/cooperativa-cta"
 import { Footer } from "@/components/footer"
+import type { Metadata } from "next"
+
 import { estadisticas, origenesConDestinos, rutasPopulares, tasaBCV } from "@/lib/consultas"
+import { sitioUrl } from "@/lib/urls"
+
+// Canonical solo con NEXT_PUBLIC_SITIO_URL (metadataBase del layout); sin ella se omite.
+export const metadata: Metadata = sitioUrl() ? { alternates: { canonical: "/" } } : {}
 
 // Regenera la portada cada 30 min (ISR): rutas, cifras y tasa BCV vigentes
 // (la tarea programada actualiza la tasa cada 30 min).

@@ -1,6 +1,6 @@
 import { WhatsappLogo } from "@phosphor-icons/react/dist/ssr"
 
-import { cooperativasUrl, soporteWhatsApp } from "@/lib/urls"
+import { cooperativasUrl, RUTAS_LEGALES, soporteWhatsApp } from "@/lib/urls"
 
 // Sobre fondo oscuro el foco usa el color de fondo de la página (claro).
 const ENLACE =
@@ -26,6 +26,12 @@ export function Footer({ secciones = {} }: FooterProps) {
   const cooperativas = [
     { label: "Registra tu cooperativa", href: "/registro-cooperativa" },
     ...(portal ? [{ label: "Entrar al panel", href: `${portal}/cooperativas/login` }] : []),
+  ]
+
+  const legales = [
+    { label: "Términos", href: RUTAS_LEGALES.terminos },
+    { label: "Privacidad", href: RUTAS_LEGALES.privacidad },
+    { label: "Eliminar cuenta", href: RUTAS_LEGALES.eliminarCuenta },
   ]
 
   return (
@@ -71,9 +77,15 @@ export function Footer({ secciones = {} }: FooterProps) {
           </nav>
         </div>
 
-        {/* Sin enlaces legales ni redes hasta que existan sus páginas */}
-        <div className="mt-12 border-t border-background/15 pt-8">
+        <div className="mt-12 flex flex-col gap-4 border-t border-background/15 pt-8 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm text-background/80">&copy; {anio} EnBus. Todos los derechos reservados.</p>
+          <nav aria-label="Legal" className="flex flex-wrap gap-x-6 gap-y-3">
+            {legales.map((link) => (
+              <a key={link.href} href={link.href} className={ENLACE}>
+                {link.label}
+              </a>
+            ))}
+          </nav>
         </div>
       </div>
     </footer>

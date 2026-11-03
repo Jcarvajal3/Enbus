@@ -95,7 +95,12 @@ export type CodigoEB =
   | "EB_CEDULA_NO_VERIFICADA"
   | "EB_PIN_BLOQUEADO"
   | "EB_PIN_INCORRECTO"
-  | "EB_DEMASIADOS_REPORTES";
+  | "EB_DEMASIADOS_REPORTES"
+  // Fase 4
+  | "EB_PIN_NO_VALIDADO"
+  | "EB_CUENTA_CON_ACTIVIDAD"
+  /** Solo de cliente: lo devuelven las server actions cuando `fn_consumir_limite` dice `permitido: false`. */
+  | "EB_DEMASIADOS_INTENTOS";
 
 const TEXTOS_EB: Partial<Record<CodigoEB, string>> = {
   EB_PAGO_YA_RESUELTO: "Otro compañero ya resolvió este pago. Actualiza la lista.",
@@ -103,7 +108,32 @@ const TEXTOS_EB: Partial<Record<CodigoEB, string>> = {
     "No hay tasa BCV registrada hoy. Pídele al administrador que la cargue en Tarifas.",
   EB_PAGOS_PENDIENTES:
     "Primero resuelve los pagos por verificar de este viaje (apruébalos o recházalos) y vuelve a cancelarlo.",
+  EB_PIN_NO_VALIDADO: "Vuelve a validar el PIN de retiro: la validación vence a los 15 minutos.",
 };
+
+/** Texto cuando el error no trae `hint` (códigos que también genera el cliente). */
+const RESPALDO_EB: Partial<Record<CodigoEB, string>> = {
+  EB_DEMASIADOS_INTENTOS: "Hiciste demasiados intentos seguidos. Espera unos minutos y vuelve a intentarlo.",
+};
+
+/** "1 minuto", "10 minutos", "45 segundos" (redondeo hacia arriba a minutos desde 60 s). */
+function esperaTexto(segundos: number) {
+  const s = Math.max(1, Math.ceil(segundos));
+  if (s < 60) return segundosTexto(s);
+  const min = Math.ceil(s / 60);
+  return min === 1 ? "1 minuto" : `${min} minutos`;
+}
+
+/**
+ * Mensaje de `EB_DEMASIADOS_INTENTOS` para una server action, con la espera de
+ * `fn_consumir_limite` (`reintentar_en_segundos`): "Hiciste demasiados intentos.
+ * Espera 10 minutos y vuelve a intentarlo.".
+ */
+export function textoDemasiadosIntentos(reintentarEnSegundos?: number | null): string {
+  return reintentarEnSegundos && reintentarEnSegundos > 0
+    ? `Hiciste demasiados intentos. Espera ${esperaTexto(reintentarEnSegundos)} y vuelve a intentarlo.`
+    : (RESPALDO_EB.EB_DEMASIADOS_INTENTOS as string);
+}
 
 /** Detalle estructurado de un error EB_* (`details` de PostgREST). */
 export type DetalleEB = {
@@ -120,6 +150,16 @@ export type DetalleEB = {
   rechazadas?: { id: string; resultado: string; tracking_id: string | null; ciudad_destino: string | null }[];
   /** `EB_PAGOS_PENDIENTES`: pagos por verificar del viaje. */
   pendientes?: number;
+  /** `EB_DATOS_INVALIDOS` de `fn_editar_viaje` (campo asientos): asientos mínimos del bus. */
+  minimo?: number;
+  /** `EB_CUENTA_CON_ACTIVIDAD`: lo que impide eliminar la cuenta. */
+  boletos?: number;
+  pagos?: number;
+  encomiendas_enviadas?: number;
+  encomiendas_por_recibir?: number;
+  reembolsos?: number;
+  /** `EB_DEMASIADOS_INTENTOS`: segundos hasta poder reintentar. */
+  reintentar_en_segundos?: number;
   [clave: string]: unknown;
 };
 
@@ -205,6 +245,8 @@ export function humanizeError(err: unknown, contexto?: ContextoError): string {
     const propio = TEXTOS_EB[message.trim() as CodigoEB];
     if (propio) return propio;
     if (hint.trim()) return hint.trim();
+    const respaldo = RESPALDO_EB[message.trim() as CodigoEB];
+    if (respaldo) return respaldo;
     return ctx.accion
       ? `No pudimos ${ctx.accion}. Actualiza la página e intenta de nuevo.`
       : "No pudimos completar la operación. Actualiza la página e intenta de nuevo.";

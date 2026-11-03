@@ -3,7 +3,6 @@ import { supabase } from './supabase';
 // funcionan importados de `expo-file-system/legacy`; desde la raíz lanzan.
 import * as FileSystem from 'expo-file-system/legacy';
 import { AppError } from './errores';
-import { urlFotoEncomienda } from './fotos';
 
 const BUCKET = 'fotos-encomiendas';
 
@@ -11,7 +10,7 @@ const BUCKET = 'fotos-encomiendas';
  * Sube una imagen local (URI) al bucket privado `fotos-encomiendas`, en la
  * carpeta del usuario, y devuelve la RUTA del objeto (`<userId>/<ts>.<ext>`),
  * no una URL: el bucket es privado y la foto se muestra con
- * `urlFotoEncomienda(ruta)` (URL firmada).
+ * `urlFotoEncomienda(ruta)` de `src/utils/fotos.ts` (URL firmada).
  */
 export async function uploadEvidencePhoto(localUri: string, userId: string): Promise<string> {
   // fetch().blob() is unreliable on Android and doesn't support HEIC.
@@ -65,16 +64,4 @@ export async function uploadEvidencePhoto(localUri: string, userId: string): Pro
   }
 
   return ruta;
-}
-
-/**
- * @deprecated Usa `urlFotoEncomienda` de `src/utils/fotos.ts` (devuelve `null`
- * si no se puede mostrar). Se mantiene para las pantallas que aún la usan:
- * devuelve la URL firmada (1 h), la URL antigua si no es de este bucket, o `''`.
- */
-export async function getSignedPhotoUrl(urlOrPath: string): Promise<string> {
-  if (!urlOrPath) return '';
-  const firmada = await urlFotoEncomienda(urlOrPath);
-  if (firmada) return firmada;
-  return /^https?:\/\//i.test(urlOrPath) && !urlOrPath.includes(`/${BUCKET}/`) ? urlOrPath : '';
 }

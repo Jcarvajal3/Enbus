@@ -170,7 +170,7 @@ export function Calculadora({ origenes }: { origenes: OrigenConDestinos[] }) {
       </form>
 
       {errorGeneral && (
-        <p role="alert" className="campo-error mt-4 flex items-start gap-1.5 rounded-sm bg-red-50 p-3">
+        <p role="alert" className="campo-error mt-4 flex items-start gap-1.5 rounded-sm bg-destructive-light p-3">
           <WarningCircle className="mt-0.5 size-4 shrink-0" aria-hidden />
           {errorGeneral}
         </p>

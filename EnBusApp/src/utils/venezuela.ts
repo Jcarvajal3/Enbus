@@ -67,3 +67,23 @@ export function normalizeCityForDb(ciudad: string | null | undefined): string {
     .trim()
     .replace(/\s+/g, '_');
 }
+
+const NOMBRES_POPULARES = [
+  'Caracas',
+  'Valencia',
+  'Maracaibo',
+  'Barquisimeto',
+  'Maracay',
+  'Mérida',
+  'Puerto La Cruz',
+  'San Cristóbal',
+] as const;
+
+/**
+ * Ciudades más pedidas, en este orden, para la sección "Populares" del
+ * selector (APP-15). Son las mismas entradas de `VENEZUELA_LOCATIONS` (misma
+ * referencia), así que se comparan igual que cualquier otra.
+ */
+export const CIUDADES_POPULARES: Localidad[] = NOMBRES_POPULARES.map((ciudad) =>
+  VENEZUELA_LOCATIONS.find((l) => l.ciudad === ciudad)
+).filter((l): l is Localidad => !!l);

@@ -1,7 +1,7 @@
 import {
   ChartBar, Package, Ticket, TruckTrailer,
   MapPin, Users, Gear, CalendarBlank,
-  DownloadSimple, Handshake, Receipt, ArrowCounterClockwise,
+  DownloadSimple, Handshake, Receipt, ArrowCounterClockwise, Printer,
   type Icon,
 } from "@phosphor-icons/react";
 
@@ -62,6 +62,13 @@ export const NAV_ITEMS: NavItem[] = [
     title: "Entrega",
     href: "/cooperativas/entrega",
     icon: Handshake,
+    roles: ["admin_cooperativa", "taquillero"],
+  },
+  {
+    // Impresora de tickets, lector y sonido de este equipo (#53): también para el taquillero.
+    title: "Impresora y lector",
+    href: "/cooperativas/hardware",
+    icon: Printer,
     roles: ["admin_cooperativa", "taquillero"],
   },
   {

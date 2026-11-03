@@ -11,6 +11,29 @@ export function cooperativasUrl(): string | null {
   return url.replace(/\/+$/, "");
 }
 
+/**
+ * URL pública de la landing (sin "/" final), o null. La usan `metadataBase`, el canonical,
+ * la imagen OG, `robots.txt` y `sitemap.xml`: sin ella se omiten (nunca localhost).
+ */
+export function sitioUrl(): string | null {
+  const url = (process.env.NEXT_PUBLIC_SITIO_URL ?? "").trim();
+  if (!/^https?:\/\/[^/\s]+/i.test(url)) return null;
+  return url.replace(/\/+$/, "");
+}
+
+/** Rutas de las páginas legales (la app y el panel las enlazan como `{SITIO_URL}{ruta}`). */
+export const RUTAS_LEGALES = {
+  terminos: "/terminos",
+  privacidad: "/privacidad",
+  eliminarCuenta: "/eliminar-cuenta",
+} as const;
+
+/** Correo de soporte ("soporte@enbus.com.ve"), o null si no está configurado o no es válido. */
+export function correoSoporte(): string | null {
+  const correo = (process.env.NEXT_PUBLIC_SOPORTE_CORREO ?? "").trim();
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correo) ? correo : null;
+}
+
 /** Número de WhatsApp de soporte en formato internacional ("584121234567"), o null. */
 export function numeroSoporteWhatsApp(): string | null {
   const digitos = (process.env.NEXT_PUBLIC_SOPORTE_WHATSAPP ?? "").replace(/\D/g, "");

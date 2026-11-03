@@ -175,7 +175,13 @@ export type CodigoEB =
   | 'EB_CEDULA_NO_VERIFICADA'
   | 'EB_PIN_BLOQUEADO'
   | 'EB_PIN_INCORRECTO'
-  | 'EB_DEMASIADOS_REPORTES';
+  | 'EB_DEMASIADOS_REPORTES'
+  // Fase 4 (§3.1)
+  | 'EB_PIN_NO_VALIDADO'
+  /** `fn_eliminar_mi_cuenta`: detalle `{boletos, pagos, encomiendas_enviadas, encomiendas_por_recibir, reembolsos}` */
+  | 'EB_CUENTA_CON_ACTIVIDAD'
+  /** Solo de cliente: lo devuelven las server actions cuando `fn_consumir_limite` dice `permitido:false` */
+  | 'EB_DEMASIADOS_INTENTOS';
 
 /** `'EB_ASIENTO_OCUPADO'` si `err` es un error de negocio de una RPC; si no, `null`. */
 export function codigoEB(err: unknown): CodigoEB | null {
@@ -247,6 +253,8 @@ function respaldoEB(codigo: CodigoEB): string {
       return MSG.noEncontrado;
     case 'EB_ESTADO_CAMBIO':
       return MSG.estadoCambiado;
+    case 'EB_DEMASIADOS_INTENTOS':
+      return 'Hiciste muchos intentos seguidos. Espera unos minutos y vuelve a intentarlo.';
     default:
       return MSG.generico;
   }

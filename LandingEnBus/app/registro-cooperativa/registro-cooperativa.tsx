@@ -15,7 +15,7 @@ import {
 
 import { reenviarInvitacion, type CampoReenvio, type ReenvioState } from "./actions";
 import { normalizeRif, RIF_AYUDA, RIF_PLACEHOLDER } from "@/lib/rif";
-import { cooperativasUrl, soporteWhatsApp } from "@/lib/urls";
+import { cooperativasUrl, RUTAS_LEGALES, soporteWhatsApp } from "@/lib/urls";
 
 const FOCO =
   "outline-none focus-visible:ring-2 focus-visible:ring-foreground focus-visible:ring-offset-2 focus-visible:ring-offset-background";
@@ -132,13 +132,20 @@ function ReenviarInvitacion({ panel }: { panel: string | null }) {
 
       <div ref={resumenRef} tabIndex={-1} className="outline-none" aria-live="polite">
         {state.success && state.enviadoA && (
-          <p role="status" className="flex items-start gap-2 rounded-sm bg-emerald-50 p-3 text-sm text-emerald-900">
+          <p role="status" className="flex items-start gap-2 rounded-sm bg-success-light p-3 text-sm text-success-deep">
             <CheckCircle className="mt-0.5 size-4 shrink-0" weight="fill" aria-hidden />
             Listo. Te reenviamos la invitación a {state.enviadoA}. Si no llega en 10 minutos, revisa la carpeta de spam.
           </p>
         )}
         {errorGeneral && (
-          <div role="alert" className="flex flex-col gap-2 rounded-sm bg-red-50 p-3 text-sm text-red-900">
+          <div
+            role="alert"
+            className={`flex flex-col gap-2 rounded-sm p-3 text-sm ${
+              state.codigo === "EB_DEMASIADOS_INTENTOS"
+                ? "bg-warning-light text-warning-deep"
+                : "bg-destructive-light text-destructive-deep"
+            }`}
+          >
             <p className="flex items-start gap-2">
               <WarningCircle className="mt-0.5 size-4 shrink-0" aria-hidden />
               {errorGeneral}
@@ -213,9 +220,9 @@ export function RegistroCooperativa() {
               </p>
             </div>
           ) : (
-            <div role="status" className="flex max-w-2xl flex-col gap-2 rounded-sm border border-amber-300 bg-amber-50 p-4 text-sm text-foreground">
+            <div role="status" className="flex max-w-2xl flex-col gap-2 rounded-sm border border-warning/40 bg-warning-light p-4 text-sm text-foreground">
               <p className="flex items-start gap-2 font-medium">
-                <WarningCircle className="mt-0.5 size-5 shrink-0 text-amber-800" aria-hidden />
+                <WarningCircle className="mt-0.5 size-5 shrink-0 text-warning-deep" aria-hidden />
                 El registro no está disponible en este momento. Escríbenos por WhatsApp.
               </p>
               {whatsapp && (
@@ -283,9 +290,20 @@ export function RegistroCooperativa() {
       </main>
 
       <footer className="border-t border-border">
-        <p className="mx-auto max-w-5xl px-4 py-6 text-sm text-muted-foreground sm:px-6">
-          &copy; {new Date().getFullYear()} EnBus. Todos los derechos reservados.
-        </p>
+        <div className="mx-auto flex max-w-5xl flex-col gap-3 px-4 py-6 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between sm:px-6">
+          <p>&copy; {new Date().getFullYear()} EnBus. Todos los derechos reservados.</p>
+          <nav aria-label="Legal" className="flex flex-wrap gap-x-5 gap-y-2">
+            <Link href={RUTAS_LEGALES.terminos} className={`rounded-sm hover:text-foreground ${FOCO}`}>
+              Términos
+            </Link>
+            <Link href={RUTAS_LEGALES.privacidad} className={`rounded-sm hover:text-foreground ${FOCO}`}>
+              Privacidad
+            </Link>
+            <Link href={RUTAS_LEGALES.eliminarCuenta} className={`rounded-sm hover:text-foreground ${FOCO}`}>
+              Eliminar cuenta
+            </Link>
+          </nav>
+        </div>
       </footer>
     </div>
   );

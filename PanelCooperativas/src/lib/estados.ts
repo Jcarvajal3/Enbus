@@ -361,7 +361,7 @@ export const ROLES: Record<"user" | "taquillero" | "admin_cooperativa" | "super_
   user: "Pasajero",
   taquillero: "Taquillero",
   admin_cooperativa: "Administrador de cooperativa",
-  super_admin: "Administrador EnBus",
+  super_admin: "Superadministrador",
 };
 
 /** Nombre legible de un rol; desconocido → literal legible. */

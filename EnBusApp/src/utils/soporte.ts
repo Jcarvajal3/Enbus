@@ -1,5 +1,5 @@
 /**
- * Canal de ayuda por WhatsApp (#28).
+ * Canal de ayuda por WhatsApp (#28) y páginas legales del sitio (#50).
  *
  * El número de soporte viene de `EXPO_PUBLIC_SOPORTE_WHATSAPP` (en `.env.local`
  * y en EAS). Si falta, `SOPORTE_WHATSAPP` es `null` y las pantallas no
@@ -7,6 +7,7 @@
  */
 
 import * as Linking from 'expo-linking';
+import * as WebBrowser from 'expo-web-browser';
 
 /**
  * Número en formato internacional, solo dígitos ("584141234567").
@@ -50,4 +51,34 @@ export async function abrirSoporteWhatsApp(contexto?: string): Promise<boolean> 
   const extra = contexto?.trim();
   const mensaje = `Hola, necesito ayuda con EnBus.${extra ? ` ${extra}` : ''}`;
   return abrirWhatsApp(SOPORTE_WHATSAPP, mensaje);
+}
+
+// ─── Páginas legales en el sitio web (#50) ────────────────────────────────────
+
+
+/**
+ * Sitio público de EnBus (`EXPO_PUBLIC_SITIO_URL`, p. ej. "https://enbus.app"),
+ * sin "/" final. `null` si falta o no es https: las pantallas no muestran
+ * enlaces a páginas que no existen.
+ */
+export const SITIO_URL: string | null = (() => {
+  const url = (process.env.EXPO_PUBLIC_SITIO_URL ?? '').trim().replace(/\/+$/, '');
+  return /^https:\/\/[^\s/]+/i.test(url) ? url : null;
+})();
+
+/**
+ * Abre `/terminos`, `/privacidad` o `/eliminar-cuenta` del sitio en el
+ * navegador dentro de la app. Devuelve `false` si no hay `SITIO_URL` o no se
+ * pudo abrir (la pantalla decide qué decir).
+ */
+export async function abrirPaginaLegal(
+  pagina: 'terminos' | 'privacidad' | 'eliminar-cuenta'
+): Promise<boolean> {
+  if (!SITIO_URL) return false;
+  try {
+    await WebBrowser.openBrowserAsync(`${SITIO_URL}/${pagina}`);
+    return true;
+  } catch {
+    return false;
+  }
 }
