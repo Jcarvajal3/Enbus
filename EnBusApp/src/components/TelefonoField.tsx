@@ -10,7 +10,7 @@
 import React, { type Ref } from 'react';
 import type { ReturnKeyTypeOptions, TextInput } from 'react-native';
 import { Phone } from 'phosphor-react-native';
-import { Field } from '@/src/components/ui';
+import { Field, type FieldTone } from '@/src/components/ui';
 import { mascaraTelefono, telefonoParaGuardar } from '@/src/utils/ve.generated';
 
 export interface TelefonoFieldProps {
@@ -22,6 +22,8 @@ export interface TelefonoFieldProps {
   returnKeyType?: ReturnKeyTypeOptions;
   onSubmitEditing?: () => void;
   editable?: boolean;
+  /** Mismo `tone` que los demás campos de la tarjeta. Por defecto `light`. */
+  tone?: FieldTone;
   /** Al `TextInput` (para encadenar "Siguiente"). */
   ref?: Ref<TextInput>;
 }
@@ -40,6 +42,7 @@ export function TelefonoField({
   returnKeyType,
   onSubmitEditing,
   editable = true,
+  tone,
   ref,
 }: TelefonoFieldProps) {
   // Los marcadores 'PENDIENTE-…' del alta con Google no son un teléfono.
@@ -68,7 +71,7 @@ export function TelefonoField({
       icon={Phone}
       value={visible}
       onChangeText={cambiar}
-      placeholder="0414-1234567"
+      placeholder="Ej. 0414-1234567"
       keyboardType="phone-pad"
       inputMode="tel"
       textContentType="telephoneNumber"
@@ -77,6 +80,7 @@ export function TelefonoField({
       returnKeyType={returnKeyType}
       onSubmitEditing={onSubmitEditing}
       editable={editable}
+      tone={tone}
       error={error ?? undefined}
       helper={helper}
     />

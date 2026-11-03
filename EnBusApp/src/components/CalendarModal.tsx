@@ -1,5 +1,6 @@
 /**
- * CalendarModal — selector de fecha (APP-18).
+ * CalendarModal — selector de fecha (APP-18), en la hoja inferior común
+ * (`BottomSheet`, AU-25/AU-33), como los demás selectores.
  *
  * Por defecto un toque en un día lo elige y cierra (`seleccionRapida`). Arriba,
  * atajos "Hoy", "Mañana" y los siguientes días con salida; un punto bajo cada
@@ -8,10 +9,10 @@
  * `seleccionRapida={false}` se elige y luego se toca "Confirmar fecha".
  */
 import React, { useEffect, useMemo, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { CaretLeft, CaretRight, X } from 'phosphor-react-native';
-import { Button, Chip, IconButton, Text } from '@/src/components/ui';
-import { Colors, Layout, Opacity, Radius, Shadows, Sizes, Spacing } from '@/src/theme';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { CaretLeft, CaretRight } from 'phosphor-react-native';
+import { BottomSheet, Button, Chip, IconButton, Text } from '@/src/components/ui';
+import { Colors, Layout, Opacity, Radius, Sizes, Spacing } from '@/src/theme';
 
 interface CalendarModalProps {
   visible: boolean;
@@ -23,7 +24,7 @@ interface CalendarModalProps {
   maximumDate?: Date;
   /** `YYYY-MM-DD` keys that have departures. Days outside the list are disabled. */
   activeDates?: string[];
-  /** Sheet title. Defaults to "Seleccionar fecha". */
+  /** Título de la hoja. Por defecto "Fecha". */
   title?: string;
   /**
    * `true` (por defecto): tocar un día (o un atajo) lo elige y cierra, sin
@@ -90,7 +91,7 @@ export function CalendarModal({
   minimumDate,
   maximumDate,
   activeDates,
-  title = 'Seleccionar fecha',
+  title = 'Fecha',
   seleccionRapida = true,
 }: CalendarModalProps) {
   // Defensive: callers have passed an undefined `value` before, which produced
@@ -194,183 +195,155 @@ export function CalendarModal({
   }, [activeDates, year, month]);
 
   return (
-    <Modal visible={visible} animationType="fade" transparent onRequestClose={onClose}>
-      <View style={s.overlay}>
-        <Pressable
-          style={StyleSheet.absoluteFill}
-          onPress={onClose}
-          accessibilityLabel="Cerrar calendario"
-          accessibilityRole="button"
-        />
+    <BottomSheet
+      visible={visible}
+      onClose={onClose}
+      title={title}
+      footer={
+        seleccionRapida ? undefined : (
+          <Button
+            fullWidth
+            disabled={isDisabled(selected)}
+            onPress={() => {
+              onChange(selected);
+              onClose();
+            }}
+          >
+            Confirmar fecha
+          </Button>
+        )
+      }
+    >
+      <ScrollView contentContainerStyle={s.contenido} showsVerticalScrollIndicator={false}>
+        {shortcuts.length > 0 && (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            // Sale del margen de la hoja para llegar al borde, y deja el mismo margen al final.
+            style={s.shortcutsScroll}
+            contentContainerStyle={s.shortcuts}
+            accessibilityLabel="Fechas rápidas"
+          >
+            {shortcuts.map((sc) => (
+              <Chip
+                key={dateKey(sc.date)}
+                label={sc.label}
+                selected={sameDay(sc.date, selected)}
+                onPress={() => choose(sc.date)}
+                accessibilityLabel={sc.a11y}
+              />
+            ))}
+          </ScrollView>
+        )}
 
-        <View style={s.card}>
-          <View style={s.header}>
-            <Text variant="heading">{title}</Text>
-            <IconButton icon={X} label="Cerrar calendario" onPress={onClose} size="md" />
+        <View style={s.calendar}>
+          <View style={s.monthRow}>
+            <IconButton
+              icon={CaretLeft}
+              label="Mes anterior"
+              onPress={() => shiftMonth(-1)}
+              disabled={!canGoBack}
+              size="md"
+              variant="inverse"
+            />
+            <Text variant="subheading" align="center">
+              {`${MONTHS[month]} ${year}`}
+            </Text>
+            <IconButton
+              icon={CaretRight}
+              label="Mes siguiente"
+              onPress={() => shiftMonth(1)}
+              disabled={!canGoForward}
+              size="md"
+              variant="inverse"
+            />
           </View>
 
-          {shortcuts.length > 0 && (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={s.shortcuts}
-              accessibilityLabel="Fechas rápidas"
-            >
-              {shortcuts.map((sc) => (
-                <Chip
-                  key={dateKey(sc.date)}
-                  label={sc.label}
-                  selected={sameDay(sc.date, selected)}
-                  onPress={() => choose(sc.date)}
-                  accessibilityLabel={sc.a11y}
-                />
-              ))}
-            </ScrollView>
-          )}
-
-          <View style={s.calendar}>
-            <View style={s.monthRow}>
-              <IconButton
-                icon={CaretLeft}
-                label="Mes anterior"
-                onPress={() => shiftMonth(-1)}
-                disabled={!canGoBack}
-                size="md"
-                variant="inverse"
-              />
-              <Text variant="subheading" align="center">
-                {`${MONTHS[month]} ${year}`}
+          <View style={s.weekdays}>
+            {WEEKDAYS.map((day) => (
+              <Text key={day} variant="caption" color="muted" align="center" style={s.weekday}>
+                {day}
               </Text>
-              <IconButton
-                icon={CaretRight}
-                label="Mes siguiente"
-                onPress={() => shiftMonth(1)}
-                disabled={!canGoForward}
-                size="md"
-                variant="inverse"
-              />
-            </View>
+            ))}
+          </View>
 
-            <View style={s.weekdays}>
-              {WEEKDAYS.map((day) => (
-                <Text key={day} variant="caption" color="muted" align="center" style={s.weekday}>
-                  {day}
-                </Text>
-              ))}
-            </View>
+          <View style={s.grid}>
+            {grid.map((date, index) => {
+              if (!date) return <View key={`pad-${index}`} style={s.cell} />;
 
-            <View style={s.grid}>
-              {grid.map((date, index) => {
-                if (!date) return <View key={`pad-${index}`} style={s.cell} />;
+              const active = sameDay(date, selected);
+              const disabled = isDisabled(date);
+              const today = sameDay(date, new Date());
+              const conSalida = !!activeSet && !disabled;
 
-                const active = sameDay(date, selected);
-                const disabled = isDisabled(date);
-                const today = sameDay(date, new Date());
-                const conSalida = !!activeSet && !disabled;
+              const a11y = [
+                longDay(date),
+                today ? 'hoy' : '',
+                conSalida ? 'con salidas' : '',
+                disabled ? (activeDates ? 'sin viajes' : 'no disponible') : '',
+              ]
+                .filter(Boolean)
+                .join(', ');
 
-                const a11y = [
-                  longDay(date),
-                  today ? 'hoy' : '',
-                  conSalida ? 'con salidas' : '',
-                  disabled ? (activeDates ? 'sin viajes' : 'no disponible') : '',
-                ]
-                  .filter(Boolean)
-                  .join(', ');
-
-                return (
-                  <Pressable
-                    key={dateKey(date)}
-                    onPress={() => choose(date)}
-                    disabled={disabled}
-                    style={s.cell}
-                    accessibilityRole="button"
-                    accessibilityLabel={a11y}
-                    accessibilityState={{ disabled, selected: active }}
+              return (
+                <Pressable
+                  key={dateKey(date)}
+                  onPress={() => choose(date)}
+                  disabled={disabled}
+                  style={s.cell}
+                  accessibilityRole="button"
+                  accessibilityLabel={a11y}
+                  accessibilityState={{ disabled, selected: active }}
+                >
+                  <View
+                    style={[
+                      s.day,
+                      active && s.dayActive,
+                      today && !active && s.dayToday,
+                      disabled && s.dayDisabled,
+                    ]}
                   >
-                    <View
-                      style={[
-                        s.day,
-                        active && s.dayActive,
-                        today && !active && s.dayToday,
-                        disabled && s.dayDisabled,
-                      ]}
+                    <Text
+                      variant="label"
+                      weight={active ? 'bold' : 'medium'}
+                      color={active ? 'inverse' : disabled ? 'muted' : 'foreground'}
+                      compact
                     >
-                      <Text
-                        variant="label"
-                        weight={active ? 'bold' : 'medium'}
-                        color={active ? 'inverse' : disabled ? 'muted' : 'foreground'}
-                        compact
-                      >
-                        {String(date.getDate())}
-                      </Text>
-                      {conSalida ? <View style={[s.dot, active && s.dotActive]} /> : null}
-                    </View>
-                  </Pressable>
-                );
-              })}
-            </View>
-
-            {availableThisMonth === 0 && (
-              <Text variant="caption" color="muted" align="center" style={s.hint}>
-                No hay salidas este mes. Prueba el mes siguiente.
-              </Text>
-            )}
+                      {String(date.getDate())}
+                    </Text>
+                    {conSalida ? <View style={[s.dot, active && s.dotActive]} /> : null}
+                  </View>
+                </Pressable>
+              );
+            })}
           </View>
 
-          {seleccionRapida ? (
-            <View style={s.footerSpacer} />
-          ) : (
-            <View style={s.footer}>
-              <Button
-                variant="accent"
-                fullWidth
-                disabled={isDisabled(selected)}
-                onPress={() => {
-                  onChange(selected);
-                  onClose();
-                }}
-              >
-                Confirmar fecha
-              </Button>
-            </View>
+          {availableThisMonth === 0 && (
+            <Text variant="caption" color="muted" align="center" style={s.hint}>
+              No hay salidas este mes. Prueba el mes siguiente.
+            </Text>
           )}
         </View>
-      </View>
-    </Modal>
+      </ScrollView>
+    </BottomSheet>
   );
 }
 
 const s = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: Colors.scrim,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: Spacing.lg,
-  },
-  card: {
-    width: '100%',
-    maxWidth: Layout.modalMaxWidth,
-    backgroundColor: Colors.background,
-    borderRadius: Radius['2xl'],
-    overflow: 'hidden',
-    ...Shadows.overlay,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: Spacing.xl,
+  contenido: {
+    paddingHorizontal: Layout.screenPadding,
     paddingTop: Spacing.lg,
-    paddingBottom: Spacing.md,
+    paddingBottom: Spacing['2xl'],
+  },
+  shortcutsScroll: {
+    marginHorizontal: -Layout.screenPadding,
+    marginBottom: Spacing.lg,
   },
   shortcuts: {
     gap: Spacing.sm,
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: Spacing.md,
+    paddingHorizontal: Layout.screenPadding,
   },
   calendar: {
-    marginHorizontal: Spacing.lg,
     padding: Spacing.lg,
     backgroundColor: Colors.surface,
     borderRadius: Radius.xl,
@@ -397,21 +370,23 @@ const s = StyleSheet.create({
     aspectRatio: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: Spacing.xs / 2,
+    padding: Sizes.hairline,
   },
   day: {
     width: '100%',
     height: '100%',
+    maxWidth: Sizes.touchTarget,
+    maxHeight: Sizes.touchTarget,
     borderRadius: Radius.full,
     alignItems: 'center',
     justifyContent: 'center',
   },
   dayActive: {
-    backgroundColor: Colors.accent,
+    backgroundColor: Colors.accentStrong,
   },
   dayToday: {
-    borderWidth: Sizes.hairline,
-    borderColor: Colors.accent,
+    borderWidth: Sizes.borderStrong,
+    borderColor: Colors.accentStrong,
   },
   dayDisabled: {
     opacity: Opacity.disabled,
@@ -423,18 +398,12 @@ const s = StyleSheet.create({
     width: Spacing.xs,
     height: Spacing.xs,
     borderRadius: Radius.full,
-    backgroundColor: Colors.accent,
+    backgroundColor: Colors.accentStrong,
   },
   dotActive: {
-    backgroundColor: Colors.white,
+    backgroundColor: Colors.accentStrongForeground,
   },
   hint: {
     marginTop: Spacing.md,
-  },
-  footer: {
-    padding: Spacing.xl,
-  },
-  footerSpacer: {
-    height: Spacing.lg,
   },
 });

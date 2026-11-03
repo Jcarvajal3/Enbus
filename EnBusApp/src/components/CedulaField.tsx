@@ -10,7 +10,7 @@
  */
 import React, { useEffect, useState, type Ref } from 'react';
 import { StyleSheet, View, type ReturnKeyTypeOptions, type TextInput } from 'react-native';
-import { Chip, Field, Text } from '@/src/components/ui';
+import { Chip, Field, FieldMessage, Text, type FieldTone } from '@/src/components/ui';
 import { cedulaParaGuardar, separarCedula, type LetraCedula } from '@/src/utils/ve.generated';
 import { Spacing } from '@/src/theme';
 
@@ -38,6 +38,8 @@ export interface CedulaFieldProps {
   returnKeyType?: ReturnKeyTypeOptions;
   onSubmitEditing?: () => void;
   editable?: boolean;
+  /** Mismo `tone` que los demás campos de la tarjeta (AU-10). Por defecto `light`. */
+  tone?: FieldTone;
   /** Al `TextInput` del número (para encadenar "Siguiente"). */
   ref?: Ref<TextInput>;
 }
@@ -58,6 +60,7 @@ export function CedulaField({
   returnKeyType,
   onSubmitEditing,
   editable = true,
+  tone = 'light',
   ref,
 }: CedulaFieldProps) {
   const separada = separarCedula(value);
@@ -122,6 +125,8 @@ export function CedulaField({
               label={l}
               selected={l === letra}
               onPress={() => elegirLetra(l)}
+              // Junto a un campo blanco (sobre beige) el chip sin elegir es blanco.
+              sobre={tone === 'light' ? 'surface' : 'background'}
               accessibilityLabel={`${NOMBRE_LETRA[l]} (${l})`}
             />
           ))}
@@ -131,7 +136,7 @@ export function CedulaField({
           ref={ref}
           value={separada.numero}
           onChangeText={cambiarNumero}
-          placeholder="12345678"
+          placeholder="Ej. 12345678"
           keyboardType="number-pad"
           inputMode="numeric"
           autoComplete="off"
@@ -139,12 +144,17 @@ export function CedulaField({
           returnKeyType={returnKeyType}
           onSubmitEditing={onSubmitEditing}
           editable={editable}
+          tone={tone}
           error={error ?? undefined}
           helper={helper}
+          // La ayuda y el error van a todo el ancho, bajo la fila (AU-10).
+          sinMensaje
           accessibilityLabel={`${label}, número (${NOMBRE_LETRA[letra]}, ${letra})`}
           containerStyle={s.numero}
         />
       </View>
+
+      <FieldMessage error={error} helper={helper} />
     </View>
   );
 }
@@ -155,17 +165,16 @@ const s = StyleSheet.create({
   },
   label: {
     marginBottom: Spacing.sm,
-    marginLeft: Spacing.xs,
+    marginLeft: Spacing.xl,
   },
   row: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     gap: Spacing.sm,
   },
   letras: {
     flexDirection: 'row',
     gap: Spacing.xs,
-    paddingTop: Spacing.xs,
   },
   numero: {
     flex: 1,
