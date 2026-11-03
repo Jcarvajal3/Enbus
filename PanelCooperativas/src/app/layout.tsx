@@ -11,8 +11,8 @@ const roobert = localFont({
   display: "swap",
 });
 
-// Pestaña del navegador: "<Sección> · EnBus" (SY-19). Las secciones del panel la ponen
-// desde el shell (`seccionDe`); el admin tiene su propio valor por defecto.
+// Pestaña del navegador: "<Sección> · EnBus" (SY-19). Cada sección la pone con el
+// `metadata.title` de su layout.tsx (nombre de `lib/navigation`); el admin tiene su propio valor por defecto.
 export const metadata: Metadata = {
   title: {
     default: "Panel de cooperativas · EnBus",

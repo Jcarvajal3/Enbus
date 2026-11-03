@@ -302,9 +302,6 @@ export type TipoMetodoPago = 'PAGO_MOVIL' | 'TRANSFERENCIA_BANCARIA' | 'ZELLE' |
 /** Cómo devolvió la cooperativa el dinero de un boleto (`boletos.reembolso_metodo`). */
 export type MetodoReembolso = TipoMetodoPago;
 
-/** @deprecated Usa `TipoMetodoPago` (los valores reales del enum). */
-export type TipoPago = TipoMetodoPago;
-
 /** Columna generada `pagos.estado_verificacion`. */
 export type EstadoVerificacionPago = 'PENDIENTE' | 'APROBADO' | 'RECHAZADO';
 

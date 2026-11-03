@@ -40,13 +40,7 @@ export type TextColorToken =
   | 'infoText'
   | 'link'
   | 'dangerText'
-  | 'inverse'
-  /** @deprecated D25 → `link` (el azul vivo no llega a 4,5:1 como texto) */
-  | 'accent'
-  /** @deprecated D25 → `foreground` (el coral no llega a 4,5:1 como texto) */
-  | 'secondary'
-  /** @deprecated D25 → `dangerText` */
-  | 'danger';
+  | 'inverse';
 
 const COLOR_MAP: Record<TextColorToken, string> = {
   foreground: Colors.foreground,
@@ -58,10 +52,6 @@ const COLOR_MAP: Record<TextColorToken, string> = {
   link: Colors.link,
   dangerText: Colors.dangerText,
   inverse: Colors.white,
-  // Alias D25: ya se pintan con el color legible.
-  accent: Colors.link,
-  secondary: Colors.foreground,
-  danger: Colors.dangerText,
 };
 
 export interface TextProps extends RNTextProps {

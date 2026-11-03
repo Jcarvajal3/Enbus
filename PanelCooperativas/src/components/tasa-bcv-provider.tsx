@@ -5,7 +5,7 @@
 // El provider la refresca cada 30 min (la taquilla pasa el día abierta) y
 // `useTasaBCV()` la expone a <Monto> y a cualquier componente de cliente.
 
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { formatNumeroVE, fechaTasaCorta } from "@/lib/dinero";
 import { esTasaDesactualizada, filaATasaBCV, type TasaBCV } from "@/lib/types/pagos";
@@ -35,6 +35,8 @@ export function TasaBCVProvider({
     setTasa(tasaInicial);
   }
 
+  const sinTasaDelServidor = useRef(!tasaInicial);
+
   useEffect(() => {
     let activo = true;
     const refrescar = async () => {
@@ -44,6 +46,9 @@ export function TasaBCVProvider({
       const nueva = filaATasaBCV(data as Parameters<typeof filaATasaBCV>[0]);
       if (nueva) setTasa(nueva);
     };
+    // Sin tasa del servidor (consulta fallida o sin tasa todavía): se pide ya desde el
+    // navegador, sin esperar 30 min mostrando "Sin tasa BCV" cuando sí la hay.
+    if (sinTasaDelServidor.current) void refrescar();
     const id = window.setInterval(refrescar, REFRESCO_MS);
     return () => {
       activo = false;

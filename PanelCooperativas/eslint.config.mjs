@@ -14,9 +14,9 @@ const MENSAJE_TOKENS =
 const NIVEL = "error";
 
 // ─── Barrido panel de la fase 5 (Audits/fase5/fase5_spec.md §4) ─────────────
-// En "warn" mientras la oleada 2 limpia sus archivos; la integración lo pasa a
-// "error" (§5 paso 1). Regla local, sin dependencias.
-const NIVEL_BARRIDO = "warn";
+// En "error" desde la integración de la fase 5 (§5 paso 1; antes "warn" mientras
+// la oleada 2 limpiaba sus archivos). Regla local, sin dependencias.
+const NIVEL_BARRIDO = "error";
 const CLASES_BARRIDO = [
   {
     re: /(^|[\s:])bg-accent(?![-\w])/,

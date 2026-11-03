@@ -43,9 +43,6 @@ export const ADMIN_NAV_GRUPOS: AdminNavGrupo[] = [
   },
 ];
 
-/** @deprecated Usar `ADMIN_NAV_GRUPOS` (se borra en la integración de la fase 5). */
-export const ADMIN_NAV_ITEMS: AdminNavItem[] = ADMIN_NAV_GRUPOS.flatMap((g) => g.items);
-
 /** Sección (y su grupo) del admin a la que pertenece `pathname`, o null fuera del menú. */
 export function seccionAdminDe(pathname: string): { grupo?: string; item: AdminNavItem } | null {
   for (const g of ADMIN_NAV_GRUPOS) {
@@ -53,4 +50,11 @@ export function seccionAdminDe(pathname: string): { grupo?: string; item: AdminN
     if (item) return { grupo: g.titulo, item };
   }
   return null;
+}
+
+/** Nombre de la sección del admin con ese `href` (para `metadata.title` de su layout). */
+export function tituloSeccionAdmin(href: string): string {
+  const item = ADMIN_NAV_GRUPOS.flatMap((g) => g.items).find((i) => i.href === href);
+  if (!item) throw new Error(`Sección desconocida: ${href}`);
+  return item.title;
 }

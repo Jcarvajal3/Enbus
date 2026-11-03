@@ -7,13 +7,11 @@
  * constructions per frame.
  */
 
-import { formatCiudad, formatDiaHoraVE, formatDiaVE, formatHoraVE, ZONA_VE } from './ve.generated';
+import { formatCiudad, ZONA_VE } from './ve.generated';
 
 // ─── Date formatters ──────────────────────────────────────────────────────────
 // Fechas y horas: usar `formatDiaVE` ("mar. 3 nov."), `formatHoraVE` ("2:30 p. m.") y
 // `formatDiaHoraVE` ("mar. 3 nov. · 2:30 p. m."), siempre en hora de Venezuela (D4).
-// `dateTime`, `dateFull` y `timeOnly` quedan como alias 12 h sobre esos helpers
-// (misma forma `{ format(fecha) }`); la integración de la fase 5 los borra.
 
 const LOCALE = 'es-VE';
 
@@ -36,15 +34,6 @@ export const dateDayMonth = new Intl.DateTimeFormat(LOCALE, {
   month: 'short',
   timeZone: ZONA_VE,
 });
-
-/** @deprecated Usar `formatDiaHoraVE` ("mar. 3 nov. · 2:30 p. m."). */
-export const dateTime: FormateadorFecha = { format: (d) => formatDiaHoraVE(d) };
-
-/** @deprecated Usar `formatDiaVE` ("mar. 3 nov."). */
-export const dateFull: FormateadorFecha = { format: (d) => formatDiaVE(d) };
-
-/** @deprecated Usar `formatHoraVE` ("2:30 p. m."). */
-export const timeOnly: FormateadorFecha = { format: (d) => formatHoraVE(d) };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 

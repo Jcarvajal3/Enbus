@@ -23,8 +23,6 @@ import { getEstadoVisual, type EstadoDominio } from '@/src/utils/estados';
 export interface BadgeProps {
   children: string;
   tone?: StatusTone;
-  /** @deprecated SY-23: las insignias no llevan icono; se ignora. */
-  icon?: React.ComponentType<IconProps>;
   size?: 'sm' | 'md';
   /** Dibuja el borde del tono (el tono `neutral` siempre lo lleva). */
   bordered?: boolean;

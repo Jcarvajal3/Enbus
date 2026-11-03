@@ -31,16 +31,6 @@ export interface RouteSummaryProps {
   horaLlegada?: string;
 }
 
-/**
- * Three-letter airport-style code derived from a city name.
- * @deprecated Sin uso desde la fase 4 (APP-58): `RouteSummary` muestra el nombre
- * completo. Se conserva porque `ui/index.ts` la reexporta.
- */
-export function cityCode(city?: string | null): string {
-  const name = formatCity(city);
-  return name ? name.substring(0, 3).toUpperCase() : '—';
-}
-
 export function RouteSummary({
   origen,
   destino,

@@ -6,17 +6,15 @@
  * "Mis encomiendas", las salidas y la cooperativa del envío.
  *
  * Con `selectable`, tocar la tarjeta la elige (no avanza): elegida = borde
- * `accentStrong` de 2 pt + `CheckCircle` (D1). La píldora con la inicial ya no
- * se dibuja (`initial` y `tone` quedan como alias D25).
+ * `accentStrong` de 2 pt + `CheckCircle` (D1).
  */
 import React, { memo } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { CaretRight, CheckCircle } from 'phosphor-react-native';
 import { PressableScale } from '../PressableScale';
 import { Text } from './Text';
-import { Colors, Motion, Radius, Sizes, Spacing, type StatusTone } from '@/src/theme';
+import { Colors, Motion, Radius, Sizes, Spacing } from '@/src/theme';
 
-export type PillTone = StatusTone | 'accent' | 'primary';
 
 export interface EntityCardProps {
   title: string;
@@ -25,10 +23,6 @@ export interface EntityCardProps {
   badge?: React.ReactNode;
   /** Trailing element of the top row — a code, a price, a seat count */
   meta?: React.ReactNode;
-  /** @deprecated D25 (AU-21): la píldora con la inicial ya no se dibuja. */
-  initial?: string;
-  /** @deprecated D25: sin píldora no hay tono que pintar. */
-  tone?: PillTone;
   /**
    * Flecha a la derecha (la tarjeta abre otra pantalla). Por defecto, sí cuando
    * hay `onPress` y la tarjeta no es `selectable`.

@@ -201,10 +201,10 @@ Componentes de dominio comunes (`src/components`): `BrandMark` (bloque "EB"),
 `TransactionCard` (sobre `EntityCard`), `ScreenSkeleton` (`lista` · `detalle` ·
 `perfil`: la espera con la forma de la pantalla; el spinner solo va en botones).
 
-**Alias retirados (D25)**, se borran en la integración: `Button`
-`accent`/`gradient`/`dangerSoft`/`glow`, `Text color` `accent`/`secondary`/`danger`,
-`EntityCard` `initial`/`tone`, `Badge icon`, `PageTransition`, `LoadingState`.
-ESLint los marca (`warn`) junto con el resto del barrido de la app:
+**Retirados (D25)**: `Button` `accent`/`gradient`/`dangerSoft`/`glow`, `Text color`
+`accent`/`secondary`/`danger`, `EntityCard` `initial`/`tone`, `Badge icon`,
+`PageTransition`, `LoadingState`. ESLint (`error`) impide volver a usarlos y
+también el resto del barrido de la app:
 `Alert.alert`, `router.back()`, `capitalize`, formateadores de fecha sueltos,
 `right={<StatusBadge…>}`, `Spacing.x ± n`, "Desde"/"Hacia", "Sí, …" y
 marcadores que no empiezan por "Ej. ".

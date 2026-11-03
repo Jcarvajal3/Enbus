@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { AppSidebar } from "@/components/app-sidebar";
@@ -46,32 +46,17 @@ export function SaltarAlContenido() {
 /**
  * Barra superior (D15). Lista: "Grupo › Sección" (el grupo se oculta < md; sin grupo
  * no hay miga). Detalle (<MigaObjeto>): "Sección › Objeto" con la sección enlazada.
- * También pone la pestaña del navegador: "<Sección> · EnBus".
+ * La pestaña del navegador ("<Sección> · EnBus") la ponen los `metadata` de cada sección
+ * (layout.tsx de su carpeta) con la plantilla "%s · EnBus" del layout raíz.
  */
 export function BarraSuperior({
   seccion,
-  tituloPorDefecto,
   extra,
 }: {
   seccion: { grupo?: string; item: { title: string; href: string } } | null;
-  tituloPorDefecto: string;
   extra?: React.ReactNode;
 }) {
   const objeto = useMigaObjeto();
-  const titulo = seccion ? `${seccion.item.title} · EnBus` : tituloPorDefecto;
-
-  // Pestaña del navegador ("<Sección> · EnBus", SY-19). No se usa <title> de React: el de
-  // los metadatos de Next.js va antes en el <head>, gana y además llega en streaming después
-  // de hidratar. Por eso el shell lo fija y lo vuelve a fijar si Next lo reescribe.
-  useEffect(() => {
-    const fijar = () => {
-      if (document.title !== titulo) document.title = titulo;
-    };
-    fijar();
-    const observador = new MutationObserver(fijar);
-    observador.observe(document.head, { subtree: true, childList: true, characterData: true });
-    return () => observador.disconnect();
-  }, [titulo]);
 
   let miga: React.ReactNode = null;
   if (seccion && objeto) {
@@ -150,11 +135,7 @@ export function PanelShell({
             <ConnectivityBanner />
             {/* Estado de la cooperativa (en revisión, rechazada, suspendida o desactivada): no se puede cerrar */}
             <EstadoCooperativaBanner />
-            <BarraSuperior
-              seccion={seccionDe(pathname)}
-              tituloPorDefecto="Panel de cooperativas · EnBus"
-              extra={headerExtra}
-            />
+            <BarraSuperior seccion={seccionDe(pathname)} extra={headerExtra} />
             {/* SidebarInset ya es el <main>: el destino de "Saltar al contenido" es este bloque. */}
             <div id="contenido" tabIndex={-1} className="flex min-w-0 flex-1 flex-col p-4 outline-none sm:p-6">
               {children}

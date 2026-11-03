@@ -28,11 +28,6 @@ interface QRCodeViewerProps {
   codigoLegible?: string;
   /** Añade "Mostrar QR en grande": pantalla blanca con el QR de 280 pt. */
   ampliable?: boolean;
-  /**
-   * @deprecated Se ignora: subir el brillo requiere `expo-brightness`, que no
-   * está instalada. Con `ampliable` se muestra la ayuda "Sube el brillo…".
-   */
-  autoMaxBrightness?: boolean;
 }
 
 /** QR with a spring reveal — it should feel like the code "arrives", not blink in. */

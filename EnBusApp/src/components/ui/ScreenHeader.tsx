@@ -12,8 +12,8 @@
  * `status`, una fila bajo el título. `right` solo para `IconButton`.
  * Asistente = `steps`: "Paso 2 de 4" + título del paso.
  */
-import React from 'react';
-import { StyleSheet, View } from 'react-native';
+import React, { useState } from 'react';
+import { StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 import { ArrowLeft } from 'phosphor-react-native';
 import Animated, {
   useAnimatedStyle,
@@ -23,7 +23,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { IconButton } from './IconButton';
 import { Text } from './Text';
-import { Colors, Layout, Motion, Radius, Sizes, Spacing } from '@/src/theme';
+import { Colors, Layout, Motion, Radius, Sizes, Spacing, Typography } from '@/src/theme';
 
 export type ScreenHeaderVariant = 'large' | 'compact' | 'steps';
 
@@ -145,13 +145,7 @@ export function ScreenHeader({
               {eyebrow}
             </Text>
           ) : null}
-          {typeof title === 'string' ? (
-            <Text variant="title" accessibilityRole="header">
-              {title}
-            </Text>
-          ) : (
-            title
-          )}
+          {typeof title === 'string' ? <TituloPestana>{title}</TituloPestana> : title}
         </View>
         {right ? <View style={s.rightGroup}>{right}</View> : null}
       </View>
@@ -161,6 +155,61 @@ export function ScreenHeader({
         </Text>
       ) : null}
       {status ? <View style={s.status}>{status}</View> : null}
+    </View>
+  );
+}
+
+// ─── Título de pestaña ───────────────────────────────────────────────────────
+
+/** "Mis encomiendas" encoge hasta este factor antes que partirse (360 pt). */
+const PESTANA_ESCALA_MINIMA = 0.8;
+/** Ancho holgado de la copia de medida (el título nunca llega a tanto). */
+const MEDIDA_ANCHO = 1000;
+
+/**
+ * Título de pestaña en una sola línea: mide su ancho natural con una copia
+ * invisible y, si no cabe junto a las acciones, reduce el cuerpo (en web
+ * `adjustsFontSizeToFit` no existe, por eso se mide).
+ */
+function TituloPestana({ children }: { children: string }) {
+  const [disponible, setDisponible] = useState(0);
+  const [natural, setNatural] = useState(0);
+  const escala =
+    disponible > 0 && natural > disponible
+      ? Math.max(PESTANA_ESCALA_MINIMA, disponible / natural)
+      : 1;
+  const base = Typography.sizes[Typography.presets.title.size];
+  const alto = Typography.lineHeights[Typography.presets.title.size];
+  const ajuste = escala < 1 ? { fontSize: base * escala, lineHeight: alto * escala } : null;
+
+  return (
+    <View onLayout={(e: LayoutChangeEvent) => setDisponible(e.nativeEvent.layout.width)}>
+      <Text
+        variant="title"
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={PESTANA_ESCALA_MINIMA}
+        accessibilityRole="header"
+        style={ajuste}
+      >
+        {children}
+      </Text>
+      <View
+        style={s.medida}
+        pointerEvents="none"
+        aria-hidden
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
+      >
+        <Text
+          variant="title"
+          numberOfLines={1}
+          style={s.medidaTexto}
+          onLayout={(e: LayoutChangeEvent) => setNatural(e.nativeEvent.layout.width)}
+        >
+          {children}
+        </Text>
+      </View>
     </View>
   );
 }
@@ -265,6 +314,17 @@ const s = StyleSheet.create({
   },
   largeTitles: {
     flex: 1,
+  },
+  /** Copia invisible del título para medir su ancho sin límite. */
+  medida: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: MEDIDA_ANCHO,
+    opacity: 0,
+  },
+  medidaTexto: {
+    alignSelf: 'flex-start',
   },
   largeSubtitle: {
     marginTop: Spacing.xs,

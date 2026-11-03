@@ -120,7 +120,7 @@ export function SegmentedControl<T extends string>({
             <Text variant="label" color={isActive ? 'foreground' : 'muted'} compact numberOfLines={1}>
               {option.label}
             </Text>
-            {option.badge ? <CountPill value={option.badge} /> : null}
+            {option.badge ? <CountPill value={option.badge} active={isActive} /> : null}
           </PressableScale>
         );
       })}

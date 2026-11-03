@@ -358,14 +358,6 @@ export const Shadows = {
     shadowRadius: 24,
     elevation: 16,
   },
-  /** Colored glow behind CTAs */
-  glow: (color: string) => ({
-    shadowColor: color,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3,
-    shadowRadius: 14,
-    elevation: 6,
-  }),
   /** Tab bar floating shadow */
   tabBar: {
     shadowColor: palette.black,
@@ -379,18 +371,6 @@ export const Shadows = {
 // ─── Gradients ───────────────────────────────────────────────────────────────
 
 export const Gradients = {
-  /** Hero gradient: warm yellow → coral */
-  warm: [palette.yellow, palette.coral] as const,
-  /** Accent CTA gradient — subtle depth on the blue */
-  accent: [palette.blueBright, palette.blue] as const,
-  /** Ambient background glow */
-  ambientGlow: [
-    alpha(palette.yellow, 0.22),
-    alpha(palette.coral, 0.1),
-    palette.white,
-  ] as const,
-  /** Subtle surface gradient for cards */
-  surfaceSubtle: [palette.white, palette.beige] as const,
   /** Fade used to let content scroll out under a floating bar */
   fadeToBackground: [
     alpha(palette.white, 0),

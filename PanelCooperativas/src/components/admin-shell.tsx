@@ -35,11 +35,7 @@ export function AdminShell({
           <AdminSidebar />
           <SidebarInset className="min-w-0">
             <ConnectivityBanner />
-            <BarraSuperior
-              seccion={seccionAdminDe(pathname)}
-              tituloPorDefecto="Administración · EnBus"
-              extra={headerExtra}
-            />
+            <BarraSuperior seccion={seccionAdminDe(pathname)} extra={headerExtra} />
             {/* SidebarInset ya es el <main>: el destino de "Saltar al contenido" es este bloque. */}
             <div id="contenido" tabIndex={-1} className="flex min-w-0 flex-1 flex-col p-4 outline-none sm:p-6">
               {children}

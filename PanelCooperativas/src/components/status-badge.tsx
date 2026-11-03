@@ -6,9 +6,6 @@ import type { EstadoEncomienda } from "@/lib/types/encomiendas";
 import type { EstadoBoleto } from "@/lib/types/boletos";
 import type { EstadoUiBoleto } from "@/lib/types/pagos";
 
-/** @deprecated usar EstadoEncomienda de lib/types/encomiendas. */
-export type EncomiendaEstado = EstadoEncomienda;
-
 // Tonos de sistema.md §4.1 (≥ 6:1 en claro y en oscuro): fondo `*-light` y
 // texto `*-deep` del mismo matiz; neutro = contorno. Las insignias no llevan
 // icono (§2.4) y van en `text-xs font-semibold` (SY-23, desde `Badge`).

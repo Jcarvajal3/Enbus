@@ -167,7 +167,9 @@ export function BottomSheet({
             ) : null}
           </View>
 
-          <View style={[s.body, footer ? null : { paddingBottom: insets.bottom }]}>{children}</View>
+          <View style={[s.body, height ? s.bodyFill : null, footer ? null : { paddingBottom: insets.bottom }]}>
+            {children}
+          </View>
 
           {footer ? (
             <View style={[s.footer, { paddingBottom: Spacing['2xl'] + insets.bottom }]}>{footer}</View>
@@ -220,6 +222,10 @@ const s = StyleSheet.create({
   },
   body: {
     flexShrink: 1,
+  },
+  /** Con `height` fijo el cuerpo ocupa el resto y el pie queda abajo. */
+  bodyFill: {
+    flex: 1,
   },
   footer: {
     paddingHorizontal: Layout.screenPadding,

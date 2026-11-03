@@ -1,6 +1,6 @@
 /**
  * Screen shell primitives: Screen, FloatingBar, EmptyState, ErrorState,
- * StaleBanner, LoadingState.
+ * StaleBanner.
  *
  * These encode the layout rules that screens kept re-deriving by hand:
  * the horizontal gutter, and — critically — the bottom inset needed to clear
@@ -9,7 +9,7 @@
  * everything with it.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, StyleSheet, View, ViewStyle } from 'react-native';
+import { StyleSheet, View, ViewStyle } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets, type Edge } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
@@ -327,40 +327,9 @@ export function StaleBanner({
   );
 }
 
-// ─── Loading state ───────────────────────────────────────────────────────────
-
-/**
- * Centred loading block.
- * @deprecated D25 (AU-49): una pantalla espera con `ScreenSkeleton` (la forma de
- * lo que viene); el spinner solo va dentro de los botones.
- */
-export function LoadingState({ label, compact }: { label?: string; compact?: boolean }) {
-  return (
-    <View style={[s.loading, compact && s.loadingCompact]} accessibilityRole="progressbar">
-      <ActivityIndicator size="large" color={Colors.mutedForeground} />
-      {label ? (
-        <Text variant="secondary" color="muted" align="center" style={s.loadingLabel}>
-          {label}
-        </Text>
-      ) : null}
-    </View>
-  );
-}
-
 const s = StyleSheet.create({
   screen: {
     flex: 1,
-  },
-  loading: {
-    paddingVertical: Spacing['5xl'] + Spacing['3xl'],
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  loadingCompact: {
-    paddingVertical: Spacing['3xl'],
-  },
-  loadingLabel: {
-    marginTop: Spacing.md,
   },
   gutter: {
     paddingHorizontal: Layout.screenPadding,

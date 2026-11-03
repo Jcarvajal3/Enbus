@@ -105,5 +105,3 @@ export function KpiCard({
   );
 }
 
-/** @deprecated Usar `KpiCard`. */
-export const KPICard = KpiCard;

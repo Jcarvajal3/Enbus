@@ -97,11 +97,6 @@ export async function fetchSolicitudes(): Promise<SolicitudesAdmin> {
   };
 }
 
-/** @deprecated usar fetchSolicitudes (incluye las rechazadas y el estado de la cuenta). */
-export async function fetchSolicitudesPendientes(): Promise<SolicitudPendiente[]> {
-  return (await fetchSolicitudes()).pendientes;
-}
-
 export async function countSolicitudesPendientes(): Promise<number> {
   const supabase = await createClient();
 

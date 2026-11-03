@@ -102,9 +102,6 @@ export const NAV_PIE: NavItem[] = [
   { title: "Impresora y lector", href: "/cooperativas/hardware", icon: ICONO_SECCION.impresora, roles: AMBOS },
 ];
 
-/** @deprecated Usar `NAV_GRUPOS` / `navParaRol` (se borra en la integración de la fase 5). */
-export const NAV_ITEMS: NavItem[] = [...NAV_GRUPOS.flatMap((g) => g.items), ...NAV_PIE];
-
 /** Grupos del menú visibles para el rol; un grupo sin ítems no se devuelve. */
 export function navParaRol(rol: RolPanel): NavGrupo[] {
   return NAV_GRUPOS.map((g) => ({ ...g, items: g.items.filter((i) => i.roles.includes(rol)) })).filter(
@@ -126,4 +123,11 @@ export function seccionDe(pathname: string): { grupo?: string; item: NavItem } |
   }
   const pie = NAV_PIE.find((i) => esRutaActiva(pathname, i.href));
   return pie ? { item: pie } : null;
+}
+
+/** Nombre de la sección con ese `href` (para `metadata.title` de su layout: "<Sección> · EnBus"). */
+export function tituloSeccion(href: string): string {
+  const item = [...NAV_GRUPOS.flatMap((g) => g.items), ...NAV_PIE].find((i) => i.href === href);
+  if (!item) throw new Error(`Sección desconocida: ${href}`);
+  return item.title;
 }

@@ -24,7 +24,7 @@ const sintaxisRestringida = {
   },
 };
 
-// ─── Barrido app de la fase 5 (en `warn`; la integración las pasa a `error`) ───
+// ─── Barrido app de la fase 5 (en `error` desde la integración) ───
 const BARRIDO_APP = [
   {
     selector: "JSXAttribute[name.name='variant'][value.value=/^(accent|gradient|dangerSoft)$/]",
@@ -111,10 +111,10 @@ module.exports = defineConfig([
     ignores: ['**/*.generated.ts'],
     plugins: { enbus: { rules: { barrido: sintaxisRestringida, fechas: sintaxisRestringida } } },
     rules: {
-      'enbus/barrido': ['warn', BARRIDO_APP],
-      'enbus/fechas': ['warn', BARRIDO_FECHAS],
+      'enbus/barrido': ['error', BARRIDO_APP],
+      'enbus/fechas': ['error', BARRIDO_FECHAS],
       'no-restricted-properties': [
-        'warn',
+        'error',
         { object: 'Alert', property: 'alert', message: 'Confirma con useConfirm / ConfirmSheet (D3).' },
         { object: 'router', property: 'back', message: 'Usa useVolver(padre): la ← nunca queda muerta.' },
       ],

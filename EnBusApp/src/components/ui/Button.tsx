@@ -29,13 +29,7 @@ export type ButtonVariant =
   | 'outline'
   | 'ghost'
   | 'danger'
-  | 'dangerGhost'
-  /** @deprecated D25 → `primary` */
-  | 'accent'
-  /** @deprecated D25 → `primary` (texto blanco sobre amarillo→coral no llega a AA) */
-  | 'gradient'
-  /** @deprecated D25 → `dangerGhost` */
-  | 'dangerSoft';
+  | 'dangerGhost';
 
 export type ButtonSize = 'sm' | 'md' | 'lg';
 
@@ -55,26 +49,9 @@ export interface ButtonProps {
   disabled?: boolean;
   fullWidth?: boolean;
   haptic?: boolean;
-  /** @deprecated D25: ya no hace nada (la sombra de color se retiró). */
-  glow?: boolean;
   style?: ViewStyle | ViewStyle[];
   accessibilityLabel?: string;
 }
-
-type VarianteReal = 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger' | 'dangerGhost';
-
-/** Las variantes retiradas se pintan como su sustituta (D25). */
-const ALIAS: Record<ButtonVariant, VarianteReal> = {
-  primary: 'primary',
-  secondary: 'secondary',
-  outline: 'outline',
-  ghost: 'ghost',
-  danger: 'danger',
-  dangerGhost: 'dangerGhost',
-  accent: 'primary',
-  gradient: 'primary',
-  dangerSoft: 'dangerGhost',
-};
 
 interface VariantSpec {
   background: string;
@@ -82,7 +59,7 @@ interface VariantSpec {
   border?: string;
 }
 
-const VARIANTS: Record<VarianteReal, VariantSpec> = {
+const VARIANTS: Record<ButtonVariant, VariantSpec> = {
   // Amarillo + tinta: 10,5:1.
   primary: { background: Colors.primary, foreground: Colors.primaryForeground },
   secondary: { background: Colors.surface, foreground: Colors.foreground },
@@ -123,12 +100,11 @@ export function Button({
   style,
   accessibilityLabel,
 }: ButtonProps) {
-  const real = ALIAS[variant];
-  const base = VARIANTS[real];
+  const base = VARIANTS[variant];
   const dims = SIZES[size];
   const isInert = disabled || loading;
   // Mientras carga se conserva el color (la acción está en curso, no prohibida).
-  const sinRelleno = real === 'ghost' || real === 'dangerGhost';
+  const sinRelleno = variant === 'ghost' || variant === 'dangerGhost';
   const spec: VariantSpec = disabled
     ? sinRelleno
       ? { ...base, foreground: Colors.mutedForeground }
