@@ -45,7 +45,7 @@ Crear `PanelCooperativas/.env.local`:
 
 ```env
 NEXT_PUBLIC_SUPABASE_URL=https://tydpnvajwfzcsxsowctp.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR5ZHBudmFqd2Z6Y3N4c293Y3RwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUwODk4MTIsImV4cCI6MjA5MDY2NTgxMn0.VeuLT_p8ew2fCZoYG7aldelLPTr-Z5sJoYWolleLcSo
+NEXT_PUBLIC_SUPABASE_ANON_KEY=<ANON_KEY>
 ```
 
 ### 1.6 Estructura de carpetas objetivo

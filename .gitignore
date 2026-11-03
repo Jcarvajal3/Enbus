@@ -1,2 +1,38 @@
-.vercel
+# ─── EnBus (monorepo) ────────────────────────────────────────────────────────
+# Cada subproyecto tiene además su propio .gitignore.
+
+# Variables de entorno: nunca se versionan (solo las plantillas .env.example)
 .env*
+!.env.example
+
+# Dependencias y builds
+node_modules/
+.next/
+out/
+build/
+dist/
+.expo/
+web-build/
+coverage/
+*.tsbuildinfo
+next-env.d.ts
+
+# Vercel y Supabase CLI
+.vercel
+supabase/.temp/
+supabase/.branches/
+
+# Claves y certificados
+*.pem
+*.p8
+*.p12
+*.jks
+*.key
+*.mobileprovision
+
+# Sistema y logs
+.DS_Store
+Thumbs.db
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*

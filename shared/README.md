@@ -10,6 +10,7 @@ shared/
   ve.ts           formatos venezolanos: cédula, teléfono, RIF, ciudades, fechas VE, duración
   artefactos.ts   código de boleto, QR del pase, código de seguimiento, PIN de retiro
   generar.mjs     node shared/generar.mjs [--check]   (Node ≥ 18, sin dependencias)
+  tests/          pruebas de ve.ts y artefactos.ts      (npm test, Node ≥ 22.6)
 ```
 
 ## Uso
@@ -20,8 +21,13 @@ node shared/generar.mjs --check   # no escribe; sale con 1 y lista los que no co
 ```
 
 Después de editar `tokens.json`, `ve.ts` o `artefactos.ts`, ejecuta el script y
-versiona los generados junto con la fuente. `--check` va en el CI (cuando exista) y
-antes de cada entrega.
+versiona los generados junto con la fuente. `--check` y las pruebas corren en el CI
+(`.github/workflows/ci.yml`, job `shared`) y conviene correrlos antes de cada entrega:
+
+```bash
+node shared/generar.mjs --check
+cd shared && npm test      # node --experimental-strip-types --test "tests/*.test.ts"
+```
 
 **Regla: nunca edites un `*.generated.*` a mano.** Empiezan con
 `GENERADO por shared/generar.mjs — no editar a mano`; `--check` detecta cualquier
@@ -97,8 +103,12 @@ y `rgb(`/`rgba(` fuera de `src/theme.ts` y `src/tokens.generated.ts`: usa `Color
 
 ## ve.ts y artefactos.ts
 
-TS puro, **sin imports**, sin `\p{…}` ni lookbehind (Hermes no los soporta). Los
-`Intl.DateTimeFormat` se crean al primer uso. Lo que ya existía conserva nombre,
+TS puro, **sin imports**, sin `\p{…}` ni lookbehind (Hermes no los soporta). Las
+fechas y horas por defecto ("03/10/2026", "2:30 p. m.") se calculan a mano con el
+desfase fijo de Venezuela (UTC-4), sin Intl, para que Node, el navegador y Hermes den
+el mismo texto (sin errores de hidratación); solo `formatFechaVE` con `opciones` usa
+Intl. `normalizeRif` no exige el dígito verificador; `rifDigitoValido` lo comprueba
+(módulo 11 del SENIAT; la letra C se acepta con cualquier dígito). Lo que ya existía conserva nombre,
 firma y comportamiento; la implementación canónica es la del panel (cédula, teléfono,
 RIF y fechas) y la de la app para los nombres de ciudad con tildes.
 
@@ -106,8 +116,8 @@ RIF y fechas) y la de la app para los nombres de ciudad con tildes.
 `separarCedula`, `LETRAS_CEDULA`, `CEDULA_PLACEHOLDER`, `CEDULA_ERROR`;
 `normalizarTelefono`, `telefonoValido`, `formatTelefono`, `telefonoParaGuardar`,
 `telefonoWhatsApp`, `mascaraTelefono`, `OPERADORAS_MOVILES`, `TELEFONO_PLACEHOLDER`,
-`TELEFONO_ERROR`; `normalizeRif`, `isValidRif`, `RIF_PLACEHOLDER`, `RIF_AYUDA`,
-`RIF_ERROR`; `normalizarCiudad` (= `normalizar_localidad` de SQL), `formatCiudad`,
+`TELEFONO_ERROR`; `normalizeRif`, `isValidRif`, `digitoVerificadorRif`, `rifDigitoValido`,
+`RIF_PLACEHOLDER`, `RIF_AYUDA`, `RIF_ERROR`, `RIF_DIGITO_ERROR`; `normalizarCiudad` (= `normalizar_localidad` de SQL), `formatCiudad`,
 `formatRuta`, `mismaCiudad`; `ZONA_VE`, `fechaVE`, `hoyVE`, `sumarDiasVE`,
 `fechaHoraVEaISO`, `rangoDiaVE`, `formatFechaVE`, `formatHoraVE`, `formatFechaHoraVE`,
 `formatFechaCalendario`, `formatHaceTiempo`, `formatDuracion`.

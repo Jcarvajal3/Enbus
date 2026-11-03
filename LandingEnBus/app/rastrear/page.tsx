@@ -15,6 +15,7 @@ import {
   normalizarCodigoSeguimiento,
 } from "@/lib/estados"
 import { sitioUrl, soporteWhatsApp } from "@/lib/urls"
+import { formatFechaHoraVE } from "@/lib/ve.generated"
 import { cn } from "@/lib/utils"
 
 export const metadata: Metadata = {
@@ -26,20 +27,9 @@ export const metadata: Metadata = {
 
 // ─── Formato ─────────────────────────────────────────────────────────────────
 
-const FECHA_HORA = new Intl.DateTimeFormat("es-VE", {
-  timeZone: "America/Caracas",
-  day: "2-digit",
-  month: "2-digit",
-  year: "numeric",
-  hour: "numeric",
-  minute: "2-digit",
-  hour12: true,
-})
-
 function fechaHora(iso: string | null | undefined): string | null {
   if (!iso) return null
-  const d = new Date(iso)
-  return Number.isNaN(d.getTime()) ? null : FECHA_HORA.format(d)
+  return formatFechaHoraVE(iso) || null
 }
 
 function lugar(l: Lugar): string {
@@ -169,6 +159,17 @@ function Resultado({ resultado, codigo }: { resultado: EstadoRastreo; codigo: st
           {enlaceAyuda}
         </Aviso>
       )
+    case "limite": {
+      const minutos = Math.max(1, Math.ceil(resultado.reintentarEnSegundos / 60))
+      return (
+        <Aviso titulo="Hiciste muchas búsquedas seguidas.">
+          <p>
+            Intenta de nuevo en {minutos} {minutos === 1 ? "minuto" : "minutos"}.
+          </p>
+          {enlaceAyuda}
+        </Aviso>
+      )
+    }
     case "error":
       return (
         <Aviso titulo="No pudimos consultar el rastreo.">

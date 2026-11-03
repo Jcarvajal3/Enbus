@@ -79,6 +79,10 @@ export interface OrigenConDestinos {
 
 // ─── Utilidades ──────────────────────────────────────────────────────────────
 
+/** Rutas por página (= `max_rows` de PostgREST) y tope total para los selectores de la calculadora. */
+const PAGINA_RUTAS = 1000;
+const MAX_RUTAS = 20_000;
+
 const ERROR_GENERICO_COTIZAR = "No pudimos calcular el costo en este momento. Intenta de nuevo en unos minutos.";
 
 function numero(v: unknown): number | null {
@@ -288,31 +292,29 @@ export async function origenesConDestinos(): Promise<OrigenConDestinos[]> {
   const supabase = obtenerSupabaseAdmin();
   if (!supabase) return [];
   try {
-    const { data: coops, error: errorCoops } = await supabase
-      .from("cooperativas")
-      .select("id")
-      .eq("estado", "ACTIVA");
-    if (errorCoops) {
-      console.error("No se pudieron leer las cooperativas activas:", errorCoops.message);
-      return [];
-    }
-    const ids = (coops ?? []).map((c) => c.id as string);
-    if (ids.length === 0) return [];
-
-    const { data: rutas, error: errorRutas } = await supabase
-      .from("rutas")
-      .select("ciudad_origen, ciudad_destino")
-      .eq("activa", true)
-      .in("cooperativa_id", ids)
-      .limit(2000);
-    if (errorRutas) {
-      console.error("No se pudieron leer las rutas:", errorRutas.message);
-      return [];
+    // Filtro por la cooperativa con un join (`!inner`): con `.in(ids)` la URL crece con cada
+    // cooperativa activa hasta pasar el límite del servidor. PostgREST devuelve como mucho
+    // `max_rows` (1000) filas por petición: se pagina hasta MAX_RUTAS.
+    const rutas: { ciudad_origen: unknown; ciudad_destino: unknown }[] = [];
+    for (let desde = 0; desde < MAX_RUTAS; desde += PAGINA_RUTAS) {
+      const { data, error: errorRutas } = await supabase
+        .from("rutas")
+        .select("ciudad_origen, ciudad_destino, cooperativas!inner(estado)")
+        .eq("activa", true)
+        .eq("cooperativas.estado", "ACTIVA")
+        .order("id")
+        .range(desde, desde + PAGINA_RUTAS - 1);
+      if (errorRutas) {
+        console.error("No se pudieron leer las rutas:", errorRutas.message);
+        return [];
+      }
+      rutas.push(...(data ?? []));
+      if (!data || data.length < PAGINA_RUTAS) break;
     }
 
     // Agrupa por ciudad sin distinguir tildes ni mayúsculas (como normalizar_localidad).
     const mapa = new Map<string, { origen: string; destinos: Map<string, string> }>();
-    for (const r of rutas ?? []) {
+    for (const r of rutas) {
       const origen = String(r.ciudad_origen ?? "").trim();
       const destino = String(r.ciudad_destino ?? "").trim();
       if (!origen || !destino) continue;

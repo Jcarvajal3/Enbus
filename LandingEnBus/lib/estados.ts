@@ -2,6 +2,8 @@
 // Copia de la columna "pasajero" de Audits/fase3_spec.md §4 (la misma que usa
 // EnBusApp/src/utils/estados.ts). Si cambia una etiqueta, cambiarla en ambos.
 
+import { normalizarTracking } from "@/lib/artefactos.generated";
+
 export type TonoEstado = "pendiente" | "info" | "exito" | "peligro" | "terminado" | "neutro";
 
 export interface EstadoPublico {
@@ -83,13 +85,12 @@ export const CODIGO_EJEMPLO = "EB-261003-12345";
 
 /**
  * Limpia el código como lo escriba la persona: " eb 261003 12345" o "EB26100312345"
- * -> "EB-261003-12345". Si no tiene la forma esperada, lo devuelve en mayúsculas y
- * sin espacios (la base decide si existe). Cadena vacía si no hay nada.
+ * -> "EB-261003-12345" (`normalizarTracking` de shared/artefactos.ts). Si no tiene la
+ * forma esperada, lo devuelve en mayúsculas y sin espacios (máx. 40 caracteres).
+ * Cadena vacía si no hay nada.
  */
 export function normalizarCodigoSeguimiento(entrada: string | null | undefined): string {
-  const limpio = (entrada ?? "").toUpperCase().replace(/[\s_.]/g, "").slice(0, 40);
-  const m = /^EB-?(\d{6})-?(\d{5})$/.exec(limpio);
-  return m ? `EB-${m[1]}-${m[2]}` : limpio;
+  return normalizarTracking(typeof entrada === "string" ? entrada.slice(0, 80) : "").slice(0, 40);
 }
 
 /** Estado de encomienda listo para mostrar al público; nunca lanza con un estado desconocido. */

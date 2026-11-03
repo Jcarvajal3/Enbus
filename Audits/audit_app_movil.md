@@ -141,7 +141,7 @@ Cambio importante: la versión anterior usaba `light-dark()` CSS function (exper
 
 ```typescript
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || 
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3M...VeuLT_p8...'
+  '<ANON_KEY>'
 ```
 
 La JWT ANON KEY completa está hardcodeada como fallback en el código fuente y será enviada al repositorio Git.
