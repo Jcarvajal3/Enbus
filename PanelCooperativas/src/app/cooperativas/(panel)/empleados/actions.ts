@@ -258,13 +258,22 @@ export async function toggleEmpleado(
     return { error: "No encontramos a ese empleado en tu cooperativa. Actualiza la página." };
   }
 
-  const { error } = await createAdminClient().auth.admin.updateUserById(targetId, {
+  const adminClient = createAdminClient();
+  const { error } = await adminClient.auth.admin.updateUserById(targetId, {
     ban_duration: action === "desactivar" ? "876000h" : "none",
   });
 
   if (error) {
     console.error(`[toggleEmpleado] Error al ${action}:`, error);
     return { error: humanizeError(error, `${action} al empleado`) };
+  }
+
+  if (action === "desactivar") {
+    // El ban no invalida las sesiones abiertas: sin esto el empleado seguía
+    // trabajando hasta que su token caducaba. Mejor esfuerzo (las RPC ya rechazan
+    // a los empleados desactivados).
+    const { error: sesionesError } = await adminClient.rpc("fn_cerrar_sesiones_usuario", { p_usuario_id: targetId });
+    if (sesionesError) console.warn("[toggleEmpleado] No se pudieron cerrar las sesiones:", sesionesError);
   }
 
   revalidatePath("/cooperativas/empleados");

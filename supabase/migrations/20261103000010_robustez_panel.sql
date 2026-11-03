@@ -15,9 +15,12 @@ CREATE OR REPLACE FUNCTION public.exigir_cooperativa_activa_fn()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
 DECLARE v_estado public.estado_cooperativa;
 BEGIN
-  IF TG_TABLE_NAME = 'encomiendas' AND TG_OP = 'UPDATE'
-     AND NOT (OLD.estado = 'PENDIENTE_DE_ESCANEO' AND NEW.estado = 'EN_RECEPCION') THEN
-    RETURN NEW;   -- solo cuenta como "nueva" la recepción en origen de un envío de la app
+  -- IF anidados: cada expresión se compila con el tipo de fila de la tabla del trigger (en boletos,
+  -- 'PENDIENTE_DE_ESCANEO' no es un estado_boleto válido).
+  IF TG_OP = 'UPDATE' THEN
+    IF NOT (OLD.estado::text = 'PENDIENTE_DE_ESCANEO' AND NEW.estado::text = 'EN_RECEPCION') THEN
+      RETURN NEW;   -- solo cuenta como "nueva" la recepción en origen de un envío de la app
+    END IF;
   END IF;
   SELECT c.estado INTO v_estado FROM public.cooperativas c WHERE c.id = NEW.cooperativa_id;
   IF v_estado IS DISTINCT FROM 'ACTIVA' THEN
@@ -63,7 +66,7 @@ CREATE OR REPLACE FUNCTION public.fn_cerrar_sesiones_usuario(p_usuario_id uuid)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, auth, pg_temp AS $$
 DECLARE v_uid uuid := auth.uid(); v_rol public.rol_usuario; v_coop uuid; v_obj record; v_s integer; v_r integer;
 BEGIN
-  IF current_user <> 'service_role' AND coalesce(auth.role(), '') <> 'service_role' THEN
+  IF coalesce(auth.role(), '') <> 'service_role' THEN   -- dentro de SECURITY DEFINER, current_user es el dueño
     SELECT role, cooperativa_id INTO v_rol, v_coop FROM public.profiles WHERE id = v_uid AND eliminada_at IS NULL;
     SELECT role, cooperativa_id INTO v_obj FROM public.profiles WHERE id = p_usuario_id;
     IF NOT (v_rol = 'super_admin'

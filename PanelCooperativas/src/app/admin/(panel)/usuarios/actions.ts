@@ -189,6 +189,13 @@ export async function toggleUsuarioEstado(userId: string, currentIsBanned: boole
       return { success: false, error: humanizeError(error, currentIsBanned ? "reactivar la cuenta" : "suspender la cuenta") };
     }
 
+    if (!currentIsBanned) {
+      // El ban no invalida las sesiones abiertas: se cierran para que la suspensión
+      // tenga efecto ya y no al caducar el token. Mejor esfuerzo.
+      const { error: sesionesError } = await adminSupabase.rpc("fn_cerrar_sesiones_usuario", { p_usuario_id: userId });
+      if (sesionesError) console.warn(`No se pudieron cerrar las sesiones de ${userId}:`, sesionesError);
+    }
+
     // Revalidate both list and detail pages
     revalidatePath("/admin/usuarios");
     revalidatePath(`/admin/usuarios/${userId}`);
