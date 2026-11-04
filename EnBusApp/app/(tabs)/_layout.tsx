@@ -8,7 +8,7 @@ import Animated, {
   useAnimatedStyle,
   useReducedMotion,
   useSharedValue,
-  withSpring,
+  withTiming,
 } from 'react-native-reanimated';
 import { PressableScale } from '@/src/components/PressableScale';
 import { Text } from '@/src/components/ui';
@@ -36,7 +36,8 @@ interface TabBarProps {
 
 /**
  * La barra es noche flotando sobre un fondo claro: el ancla oscura de la pantalla. La
- * pestaña activa es una pastilla blanca que se desliza con un resorte: el sol queda
+ * pestaña activa es una pastilla blanca que se desliza y frena sin rebote: navegar es
+ * algo que se hace a menudo y el movimiento no debe llamar la atención. El sol queda
  * reservado para la acción principal, que nunca compite con la navegación.
  */
 function CustomTabBar({ state, descriptors, navigation, badges }: TabBarProps) {
@@ -56,7 +57,9 @@ function CustomTabBar({ state, descriptors, navigation, badges }: TabBarProps) {
     indicatorWidth.value = tabWidth;
     const destino = state.index * tabWidth;
     // Con "reducir movimiento" la pastilla salta a la pestaña sin deslizarse.
-    translateX.value = reduceMotion ? destino : withSpring(destino, Motion.spring.snappy);
+    translateX.value = reduceMotion
+      ? destino
+      : withTiming(destino, { duration: Motion.duration.base, easing: Motion.easing.out });
   }, [state.index, tabWidth, indicatorWidth, translateX, reduceMotion]);
 
   const indicatorStyle = useAnimatedStyle(() => ({

@@ -162,7 +162,7 @@ Toda animación lee de aquí. No hay duraciones sueltas.
 
 - `duration`: `instant 110 · fast 160 · base 240 · slow 340 · slower 520 · ambient 800`
 - `easing`: `out` (entra), `in` (sale), `inOut` (bucles)
-- `spring`: `snappy` (indicadores) · `soft` (sheets) · `bouncy` (selección)
+- `spring`: `snappy` (toasts) · `soft` (sheets) · `bouncy` (selección)
 - `press`: factores de escala por tipo de superficie
 - `stagger`: `step 45`, `maxIndex 7`
 
@@ -206,7 +206,8 @@ color de `canvas`, así que una pantalla con pase va sin velo: `<Screen atmosfer
 ## 3. Navegación
 
 - Pestañas **Inicio · Boletos · Encomiendas**, en una barra de noche flotante; la activa es
-  una pastilla blanca (el amarillo se reserva para la acción). Cabecera de pestaña:
+  una pastilla blanca (el amarillo se reserva para la acción) que se desliza sin rebote
+  (`withTiming`, `base` + `out`): navegar se hace a menudo y no debe llamar la atención. Cabecera de pestaña:
   `ScreenHeader` `large` con título y `HeaderActions`. Inicio usa `<BrandMark conNombre />`
   como título.
 - Detalle: `ScreenHeader` `compact` con ← (`useVolver(padre)`), ceja = nombre del objeto,
