@@ -65,8 +65,8 @@ Desde la fase 2 cada paso es una **RPC de base de datos** (`SECURITY DEFINER`): 
 | Reportar pago de boletos (app) | `fn_checkout_boletos` | En una transacción: re-asegura asientos, calcula total USD y Bs, inserta **un** pago `PENDIENTE` y lo vincula a todos los boletos de la compra (`boletos.compra_id`, `boletos.pago_id`). Con pago pendiente la reserva **no vence**. Idempotente por `idempotency_key`. |
 | Reportar pago de encomienda (app) | `fn_registrar_pago_encomienda` | Remitente (origen) o remitente/destinatario (destino). Un solo pago pendiente por encomienda. |
 | Aprobar (panel) | `fn_aprobar_pago` | Boletos `RESERVADO → PAGADO` (con QR) o encomienda `POR_PAGAR → PAGADA`. Si los boletos ya vencieron o se cancelaron no aprueba (`EB_BOLETOS_NO_ACTIVABLES`). Notifica al cliente. |
-| Rechazar (panel) | `fn_rechazar_pago` | Motivo obligatorio (≥ 5 caracteres) que se envía al cliente. Los boletos vuelven a "reserva sin pagar" con 30 min nuevos (si el bus ya salió, el cron los libera y el aviso pide contactar a la cooperativa para la devolución). |
-| Bandeja "Pagos por verificar" | `fn_pagos_por_verificar` | Esperado vs declarado, método, cuenta destino, banco, referencia y aviso de referencia repetida. |
+| Rechazar (panel) | `fn_rechazar_pago` | Motivo obligatorio (≥ 5 caracteres) que se envía al cliente. Los boletos `RESERVADO` de ese pago pasan a `CANCELADO` y sus asientos **quedan libres al momento**; para viajar, el cliente vuelve a elegirlos. La encomienda sigue por pagar y se puede volver a reportar. |
+| Bandeja "Pagos por verificar" | `fn_pagos_por_verificar` | Esperado vs declarado, método, cuenta destino, banco, referencia, aviso de referencia repetida y capture del pago. |
 
 Los errores llegan como `message = 'EB_<CODIGO>'` y `hint` con el texto para el usuario (ver `Audits/fase2_spec.md` §3.1).
 
@@ -113,6 +113,7 @@ Lo que el cliente envía desde la app:
 | `banco_emisor` | TEXT | Sí (salvo Zelle) | Banco desde el cual se realizó el pago |
 | `metodo_pago_id` | UUID FK | Sí | Método de pago de la cooperativa que se utilizó (no `EFECTIVO`) |
 | `monto_declarado` | DECIMAL | No | Lo que el cliente dice que pagó, en `moneda` (por defecto, el esperado) |
+| `comprobante_path` | TEXT | Sí en Pago Móvil | Capture del pago: ruta en el bucket privado `comprobantes-pago` (`<usuario>/<archivo>`; JPG, PNG o WEBP de hasta 5 MB). Sin él, `EB_COMPROBANTE_REQUERIDO`. Los demás métodos no lo usan |
 | `idempotency_key` | TEXT | Sí | Clave única de la operación (evita pagos duplicados por doble toque) |
 
 Lo que calcula el servidor:

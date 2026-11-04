@@ -27,7 +27,7 @@
  * para su `FloatingBar` o el pie de la hoja.
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { AccessibilityInfo, ScrollView, StyleSheet, View } from 'react-native';
+import { AccessibilityInfo, Image, ScrollView, StyleSheet, View } from 'react-native';
 import {
   ArrowLeft,
   Bank,
@@ -37,6 +37,7 @@ import {
   Copy,
   CurrencyDollar,
   DeviceMobile,
+  Image as ImageIcon,
   Info,
   MagnifyingGlass,
   Money,
@@ -46,6 +47,7 @@ import {
 } from 'phosphor-react-native';
 import * as Haptics from 'expo-haptics';
 import * as Clipboard from 'expo-clipboard';
+import * as ImagePicker from 'expo-image-picker';
 import { PressableScale } from './PressableScale';
 import { CalendarModal } from './CalendarModal';
 import { SkeletonLoader } from './SkeletonLoader';
@@ -63,7 +65,9 @@ import {
 } from '@/src/components/ui';
 import { supabase } from '@/src/utils/supabase';
 import { useToast } from '@/src/components/Toast';
-import { humanizeError, parseDetalleEB } from '@/src/utils/errores';
+import { useAuth } from '@/src/contexts/AuthContext';
+import { AppError, humanizeError, parseDetalleEB } from '@/src/utils/errores';
+import { uploadComprobantePago } from '@/src/utils/storage';
 import { formatDiaVE, toDateKey } from '@/src/utils/formatters';
 import {
   formatBs,
@@ -198,8 +202,8 @@ type FechaOpcion = 'hoy' | 'ayer' | 'otra';
 const DIAS_ATRAS_MAX = 30;
 
 /** Campos del formulario que el servidor puede señalar en `details.campo`. */
-type CampoFormulario = 'referencia' | 'banco' | 'fecha' | 'monto';
-const CAMPOS_FORMULARIO: readonly string[] = ['referencia', 'banco', 'fecha', 'monto'];
+type CampoFormulario = 'referencia' | 'banco' | 'fecha' | 'monto' | 'comprobante';
+const CAMPOS_FORMULARIO: readonly string[] = ['referencia', 'banco', 'fecha', 'monto', 'comprobante'];
 
 const AVISO_SIN_TASA =
   'Aún no tenemos la tasa BCV de hoy para calcular el monto en bolívares. Intenta en unos minutos o paga en la taquilla.';
@@ -286,6 +290,7 @@ export function PaymentFlow({
   onAccion,
 }: PaymentFlowProps) {
   const toast = useToast();
+  const { user } = useAuth();
   const controlado = metodoControlado !== undefined;
   /** Con tarjeta propia (sin pantalla que lo controle ni hoja que lo contenga). */
   const enTarjeta = !controlado && !embebido;
@@ -313,6 +318,10 @@ export function PaymentFlow({
   const [bancoQuery, setBancoQuery] = useState('');
   const [montoTexto, setMontoTexto] = useState('');
   const [montoEditado, setMontoEditado] = useState(false);
+  /** Capture del Pago Móvil: URI local de la imagen elegida */
+  const [comprobante, setComprobante] = useState<string | null>(null);
+  /** Lo ya subido: un reintento no vuelve a subir la misma imagen. */
+  const comprobanteSubidoRef = useRef<{ uri: string; ruta: string } | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<Partial<Record<CampoFormulario, string>>>({});
 
@@ -367,6 +376,7 @@ export function PaymentFlow({
   const esBoleto = tipoRecurso === 'boleto';
   const metodo = abierto && abierto !== 'efectivo' ? abierto : null;
   const isZelle = metodo?.tipo === 'ZELLE';
+  const isPagoMovil = metodo?.tipo === 'PAGO_MOVIL';
   const moneda: MonedaPago = isZelle ? 'USD' : 'VES';
   const efectivoNavegable = esBoleto && !!onEfectivo;
 
@@ -381,6 +391,7 @@ export function PaymentFlow({
   useEffect(() => {
     setErrors({});
     setMontoEditado(false);
+    setComprobante(null);
   }, [metodoId]);
 
   // Al volver a la lista, la opción que estaba abierta sigue marcada.
@@ -427,9 +438,33 @@ export function PaymentFlow({
         ? 'Escribe el monto que enviaste, por ejemplo 12,40.'
         : 'Escribe el monto que pagaste, por ejemplo 1250,00.';
     }
+    if (isPagoMovil && !comprobante) next.comprobante = 'Adjunta el capture del Pago Móvil.';
 
     setErrors(next);
     return Object.keys(next).length === 0;
+  };
+
+  /** La galería del sistema no pide permiso para elegir una imagen. */
+  const elegirComprobante = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.7 });
+      if (result.canceled || !result.assets?.length) return;
+      setComprobante(result.assets[0].uri);
+      limpiarError('comprobante');
+    } catch (err) {
+      if (__DEV__) console.error('[PaymentFlow] Error eligiendo el capture:', err);
+      toast.show('error', 'No pudimos abrir tus fotos. Inténtalo de nuevo.');
+    }
+  };
+
+  /** Ruta del capture en Storage; lo sube si esa imagen todavía no se subió. */
+  const subirComprobante = async (): Promise<string | null> => {
+    if (!isPagoMovil || !comprobante) return null;
+    if (comprobanteSubidoRef.current?.uri === comprobante) return comprobanteSubidoRef.current.ruta;
+    if (!user) throw new AppError('Tu sesión expiró. Inicia sesión de nuevo.');
+    const ruta = await uploadComprobantePago(comprobante, user.id);
+    comprobanteSubidoRef.current = { uri: comprobante, ruta };
+    return ruta;
   };
 
   const handleSubmit = async () => {
@@ -443,15 +478,16 @@ export function PaymentFlow({
     setSubmitting(true);
 
     const ref = sinSeparadores(referencia.trim());
-    const declarado: PagoDeclarado = {
-      metodo_pago_id: metodo.id,
-      numero_referencia: isZelle ? ref.toUpperCase() : ref,
-      fecha_transaccion: toDateKey(fechaPago),
-      banco_emisor: isZelle ? 'Zelle' : banco,
-      monto_declarado: leerMonto(montoTexto),
-    };
 
     try {
+      const declarado: PagoDeclarado = {
+        metodo_pago_id: metodo.id,
+        numero_referencia: isZelle ? ref.toUpperCase() : ref,
+        fecha_transaccion: toDateKey(fechaPago),
+        banco_emisor: isZelle ? 'Zelle' : banco,
+        monto_declarado: leerMonto(montoTexto),
+        comprobante_path: await subirComprobante(),
+      };
       await onRegistrar(declarado);
     } catch (err) {
       if (__DEV__) console.error('[PaymentFlow] Error registrando pago:', err);
@@ -614,7 +650,6 @@ export function PaymentFlow({
   // ─── Formulario ────────────────────────────────────────────────────────────
   if (metodo) {
     const info = METODO_INFO[metodo.tipo] ?? { label: 'Pago', desc: '', icono: Bank };
-    const isPagoMovil = metodo.tipo === 'PAGO_MOVIL';
     const bancoCuenta = metodo.banco ? bancoConCodigo(metodo.banco) : null;
 
     const filaMonto = isZelle
@@ -783,6 +818,41 @@ export function PaymentFlow({
           error={errors.monto}
           containerStyle={s.ultimoCampo}
         />
+
+        {isPagoMovil ? (
+          <View style={s.comprobante}>
+            <Text variant="label" style={s.fechaLabel}>
+              Capture del pago
+            </Text>
+            {comprobante ? (
+              <Image
+                source={{ uri: comprobante }}
+                style={s.comprobanteFoto}
+                resizeMode="contain"
+                accessibilityLabel="Capture del Pago Móvil que elegiste"
+              />
+            ) : null}
+            <Button
+              variant="outline"
+              size="md"
+              fullWidth
+              icon={ImageIcon}
+              disabled={submitting}
+              onPress={() => void elegirComprobante()}
+            >
+              {comprobante ? 'Cambiar capture' : 'Adjuntar capture'}
+            </Button>
+            {errors.comprobante ? (
+              <Text variant="caption" color="dangerText" style={s.fechaHelper} accessibilityLiveRegion="polite">
+                {errors.comprobante}
+              </Text>
+            ) : (
+              <Text variant="caption" color="muted" style={s.fechaHelper}>
+                Obligatorio. La cooperativa lo revisa para confirmar tu pago.
+              </Text>
+            )}
+          </View>
+        ) : null}
 
         {botonPropio}
 
@@ -1300,6 +1370,16 @@ const s = StyleSheet.create({
   },
   ultimoCampo: {
     marginBottom: 0,
+  },
+  comprobante: {
+    marginTop: Spacing.lg,
+  },
+  comprobanteFoto: {
+    width: '100%',
+    aspectRatio: 1,
+    borderRadius: Radius.lg,
+    backgroundColor: Colors.surface,
+    marginBottom: Spacing.md,
   },
 
   submit: {

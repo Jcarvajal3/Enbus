@@ -417,6 +417,7 @@ export function usePagoEncomienda(
         p_monto_declarado: d.monto_declarado,
         p_tasa_esperada: tasaEsperada,
         p_idempotency_key: idemKeyRef.current,
+        p_comprobante_path: d.comprobante_path,
       });
       if (error) throw error;
       idemKeyRef.current = nuevaClaveIdempotencia();

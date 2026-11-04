@@ -4,7 +4,8 @@
 // Diálogo único para la bandeja "Pagos por verificar", la taquilla de boletos,
 // el embarque, el cobro y la entrega de encomiendas. Muestra lo que debe
 // aparecer en la cuenta de la cooperativa frente a lo que el cliente declaró,
-// y permite aprobar o rechazar (con motivo que se le envía al cliente).
+// y permite aprobar o rechazar (con motivo que se le envía al cliente). Al
+// rechazar un pago de boletos, sus asientos quedan libres.
 //
 // `embebido`: se dibuja dentro de otro diálogo (sin Dialog propio).
 
@@ -64,6 +65,7 @@ const MOTIVOS_SUGERIDOS = [
   "La referencia no aparece en nuestra cuenta",
   "El monto recibido no coincide",
   "El pago llegó a otra cuenta",
+  "El capture no corresponde al pago",
 ];
 
 const ROLES: Record<PagadorRol, string> = {
@@ -286,7 +288,9 @@ export function VerificarPagoDialog({
         avisarExito(
           res.data.ya_procesado
             ? "Este pago ya estaba rechazado."
-            : "Pago rechazado. Le avisamos al cliente con el motivo."
+            : res.data.boletos_liberados
+              ? "Pago rechazado. Los asientos quedaron libres y le avisamos al cliente."
+              : "Pago rechazado. Le avisamos al cliente con el motivo."
         );
         enviandoRef.current = false;
         onResuelto({ aprobado: false });
@@ -453,7 +457,31 @@ export function VerificarPagoDialog({
           )}
         </dl>
 
-
+        {/* Capture del pago */}
+        {pago.comprobante_path ? (
+          <section aria-label="Capture del pago" className="flex flex-col gap-2">
+            <p className="text-sm font-medium text-foreground">Capture del pago</p>
+            {pago.comprobante_url ? (
+              <a
+                href={pago.comprobante_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Abrir el capture en otra pestaña"
+                className="block overflow-hidden rounded-md border border-border bg-muted/50 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={pago.comprobante_url} alt="Capture del pago que envió el cliente" className="max-h-72 w-full object-contain" />
+              </a>
+            ) : (
+              <p className="text-sm text-muted-foreground">No pudimos cargar el capture. Vuelve a abrir este pago.</p>
+            )}
+          </section>
+        ) : (
+          pendiente &&
+          pago.metodo_tipo === "PAGO_MOVIL" && (
+            <Aviso>Este pago no trae capture: se registró antes de que fuera obligatorio. Compáralo con tu banco.</Aviso>
+          )
+        )}
 
         {/* Rechazo */}
         {pendiente && rechazando && (
@@ -461,6 +489,11 @@ export function VerificarPagoDialog({
             <label htmlFor={idMotivo} className="text-sm font-medium text-foreground">
               Motivo del rechazo (lo verá el cliente)
             </label>
+            {pago.tipo_recurso === "boleto" && !pago.recurso_vencido && (
+              <p className="text-sm text-muted-foreground">
+                Se cancelará la reserva y {pago.asientos?.includes(",") ? `los asientos ${pago.asientos} quedarán libres` : `el asiento ${pago.asientos ?? ""} quedará libre`} para la venta.
+              </p>
+            )}
             <div className="flex flex-wrap gap-2">
               {MOTIVOS_SUGERIDOS.map((m) => (
                 <Button

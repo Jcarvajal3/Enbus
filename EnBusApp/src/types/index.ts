@@ -389,6 +389,8 @@ export interface PagoDeclarado {
   banco_emisor: string;
   /** En Bs (o en USD si el método es Zelle). Null = el monto exacto esperado */
   monto_declarado: number | null;
+  /** Capture ya subido a `comprobantes-pago` (obligatorio en Pago Móvil) */
+  comprobante_path: string | null;
 }
 
 /** Cuánto hay que pagar, tal como lo calculó el servidor. */

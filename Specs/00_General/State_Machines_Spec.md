@@ -114,7 +114,7 @@ La app y el panel muestran el estado con `estado_ui_boleto(boleto.estado, pago.e
 |---|---|---|
 | `RESERVA_SIN_PAGAR` | `RESERVADO` sin pago (o pagará en taquilla) | Sí: 30 min (`reserva_expira_at`), nunca después de la salida |
 | `PAGO_EN_VERIFICACION` | `RESERVADO` con pago `PENDIENTE` | **No** (`reserva_expira_at = NULL`) mientras la cooperativa decide |
-| `PAGO_RECHAZADO` | `RESERVADO` con el último pago `RECHAZADO` | Sí: 30 min nuevos desde el rechazo para volver a pagar |
+| `PAGO_RECHAZADO` | `RESERVADO` con el último pago `RECHAZADO`. Solo en reservas rechazadas antes de que el rechazo liberara los asientos | Sí: la reserva vence con los 30 min que recibió entonces |
 
 Para los demás estados `estado_ui` es el mismo valor del enum.
 
@@ -132,7 +132,7 @@ RESERVADO
     │       │
     │       └──→ EXPIRADO (fecha del viaje pasó) ■
     │
-    ├──→ CANCELADO (usuario cancela antes de pagar o la cooperativa cancela el viaje; sin costo) ■
+    ├──→ CANCELADO (usuario cancela antes de pagar, la cooperativa rechaza el pago o cancela el viaje; sin costo) ■
     │
     └──→ EXPIRADO (reserva no pagada, tiempo agotado) ■
 
@@ -144,7 +144,7 @@ RESERVADO
 | Desde | Hacia | Condiciones |
 |---|---|---|
 | `RESERVADO` | `PAGADO` | Cooperativa aprueba el pago (`fn_aprobar_pago`) o lo cobra en taquilla (`fn_cobrar_reserva_taquilla`) |
-| `RESERVADO` | `CANCELADO` | Usuario cancela (sin costo, asiento se libera). No se permite con un pago en verificación (`EB_PAGO_EN_VERIFICACION`). También al cancelar el viaje (`fn_cancelar_viaje`), que exige no tener pagos en verificación (`EB_PAGOS_PENDIENTES`) |
+| `RESERVADO` | `CANCELADO` | Usuario cancela (sin costo, asiento se libera). No se permite con un pago en verificación (`EB_PAGO_EN_VERIFICACION`). También al cancelar el viaje (`fn_cancelar_viaje`), que exige no tener pagos en verificación (`EB_PAGOS_PENDIENTES`), y cuando la cooperativa rechaza el pago (`fn_rechazar_pago`, el asiento se libera) |
 | `RESERVADO` | `EXPIRADO` | Reserva sin pago pendiente vencida (30 minutos), o el viaje salió / fue cancelado sin pago pendiente |
 | `PAGADO` | `USADO` | QR de embarque validado y confirmado por el personal (`fn_validar_embarque` + `fn_confirmar_embarque`) |
 | `PAGADO` | `CANCELADO` | Usuario cancela antes de la salida (reembolso del 95%, procesado por cooperativa en 1-2 días hábiles), o la cooperativa cancela el viaje (`fn_cancelar_viaje`, reembolso del **100 %**) |
@@ -156,7 +156,7 @@ Venta en taquilla: `fn_vender_boletos_taquilla` crea los boletos directamente en
 - Al cancelar un boleto `PAGADO`, el usuario debe escribir un **motivo de cancelación** (campo de texto obligatorio).
 - El reembolso del **95%** (USD de referencia, pagado en Bs a la tasa BCV del día) es procesado por la cooperativa mediante los mismos canales de pago.
 - Al cancelar, el asiento se libera automáticamente.
-- La reserva sin pago tiene un **tiempo límite de 30 minutos**; con un pago en verificación **no vence**. Un rechazo da 30 minutos nuevos.
+- La reserva sin pago tiene un **tiempo límite de 30 minutos**; con un pago en verificación **no vence**. Un rechazo cancela la reserva y libera los asientos.
 - **Solo el servidor** escribe `EXPIRADO`; la app nunca lo hace. El cliente solo puede cancelar (trigger `aa_proteger_boletos_cliente`).
 - Un asiento solo puede estar ocupado (`RESERVADO`, `PAGADO` o `USADO`) por un boleto por viaje (índice único `uq_boletos_asiento_ocupado`). Los asientos se guardan como número (`"1"`..`"N"`).
 - Al marcar la salida del bus (`fn_marcar_salida_viaje`, `PROGRAMADO → EN_CURSO`) se liberan las reservas sin pago pendiente.

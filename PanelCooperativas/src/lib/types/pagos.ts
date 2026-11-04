@@ -164,6 +164,10 @@ export interface PagoPorVerificar {
   motivo_rechazo: string | null;
   /** La misma referencia aparece en otro pago no rechazado de la cooperativa. */
   referencia_repetida: boolean;
+  /** Capture del pago en el bucket privado `comprobantes-pago` (obligatorio en Pago Móvil). */
+  comprobante_path: string | null;
+  /** URL firmada del capture; solo la trae `obtenerPago`. Null si no se pudo firmar. */
+  comprobante_url?: string | null;
 }
 
 /** "04/10 · 8:00 a. m." en hora de Venezuela (salida de un viaje) = `formatFechaHoraCortaVE`. */
@@ -198,7 +202,8 @@ export type ResultadoAprobarPago = {
 
 export type ResultadoRechazarPago = {
   ok: boolean;
-  boletos_afectados?: number;
+  /** Boletos cancelados por el rechazo: sus asientos quedaron libres. */
+  boletos_liberados?: number;
   ya_procesado?: boolean;
 };
 

@@ -52,7 +52,15 @@ export async function obtenerPago(pagoId: string): Promise<ResultadoAccion<PagoP
   if (error) return fallo(error, "cargar el pago");
   const fila = (data as PagoPorVerificar[] | null)?.[0];
   if (!fila) return { success: false, error: MSG_PAGO_NO_ENCONTRADO, codigo: "EB_NO_ENCONTRADO" };
-  return { success: true, data: fila };
+  // El bucket es privado: el capture se muestra con una URL firmada de corta duración.
+  let comprobante_url: string | null = null;
+  if (fila.comprobante_path) {
+    const { data: firmada } = await supabase.storage
+      .from("comprobantes-pago")
+      .createSignedUrl(fila.comprobante_path, 600);
+    comprobante_url = firmada?.signedUrl ?? null;
+  }
+  return { success: true, data: { ...fila, comprobante_url } };
 }
 
 /** Aprueba el pago: activa los boletos (PAGADO) o marca la encomienda PAGADA y avisa al cliente. */
@@ -65,7 +73,10 @@ export async function aprobarPago(pagoId: string): Promise<ResultadoAccion<Resul
   return { success: true, data: (data ?? { ok: true }) as ResultadoAprobarPago };
 }
 
-/** Rechaza el pago con un motivo que se le envía al cliente (mínimo 5 caracteres). */
+/**
+ * Rechaza el pago con un motivo que se le envía al cliente (mínimo 5 caracteres).
+ * En boletos, cancela la reserva y libera los asientos.
+ */
 export async function rechazarPago(
   pagoId: string,
   motivo: string

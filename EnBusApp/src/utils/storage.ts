@@ -4,46 +4,51 @@ import { supabase } from './supabase';
 import * as FileSystem from 'expo-file-system/legacy';
 import { AppError } from './errores';
 
-const BUCKET = 'fotos-encomiendas';
+// Map extension to MIME type (covers HEIC common on iOS, WEBP from Android)
+const MIME_MAP: Record<string, string> = {
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  heic: 'image/heic',
+  heif: 'image/heif',
+  webp: 'image/webp',
+  gif: 'image/gif',
+};
 
-/**
- * Sube una imagen local (URI) al bucket privado `fotos-encomiendas`, en la
- * carpeta del usuario, y devuelve la RUTA del objeto (`<userId>/<ts>.<ext>`),
- * no una URL: el bucket es privado y la foto se muestra con
- * `urlFotoEncomienda(ruta)` de `src/utils/fotos.ts` (URL firmada).
- */
-export async function uploadEvidencePhoto(localUri: string, userId: string): Promise<string> {
+/** Sube la imagen a `<userId>/<nombre>.<ext>` del bucket y devuelve la ruta del objeto. */
+async function subirImagen(
+  localUri: string,
+  userId: string,
+  opciones: {
+    bucket: string;
+    maxMb: number;
+    upsert: boolean;
+    /** Si se indica, otros formatos se rechazan antes de subir. */
+    formatos?: string[];
+  }
+): Promise<string> {
   // fetch().blob() is unreliable on Android and doesn't support HEIC.
   const fileInfo = await FileSystem.getInfoAsync(localUri);
   if (!fileInfo.exists) {
     throw new AppError('No pudimos leer la imagen. Selecciónala de nuevo.');
   }
 
-  // Validate file size (10MB max to avoid memory pressure and upload timeouts)
-  const MAX_SIZE_BYTES = 10 * 1024 * 1024;
-  if (fileInfo.size && fileInfo.size > MAX_SIZE_BYTES) {
-    throw new AppError('La imagen es demasiado grande. El tamaño máximo es 10 MB.');
+  // Validate file size to avoid memory pressure and upload timeouts
+  if (fileInfo.size && fileInfo.size > opciones.maxMb * 1024 * 1024) {
+    throw new AppError(`La imagen es demasiado grande. El tamaño máximo es ${opciones.maxMb} MB.`);
+  }
+
+  const cleanUri = localUri.split('?')[0].split('#')[0];
+  const rawExt = cleanUri.split('.').pop()?.toLowerCase() ?? '';
+  const fileExt = MIME_MAP[rawExt] ? rawExt : 'jpg';
+  const contentType = MIME_MAP[fileExt];
+  if (opciones.formatos && !opciones.formatos.includes(fileExt)) {
+    throw new AppError('Este formato de imagen no se puede enviar. Usa un capture en JPG o PNG.');
   }
 
   const base64 = await FileSystem.readAsStringAsync(localUri, {
     encoding: 'base64',
   });
-
-  const cleanUri = localUri.split('?')[0].split('#')[0];
-  const rawExt = cleanUri.split('.').pop()?.toLowerCase() ?? '';
-
-  // Map extension to MIME type (covers HEIC common on iOS, WEBP from Android)
-  const MIME_MAP: Record<string, string> = {
-    png: 'image/png',
-    jpg: 'image/jpeg',
-    jpeg: 'image/jpeg',
-    heic: 'image/heic',
-    heif: 'image/heif',
-    webp: 'image/webp',
-    gif: 'image/gif',
-  };
-  const fileExt = MIME_MAP[rawExt] ? rawExt : 'jpg';
-  const contentType = MIME_MAP[fileExt];
 
   // Supabase storage accepts ArrayBuffer; decode base64 string to Uint8Array
   const byteCharacters = atob(base64);
@@ -54,9 +59,9 @@ export async function uploadEvidencePhoto(localUri: string, userId: string): Pro
 
   const ruta = `${userId}/${Date.now()}.${fileExt}`;
 
-  const { error } = await supabase.storage.from(BUCKET).upload(ruta, byteArray, {
+  const { error } = await supabase.storage.from(opciones.bucket).upload(ruta, byteArray, {
     contentType,
-    upsert: true,
+    upsert: opciones.upsert,
   });
 
   if (error) {
@@ -64,4 +69,29 @@ export async function uploadEvidencePhoto(localUri: string, userId: string): Pro
   }
 
   return ruta;
+}
+
+/**
+ * Sube una imagen local (URI) al bucket privado `fotos-encomiendas`, en la
+ * carpeta del usuario, y devuelve la RUTA del objeto (`<userId>/<ts>.<ext>`),
+ * no una URL: el bucket es privado y la foto se muestra con
+ * `urlFotoEncomienda(ruta)` de `src/utils/fotos.ts` (URL firmada).
+ */
+export function uploadEvidencePhoto(localUri: string, userId: string): Promise<string> {
+  return subirImagen(localUri, userId, { bucket: 'fotos-encomiendas', maxMb: 10, upsert: true });
+}
+
+/**
+ * Sube el capture de un Pago Móvil al bucket privado `comprobantes-pago`. La
+ * ruta se envía con el reporte del pago, y la cooperativa la abre desde el
+ * panel. Mismos límites que el bucket: 5 MB, JPG, PNG o WEBP (HEIC no se ve en
+ * el navegador).
+ */
+export function uploadComprobantePago(localUri: string, userId: string): Promise<string> {
+  return subirImagen(localUri, userId, {
+    bucket: 'comprobantes-pago',
+    maxMb: 5,
+    upsert: false,
+    formatos: ['jpg', 'jpeg', 'png', 'webp'],
+  });
 }

@@ -95,13 +95,16 @@ INSERT INTO resultados (r) SELECT pg_temp.afirma(
   'calcular_dias_habiles cuenta con fechas de Venezuela');
 
 -- Referencia de pago repetida: P1 y P2 reportan la misma referencia en dos compras distintas.
+-- METODO_A es Pago Móvil: el reporte necesita su capture.
+INSERT INTO storage.objects (bucket_id, name, owner_id)
+SELECT 'comprobantes-pago', v::text || '/prueba-02.jpg', v::text FROM fx WHERE k = 'P1';
 SELECT pg_temp.como('P1');
 SELECT public.fn_reservar_asientos('33333333-3333-3333-3333-333333333333', (SELECT v FROM fx WHERE k = 'VIAJE_A'), ARRAY['10']);
 SELECT public.fn_asignar_pasajeros('33333333-3333-3333-3333-333333333333',
   '[{"asiento":"10","nombre":"Pedro Pérez","cedula":"V-12345678"}]'::jsonb);
 SELECT public.fn_checkout_boletos('33333333-3333-3333-3333-333333333333', (SELECT v FROM fx WHERE k = 'VIAJE_A'), ARRAY['10'],
   (SELECT v FROM fx WHERE k = 'METODO_A'), '99887766', (now() AT TIME ZONE 'America/Caracas')::date, 'Banesco',
-  NULL, NULL, 'prueba-checkout-0001');
+  NULL, NULL, 'prueba-checkout-0001', (SELECT v::text || '/prueba-02.jpg' FROM fx WHERE k = 'P1'));
 RESET ROLE;
 -- Un INSERT que no pasa por la comprobación de la RPC (p. ej. otra RPC futura) también se frena.
 INSERT INTO resultados (r) SELECT pg_temp.espera_error('EB_REFERENCIA_REPETIDA', format($q$
