@@ -68,8 +68,8 @@ const BARRIDO_APP = [
     message: 'Confirmar = verbo + objeto ("Cancelar envío"), sin "Sí, …".',
   },
   {
-    selector: "JSXAttribute[name.name='placeholder'][value.type='Literal'][value.value!=/^Ej\\. /]",
-    message: 'Marcador solo de formato: "Ej. 0414-1234567".',
+    selector: "JSXAttribute[name.name='placeholder'][value.type='Literal'][value.value!=/^(Ej\\. |Mínimo |Escríbela |La que |Busca )/]",
+    message: 'Marcador: un ejemplo ("Ej. 0414-1234567"), o lo que se espera si no cabe ejemplo (contraseña, búsqueda).',
   },
 ];
 

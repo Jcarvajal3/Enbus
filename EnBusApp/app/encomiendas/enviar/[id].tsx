@@ -10,6 +10,7 @@ import {
   UserCircle,
   WhatsappLogo,
   XCircle,
+  type IconProps,
 } from 'phosphor-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { QRCodeViewer } from '@/src/components/QRCodeViewer';
@@ -17,14 +18,19 @@ import { StatusTimeline, buildEncomiendaTimeline } from '@/src/components/Status
 import { PaymentFlow } from '@/src/components/PaymentFlow';
 import { ScreenSkeleton, SkeletonLoader } from '@/src/components/SkeletonLoader';
 import {
+  Atmosfera,
+  Aviso,
   BottomSheet,
   Button,
   Card,
   Divider,
   EmptyState,
   ErrorState,
+  IconTile,
   InfoRow,
   Monto,
+  Perforacion,
+  RouteSummary,
   Screen,
   ScreenHeader,
   StaleBanner,
@@ -62,7 +68,7 @@ import {
   type PagoEncomienda,
 } from '@/src/hooks/useEncomiendas';
 import type { Encomienda } from '@/src/types';
-import { Colors, Radius, Sizes, Spacing, StatusPalette, type StatusTone } from '@/src/theme';
+import { Colors, Radius, Shadows, Sizes, Spacing, type StatusTone } from '@/src/theme';
 
 /** Ceja del detalle = nombre del segmento de la lista (AN-07). */
 const CEJA = 'Enviada';
@@ -280,7 +286,7 @@ export default function DetalleEnvioScreen() {
 
   if (loading) {
     return (
-      <Screen>
+      <Screen atmosfera={null}>
         <ScreenHeader variant="compact" eyebrow={CEJA} title="Encomienda" onBack={volver} />
         <ScreenSkeleton variante="detalle" />
       </Screen>
@@ -289,7 +295,7 @@ export default function DetalleEnvioScreen() {
 
   if (!encomienda) {
     return (
-      <Screen>
+      <Screen atmosfera={null}>
         <ScreenHeader variant="compact" eyebrow={CEJA} title="Encomienda" onBack={volver} />
         {noEncontrada ? (
           <EmptyState
@@ -361,7 +367,7 @@ export default function DetalleEnvioScreen() {
     });
 
   return (
-    <Screen>
+    <Screen atmosfera={null}>
       <ScreenHeader
         variant="compact"
         eyebrow={CEJA}
@@ -371,7 +377,7 @@ export default function DetalleEnvioScreen() {
       />
 
       <ScrollView
-        contentContainerStyle={scrollContent({ top: Spacing['2xl'] })}
+        contentContainerStyle={scrollContent({ top: Spacing.lg })}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -389,43 +395,53 @@ export default function DetalleEnvioScreen() {
           <AvisoCobro tone="success" icon={CheckCircle} titulo="¡Encomienda registrada!">
             {`Llévala a ${puntoEntrega.completo} y muestra este código.`}
           </AvisoCobro>
-        ) : !porEntregar && estadoVisual.hint ? (
-          <Text variant="secondary" color="muted" style={s.hint}>
-            {estadoVisual.hint}
-          </Text>
         ) : null}
 
-        {/* ── QR de entrega: codifica el código de seguimiento (DS-09) ─ */}
-        {porEntregar && (
-          <Card tone="sunken" style={s.card}>
-            <Text variant="subheading" align="center" style={s.cardTitle}>
-              Muestra este código en la taquilla
-            </Text>
-            <View style={s.qr}>
-              <QRCodeViewer
-                data={qrEncomienda(encomienda)}
-                codigoLegible={tracking ?? undefined}
-                ampliable
-                size={220}
-              />
-            </View>
-            <Divider spacing={Spacing.lg} />
-            <View style={s.puntoRow}>
-              <Storefront size={Sizes.icon.md} color={Colors.foreground} weight="bold" />
-              <View style={s.flex}>
-                <Text variant="caption" color="muted">
-                  Dónde entregarla
+        {/* ── La encomienda como un pase: la ruta manda; por entregar, el QR ── */}
+        <View style={[s.card, s.pase]}>
+          <View style={s.paseCabecera}>
+            <Atmosfera variante="sol" style={StyleSheet.absoluteFill} />
+            <RouteSummary origen={encomienda.ciudad_origen} destino={encomienda.ciudad_destino} />
+          </View>
+
+          {porEntregar ? (
+            <>
+              <Perforacion margen={0} />
+              <View style={s.paseCuerpo}>
+                <Text variant="subheading" align="center" style={s.cardTitle}>
+                  Muestra este código en la taquilla
                 </Text>
-                <Text variant="bodyStrong">{capitalizarInicio(puntoEntrega.completo)}</Text>
-                {puntoEntrega.detalle ? (
-                  <Text variant="caption" color="muted">
-                    {puntoEntrega.detalle}
-                  </Text>
-                ) : null}
+                <View style={s.qr}>
+                  <QRCodeViewer
+                    data={qrEncomienda(encomienda)}
+                    codigoLegible={tracking ?? undefined}
+                    ampliable
+                    size={196}
+                  />
+                </View>
               </View>
+              <Perforacion margen={0} />
+              <View style={[s.paseCuerpo, s.puntoRow]}>
+                <IconTile size="sm" tone="coral" icon={Storefront} />
+                <View style={s.flex}>
+                  <Text variant="caption" color="muted">
+                    Dónde entregarla
+                  </Text>
+                  <Text variant="bodyStrong">{capitalizarInicio(puntoEntrega.completo)}</Text>
+                  {puntoEntrega.detalle ? (
+                    <Text variant="caption" color="muted">
+                      {puntoEntrega.detalle}
+                    </Text>
+                  ) : null}
+                </View>
+              </View>
+            </>
+          ) : estadoVisual.hint ? (
+            <View style={s.paseCuerpo}>
+              <Text variant="secondary">{estadoVisual.hint}</Text>
             </View>
-          </Card>
-        )}
+          ) : null}
+        </View>
 
         {/* ── Avisar a quien recibe (APP-46) ─────────────────────────── */}
         {puedeAvisar ? (
@@ -543,7 +559,7 @@ export default function DetalleEnvioScreen() {
         ) : null}
 
         {/* ── Seguimiento ─────────────────────────────────────────────── */}
-        <Card tone="sunken" style={s.card}>
+        <Card style={s.card}>
           <Text variant="subheading">Seguimiento</Text>
           <StatusTimeline
             estados={buildEncomiendaTimeline(encomienda.estado, historial, {
@@ -553,7 +569,7 @@ export default function DetalleEnvioScreen() {
         </Card>
 
         {/* ── Detalles ────────────────────────────────────────────────── */}
-        <Card tone="sunken" style={s.card}>
+        <Card style={s.card}>
           <Text variant="subheading">Detalles</Text>
 
           {/* Mismo orden de filas que el detalle de "Para mí". */}
@@ -593,18 +609,10 @@ export default function DetalleEnvioScreen() {
 
           <Divider spacing={Spacing.xs} />
 
-          {/* Mismo trayecto que la fila de la lista y el resumen del asistente. */}
-          <InfoRow
-            label="Trayecto"
-            value={`${formatCity(encomienda.ciudad_origen) || '—'} → ${formatCity(encomienda.ciudad_destino) || '—'}`}
-          />
-
-          <Divider spacing={Spacing.xs} />
-
           <InfoRow label="Quien recibe" value={encomienda.receiver_nombre || 'Sin nombre'} />
           <Divider spacing={Spacing.xs} />
           <View style={[s.puntoRow, s.puntoRowDetalles]}>
-            <Storefront size={Sizes.icon.md} color={Colors.foreground} weight="bold" />
+            <IconTile size="sm" tone="coral" icon={Storefront} />
             <View style={s.flex}>
               <Text variant="caption" color="muted">
                 Dónde la retira
@@ -621,7 +629,7 @@ export default function DetalleEnvioScreen() {
 
         {/* ── Fotos ───────────────────────────────────────────────────── */}
         {fotoCliente || fotoTaquilla ? (
-          <Card tone="sunken" style={s.card}>
+          <Card style={s.card}>
             <Text variant="subheading" style={s.cardTitle}>
               Fotos
             </Text>
@@ -710,33 +718,19 @@ export default function DetalleEnvioScreen() {
 
 function AvisoCobro({
   tone,
-  icon: Icon,
+  icon,
   titulo,
   children,
   extra,
 }: {
   tone: StatusTone;
-  icon: React.ComponentType<{ size?: number; color?: string; weight?: 'fill' }>;
+  icon: React.ComponentType<IconProps>;
   titulo: string;
   children: string;
   extra?: React.ReactNode;
 }) {
-  const palette = StatusPalette[tone];
   return (
-    <Card tone="sunken" style={s.card} accessibilityRole="summary">
-      <View style={s.avisoHead}>
-        <View style={[s.avisoIcon, { backgroundColor: palette.bg }]}>
-          <Icon color={palette.fg} weight="fill" size={Sizes.icon.lg} />
-        </View>
-        <View style={s.avisoBody}>
-          <Text variant="bodyStrong">{titulo}</Text>
-          <Text variant="secondary" color="muted">
-            {children}
-          </Text>
-          {extra}
-        </View>
-      </View>
-    </Card>
+    <Aviso estado={tone} icon={icon} titulo={titulo} texto={children} extra={extra} style={s.card} />
   );
 }
 
@@ -744,11 +738,8 @@ const s = StyleSheet.create({
   flex: {
     flex: 1,
   },
-  hint: {
-    marginBottom: Spacing['2xl'],
-  },
   card: {
-    marginBottom: Spacing['2xl'],
+    marginBottom: Spacing.lg,
   },
   cardTitle: {
     marginBottom: Spacing.lg,
@@ -756,9 +747,23 @@ const s = StyleSheet.create({
   qr: {
     alignItems: 'center',
   },
+  pase: {
+    backgroundColor: Colors.background,
+    borderRadius: Radius.xl,
+    borderCurve: 'continuous',
+    overflow: 'hidden',
+    ...Shadows.card,
+  },
+  paseCabecera: {
+    padding: Spacing.xl,
+  },
+  paseCuerpo: {
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.lg,
+  },
   puntoRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     gap: Spacing.md,
   },
   puntoRowDetalles: {
@@ -776,22 +781,6 @@ const s = StyleSheet.create({
     gap: Spacing.md,
     paddingVertical: Spacing.md,
   },
-  avisoHead: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: Spacing.md,
-  },
-  avisoIcon: {
-    width: Sizes.iconBox.lg,
-    height: Sizes.iconBox.lg,
-    borderRadius: Radius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avisoBody: {
-    flex: 1,
-    gap: Spacing.xs,
-  },
   avisoAction: {
     alignSelf: 'flex-start',
     marginTop: Spacing.sm,
@@ -799,7 +788,7 @@ const s = StyleSheet.create({
   photo: {
     width: '100%',
     height: 200,
-    borderRadius: Radius.lg,
+    borderRadius: Radius.md,
   },
   photoSecond: {
     marginTop: Spacing.lg,
@@ -809,7 +798,7 @@ const s = StyleSheet.create({
   },
   reportar: {
     alignItems: 'center',
-    marginTop: Spacing['2xl'],
+    marginTop: Spacing.xl,
   },
   /** `TextLink` se alinea al inicio: este envoltorio lo centra. */
   reportarEnlace: {

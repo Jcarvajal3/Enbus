@@ -11,13 +11,15 @@
  *
  * `tasa`: si no se pasa (undefined) se usa la vigente de `useTasaBCV`; con
  * `null` se muestra sin tasa a propósito (p. ej. un pago guardado sin tasa).
+ *
+ * En `lg`, el símbolo va más pequeño que la cifra: la cifra es lo que se lee.
  */
 import React from 'react';
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Text, type TextColorToken } from './Text';
 import { formatMoney, type MonedaPago, type TasaRef } from '@/src/utils/dinero';
 import { useTasaBCV } from '@/src/hooks/useTasaBCV';
-import { type FontSizeToken, type TextVariant } from '@/src/theme';
+import { Spacing, type FontSizeToken, type TextVariant } from '@/src/theme';
 
 export type MontoSize = 'lg' | 'md' | 'sm';
 
@@ -49,11 +51,41 @@ const PRINCIPAL: Record<MontoSize, { variant: TextVariant; size?: FontSizeToken 
 const SECUNDARIO: Record<MontoSize, { variant: TextVariant; size?: FontSizeToken }> = {
   lg: { variant: 'secondary' },
   md: { variant: 'caption' },
-  // 11 pt: la referencia se lee también en las listas (SY-31). `micro` es solo para contadores.
+  // La referencia se lee también en las listas. `micro` es solo para contadores.
   sm: { variant: 'caption' },
 };
 
 const ALINEACION = { left: 'flex-start', center: 'center', right: 'flex-end' } as const;
+
+/**
+ * "Bs 17.822,11" → el símbolo pequeño y la cifra grande, sobre la misma línea base.
+ * Para los montos que mandan en una pantalla.
+ */
+export function CifraMonto({
+  texto,
+  color = 'foreground',
+  size = '3xl',
+  align,
+}: {
+  texto: string;
+  color?: string;
+  size?: FontSizeToken;
+  align?: 'left' | 'center' | 'right';
+}) {
+  const espacio = texto.indexOf(' ');
+  const simbolo = espacio > 0 ? texto.slice(0, espacio) : null;
+  const cifra = espacio > 0 ? texto.slice(espacio + 1) : texto;
+  return (
+    <Text variant="display" size={size} color={color} align={align} numberOfLines={1} adjustsFontSizeToFit compact>
+      {simbolo ? (
+        <Text variant="heading" weight="medium" size="xl" tracking="normal" color={color}>
+          {`${simbolo} `}
+        </Text>
+      ) : null}
+      {cifra}
+    </Text>
+  );
+}
 
 export function Monto(props: MontoProps) {
   // El hook solo se usa cuando la pantalla no pasa una tasa.
@@ -79,7 +111,7 @@ function MontoBase({
 }: MontoProps) {
   const { principal, secundario, accesible } = formatMoney({ usd, bs, tasa, moneda });
   const p = PRINCIPAL[size];
-  const s = SECUNDARIO[size];
+  const sec = SECUNDARIO[size];
 
   return (
     <View
@@ -89,11 +121,15 @@ function MontoBase({
       accessibilityLabel={accesible}
       testID={testID}
     >
-      <Text variant={p.variant} size={p.size} color={color} align={align} compact={size === 'lg'}>
-        {principal}
-      </Text>
+      {size === 'lg' ? (
+        <CifraMonto texto={principal} color={color} align={align} />
+      ) : (
+        <Text variant={p.variant} size={p.size} color={color} align={align} tracking="snug">
+          {principal}
+        </Text>
+      )}
       {secundario && !sinReferencia ? (
-        <Text variant={s.variant} size={s.size} color="muted" align={align}>
+        <Text variant={sec.variant} size={sec.size} color="muted" align={align} style={size === 'lg' ? styles.refLg : null}>
           {secundario}
         </Text>
       ) : null}
@@ -102,5 +138,11 @@ function MontoBase({
 }
 
 const styles = StyleSheet.create({
-  base: {},
+  // En una fila, un monto largo parte su línea en vez de salirse del contenedor.
+  base: {
+    flexShrink: 1,
+  },
+  refLg: {
+    marginTop: Spacing.xs,
+  },
 });

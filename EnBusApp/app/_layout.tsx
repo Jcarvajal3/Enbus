@@ -249,7 +249,13 @@ function RootLayoutNav() {
       {/* Una sola transición por tipo (AN-11): toda pantalla empujada entra desde
           la derecha; lo que sube desde abajo es una hoja (`BottomSheet`). Acceso,
           retorno de enlaces y pestañas cambian con un fundido. */}
-      <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
+      <Stack
+        screenOptions={{
+          headerShown: false,
+          animation: 'slide_from_right',
+          contentStyle: { backgroundColor: Colors.canvas },
+        }}
+      >
         <Stack.Screen name="(auth)" options={{ animation: 'fade' }} />
         <Stack.Screen name="auth/callback" options={{ animation: 'fade', gestureEnabled: false }} />
         <Stack.Screen name="(tabs)" options={{ animation: 'fade' }} />
@@ -276,8 +282,13 @@ function ConfiguracionFaltante() {
 }
 
 export default function RootLayout() {
+  // Un archivo por peso (`Typography.fonts`): ver el porqué en `src/theme.ts`.
   const [fontsLoaded, fontError] = useFonts({
-    Roobert: require('../assets/fonts/Roobert.ttf'),
+    'Onest-Regular': require('../assets/fonts/Onest-Regular.ttf'),
+    'Onest-Medium': require('../assets/fonts/Onest-Medium.ttf'),
+    'Onest-SemiBold': require('../assets/fonts/Onest-SemiBold.ttf'),
+    'Onest-Bold': require('../assets/fonts/Onest-Bold.ttf'),
+    'Onest-ExtraBold': require('../assets/fonts/Onest-ExtraBold.ttf'),
   });
 
   useEffect(() => {
@@ -306,7 +317,7 @@ export default function RootLayout() {
 const s = StyleSheet.create({
   splash: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: Colors.canvas,
     alignItems: 'center',
     justifyContent: 'center',
   },

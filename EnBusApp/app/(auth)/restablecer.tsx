@@ -105,9 +105,10 @@ export default function RestablecerScreen() {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          <Card tone="sunken" padding="md">
+          <Card padding="md">
             <Field
               label="Contraseña nueva"
+              placeholder="Mínimo 8 caracteres"
               secureTextEntry
               autoCapitalize="none"
               autoCorrect={false}
@@ -129,6 +130,7 @@ export default function RestablecerScreen() {
             <Field
               ref={repetirRef}
               label="Repite la contraseña"
+              placeholder="Escríbela otra vez"
               secureTextEntry
               autoCapitalize="none"
               autoCorrect={false}

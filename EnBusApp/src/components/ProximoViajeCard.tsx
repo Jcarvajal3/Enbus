@@ -1,21 +1,22 @@
 /**
- * ProximoViajeCard — "Tu próximo viaje" sobre el buscador de Inicio (APP-16):
- * cuándo sale, la ruta, los asientos y el acceso directo al pase de abordaje.
+ * ProximoViajeCard — "Tu próximo viaje" sobre el buscador de Inicio: cuándo sale, la
+ * ruta, los asientos y el acceso directo al pase de abordaje.
  *
  *   const { proximo } = useProximoViaje();
  *   {proximo && <ProximoViajeCard proximo={proximo} onVerPase={() => router.push(…)} />}
  *
- * El bloque informativo se lee como uno solo con el lector de pantalla; el
- * botón queda aparte. El botón es `outline`: en Inicio la acción principal es
- * "Buscar viaje" (un solo amarillo por pantalla).
+ * Es de noche, con el sol asomando: lo más importante de la pantalla cuando hay un
+ * viaje cerca, y se distingue del buscador sin competir con él (su botón es blanco; el
+ * sol se reserva para "Buscar viaje"). El bloque informativo se lee como uno solo con
+ * el lector de pantalla; el botón queda aparte.
  */
 import React, { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { QrCode } from 'phosphor-react-native';
-import { Badge, Button, Card, SectionLabel, Text } from '@/src/components/ui';
+import { ArrowRight, QrCode } from 'phosphor-react-native';
+import { Atmosfera, Button, Text } from '@/src/components/ui';
 import { capitalizarInicio, fechaVE, formatDiaVE, formatDuracion, formatHoraVE, sumarDiasVE } from '@/src/utils/formatters';
 import type { ProximoViaje } from '@/src/types';
-import { Spacing } from '@/src/theme';
+import { alpha, Colors, Radius, Shadows, Sizes, Spacing } from '@/src/theme';
 
 const TRES_HORAS_MIN = 180;
 
@@ -58,10 +59,10 @@ export function ProximoViajeCard({
   const minutos = useMinutosParaSalir(proximo.salida);
 
   const titulo = `${etiquetaDia(proximo.salida, new Date())} · ${formatHoraVE(proximo.salida)}`;
-  const ruta =
-    proximo.ciudadOrigen && proximo.ciudadDestino
-      ? `${proximo.ciudadOrigen} → ${proximo.ciudadDestino}`
-      : proximo.ciudadOrigen || proximo.ciudadDestino;
+  const conRuta = !!proximo.ciudadOrigen && !!proximo.ciudadDestino;
+  const ruta = conRuta
+    ? `${proximo.ciudadOrigen} → ${proximo.ciudadDestino}`
+    : proximo.ciudadOrigen || proximo.ciudadDestino;
   const meta = [etiquetaAsientos(proximo.asientos), proximo.cooperativa].filter(Boolean).join(' · ');
   const aviso =
     minutos <= 0
@@ -81,39 +82,67 @@ export function ProximoViajeCard({
     .join('. ');
 
   return (
-    <View>
-      <SectionLabel>Tu próximo viaje</SectionLabel>
-      <Card tone="sunken" padding="md" style={s.card}>
-        <View accessible accessibilityLabel={etiquetaAccesible} style={s.info}>
-          <View style={s.cabecera}>
-            <Text variant="heading" style={s.titulo}>
-              {titulo}
-            </Text>
-            {aviso ? <Badge tone="pending">{aviso}</Badge> : null}
-          </View>
-          {ruta ? (
-            <Text variant="bodyStrong" numberOfLines={2}>
-              {ruta}
-            </Text>
-          ) : null}
-          {meta ? (
-            <Text variant="secondary" color="muted" numberOfLines={2}>
-              {meta}
-            </Text>
+    <View style={s.tarjeta}>
+      <Atmosfera variante="noche" style={StyleSheet.absoluteFill} />
+
+      <View accessible accessibilityLabel={etiquetaAccesible} style={s.info}>
+        <View style={s.cabecera}>
+          <Text variant="label" color="inverseMuted">
+            Tu próximo viaje
+          </Text>
+          {aviso ? (
+            <View style={s.aviso}>
+              <View style={s.avisoPunto} />
+              <Text variant="caption" weight="semibold" color="foreground" compact numberOfLines={1}>
+                {aviso}
+              </Text>
+            </View>
           ) : null}
         </View>
 
-        <Button variant="outline" size="md" icon={QrCode} fullWidth onPress={onVerPase}>
-          Ver pase de abordaje
-        </Button>
-      </Card>
+        <Text variant="title" size="2xl" tracking="tight" color="inverse" style={s.titulo}>
+          {titulo}
+        </Text>
+
+        {conRuta ? (
+          <View style={s.ruta}>
+            <Text variant="subheading" weight="medium" color="inverse" numberOfLines={1} style={s.ciudad}>
+              {proximo.ciudadOrigen}
+            </Text>
+            <ArrowRight size={Sizes.icon.sm} color={Colors.primary} weight="bold" />
+            <Text variant="subheading" weight="medium" color="inverse" numberOfLines={1} style={s.ciudad}>
+              {proximo.ciudadDestino}
+            </Text>
+          </View>
+        ) : ruta ? (
+          <Text variant="subheading" weight="medium" color="inverse" numberOfLines={2}>
+            {ruta}
+          </Text>
+        ) : null}
+
+        {meta ? (
+          <Text variant="secondary" color="inverseMuted" numberOfLines={2} style={s.meta}>
+            {meta}
+          </Text>
+        ) : null}
+      </View>
+
+      <Button variant="secondary" size="md" icon={QrCode} fullWidth onPress={onVerPase} style={s.boton}>
+        Ver pase de abordaje
+      </Button>
     </View>
   );
 }
 
 const s = StyleSheet.create({
-  card: {
+  tarjeta: {
+    borderRadius: Radius.xl,
+    borderCurve: 'continuous',
+    overflow: 'hidden',
+    padding: Spacing.xl,
+    backgroundColor: Colors.night,
     gap: Spacing.lg,
+    ...Shadows.raised,
   },
   info: {
     gap: Spacing.xs,
@@ -121,10 +150,41 @@ const s = StyleSheet.create({
   cabecera: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     flexWrap: 'wrap',
     gap: Spacing.sm,
+    marginBottom: Spacing.xs,
+  },
+  aviso: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs + Sizes.hairline,
+    minHeight: Sizes.badge.sm,
+    paddingHorizontal: Spacing.sm + Spacing.xs / 2,
+    borderRadius: Radius.full,
+    backgroundColor: Colors.primary,
+  },
+  avisoPunto: {
+    width: Sizes.dot,
+    height: Sizes.dot,
+    borderRadius: Radius.full,
+    backgroundColor: alpha(Colors.night, 0.75),
   },
   titulo: {
+    marginTop: Spacing.xs,
+  },
+  ruta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  ciudad: {
     flexShrink: 1,
+  },
+  meta: {
+    marginTop: Spacing.xs / 2,
+  },
+  boton: {
+    borderWidth: 0,
   },
 });

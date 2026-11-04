@@ -1,18 +1,17 @@
 /**
- * RouteField — el único selector de ruta (D10, AU-15, AN-31): Inicio, paso 1
- * de la compra y paso 1 del envío.
+ * RouteField — el único selector de ruta: Inicio, paso 1 de la compra y paso 1 del
+ * envío.
  *
- * Dos tarjetas apiladas, "Origen" y "Destino", con el marcador "Elige la
- * ciudad"; cada una abre `LocationSelector`. Iconos neutros (origen `Circle`
- * bold, destino `MapPin` fill, ambos `foreground` en un círculo `surface`) y,
- * con `onIntercambiar`, el botón ⇅ entre las dos.
+ * Es lo más importante de la compra, y se ve: un solo bloque con el camino dibujado
+ * (punto de salida, línea, pin de llegada) y la ciudad en grande. Cada fila abre
+ * `LocationSelector`. Con `onIntercambiar`, el botón ⇅ sobre la línea que las separa.
  *
  *   <RouteField origen={o} destino={d} onOrigen={setO} onDestino={setD}
  *     onIntercambiar={intercambiar} recientes={recientes} populares={CIUDADES_POPULARES} />
  */
 import React, { useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { ArrowsDownUp, CircleIcon as Circle, MapPin, type IconProps } from 'phosphor-react-native';
+import { ArrowsDownUp, MapPin } from 'phosphor-react-native';
 import Animated, {
   useAnimatedStyle,
   useReducedMotion,
@@ -23,7 +22,7 @@ import { LocationSelector } from './LocationSelector';
 import { PressableScale } from './PressableScale';
 import { Text } from '@/src/components/ui';
 import type { Localidad } from '@/src/utils/venezuela';
-import { Colors, Motion, Radius, Sizes, Spacing } from '@/src/theme';
+import { Colors, Motion, Radius, Shadows, Sizes, Spacing } from '@/src/theme';
 
 export function RouteField({
   origen,
@@ -77,7 +76,7 @@ export function RouteField({
 
   return (
     <View>
-      <View style={s.pila}>
+      <View style={s.bloque}>
         <LocationSelector
           label="Origen"
           value={origen}
@@ -88,17 +87,19 @@ export function RouteField({
           recientes={recientes}
           populares={populares}
           customTrigger={(abrir) => (
-            <Tarjeta
+            <Fila
               etiqueta="Origen"
               valor={origen?.ciudad}
-              icono={Circle}
-              peso="bold"
+              extremo="salida"
               onPress={abrir}
               disabled={disabled}
               conIntercambio={!!onIntercambiar}
             />
           )}
         />
+
+        <View style={s.separador} />
+
         <LocationSelector
           label="Destino"
           value={destino}
@@ -109,11 +110,10 @@ export function RouteField({
           recientes={recientes}
           populares={populares}
           customTrigger={(abrir) => (
-            <Tarjeta
+            <Fila
               etiqueta="Destino"
               valor={destino?.ciudad}
-              icono={MapPin}
-              peso="fill"
+              extremo="llegada"
               onPress={abrir}
               disabled={disabled}
               conIntercambio={!!onIntercambiar}
@@ -121,6 +121,9 @@ export function RouteField({
             />
           )}
         />
+
+        {/* El camino: une el punto de salida con el pin de llegada. */}
+        <View style={s.camino} pointerEvents="none" />
 
         {onIntercambiar ? (
           <PressableScale
@@ -134,7 +137,7 @@ export function RouteField({
             accessibilityLabel="Intercambiar origen y destino"
           >
             <Animated.View style={giroStyle}>
-              <ArrowsDownUp size={Sizes.icon.md} color={Colors.foreground} weight="bold" />
+              <ArrowsDownUp size={Sizes.icon.md} color={Colors.accentStrong} weight="bold" />
             </Animated.View>
           </PressableScale>
         ) : null}
@@ -143,6 +146,7 @@ export function RouteField({
       {error ? (
         <Text
           variant="caption"
+          weight="medium"
           color="dangerText"
           style={s.error}
           accessibilityRole="alert"
@@ -155,11 +159,10 @@ export function RouteField({
   );
 }
 
-function Tarjeta({
+function Fila({
   etiqueta,
   valor,
-  icono: Icono,
-  peso,
+  extremo,
   onPress,
   disabled,
   conIntercambio,
@@ -167,8 +170,7 @@ function Tarjeta({
 }: {
   etiqueta: string;
   valor?: string;
-  icono: React.ComponentType<IconProps>;
-  peso: IconProps['weight'];
+  extremo: 'salida' | 'llegada';
   onPress: () => void;
   disabled: boolean;
   conIntercambio: boolean;
@@ -185,79 +187,114 @@ function Tarjeta({
       dimWhenDisabled={false}
       haptic
       hapticType="selection"
-      scaleValue={Motion.press.button}
-      style={[s.tarjeta, conIntercambio && s.tarjetaConIntercambio]}
+      scaleValue={Motion.press.card}
+      style={[s.fila, conIntercambio && s.filaConIntercambio]}
       accessibilityRole="button"
       accessibilityLabel={`${etiqueta}: ${valor ?? 'sin elegir'}`}
       accessibilityState={{ disabled }}
     >
-      <View style={s.icono}>
-        <Icono size={Sizes.icon.sm} color={disabled ? Colors.mutedForeground : Colors.foreground} weight={peso} />
+      <View style={s.marcador}>
+        {extremo === 'salida' ? (
+          <View style={[s.puntoSalida, disabled && s.apagado]} />
+        ) : (
+          <MapPin
+            size={Sizes.icon.md}
+            color={disabled ? Colors.mutedForeground : Colors.secondaryDeep}
+            weight="fill"
+          />
+        )}
       </View>
       <View style={s.textos}>
         <Text variant="caption" color="muted" compact>
           {etiqueta}
         </Text>
-        <Text
-          variant="bodyStrong"
-          color={valor && !disabled ? 'foreground' : 'muted'}
-          numberOfLines={1}
-        >
-          {valor ?? 'Elige la ciudad'}
-        </Text>
+        {valor ? (
+          <Text variant="heading" color={disabled ? 'muted' : 'foreground'} numberOfLines={1}>
+            {valor}
+          </Text>
+        ) : (
+          <Text variant="body" size="lg" color={Colors.placeholder} numberOfLines={1} style={s.vacio}>
+            Elige la ciudad
+          </Text>
+        )}
       </View>
     </PressableScale>
   );
 }
 
+/** Ancho de la columna del marcador: el camino pasa por su centro. */
+const MARCADOR = Sizes.icon.lg;
+const PUNTO = Spacing.md;
+const FILA = Sizes.control.xl + Spacing.md;
+
 const s = StyleSheet.create({
-  pila: {
-    gap: Spacing.sm,
+  bloque: {
+    borderRadius: Radius.lg,
+    borderCurve: 'continuous',
+    backgroundColor: Colors.surface,
     justifyContent: 'center',
   },
-  tarjeta: {
+  fila: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.md,
-    minHeight: Sizes.control.xl,
+    minHeight: FILA,
     paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.sm,
-    borderRadius: Radius.lg,
-    backgroundColor: Colors.background,
-    borderWidth: Sizes.hairline,
-    borderColor: Colors.border,
+    paddingVertical: Spacing.md,
   },
-  /** Deja libre el botón ⇅, que flota a la derecha entre las dos tarjetas. */
-  tarjetaConIntercambio: {
+  /** Deja libre el botón ⇅, que flota a la derecha entre las dos filas. */
+  filaConIntercambio: {
     paddingRight: Sizes.touchTarget + Spacing['2xl'],
   },
-  icono: {
-    width: Sizes.iconBox.sm,
-    height: Sizes.iconBox.sm,
-    borderRadius: Radius.full,
-    backgroundColor: Colors.surface,
+  marcador: {
+    width: MARCADOR,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  puntoSalida: {
+    width: PUNTO,
+    height: PUNTO,
+    borderRadius: Radius.full,
+    borderWidth: Sizes.borderSelected + Sizes.hairline,
+    borderColor: Colors.accentStrong,
+    backgroundColor: Colors.background,
+  },
+  apagado: {
+    borderColor: Colors.mutedForeground,
+  },
   textos: {
     flex: 1,
+    gap: Spacing.xs / 2,
+  },
+  vacio: {
+    marginTop: Spacing.xs / 2,
+  },
+  separador: {
+    height: Sizes.hairline,
+    backgroundColor: Colors.surfaceDark,
+    marginLeft: Spacing.lg + MARCADOR + Spacing.md,
+  },
+  camino: {
+    position: 'absolute',
+    left: Spacing.lg + MARCADOR / 2 - Sizes.hairline,
+    top: FILA / 2 + PUNTO,
+    bottom: FILA / 2 + PUNTO,
+    width: Sizes.borderSelected,
+    borderRadius: Radius.full,
+    backgroundColor: Colors.surfaceDark,
   },
   intercambio: {
     position: 'absolute',
-    right: Spacing.lg,
-    top: '50%',
-    marginTop: -Sizes.touchTarget / 2,
+    right: Spacing.md,
     width: Sizes.touchTarget,
     height: Sizes.touchTarget,
     borderRadius: Radius.full,
     backgroundColor: Colors.background,
-    borderWidth: Sizes.hairline,
-    borderColor: Colors.borderStrong,
     alignItems: 'center',
     justifyContent: 'center',
+    ...Shadows.subtle,
   },
   error: {
     marginTop: Spacing.sm,
-    marginLeft: Spacing.lg,
   },
 });

@@ -1,9 +1,9 @@
 /**
  * Text — the only way text is rendered in the app.
  *
- * Replaces ~270 hand-written `{ fontFamily: Typography.family, fontSize: 14,
- * fontWeight: '700', color: … }` blocks. A screen picks a *role* (`variant`)
- * and, when needed, overrides one axis (`size`, `weight`, `color`).
+ * Replaces ~270 hand-written `{ fontFamily, fontSize, fontWeight, color }` blocks. A
+ * screen picks a *role* (`variant`) and, when needed, overrides one axis (`size`,
+ * `weight`, `color`).
  *
  *   <Text variant="title">Mis boletos</Text>
  *   <Text variant="secondary" color="muted">Mérida → Caracas</Text>
@@ -11,7 +11,7 @@
  *   <TextLink onPress={…}>¿Olvidaste tu contraseña?</TextLink>
  */
 import React, { useMemo } from 'react';
-import { Text as RNText, StyleSheet, TextProps as RNTextProps, TextStyle } from 'react-native';
+import { Platform, Text as RNText, StyleSheet, TextProps as RNTextProps, TextStyle } from 'react-native';
 import { PressableScale } from '../PressableScale';
 import {
   Colors,
@@ -26,10 +26,9 @@ import {
 type TrackingToken = keyof typeof Typography.tracking;
 
 /**
- * Text colours only. The vivid surface colours (`primary`, `secondary`,
- * `accent`, `success`, `warning`) fail WCAG contrast as text on white
- * (1.6–3.7:1), so they are not tokens here: use the `*Text` variants and
- * `link` (all ≥ 4.5:1 on white/surface).
+ * Text colours only. The vivid surface colours (`primary`, `secondary`, `accent`,
+ * `success`, `warning`) fail WCAG contrast as text on white (1.6–3.7:1), so they are
+ * not tokens here: use the `*Text` variants and `link` (all ≥ 4.5:1 on white/surface).
  */
 export type TextColorToken =
   | 'foreground'
@@ -40,7 +39,8 @@ export type TextColorToken =
   | 'infoText'
   | 'link'
   | 'dangerText'
-  | 'inverse';
+  | 'inverse'
+  | 'inverseMuted';
 
 const COLOR_MAP: Record<TextColorToken, string> = {
   foreground: Colors.foreground,
@@ -52,6 +52,7 @@ const COLOR_MAP: Record<TextColorToken, string> = {
   link: Colors.link,
   dangerText: Colors.dangerText,
   inverse: Colors.white,
+  inverseMuted: Colors.nightMuted,
 };
 
 export interface TextProps extends RNTextProps {
@@ -69,12 +70,20 @@ export interface TextProps extends RNTextProps {
   uppercase?: boolean;
   /** Drop the preset line height (for tightly packed single lines) */
   compact?: boolean;
+  /** Cifras del mismo ancho: horas, montos que cambian, cuentas atrás */
+  tabular?: boolean;
 }
 
 function resolveColor(color?: TextProps['color']): string {
   if (!color) return Colors.foreground;
   return (COLOR_MAP as Record<string, string>)[color] ?? color;
 }
+
+/**
+ * En Android el texto reserva por defecto un espacio extra arriba y abajo que lo
+ * descentra dentro de su caja: se quita para que botones e insignias queden exactos.
+ */
+const AJUSTE_ANDROID: TextStyle = Platform.OS === 'android' ? { includeFontPadding: false } : {};
 
 export function Text({
   variant = 'body',
@@ -85,6 +94,7 @@ export function Text({
   align,
   uppercase,
   compact,
+  tabular,
   style,
   ...rest
 }: TextProps) {
@@ -95,16 +105,17 @@ export function Text({
     const trackingToken: TrackingToken = tracking ?? (preset.tracking as TrackingToken);
 
     return {
-      fontFamily: Typography.family,
+      ...AJUSTE_ANDROID,
+      fontFamily: Typography.fonts[weightToken],
       fontSize: Typography.sizes[sizeToken],
-      fontWeight: Typography.weights[weightToken],
       lineHeight: compact ? undefined : Typography.lineHeights[sizeToken],
       letterSpacing: Typography.tracking[trackingToken],
       color: resolveColor(color),
       textAlign: align,
       textTransform: uppercase ? 'uppercase' : undefined,
+      fontVariant: tabular ? ['tabular-nums'] : undefined,
     };
-  }, [variant, size, weight, color, tracking, align, uppercase, compact]);
+  }, [variant, size, weight, color, tracking, align, uppercase, compact, tabular]);
 
   return <RNText {...rest} style={[composed, style]} />;
 }
@@ -114,9 +125,9 @@ Text.displayName = 'Text';
 // ─── Text link ───────────────────────────────────────────────────────────────
 
 /**
- * Enlace de texto ("¿Olvidaste tu contraseña?", "Copiar", "Ver detalle"):
- * `link` semibold y subrayado, con área táctil de 44 pt aunque el texto sea
- * pequeño. Es la única forma de pintar un enlace (D1).
+ * Enlace de texto ("¿Olvidaste tu contraseña?", "Copiar", "Ver detalle"): azul
+ * semibold, con área táctil de 44 pt aunque el texto sea pequeño. Es la única forma
+ * de pintar un enlace.
  */
 export function TextLink({
   children,
@@ -137,7 +148,7 @@ export function TextLink({
       accessibilityRole="link"
       accessibilityLabel={accessibilityLabel ?? children}
     >
-      <Text variant="label" color="link" style={textStyles.link} compact>
+      <Text variant="label" weight="semibold" color="link" compact>
         {children}
       </Text>
     </PressableScale>
@@ -145,22 +156,20 @@ export function TextLink({
 }
 
 /**
- * Escape hatch for places that need the raw font declaration inside a
- * StyleSheet (e.g. `TextInput`), without repeating the family string.
+ * Escape hatch for places that need the raw font declaration inside a StyleSheet
+ * (e.g. `TextInput`), without repeating the family string.
  */
 export const fontStyle = (
   size: FontSizeToken = 'base',
   weight: FontWeightToken = 'regular'
 ): TextStyle => ({
-  fontFamily: Typography.family,
+  fontFamily: Typography.fonts[weight],
   fontSize: Typography.sizes[size],
-  fontWeight: Typography.weights[weight],
 });
 
 export const textStyles = StyleSheet.create({
   /** Restores the family on third-party components that render raw strings */
-  inherit: { fontFamily: Typography.family },
-  link: { textDecorationLine: 'underline' },
+  inherit: { fontFamily: Typography.fonts.regular },
   linkBox: {
     minHeight: Sizes.touchTarget,
     justifyContent: 'center',

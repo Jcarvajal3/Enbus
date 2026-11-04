@@ -1,7 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Image, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { CheckCircle, Clock, Copy, Info, LockKey, Package, Storefront, XCircle } from 'phosphor-react-native';
+import {
+  CheckCircle,
+  Clock,
+  Copy,
+  Info,
+  LockKey,
+  Package,
+  Storefront,
+  XCircle,
+  type IconProps,
+} from 'phosphor-react-native';
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -10,12 +20,15 @@ import { PaymentFlow } from '@/src/components/PaymentFlow';
 import { ScreenSkeleton, SkeletonLoader } from '@/src/components/SkeletonLoader';
 import { useToast } from '@/src/components/Toast';
 import {
+  Atmosfera,
+  Aviso,
   BottomSheet,
   Button,
   Card,
   Divider,
   EmptyState,
   ErrorState,
+  IconTile,
   InfoRow,
   Monto,
   Screen,
@@ -45,7 +58,7 @@ import {
 } from '@/src/hooks/useEncomiendas';
 import { useVolver } from '@/src/hooks/useVolver';
 import type { Encomienda, RemitenteEncomienda } from '@/src/types';
-import { Colors, Radius, Sizes, Spacing, StatusPalette, type StatusTone } from '@/src/theme';
+import { alpha, Colors, Radius, Shadows, Sizes, Spacing, type StatusTone } from '@/src/theme';
 
 interface HistorialRow {
   estado_nuevo: string;
@@ -219,7 +232,7 @@ export default function DetalleRecibirScreen() {
 
   if (loading) {
     return (
-      <Screen>
+      <Screen atmosfera="calida">
         <ScreenHeader variant="compact" eyebrow={CEJA} title="Encomienda" onBack={volver} />
         <ScreenSkeleton variante="detalle" />
       </Screen>
@@ -228,7 +241,7 @@ export default function DetalleRecibirScreen() {
 
   if (!encomienda) {
     return (
-      <Screen>
+      <Screen atmosfera="calida">
         <ScreenHeader variant="compact" eyebrow={CEJA} title="Encomienda" onBack={volver} />
         {noEncontrada ? (
           <EmptyState
@@ -288,7 +301,7 @@ export default function DetalleRecibirScreen() {
     });
 
   return (
-    <Screen>
+    <Screen atmosfera="calida">
       <ScreenHeader
         variant="compact"
         eyebrow={CEJA}
@@ -298,7 +311,7 @@ export default function DetalleRecibirScreen() {
       />
 
       <ScrollView
-        contentContainerStyle={scrollContent({ top: Spacing['2xl'] })}
+        contentContainerStyle={scrollContent({ top: Spacing.lg })}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -314,49 +327,55 @@ export default function DetalleRecibirScreen() {
         {/* ── PIN de retiro (APP-45): destacado solo cuando ya se puede retirar.
             Sin la pista del estado (AU-03): es la instrucción de quien envía. ─ */}
         {enOficina && pin ? (
-          <Card style={[s.card, s.pinCard]}>
-            <Text variant="bodyStrong" align="center">
+          <View style={[s.card, s.pinCard]}>
+            <Atmosfera variante="noche" style={StyleSheet.absoluteFill} />
+            <Text variant="subheading" color="inverse" align="center">
               {`Retírala en ${puntoRetiro.completo} con este PIN y tu cédula`}
             </Text>
             {puntoRetiro.detalle ? (
-              <Text variant="caption" color="muted" align="center">
+              <Text variant="caption" color="inverseMuted" align="center">
                 {puntoRetiro.detalle}
               </Text>
             ) : null}
-            <Text
-              variant="display"
-              color="foreground"
-              align="center"
-              compact
+            <View
               style={s.pin}
+              accessible
+              accessibilityRole="text"
               accessibilityLabel={`PIN de retiro ${pin.split('').join(' ')}`}
             >
-              {pin}
-            </Text>
+              {pin.split('').map((digito, i) => (
+                <View key={i} style={s.pinDigito}>
+                  <Text variant="title" size="2xl" tracking="normal" color="inverse" compact>
+                    {digito}
+                  </Text>
+                </View>
+              ))}
+            </View>
             {encomienda.pin_bloqueado ? (
-              <View style={s.pinBloqueado}>
-                <LockKey size={Sizes.icon.md} color={Colors.dangerText} weight="bold" />
-                <Text variant="caption" color="dangerText" style={s.flex}>
-                  {`Tu PIN se bloqueó por intentos fallidos. Pide en la taquilla que lo desbloqueen${
-                    SOPORTE_WHATSAPP ? ' o escríbenos desde Ayuda' : ''
-                  }.`}
-                </Text>
-              </View>
+              <Aviso
+                tono="danger"
+                icon={LockKey}
+                texto={`Tu PIN se bloqueó por intentos fallidos. Pide en la taquilla que lo desbloqueen${
+                  SOPORTE_WHATSAPP ? ' o escríbenos desde Ayuda' : ''
+                }.`}
+                style={s.pinBloqueado}
+              />
             ) : null}
             <Button
-              variant="outline"
-              size="sm"
+              variant="secondary"
+              size="md"
               icon={Copy}
               onPress={() => copiarPin(pin)}
               accessibilityLabel="Copiar PIN"
+              style={s.pinCopiar}
             >
               Copiar PIN
             </Button>
-          </Card>
+          </View>
         ) : pinActivo ? (
-          <Card tone="sunken" style={[s.card, s.pinLinea]}>
-            <LockKey size={Sizes.icon.md} color={Colors.mutedForeground} weight="bold" />
-            <Text variant="secondary" color="muted" style={s.flex}>
+          <Card style={[s.card, s.pinLinea]}>
+            <IconTile tone="brand" icon={LockKey} />
+            <Text variant="secondary" style={s.flex}>
               {pin
                 ? `Tu PIN es ${pin}. Lo necesitarás cuando llegue a ${ciudadDestino}.`
                 : enOficina
@@ -367,7 +386,7 @@ export default function DetalleRecibirScreen() {
         ) : null}
 
         {/* ── Remitente, paquete y costo ──────────────────────────────── */}
-        <Card tone="sunken" style={s.card}>
+        <Card style={s.card}>
           <Text variant="subheading">Detalles</Text>
           <InfoRow label="Te la envía" value={nombreRemitente || 'Sin datos de quien envía'} />
           {telefonoRemitente ? (
@@ -425,7 +444,7 @@ export default function DetalleRecibirScreen() {
           <Divider spacing={Spacing.xs} />
 
           <View style={s.puntoRow}>
-            <Storefront size={Sizes.icon.md} color={Colors.foreground} weight="bold" />
+            <IconTile size="sm" tone="coral" icon={Storefront} />
             <View style={s.flex}>
               <Text variant="caption" color="muted">
                 Dónde retirarla
@@ -511,7 +530,7 @@ export default function DetalleRecibirScreen() {
         ) : null}
 
         {/* ── Seguimiento ─────────────────────────────────────────────── */}
-        <Card tone="sunken" style={s.card}>
+        <Card style={s.card}>
           <Text variant="subheading">Seguimiento</Text>
           <StatusTimeline
             estados={buildEncomiendaTimeline(encomienda.estado, historial, {
@@ -522,7 +541,7 @@ export default function DetalleRecibirScreen() {
 
         {/* ── Fotos ───────────────────────────────────────────────────── */}
         {fotos.length > 0 ? (
-          <Card tone="sunken" style={s.card}>
+          <Card style={s.card}>
             <Text variant="subheading" style={s.cardTitle}>
               Fotos
             </Text>
@@ -584,33 +603,19 @@ export default function DetalleRecibirScreen() {
 
 function AvisoCobro({
   tone,
-  icon: Icon,
+  icon,
   titulo,
   children,
   extra,
 }: {
   tone: StatusTone;
-  icon: React.ComponentType<{ size?: number; color?: string; weight?: 'fill' }>;
+  icon: React.ComponentType<IconProps>;
   titulo: string;
   children: string;
   extra?: React.ReactNode;
 }) {
-  const palette = StatusPalette[tone];
   return (
-    <Card tone="sunken" style={s.card} accessibilityRole="summary">
-      <View style={s.avisoHead}>
-        <View style={[s.avisoIcon, { backgroundColor: palette.bg }]}>
-          <Icon color={palette.fg} weight="fill" size={Sizes.icon.lg} />
-        </View>
-        <View style={s.avisoBody}>
-          <Text variant="bodyStrong">{titulo}</Text>
-          <Text variant="secondary" color="muted">
-            {children}
-          </Text>
-          {extra}
-        </View>
-      </View>
-    </Card>
+    <Aviso estado={tone} icon={icon} titulo={titulo} texto={children} extra={extra} style={s.card} />
   );
 }
 
@@ -619,28 +624,45 @@ const s = StyleSheet.create({
     flex: 1,
   },
   card: {
-    marginBottom: Spacing['2xl'],
+    marginBottom: Spacing.lg,
   },
   cardTitle: {
     marginBottom: Spacing.lg,
   },
+  // El PIN es a lo que se viene: de noche, cada cifra en su casilla.
   pinCard: {
     alignItems: 'center',
     gap: Spacing.sm,
-    // APP-45: tinte de marca detrás de un PIN oscuro, nunca texto amarillo.
-    backgroundColor: Colors.primaryLight,
-    borderWidth: Sizes.hairline,
-    borderColor: Colors.primaryBorder,
+    padding: Spacing.xl,
+    borderRadius: Radius.xl,
+    borderCurve: 'continuous',
+    overflow: 'hidden',
+    backgroundColor: Colors.night,
+    ...Shadows.raised,
   },
   pin: {
-    letterSpacing: Spacing.sm,
-    marginVertical: Spacing.sm,
+    alignSelf: 'stretch',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: Spacing.xs + Spacing.xs / 2,
+    marginVertical: Spacing.md,
+  },
+  pinDigito: {
+    flex: 1,
+    maxWidth: Sizes.iconBox.lg,
+    height: Sizes.control.xl,
+    borderRadius: Radius.md,
+    borderCurve: 'continuous',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: alpha(Colors.white, 0.12),
   },
   pinBloqueado: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: Spacing.sm,
+    alignSelf: 'stretch',
     marginBottom: Spacing.sm,
+  },
+  pinCopiar: {
+    borderWidth: 0,
   },
   pinLinea: {
     flexDirection: 'row',
@@ -654,7 +676,7 @@ const s = StyleSheet.create({
   },
   puntoRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     gap: Spacing.md,
     paddingTop: Spacing.md,
   },
@@ -668,26 +690,10 @@ const s = StyleSheet.create({
     gap: Spacing.md,
     paddingVertical: Spacing.md,
   },
-  avisoHead: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: Spacing.md,
-  },
-  avisoIcon: {
-    width: Sizes.iconBox.lg,
-    height: Sizes.iconBox.lg,
-    borderRadius: Radius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avisoBody: {
-    flex: 1,
-    gap: Spacing.xs,
-  },
   photo: {
     width: '100%',
     height: 200,
-    borderRadius: Radius.lg,
+    borderRadius: Radius.md,
   },
   photoSecond: {
     marginTop: Spacing.lg,
@@ -697,7 +703,7 @@ const s = StyleSheet.create({
   },
   reportar: {
     alignItems: 'center',
-    marginTop: Spacing['2xl'],
+    marginTop: Spacing.xl,
   },
   /** `TextLink` se alinea al inicio: este envoltorio lo centra. */
   reportarEnlace: {

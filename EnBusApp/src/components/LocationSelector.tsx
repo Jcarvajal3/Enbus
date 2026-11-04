@@ -3,12 +3,14 @@
  *
  * Título de la hoja = el campo ("Origen" / "Destino"); arriba "Recientes" y
  * "Populares" en píldoras, luego las ciudades agrupadas por estado. Las filas
- * no llevan icono (AU-31): el nombre basta. `opciones` limita las ciudades (p.
+ * no llevan icono (AU-31): el nombre basta. La búsqueda no toma el foco al abrir:
+ * el teclado saltaba en plena animación y la hoja parpadeaba, y además tapaba los
+ * atajos, que resuelven la mayoría de las búsquedas. `opciones` limita las ciudades (p.
  * ej. solo las que tienen ruta); `excluir` muestra una deshabilitada con su
  * motivo ("Ya es tu origen").
  */
-import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { FlatList, StyleSheet, View, type TextInput } from 'react-native';
+import React, { memo, useCallback, useMemo, useState } from 'react';
+import { FlatList, StyleSheet, View } from 'react-native';
 import { CaretDown, CaretUp, MagnifyingGlass, MapPin } from 'phosphor-react-native';
 import { PressableScale } from './PressableScale';
 import {
@@ -43,9 +45,6 @@ interface LocationSelectorProps {
   opciones?: Localidad[];
 }
 
-/** Retraso para enfocar la búsqueda: el `Modal` tiene que estar montado (Android). */
-const FOCO_DELAY_MS = Motion.duration.base;
-
 const mismaCiudad = (a?: Localidad | null, b?: Localidad | null) =>
   !!a && !!b && normalizeCityForDb(a.ciudad) === normalizeCityForDb(b.ciudad);
 
@@ -74,14 +73,6 @@ export function LocationSelector({
 }: LocationSelectorProps) {
   const [visible, setVisible] = useState(false);
   const [search, setSearch] = useState('');
-  const searchRef = useRef<TextInput>(null);
-
-  // El campo de búsqueda recibe el foco al abrir (APP-15).
-  useEffect(() => {
-    if (!visible) return;
-    const t = setTimeout(() => searchRef.current?.focus(), FOCO_DELAY_MS);
-    return () => clearTimeout(t);
-  }, [visible]);
 
   const esExcluida = useCallback((loc: Localidad) => mismaCiudad(loc, excluir), [excluir]);
 
@@ -192,13 +183,11 @@ export function LocationSelector({
       >
         <View style={s.search}>
           <Field
-            ref={searchRef}
             icon={MagnifyingGlass}
-            placeholder="Ej. Mérida"
+            placeholder="Busca tu ciudad o estado"
             value={search}
             onChangeText={setSearch}
             autoCorrect={false}
-            tone="sunken"
             containerStyle={s.searchField}
             accessibilityLabel="Buscar ciudad o estado"
             returnKeyType="search"
@@ -283,7 +272,7 @@ function AtajoSeccion({
               }`}
               accessibilityState={{ disabled: deshabilitada }}
             >
-              <Text variant="label" color={deshabilitada ? 'muted' : 'foreground'} compact>
+              <Text variant="label" weight="semibold" color={deshabilitada ? 'muted' : 'infoText'} compact>
                 {loc.ciudad}
               </Text>
               {deshabilitada && excluirAyuda ? (
@@ -332,9 +321,9 @@ const StateGroup = memo(function StateGroup({
         </Text>
 
         {expanded ? (
-          <CaretUp size={Sizes.icon.md} weight="bold" color={Colors.mutedForeground} />
+          <CaretUp size={Sizes.icon.sm} weight="bold" color={Colors.accentStrong} />
         ) : (
-          <CaretDown size={Sizes.icon.md} weight="bold" color={Colors.mutedForeground} />
+          <CaretDown size={Sizes.icon.sm} weight="bold" color={Colors.placeholder} />
         )}
       </PressableScale>
 
@@ -381,55 +370,56 @@ const StateGroup = memo(function StateGroup({
 const s = StyleSheet.create({
   search: {
     paddingHorizontal: Layout.screenPadding,
-    paddingTop: Spacing.lg,
+    paddingTop: Spacing.xs,
   },
   searchField: {
-    marginBottom: Spacing.sm,
+    marginBottom: Spacing.md,
   },
   list: {
     paddingHorizontal: Layout.screenPadding,
     paddingBottom: Spacing['4xl'],
   },
   group: {
-    marginBottom: Spacing.md,
-    backgroundColor: Colors.surface,
-    borderRadius: Radius.lg,
-    overflow: 'hidden',
+    borderBottomWidth: Sizes.hairline,
+    borderBottomColor: Colors.borderLight,
   },
   groupHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingVertical: Spacing.md,
-    paddingHorizontal: Spacing.lg,
-    minHeight: Sizes.touchTarget + Spacing.sm,
+    minHeight: Sizes.control.lg,
   },
   groupTitle: {
     flex: 1,
   },
   cities: {
-    backgroundColor: Colors.white,
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.md,
+    borderCurve: 'continuous',
     paddingHorizontal: Spacing.lg,
+    marginBottom: Spacing.md,
   },
   city: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.md,
-    minHeight: Sizes.touchTarget,
+    minHeight: Sizes.control.md,
   },
   cityDivided: {
     borderBottomWidth: Sizes.hairline,
-    borderBottomColor: Colors.borderLight,
+    borderBottomColor: Colors.surfaceDark,
   },
   cityName: {
     flex: 1,
   },
   atajos: {
-    gap: Spacing.lg,
-    marginBottom: Spacing.md,
+    gap: Spacing.xl,
+    marginBottom: Spacing.sm,
+    paddingTop: Spacing.sm,
   },
   seccionCabecera: {
-    marginBottom: Spacing.sm,
+    marginBottom: Spacing.md,
   },
   seccionTitulo: {
     marginTop: Spacing.xs,
@@ -441,16 +431,14 @@ const s = StyleSheet.create({
     gap: Spacing.sm,
   },
   pill: {
-    minHeight: Sizes.touchTarget,
+    minHeight: Sizes.control.sm,
     justifyContent: 'center',
     paddingHorizontal: Spacing.lg,
     paddingVertical: Spacing.xs,
     borderRadius: Radius.full,
-    backgroundColor: Colors.surface,
+    backgroundColor: Colors.accentLight,
   },
   pillOff: {
-    backgroundColor: Colors.transparent,
-    borderWidth: Sizes.hairline,
-    borderColor: Colors.border,
+    backgroundColor: Colors.surface,
   },
 });

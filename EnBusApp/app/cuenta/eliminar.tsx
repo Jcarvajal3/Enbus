@@ -142,7 +142,7 @@ export default function EliminarCuentaScreen() {
       <ScreenHeader variant="compact" title="Eliminar mi cuenta" onBack={atras} />
 
       <ScrollView
-        contentContainerStyle={scrollContent({ top: Spacing['2xl'] })}
+        contentContainerStyle={scrollContent({ top: Spacing.lg })}
         showsVerticalScrollIndicator={false}
       >
         {actividad ? (
@@ -182,7 +182,7 @@ export default function EliminarCuentaScreen() {
           </View>
         ) : null}
 
-        <Card tone="sunken" padding="md">
+        <Card padding="md">
           <Text variant="bodyStrong" style={s.lead}>
             Esto es lo que pasa:
           </Text>
@@ -206,6 +206,7 @@ export default function EliminarCuentaScreen() {
                 key={m}
                 label={m}
                 selected={motivo === m}
+                sobre="surface"
                 onPress={() => setMotivo((prev) => (prev === m ? null : m))}
               />
             ))}

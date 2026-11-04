@@ -1,27 +1,24 @@
 /**
  * Button — every tappable action label in the app.
  *
- * Replaces ~12 bespoke button implementations that disagreed on height
- * (48 / 52 / 54), radius (pill vs 10), disabled treatment (opacity 0.5 vs a
- * hardcoded translucent fill) and label size. One component, one contract.
- *
  *   <Button size="lg" fullWidth icon={Ticket} onPress={…}>Buscar viaje</Button>   // primary
  *   <Button variant="secondary" size="md" onPress={…}>Ver detalle</Button>
  *   <Button variant="dangerGhost" onPress={pedirConfirmacion}>Cancelar reserva</Button>
  *   <Button variant="danger" onPress={cancelar}>Cancelar reserva</Button>          // solo en la confirmación
  *
- * Reglas (§2.3, D1): la acción principal es amarilla con texto `ink` (una por
- * pantalla; `lg` en pantalla y `FloatingBar`, `md` en tarjetas y vacíos).
- * `danger` (relleno `dangerText` + blanco) solo confirma; `dangerGhost` abre la
- * confirmación. Deshabilitado = relleno `surfaceDark` + texto `mutedForeground`,
- * sin opacidad. Etiqueta ≤ 3 palabras.
+ * Reglas: la acción principal es el sol (gradiente amarillo con texto tinta y su
+ * resplandor), una por pantalla; `lg` en pantalla y `FloatingBar`, `md` en tarjetas
+ * y vacíos. `danger` solo confirma; `dangerGhost` abre la confirmación. Deshabilitado
+ * = relleno `surfaceDark` + texto apagado, sin sombra ni opacidad. Etiqueta ≤ 3
+ * palabras.
  */
 import React from 'react';
 import { ActivityIndicator, StyleSheet, View, ViewStyle } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import type { IconProps } from 'phosphor-react-native';
 import { PressableScale } from '../PressableScale';
 import { Text } from './Text';
-import { Colors, Motion, Radius, Sizes, Spacing, type FontSizeToken } from '@/src/theme';
+import { Colors, Gradients, Motion, Radius, Shadows, Sizes, Spacing, type FontSizeToken } from '@/src/theme';
 
 export type ButtonVariant =
   | 'primary'
@@ -57,19 +54,25 @@ interface VariantSpec {
   background: string;
   foreground: string;
   border?: string;
+  shadow?: ViewStyle;
 }
 
 const VARIANTS: Record<ButtonVariant, VariantSpec> = {
-  // Amarillo + tinta: 10,5:1.
-  primary: { background: Colors.primary, foreground: Colors.primaryForeground },
-  secondary: { background: Colors.surface, foreground: Colors.foreground },
+  primary: { background: Colors.primary, foreground: Colors.primaryForeground, shadow: Shadows.sun },
+  // Blanco con relieve: pesa menos que el sol y se ve igual sobre fondo o tarjeta.
+  secondary: {
+    background: Colors.background,
+    foreground: Colors.foreground,
+    border: Colors.borderControl,
+    shadow: Shadows.subtle,
+  },
   outline: {
     background: Colors.background,
     foreground: Colors.foreground,
-    border: Colors.borderStrong,
+    border: Colors.borderControl,
   },
   ghost: { background: Colors.transparent, foreground: Colors.foreground },
-  // Blanco sobre rojo oscuro: 6,5:1 (SY-24).
+  // Blanco sobre rojo oscuro: 6,5:1.
   danger: { background: Colors.dangerText, foreground: Colors.white },
   dangerGhost: { background: Colors.transparent, foreground: Colors.dangerText },
 };
@@ -83,7 +86,7 @@ const DISABLED: VariantSpec = {
 const SIZES: Record<ButtonSize, { height: number; paddingX: number; text: FontSizeToken; icon: number }> = {
   sm: { height: Sizes.control.sm, paddingX: Spacing.lg, text: 'sm', icon: Sizes.icon.sm },
   md: { height: Sizes.control.md, paddingX: Spacing.xl, text: 'base', icon: Sizes.icon.md },
-  lg: { height: Sizes.control.lg, paddingX: Spacing['2xl'], text: 'base', icon: Sizes.icon.lg },
+  lg: { height: Sizes.control.lg, paddingX: Spacing['2xl'], text: 'lg', icon: Sizes.icon.md },
 };
 
 export function Button({
@@ -110,6 +113,7 @@ export function Button({
       ? { ...base, foreground: Colors.mutedForeground }
       : DISABLED
     : base;
+  const conSol = variant === 'primary' && !disabled;
 
   const shell: ViewStyle = {
     height: dims.height,
@@ -129,18 +133,28 @@ export function Button({
       haptic={haptic && !isInert}
       hapticType="medium"
       scaleValue={Motion.press.button}
-      style={[s.shell, shell, ...(Array.isArray(style) ? style : [style])]}
+      style={[s.shell, shell, spec.shadow ?? s.sinSombra, ...(Array.isArray(style) ? style : [style])]}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? children}
       accessibilityState={{ disabled: isInert, busy: loading }}
     >
+      {conSol ? (
+        <LinearGradient colors={[...Gradients.sun]} style={[StyleSheet.absoluteFill, s.relleno]} />
+      ) : null}
       <View style={s.row}>
         {loading ? (
           <ActivityIndicator size="small" color={spec.foreground} />
         ) : (
           <>
-            {Icon && <Icon size={dims.icon} color={spec.foreground} weight="bold" />}
-            <Text variant="button" size={dims.text} color={spec.foreground} compact>
+            {Icon && <Icon size={dims.icon} color={spec.foreground} weight={conSol ? 'fill' : 'bold'} />}
+            <Text
+              variant="button"
+              size={dims.text}
+              color={spec.foreground}
+              tracking={size === 'lg' ? 'snug' : 'normal'}
+              numberOfLines={1}
+              compact
+            >
               {children}
             </Text>
             {IconRight && <IconRight size={dims.icon} color={spec.foreground} weight="bold" />}
@@ -155,7 +169,11 @@ const s = StyleSheet.create({
   shell: {
     alignItems: 'center',
     justifyContent: 'center',
-    overflow: 'hidden',
+    borderCurve: 'continuous',
+  },
+  sinSombra: {},
+  relleno: {
+    borderRadius: Radius.full,
   },
   row: {
     flexDirection: 'row',

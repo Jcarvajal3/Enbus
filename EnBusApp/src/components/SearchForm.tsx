@@ -313,8 +313,9 @@ export function SearchForm({
 // ─── Campo de fecha ──────────────────────────────────────────────────────────
 
 /**
- * La fecha del viaje con la misma forma que las tarjetas de `RouteField`
- * ("Fecha" + "mar. 3 nov."). Lo usan Inicio y el paso 1 de la compra.
+ * La fecha del viaje, con la misma forma que los bloques de `RouteField` pero en
+ * un pozo neutro: la ruta manda ("Fecha" + "mar. 3 nov."). Lo usan Inicio y el
+ * paso 1 de la compra.
  * `pendiente`: aún no se puede elegir (falta la ruta o se buscan las fechas);
  * el valor dice por qué.
  */
@@ -342,16 +343,20 @@ export function CampoFecha({
     >
       <View style={s.campoIcono}>
         <CalendarBlank
-          size={Sizes.icon.sm}
-          color={pendiente ? Colors.mutedForeground : Colors.foreground}
-          weight="bold"
+          size={Sizes.icon.lg}
+          color={pendiente ? Colors.placeholder : Colors.accentStrong}
+          weight="duotone"
         />
       </View>
       <View style={s.campoTextos}>
         <Text variant="caption" color="muted" compact>
           Fecha
         </Text>
-        <Text variant="bodyStrong" color={pendiente ? 'muted' : 'foreground'} numberOfLines={1}>
+        <Text
+          variant={pendiente ? 'body' : 'subheading'}
+          color={pendiente ? Colors.placeholder : 'foreground'}
+          numberOfLines={1}
+        >
           {valor}
         </Text>
       </View>
@@ -386,7 +391,7 @@ type EstadoAlternativas =
  * fija como destino; "Cambiar destino" abre el selector.
  *
  * Lo usan el buscador de Inicio y el paso 1 de `boletos/buscar` (pantallas
- * blancas: el bloque es `surface`).
+ * blanco con borde fino: se lee igual sobre el fondo y dentro de una tarjeta).
  */
 export function SinSalidasRuta({
   origen,
@@ -507,20 +512,17 @@ const s = StyleSheet.create({
     paddingHorizontal: Spacing.lg,
     paddingVertical: Spacing.sm,
     borderRadius: Radius.lg,
-    backgroundColor: Colors.background,
-    borderWidth: Sizes.hairline,
-    borderColor: Colors.border,
+    borderCurve: 'continuous',
+    backgroundColor: Colors.surface,
   },
   campoIcono: {
-    width: Sizes.iconBox.sm,
-    height: Sizes.iconBox.sm,
-    borderRadius: Radius.full,
-    backgroundColor: Colors.surface,
+    width: Sizes.icon.lg,
     alignItems: 'center',
     justifyContent: 'center',
   },
   campoTextos: {
     flex: 1,
+    gap: Spacing.xs / 2,
   },
   ayudaFecha: {
     flexDirection: 'row',
@@ -528,7 +530,7 @@ const s = StyleSheet.create({
     flexWrap: 'wrap',
     columnGap: Spacing.xs,
     marginTop: Spacing.sm,
-    paddingHorizontal: Spacing.lg,
+    paddingHorizontal: Spacing.xs,
   },
   ayudaTexto: {
     flexShrink: 1,
@@ -540,7 +542,8 @@ const s = StyleSheet.create({
     gap: Spacing.sm,
     padding: Spacing.lg,
     borderRadius: Radius.lg,
-    backgroundColor: Colors.surface,
+    borderCurve: 'continuous',
+    backgroundColor: Colors.warningLight,
   },
   cambiarDestino: {
     alignSelf: 'flex-start',

@@ -12,10 +12,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { CheckCircle, Receipt, Storefront, Ticket } from 'phosphor-react-native';
+import { CheckCircle, Receipt, Storefront, Ticket, UserCircle } from 'phosphor-react-native';
 import { ScreenSkeleton } from '@/src/components/SkeletonLoader';
 import { useVolver } from '@/src/hooks/useVolver';
 import {
+  Aviso,
   Card,
   Divider,
   EmptyState,
@@ -23,6 +24,7 @@ import {
   ErrorState,
   FloatingBar,
   Button,
+  IconTile,
   Monto,
   RouteSummary,
   Screen,
@@ -47,7 +49,7 @@ import {
   unirAsientos,
 } from '@/src/hooks/useCheckoutBoletos';
 import type { EstadoBoleto, PagoBoletoEmbed } from '@/src/types';
-import { Colors, Radius, Sizes, Spacing } from '@/src/theme';
+import { Spacing } from '@/src/theme';
 
 const SELECT_COMPRA = `id, codigo_boleto, asiento, estado, precio, reserva_expira_at, compra_id,
   pasajero_nombre, pasajero_cedula, monto_reembolso, reembolso_procesado, created_at,
@@ -277,31 +279,21 @@ export default function CompraScreen() {
         {error ? <StaleBanner onRetry={() => void cargar()} /> : null}
 
         {encabezado ? (
-          <View
-            style={[s.banner, encabezado.tono === 'success' ? s.bannerSuccess : s.bannerInfo]}
-            accessibilityRole="alert"
-            accessibilityLiveRegion="polite"
-          >
-            <encabezado.icono
-              size={Sizes.icon.lg}
-              color={encabezado.tono === 'success' ? Colors.successText : Colors.infoText}
-              weight="fill"
-            />
-            <View style={s.bannerBody}>
-              <Text variant="label">{encabezado.titulo}</Text>
-              <Text variant="secondary" color="muted">
-                {encabezado.texto}
-              </Text>
-            </View>
-          </View>
+          <Aviso
+            tono={encabezado.tono}
+            icon={encabezado.icono}
+            titulo={encabezado.titulo}
+            texto={encabezado.texto}
+            alerta
+            style={s.banner}
+          />
         ) : null}
 
         {/* ── Resumen ─────────────────────────────────────────────────── */}
-        <Card tone="sunken" padding="md">
-          <Text variant="subheading" numberOfLines={1}>
+        <Card padding="md">
+          <Text variant="bodyStrong" numberOfLines={1} style={s.resumenCoop}>
             {primero.cooperativas?.nombre ?? 'Cooperativa'}
           </Text>
-          <Divider spacing={Spacing.lg} />
           <RouteSummary
             origen={ruta?.ciudad_origen}
             destino={ruta?.ciudad_destino}
@@ -328,7 +320,7 @@ export default function CompraScreen() {
           </View>
           <Divider spacing={Spacing.md} />
           <View style={s.resumenTotal}>
-            <Text variant="bodyStrong">Total</Text>
+            <Text variant="subheading">Total</Text>
             {pago && pago.monto_bs != null ? (
               <Monto
                 usd={Number(pago.monto) || totalUsd}
@@ -404,6 +396,7 @@ function FilaBoleto({ boleto, onPress }: { boleto: BoletoDeCompra; onPress: () =
 
   return (
     <EntityCard
+      leading={<IconTile tone="sky" icon={UserCircle} />}
       badge={
         reembolso ? (
           <StatusBadge dominio="reembolso" estado={reembolso} />
@@ -422,23 +415,10 @@ function FilaBoleto({ boleto, onPress }: { boleto: BoletoDeCompra; onPress: () =
 
 const s = StyleSheet.create({
   banner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.md,
-    paddingVertical: Spacing.md,
-    paddingHorizontal: Spacing.lg,
-    borderRadius: Radius.lg,
     marginBottom: Spacing.lg,
   },
-  bannerSuccess: {
-    backgroundColor: Colors.successLight,
-  },
-  bannerInfo: {
-    backgroundColor: Colors.infoLight,
-  },
-  bannerBody: {
-    flex: 1,
-    gap: Spacing.xs,
+  resumenCoop: {
+    marginBottom: Spacing.lg,
   },
   resumenFila: {
     flexDirection: 'row',
@@ -457,7 +437,7 @@ const s = StyleSheet.create({
     gap: Spacing.md,
   },
   seccion: {
-    marginTop: Spacing['2xl'],
+    marginTop: Spacing['3xl'],
   },
   nota: {
     marginTop: Spacing.xs,

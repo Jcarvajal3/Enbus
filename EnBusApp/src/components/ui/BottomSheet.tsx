@@ -7,14 +7,18 @@
  * the same gesture behaved differently in each place. One implementation now
  * owns the gesture, the scrim, the entrance and the header.
  *
- * Con "reducir movimiento" la hoja aparece y se cierra sin deslizarse (solo el
- * fundido del fondo).
+ * La hoja anima sola su fondo y su deslizamiento: el `Modal` no lleva animación
+ * propia, porque dos animaciones sobre la misma ventana parpadean en Android. El
+ * `Modal` sigue montado hasta que termina la salida, también cuando quien la usa
+ * cierra con `visible={false}` sin pasar por `onClose`.
+ *
+ * Con "reducir movimiento" la hoja aparece y se cierra sin deslizarse.
  *
  * Subpasos (p. ej. la forma de pago dentro de "Registrar pago"): `onBack`
  * dibuja la ← a la izquierda del título y cierra el subpaso; el título cambia
  * con el paso. El pie respeta el área segura inferior (AU-45).
  */
-import React, { useCallback, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Animated,
   Dimensions,
@@ -31,7 +35,7 @@ import { useReducedMotion } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { IconButton } from './IconButton';
 import { Text } from './Text';
-import { Colors, Layout, Motion, Radius, Shadows, Sizes, Spacing } from '@/src/theme';
+import { Colors, Layout, Motion, Radius, Shadows, Spacing } from '@/src/theme';
 
 const SCREEN_HEIGHT = Dimensions.get('window').height;
 /** Drag distance (or fling velocity) past which the sheet dismisses. */
@@ -64,51 +68,84 @@ export function BottomSheet({
   children,
 }: BottomSheetProps) {
   const insets = useSafeAreaInsets();
+  const [montado, setMontado] = useState(visible);
   const translateY = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
+  const fondo = useRef(new Animated.Value(0)).current;
   const reduceMotion = useReducedMotion();
-  // El PanResponder se crea una vez: lee la preferencia por ref.
+  // El PanResponder se crea una vez: lee estos valores por ref.
   const reduceMotionRef = useRef(reduceMotion);
   reduceMotionRef.current = reduceMotion;
+  const visibleRef = useRef(visible);
+  visibleRef.current = visible;
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   const settle = useCallback(() => {
+    fondo.stopAnimation();
     if (reduceMotionRef.current) {
+      fondo.setValue(1);
       translateY.setValue(0);
       return;
     }
-    Animated.timing(translateY, {
-      toValue: 0,
-      duration: Motion.duration.slow,
-      easing: EASE_OUT,
-      useNativeDriver: true,
-    }).start();
-  }, [translateY]);
-
-  const animateOut = useCallback(() => {
-    if (reduceMotionRef.current) {
-      onClose();
-      return;
-    }
-    // La salida es más rápida que la entrada.
-    Animated.timing(translateY, {
-      toValue: SCREEN_HEIGHT,
-      duration: Motion.duration.base,
-      easing: EASE_IN,
-      useNativeDriver: true,
-    }).start(({ finished }) => {
-      if (finished) onClose();
-    });
-  }, [onClose, translateY]);
+    Animated.parallel([
+      Animated.timing(fondo, {
+        toValue: 1,
+        duration: Motion.duration.base,
+        easing: EASE_OUT,
+        useNativeDriver: true,
+      }),
+      Animated.timing(translateY, {
+        toValue: 0,
+        duration: Motion.duration.slow,
+        easing: EASE_OUT,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [fondo, translateY]);
 
   useEffect(() => {
     if (visible) {
       translateY.setValue(reduceMotionRef.current ? 0 : SCREEN_HEIGHT);
+      fondo.setValue(0);
+      setMontado(true);
       settle();
+      return;
     }
-  }, [visible, translateY, settle]);
+    if (reduceMotionRef.current) {
+      setMontado(false);
+      return;
+    }
+    // La salida es más rápida que la entrada. Si la hoja se reabre a medias,
+    // `finished` llega en falso y sigue montada.
+    Animated.parallel([
+      Animated.timing(fondo, {
+        toValue: 0,
+        duration: Motion.duration.base,
+        easing: EASE_IN,
+        useNativeDriver: true,
+      }),
+      Animated.timing(translateY, {
+        toValue: SCREEN_HEIGHT,
+        duration: Motion.duration.base,
+        easing: EASE_IN,
+        useNativeDriver: true,
+      }),
+    ]).start(({ finished }) => {
+      if (finished) setMontado(false);
+    });
+  }, [visible, fondo, translateY, settle]);
+
+  /** Pide cerrar. Si quien la usa no la cierra (p. ej. una acción en curso), vuelve a su sitio. */
+  const pedirCierre = useCallback(() => {
+    onCloseRef.current();
+    requestAnimationFrame(() => {
+      if (visibleRef.current) settle();
+    });
+  }, [settle]);
 
   // El PanResponder se crea una vez: llama a la versión más reciente.
-  const animateOutRef = useRef(animateOut);
-  animateOutRef.current = animateOut;
+  const pedirCierreRef = useRef(pedirCierre);
+  pedirCierreRef.current = pedirCierre;
   const settleRef = useRef(settle);
   settleRef.current = settle;
 
@@ -121,7 +158,7 @@ export function BottomSheet({
       },
       onPanResponderRelease: (_, gesture) => {
         if (gesture.dy > DISMISS_DISTANCE || gesture.vy > DISMISS_VELOCITY) {
-          animateOutRef.current();
+          pedirCierreRef.current();
         } else {
           settleRef.current();
         }
@@ -131,19 +168,21 @@ export function BottomSheet({
 
   return (
     <Modal
-      visible={visible}
+      visible={montado}
       transparent
-      animationType="fade"
+      animationType="none"
       statusBarTranslucent
-      onRequestClose={animateOut}
+      onRequestClose={pedirCierre}
     >
       <View style={s.overlay}>
-        <Pressable
-          style={StyleSheet.absoluteFill}
-          onPress={animateOut}
-          accessibilityLabel="Cerrar"
-          accessibilityRole="button"
-        />
+        <Animated.View style={[StyleSheet.absoluteFill, s.scrim, { opacity: fondo }]}>
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={pedirCierre}
+            accessibilityLabel="Cerrar"
+            accessibilityRole="button"
+          />
+        </Animated.View>
 
         <Animated.View
           style={[
@@ -152,7 +191,7 @@ export function BottomSheet({
             { transform: [{ translateY }] },
           ]}
         >
-          <View {...panResponder.panHandlers} style={[s.header, title ? s.headerDivided : null]}>
+          <View {...panResponder.panHandlers} style={s.header}>
             <View style={s.handle} />
             {title ? (
               <View style={s.headerRow}>
@@ -162,7 +201,7 @@ export function BottomSheet({
                 <Text variant="heading" numberOfLines={1} style={s.headerTitle} accessibilityRole="header">
                   {title}
                 </Text>
-                <IconButton icon={X} label="Cerrar" onPress={animateOut} size="md" variant="surface" />
+                <IconButton icon={X} label="Cerrar" onPress={pedirCierre} size="md" variant="surface" />
               </View>
             ) : null}
           </View>
@@ -183,31 +222,29 @@ export function BottomSheet({
 const s = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: Colors.scrim,
     justifyContent: 'flex-end',
+  },
+  scrim: {
+    backgroundColor: Colors.scrim,
   },
   sheet: {
     backgroundColor: Colors.background,
     borderTopLeftRadius: Radius['3xl'],
     borderTopRightRadius: Radius['3xl'],
+    borderCurve: 'continuous',
     overflow: 'hidden',
     ...Shadows.overlay,
   },
   header: {
-    paddingTop: Spacing.md,
+    paddingTop: Spacing.sm,
     paddingHorizontal: Layout.screenPadding,
     paddingBottom: Spacing.sm,
-  },
-  headerDivided: {
-    paddingBottom: Spacing.lg,
-    borderBottomWidth: Sizes.hairline,
-    borderBottomColor: Colors.borderLight,
   },
   handle: {
     width: Spacing['4xl'],
     height: Spacing.xs,
     borderRadius: Radius.full,
-    backgroundColor: Colors.border,
+    backgroundColor: Colors.surfaceDark,
     alignSelf: 'center',
     marginBottom: Spacing.md,
   },
@@ -230,7 +267,7 @@ const s = StyleSheet.create({
   footer: {
     paddingHorizontal: Layout.screenPadding,
     paddingTop: Spacing.lg,
-    borderTopWidth: Sizes.hairline,
-    borderTopColor: Colors.borderLight,
+    backgroundColor: Colors.background,
+    ...Shadows.subtle,
   },
 });

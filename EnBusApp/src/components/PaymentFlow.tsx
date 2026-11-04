@@ -38,11 +38,9 @@ import {
   CurrencyDollar,
   DeviceMobile,
   Image as ImageIcon,
-  Info,
   MagnifyingGlass,
   Money,
   Storefront,
-  WarningCircle,
   type IconProps,
 } from 'phosphor-react-native';
 import * as Haptics from 'expo-haptics';
@@ -52,13 +50,17 @@ import { PressableScale } from './PressableScale';
 import { CalendarModal } from './CalendarModal';
 import { SkeletonLoader } from './SkeletonLoader';
 import {
+  Atmosfera,
+  Aviso as AvisoBase,
   BottomSheet,
   Button,
   Card,
   Chip,
+  CifraMonto,
   ErrorState,
   Field,
   IconButton,
+  IconTile,
   SectionLabel,
   SelectField,
   Text,
@@ -79,7 +81,7 @@ import {
 } from '@/src/utils/dinero';
 import type { CotizacionPago, MetodoPago, PagoDeclarado } from '@/src/types';
 import type { TasaCambiada } from '@/src/hooks/useCheckoutBoletos';
-import { Colors, Layout, Motion, Radius, Sizes, Spacing } from '@/src/theme';
+import { Colors, Layout, Motion, Radius, Shadows, Sizes, Spacing } from '@/src/theme';
 
 export type { CotizacionPago, PagoDeclarado } from '@/src/types';
 
@@ -294,6 +296,8 @@ export function PaymentFlow({
   const controlado = metodoControlado !== undefined;
   /** Con tarjeta propia (sin pantalla que lo controle ni hoja que lo contenga). */
   const enTarjeta = !controlado && !embebido;
+  /** En el asistente el contenido va directo sobre `canvas`: los campos necesitan su tarjeta. */
+  const sobreCanvas = controlado && !embebido;
 
   const [metodoLocal, setMetodoLocal] = useState<MetodoElegido | null>(null);
   const abierto = controlado ? metodoControlado : metodoLocal;
@@ -571,14 +575,12 @@ export function PaymentFlow({
     </Button>
   ) : null;
 
-  /** Cajas internas: `surface` sobre fondo blanco; blancas dentro de la tarjeta beige. */
-  const caja = enTarjeta ? s.cajaEnTarjeta : s.cajaEnFondo;
-  const tonoCampo = enTarjeta ? 'light' : 'sunken';
+  const tonoCampo = 'sunken' as const;
 
   // Una función (no un componente): así el contenido no se vuelve a montar en cada render.
   const envolver = (contenido: React.ReactNode) =>
     enTarjeta ? (
-      <Card tone="sunken" padding="md">
+      <Card padding="md">
         {contenido}
       </Card>
     ) : (
@@ -670,7 +672,7 @@ export function PaymentFlow({
           .join('\n')
       : null;
 
-    const fondoCopiar = enTarjeta ? 'surface' : 'inverse';
+    const fondoCopiar = 'inverse' as const;
 
     return envolver(
       <>
@@ -687,7 +689,7 @@ export function PaymentFlow({
         {sinTasa ? <Aviso tono="warning" texto={AVISO_SIN_TASA} /> : null}
 
         <SectionLabel>Datos de la cuenta</SectionLabel>
-        <View style={[s.cuenta, caja]}>
+        <View style={[s.cuenta, sobreCanvas ? s.cuentaSuelta : null]}>
           {bancoCuenta ? <AccountRow label="Banco" value={bancoCuenta} fondo={fondoCopiar} /> : null}
           {metodo.titular ? <AccountRow label="Titular" value={metodo.titular} fondo={fondoCopiar} /> : null}
           {isPagoMovil && metodo.numero_cuenta ? (
@@ -730,6 +732,7 @@ export function PaymentFlow({
           ) : null}
         </View>
 
+        <EnvolturaFormulario enTarjeta={sobreCanvas}>
         <Field
           label={isZelle ? 'Código de confirmación de Zelle' : 'Número de referencia'}
           placeholder={isZelle ? 'Ej. ABC123XYZ' : 'Ej. 012345678901'}
@@ -754,7 +757,6 @@ export function PaymentFlow({
           <View style={s.fechaChips} accessibilityRole="radiogroup">
             <Chip
               label="Hoy"
-              sobre={enTarjeta ? 'surface' : 'background'}
               selected={fechaOpcion === 'hoy'}
               onPress={() => {
                 setFechaOpcion('hoy');
@@ -763,7 +765,6 @@ export function PaymentFlow({
             />
             <Chip
               label="Ayer"
-              sobre={enTarjeta ? 'surface' : 'background'}
               selected={fechaOpcion === 'ayer'}
               onPress={() => {
                 setFechaOpcion('ayer');
@@ -773,7 +774,6 @@ export function PaymentFlow({
             <Chip
               label={fechaOpcion === 'otra' && fechaOtra ? formatDiaVE(fechaOtra) : 'Otra fecha'}
               icon={CalendarBlank}
-              sobre={enTarjeta ? 'surface' : 'background'}
               selected={fechaOpcion === 'otra'}
               onPress={() => setCalendarVisible(true)}
             />
@@ -853,6 +853,7 @@ export function PaymentFlow({
             )}
           </View>
         ) : null}
+        </EnvolturaFormulario>
 
         {botonPropio}
 
@@ -884,7 +885,6 @@ export function PaymentFlow({
             <Field
               placeholder="Ej. Banesco o 0134"
               icon={MagnifyingGlass}
-              tone="sunken"
               value={bancoQuery}
               onChangeText={setBancoQuery}
               autoCorrect={false}
@@ -999,23 +999,12 @@ export function PaymentFlow({
               haptic
               hapticType="selection"
               scaleValue={Motion.press.card}
-              style={[s.metodo, caja, elegida && s.metodoElegido]}
+              style={[s.metodo, !sobreCanvas && s.metodoEnBlanco, elegida && s.metodoElegido]}
               accessibilityRole="radio"
               accessibilityState={{ selected: elegida, disabled: o.deshabilitada }}
               accessibilityLabel={`${o.label}. ${o.desc}`}
             >
-              <View
-                style={[
-                  s.metodoIcono,
-                  enTarjeta || elegida ? s.metodoIconoEnTarjeta : s.metodoIconoEnFondo,
-                ]}
-              >
-                <o.icono
-                  color={o.deshabilitada ? Colors.mutedForeground : Colors.foreground}
-                  weight="bold"
-                  size={Sizes.icon.md}
-                />
-              </View>
+              <IconTile tone={elegida ? 'sky' : 'neutral'} icon={o.icono} style={s.metodoIcono} />
               <View style={s.metodoBody}>
                 <Text variant="bodyStrong" color={o.deshabilitada ? 'muted' : 'foreground'}>
                   {o.label}
@@ -1047,6 +1036,12 @@ export function PaymentFlow({
       {botonPropio}
     </>
   );
+}
+
+/** Agrupa los campos del pago en una tarjeta cuando no hay nada blanco que los contenga. */
+function EnvolturaFormulario({ enTarjeta, children }: { enTarjeta: boolean; children: React.ReactNode }) {
+  if (!enTarjeta) return <>{children}</>;
+  return <Card padding="md">{children}</Card>;
 }
 
 // ─── La tasa BCV cambió ──────────────────────────────────────────────────────
@@ -1121,20 +1116,7 @@ function Aviso({
   texto: string;
   icono?: React.ComponentType<IconProps>;
 }) {
-  const warning = tono === 'warning';
-  const Icon = icono ?? (warning ? WarningCircle : Info);
-  return (
-    <View
-      style={[s.notice, warning && s.noticeWarning]}
-      accessibilityRole={warning ? 'alert' : undefined}
-      accessibilityLiveRegion={warning ? 'polite' : undefined}
-    >
-      <Icon size={Sizes.icon.lg} color={warning ? Colors.warningText : Colors.infoText} weight="fill" />
-      <Text variant="secondary" style={s.noticeText}>
-        {texto}
-      </Text>
-    </View>
-  );
+  return <AvisoBase tono={tono} icon={icono} texto={texto} alerta={tono === 'warning'} style={s.notice} />;
 }
 
 // ─── Monto ───────────────────────────────────────────────────────────────────
@@ -1160,24 +1142,25 @@ function AmountBadge({
 
   return (
     <View style={s.amount} accessible accessibilityLabel={`${label}: ${monto.accesible}`}>
-      <Text variant="caption" color="muted">
+      <Atmosfera variante="noche" style={StyleSheet.absoluteFill} />
+      <Text variant="label" color="inverseMuted">
         {label}
       </Text>
-      <Text variant="display" size="3xl" color="foreground" compact style={s.amountValue}>
-        {monto.principal}
-      </Text>
+      <View style={s.amountValue}>
+        <CifraMonto texto={monto.principal} color={Colors.white} />
+      </View>
       {monto.secundario ? (
-        <Text variant="secondary" color="muted" align="center">
+        <Text variant="secondary" color="inverseMuted">
           {monto.secundario}
         </Text>
       ) : null}
       {tasa ? (
-        <Text variant="caption" color="muted" align="center">
+        <Text variant="caption" color="inverseMuted">
           {`Tasa BCV ${formatNumeroVE(tasa.tasa)} Bs/USD`}
         </Text>
       ) : null}
       {concepto ? (
-        <Text variant="caption" color="muted" align="center" numberOfLines={2}>
+        <Text variant="caption" color="inverseMuted" numberOfLines={2}>
           {concepto}
         </Text>
       ) : null}
@@ -1213,8 +1196,9 @@ function AccountRow({
       </View>
       <IconButton
         icon={copiado ? Check : Copy}
-        variant={fondo}
-        color={copiado ? Colors.successText : Colors.foreground}
+        variant={fondo === 'inverse' ? 'plain' : 'surface'}
+        iconWeight="regular"
+        color={copiado ? Colors.successText : Colors.accentStrong}
         label={copiado ? `${label} copiado` : `Copiar ${label}`}
         onPress={() => void copiar(copyValue ?? value)}
       />
@@ -1286,48 +1270,39 @@ const s = StyleSheet.create({
     gap: Spacing.md,
   },
 
-  cajaEnFondo: {
-    backgroundColor: Colors.surface,
-  },
-  cajaEnTarjeta: {
-    backgroundColor: Colors.background,
-  },
-
+  // El monto manda: noche con el sol asomando.
   amount: {
-    alignItems: 'center',
-    gap: Spacing.xs,
-    backgroundColor: Colors.primaryLight,
-    borderRadius: Radius.lg,
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.lg,
-    marginBottom: Spacing.lg,
+    gap: Spacing.xs / 2,
+    borderRadius: Radius.xl,
+    borderCurve: 'continuous',
+    overflow: 'hidden',
+    backgroundColor: Colors.night,
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.xl,
+    marginBottom: Spacing.xl,
+    ...Shadows.raised,
   },
   amountValue: {
-    marginVertical: Spacing.xs,
+    marginTop: Spacing.xs,
+    marginBottom: Spacing.xs,
   },
 
   notice: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.md,
-    backgroundColor: Colors.infoLight,
-    borderRadius: Radius.lg,
-    paddingVertical: Spacing.md,
-    paddingHorizontal: Spacing.lg,
     marginBottom: Spacing.lg,
-  },
-  noticeWarning: {
-    backgroundColor: Colors.warningLight,
-  },
-  noticeText: {
-    flex: 1,
   },
 
   cuenta: {
     borderRadius: Radius.lg,
+    borderCurve: 'continuous',
+    backgroundColor: Colors.surface,
     paddingVertical: Spacing.sm,
     paddingHorizontal: Spacing.lg,
     marginBottom: Spacing.xl,
+  },
+  /** Sobre `canvas` (no dentro de una tarjeta), el bloque es una tarjeta blanca. */
+  cuentaSuelta: {
+    backgroundColor: Colors.card,
+    ...Shadows.card,
   },
   accountRow: {
     flexDirection: 'row',
@@ -1338,7 +1313,7 @@ const s = StyleSheet.create({
   },
   accountBody: {
     flex: 1,
-    gap: Spacing.xs,
+    gap: Spacing.xs / 2,
   },
   copyAll: {
     marginTop: Spacing.sm,
@@ -1357,7 +1332,6 @@ const s = StyleSheet.create({
   },
   fechaLabel: {
     marginBottom: Spacing.sm,
-    marginLeft: Spacing.xl,
   },
   fechaChips: {
     flexDirection: 'row',
@@ -1366,7 +1340,6 @@ const s = StyleSheet.create({
   },
   fechaHelper: {
     marginTop: Spacing.sm,
-    marginLeft: Spacing.xl,
   },
   ultimoCampo: {
     marginBottom: 0,
@@ -1392,38 +1365,37 @@ const s = StyleSheet.create({
   metodo: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.lg,
-    padding: Spacing.lg,
+    gap: Spacing.md,
+    padding: Spacing.md,
     borderRadius: Radius.lg,
-    // El borde existe siempre (transparente) para que elegir no mueva nada.
+    borderCurve: 'continuous',
+    backgroundColor: Colors.card,
+    // El borde conserva su ancho para que elegir no mueva nada.
     borderWidth: Sizes.borderSelected,
-    borderColor: Colors.transparent,
+    borderColor: Colors.card,
+    ...Shadows.card,
+  },
+  /** Dentro de algo blanco (hoja o tarjeta), la opción es un pozo. */
+  metodoEnBlanco: {
+    backgroundColor: Colors.surface,
+    borderColor: Colors.surface,
+    boxShadow: undefined,
   },
   metodoElegido: {
-    backgroundColor: Colors.background,
+    backgroundColor: Colors.card,
     borderColor: Colors.accentStrong,
   },
   metodoIcono: {
-    width: Sizes.iconBox.lg,
-    height: Sizes.iconBox.lg,
-    borderRadius: Radius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  metodoIconoEnFondo: {
-    backgroundColor: Colors.background,
-  },
-  metodoIconoEnTarjeta: {
-    backgroundColor: Colors.surface,
+    flexShrink: 0,
   },
   metodoBody: {
     flex: 1,
-    gap: Spacing.xs,
+    gap: Spacing.xs / 2,
   },
 
   bancoList: {
     paddingHorizontal: Layout.screenPadding,
-    paddingVertical: Spacing.lg,
+    paddingVertical: Spacing.md,
   },
   bancoEmpty: {
     marginBottom: Spacing.md,

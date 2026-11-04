@@ -15,7 +15,7 @@ interface State {
 
 /**
  * Pantalla de error cuando algo se rompe al dibujar: el mismo `ErrorState` de
- * toda la app (`WarningCircle` + "Reintentar"), sobre la pantalla blanca.
+ * toda la app (`WarningCircle` + "Reintentar"), sobre el fondo de pantalla.
  */
 export class ErrorBoundary extends Component<Props, State> {
   public state: State = { hasError: false, error: null };
@@ -65,13 +65,13 @@ export class ErrorBoundary extends Component<Props, State> {
 const s = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: Colors.canvas,
     justifyContent: 'center',
     paddingHorizontal: Layout.screenPadding,
   },
   debug: {
     gap: Spacing.xs,
-    backgroundColor: Colors.surface,
+    backgroundColor: Colors.background,
     borderRadius: Radius.lg,
     padding: Spacing.md,
   },

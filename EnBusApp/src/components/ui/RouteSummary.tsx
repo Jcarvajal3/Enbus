@@ -1,29 +1,21 @@
 /**
- * RouteSummary — the ORIGEN ──●── DESTINO block.
+ * RouteSummary — el bloque ORIGEN ──●── DESTINO.
  *
- * Rendered three times in `boletos/buscar` and once in `viajes/[id]` as copied
- * JSX plus ~15 copied style rules each. Extracting it also fixed the alignment
- * drift between those copies (one had `marginBottom: 6` on the timeline, the
- * others didn't).
- *
- * Muestra el nombre completo de cada ciudad (hasta 2 líneas) y, si se pasan,
- * la hora de salida y la de llegada debajo (APP-58). Antes eran códigos de
- * tres letras tipo aeropuerto ("MER", "CAR") que nadie usa en Venezuela.
- *
- * D10: los extremos usan los mismos glifos neutros que `RouteField` (origen
- * `Circle` bold, destino `MapPin` fill, en `foreground`), nunca azul ni coral.
+ * Las ciudades son lo que se lee: grandes, alineadas a cada extremo, con la hora
+ * debajo. Entre ellas, el camino: un punto de salida, una línea y un pin de llegada,
+ * con la duración encima de la línea en una pastilla.
  */
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
-import { CircleIcon as Circle, Clock, MapPin } from 'phosphor-react-native';
+import { MapPin } from 'phosphor-react-native';
 import { Text } from './Text';
 import { formatCity } from '@/src/utils/formatters';
-import { Colors, Sizes, Spacing } from '@/src/theme';
+import { alpha, Colors, Radius, Shadows, Sizes, Spacing } from '@/src/theme';
 
 export interface RouteSummaryProps {
   origen?: string | null;
   destino?: string | null;
-  /** e.g. "9 h 45 min" — shown under the connector when present */
+  /** e.g. "9 h 45 min" — shown over the connector when present */
   duration?: string;
   /** Hora de salida ya formateada ("8:30 p. m."), bajo el origen */
   horaSalida?: string;
@@ -48,38 +40,48 @@ export function RouteSummary({
     .join(', ');
 
   return (
-    <View style={s.row} accessible accessibilityLabel={etiqueta}>
-      <Endpoint ciudad={origen} hora={horaSalida} />
-
-      <View style={s.middle}>
-        <View style={s.timeline}>
-          <Circle size={Sizes.icon.sm} color={Colors.foreground} weight="bold" />
-          <View style={s.line} />
-          <MapPin size={Sizes.icon.sm} color={Colors.foreground} weight="fill" />
-        </View>
+    <View style={s.columna} accessible accessibilityLabel={etiqueta}>
+      <View style={s.camino}>
+        <View style={s.puntoSalida} />
+        <View style={s.linea} />
         {duration ? (
-          <View style={s.durationRow}>
-            <Clock color={Colors.mutedForeground} weight="bold" size={Sizes.icon.xs} />
-            <Text variant="caption" color="muted" weight="bold" compact>
-              {duration}
-            </Text>
-          </View>
+          <>
+            <View style={s.duracion}>
+              <Text variant="caption" weight="medium" color="muted" compact numberOfLines={1}>
+                {duration}
+              </Text>
+            </View>
+            <View style={s.linea} />
+          </>
         ) : null}
+        <MapPin size={Sizes.icon.md} color={Colors.foreground} weight="fill" />
       </View>
 
-      <Endpoint ciudad={destino} hora={horaLlegada} />
+      <View style={s.extremos}>
+        <Extremo ciudad={origen} hora={horaSalida} />
+        <Extremo ciudad={destino} hora={horaLlegada} derecha />
+      </View>
     </View>
   );
 }
 
-function Endpoint({ ciudad, hora }: { ciudad?: string | null; hora?: string }) {
+function Extremo({
+  ciudad,
+  hora,
+  derecha,
+}: {
+  ciudad?: string | null;
+  hora?: string;
+  derecha?: boolean;
+}) {
+  const align = derecha ? 'right' : 'left';
   return (
-    <View style={s.endpoint}>
-      <Text variant="subheading" align="center" numberOfLines={2}>
+    <View style={[s.extremo, derecha && s.extremoDerecha]}>
+      <Text variant="heading" size="xl" align={align} numberOfLines={2}>
         {formatCity(ciudad)}
       </Text>
       {hora ? (
-        <Text variant="caption" color="muted" weight="bold" align="center" style={s.hora}>
+        <Text variant="secondary" weight="medium" color="muted" align={align} tabular style={s.hora}>
           {hora}
         </Text>
       ) : null}
@@ -87,41 +89,52 @@ function Endpoint({ ciudad, hora }: { ciudad?: string | null; hora?: string }) {
   );
 }
 
+const PUNTO = Spacing.md;
+
 const s = StyleSheet.create({
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+  columna: {
+    gap: Spacing.md,
   },
-  endpoint: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  hora: {
-    marginTop: Spacing.xs,
-  },
-  middle: {
-    // Más angosto que los extremos: los nombres completos necesitan el espacio.
-    flex: 0.7,
-    alignItems: 'center',
-    paddingHorizontal: Spacing.sm,
-  },
-  timeline: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '100%',
-    marginBottom: Spacing.sm,
-  },
-  line: {
-    flex: 1,
-    height: Sizes.borderStrong,
-    backgroundColor: Colors.border,
-    marginHorizontal: Spacing.xs,
-  },
-  durationRow: {
+  camino: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.xs,
+  },
+  puntoSalida: {
+    width: PUNTO,
+    height: PUNTO,
+    borderRadius: Radius.full,
+    borderWidth: Sizes.borderSelected + Sizes.hairline,
+    borderColor: Colors.foreground,
+    backgroundColor: Colors.background,
+  },
+  linea: {
+    flex: 1,
+    height: Sizes.borderSelected,
+    borderRadius: Radius.full,
+    backgroundColor: alpha(Colors.foreground, 0.14),
+  },
+  // Blanca: se lee igual sobre una tarjeta que sobre la cabecera del pase.
+  duracion: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
+    borderRadius: Radius.full,
+    backgroundColor: Colors.background,
+    ...Shadows.subtle,
+  },
+  extremos: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: Spacing.lg,
+  },
+  extremo: {
+    flex: 1,
+  },
+  extremoDerecha: {
+    alignItems: 'flex-end',
+  },
+  hora: {
+    marginTop: Spacing.xs / 2,
   },
 });

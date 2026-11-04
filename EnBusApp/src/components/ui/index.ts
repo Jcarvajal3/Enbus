@@ -21,8 +21,13 @@ export type { ButtonProps, ButtonVariant, ButtonSize } from './Button';
 export { IconButton } from './IconButton';
 export type { IconButtonProps, IconButtonVariant } from './IconButton';
 
-export { Card, SectionLabel, Divider, InfoRow } from './Card';
-export type { CardProps, CardTone, CardPadding } from './Card';
+export { Atmosfera } from './Atmosfera';
+export { Aviso } from './Aviso';
+export type { AvisoTono } from './Aviso';
+export type { AtmosferaVariante } from './Atmosfera';
+
+export { Card, IconTile, SectionLabel, Divider, Perforacion, InfoRow } from './Card';
+export type { CardProps, CardTone, CardPadding, IconTileTone } from './Card';
 
 export { Badge, StatusBadge, CountPill, Chip } from './Badge';
 export type { BadgeProps } from './Badge';
@@ -36,6 +41,7 @@ export type { ScreenHeaderProps, ScreenHeaderVariant } from './ScreenHeader';
 export {
   Screen,
   Gutter,
+  EvitarTeclado,
   FloatingBar,
   EmptyState,
   ErrorState,
@@ -67,5 +73,5 @@ export const Field = FieldBase as unknown as (
   props: FieldProps & { ref?: Ref<TextInput> }
 ) => ReactElement;
 
-export { Monto } from './Monto';
+export { CifraMonto, Monto } from './Monto';
 export type { MontoProps, MontoSize } from './Monto';

@@ -17,7 +17,7 @@ import Animated, {
   withTiming,
   useReducedMotion,
 } from 'react-native-reanimated';
-import { Colors, Layout, Motion, Radius, Sizes, Spacing } from '@/src/theme';
+import { Colors, Layout, Motion, Radius, Shadows, Sizes, Spacing } from '@/src/theme';
 
 interface SkeletonLoaderProps {
   width?: DimensionValue;
@@ -168,9 +168,11 @@ const s = StyleSheet.create({
   fila: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.surface,
+    backgroundColor: Colors.card,
     borderRadius: Radius.xl,
+    borderCurve: 'continuous',
     padding: Spacing.lg,
+    ...Shadows.card,
   },
   filaCuerpo: {
     flex: 1,
@@ -183,9 +185,11 @@ const s = StyleSheet.create({
   },
   tarjeta: {
     gap: Spacing.md,
-    backgroundColor: Colors.surface,
+    backgroundColor: Colors.card,
     borderRadius: Radius.xl,
+    borderCurve: 'continuous',
     padding: Spacing.xl,
+    ...Shadows.card,
   },
   perfilCabecera: {
     flexDirection: 'row',

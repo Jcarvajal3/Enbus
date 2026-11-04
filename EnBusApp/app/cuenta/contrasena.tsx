@@ -13,7 +13,6 @@ import {
   Platform,
   ScrollView,
   StyleSheet,
-  View,
   type TextInput,
 } from 'react-native';
 import { GoogleLogo } from 'phosphor-react-native';
@@ -25,16 +24,8 @@ import { MSG, humanizeError } from '@/src/utils/errores';
 import { CLAVE_AYUDA, CLAVE_ERROR, CLAVE_MINIMO } from '@/src/utils/formatters';
 import { useVolver } from '@/src/hooks/useVolver';
 import { useToast } from '@/src/components/Toast';
-import {
-  Button,
-  Card,
-  Field,
-  Screen,
-  ScreenHeader,
-  Text,
-  scrollContent,
-} from '@/src/components/ui';
-import { Colors, Sizes, Spacing } from '@/src/theme';
+import { Aviso, Button, Card, Field, Screen, ScreenHeader, scrollContent } from '@/src/components/ui';
+import { Spacing } from '@/src/theme';
 
 type Campo = 'actual' | 'nueva' | 'repetir';
 type Errores = Partial<Record<Campo, string>>;
@@ -151,25 +142,24 @@ export default function ContrasenaScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <ScrollView
-          contentContainerStyle={scrollContent({ top: Spacing['2xl'] })}
+          contentContainerStyle={scrollContent({ top: Spacing.lg })}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
           {!conContrasena ? (
-            <Card tone="outline" padding="md" style={s.intro}>
-              <View style={s.introRow}>
-                <GoogleLogo size={Sizes.icon.lg} color={Colors.foreground} weight="bold" />
-                <Text variant="secondary" style={s.introText}>
-                  {`Entras con Google. Con una contraseña también podrás entrar con ${correo}.`}
-                </Text>
-              </View>
-            </Card>
+            <Aviso
+              tono="info"
+              icon={GoogleLogo}
+              texto={`Entras con Google. Con una contraseña también podrás entrar con ${correo}.`}
+              style={s.intro}
+            />
           ) : null}
 
-          <Card tone="sunken" padding="md">
+          <Card padding="md">
             {conContrasena ? (
               <Field
                 label="Contraseña actual"
+                placeholder="La que usas hoy"
                 secureTextEntry
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -191,6 +181,7 @@ export default function ContrasenaScreen() {
             <Field
               ref={nuevaRef}
               label="Contraseña nueva"
+              placeholder="Mínimo 8 caracteres"
               secureTextEntry
               autoCapitalize="none"
               autoCorrect={false}
@@ -212,6 +203,7 @@ export default function ContrasenaScreen() {
             <Field
               ref={repetirRef}
               label="Repite la contraseña nueva"
+              placeholder="Escríbela otra vez"
               secureTextEntry
               autoCapitalize="none"
               autoCorrect={false}
@@ -242,13 +234,5 @@ const s = StyleSheet.create({
   flex: { flex: 1 },
   intro: {
     marginBottom: Spacing.lg,
-  },
-  introRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: Spacing.md,
-  },
-  introText: {
-    flex: 1,
   },
 });

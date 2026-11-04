@@ -1,7 +1,6 @@
 /**
- * Inicio — la marca en la misma cabecera que las demás pestañas (AN-22), tu
- * próximo viaje si lo hay, el buscador y "Tu actividad" solo con algo en curso
- * (AN-24, AU-41).
+ * Inicio — el amanecer de fondo, tu próximo viaje si lo hay, la pregunta y el
+ * buscador como protagonista, y "Tu actividad" solo con algo en curso.
  */
 import { ScrollView, StatusBar, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -15,9 +14,18 @@ import { PressableScale } from '@/src/components/PressableScale';
 import { HeaderActions } from '@/src/components/HeaderActions';
 import { BrandMark } from '@/src/components/BrandMark';
 import { ProximoViajeCard } from '@/src/components/ProximoViajeCard';
-import { Screen, ScreenHeader, SectionLabel, Text } from '@/src/components/ui';
+import {
+  Atmosfera,
+  Card,
+  IconTile,
+  Screen,
+  ScreenHeader,
+  SectionLabel,
+  Text,
+  type IconTileTone,
+} from '@/src/components/ui';
 import { nombreValido } from '@/src/utils/validation';
-import { Colors, Layout, Motion, Radius, Sizes, Spacing } from '@/src/theme';
+import { Colors, Layout, Motion, Radius, Shadows, Sizes, Spacing } from '@/src/theme';
 
 /** "Buenos días" / "Buenas tardes" / "Buenas noches" según la hora del teléfono. */
 function saludo(): string {
@@ -27,13 +35,16 @@ function saludo(): string {
   return 'Buenas noches';
 }
 
+/** Alto de la portada: llega hasta la mitad del buscador, que flota sobre ella. */
+const ALTO_PORTADA = 560;
+
 export default function HomeScreen() {
   const router = useRouter();
   const { boletosActivos, encomiendasActivas } = useActivity();
   const { proximo } = useProximoViaje();
   const { perfil } = usePerfil();
 
-  // Solo el nombre real (AU-07): nunca el prefijo del correo ni "Usuario EnBus".
+  // Solo el nombre real: nunca el prefijo del correo ni "Usuario EnBus".
   const nombre = nombreValido(perfil?.nombre_completo)
     ? (perfil?.nombre_completo ?? '').trim().split(/\s+/)[0]
     : null;
@@ -41,8 +52,9 @@ export default function HomeScreen() {
   const hayActividad = boletosActivos > 0 || encomiendasActivas > 0;
 
   return (
-    <Screen>
-      <StatusBar barStyle="dark-content" backgroundColor={Colors.background} />
+    <Screen atmosfera={null}>
+      <StatusBar barStyle="dark-content" backgroundColor={Colors.transparent} translucent />
+      <Atmosfera variante="amanecer" style={s.portada} />
 
       {/* El contador de no leídas sale de ActivityContext (un solo canal). */}
       <ScreenHeader title={<BrandMark conNombre />} right={<HeaderActions />} />
@@ -52,7 +64,7 @@ export default function HomeScreen() {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        {/* ── Tu próximo viaje (APP-16) ──────────────────────────────────── */}
+        {/* ── Tu próximo viaje ───────────────────────────────────────────── */}
         {proximo ? (
           <View style={s.seccion}>
             <ProximoViajeCard
@@ -68,41 +80,43 @@ export default function HomeScreen() {
         ) : null}
 
         {/* ── Saludo + buscador ───────────────────────────────────────────── */}
-        <StaggerItem index={0}>
-          <Text variant="secondary" color="muted">
+        <StaggerItem index={0} style={s.saludo}>
+          <Text variant="body" weight="medium" color="foreground">
             {saludo()}
           </Text>
-          <Text variant="heading" accessibilityRole="header" style={s.pregunta}>
+          <Text variant="title" accessibilityRole="header" style={s.pregunta}>
             {nombre ? `¿A dónde vamos, ${nombre}?` : '¿A dónde vamos hoy?'}
           </Text>
         </StaggerItem>
 
         <StaggerItem index={1}>
-          <SearchForm
-            showModeToggle
-            onSubmit={(data) => {
-              if (data.mode === 'boletos') {
-                router.push({
-                  pathname: '/boletos/buscar',
-                  params: {
-                    origen: data.origen.ciudad,
-                    destino: data.destino.ciudad,
-                    fecha: data.fecha ?? '',
-                  },
-                });
-              } else {
-                router.push({
-                  pathname: '/encomiendas/nueva',
-                  params: {
-                    origen_ciudad: data.origen.ciudad,
-                    origen_estado: data.origen.estado,
-                    destino_ciudad: data.destino.ciudad,
-                    destino_estado: data.destino.estado,
-                  },
-                });
-              }
-            }}
-          />
+          <Card style={s.buscador}>
+            <SearchForm
+              showModeToggle
+              onSubmit={(data) => {
+                if (data.mode === 'boletos') {
+                  router.push({
+                    pathname: '/boletos/buscar',
+                    params: {
+                      origen: data.origen.ciudad,
+                      destino: data.destino.ciudad,
+                      fecha: data.fecha ?? '',
+                    },
+                  });
+                } else {
+                  router.push({
+                    pathname: '/encomiendas/nueva',
+                    params: {
+                      origen_ciudad: data.origen.ciudad,
+                      origen_estado: data.origen.estado,
+                      destino_ciudad: data.destino.ciudad,
+                      destino_estado: data.destino.estado,
+                    },
+                  });
+                }
+              }}
+            />
+          </Card>
         </StaggerItem>
 
         {/* ── Actividad en curso: solo lo que tiene algo ──────────────────── */}
@@ -113,20 +127,18 @@ export default function HomeScreen() {
               {boletosActivos > 0 ? (
                 <Mosaico
                   icono={Ticket}
+                  tono="sky"
                   cantidad={boletosActivos}
                   etiqueta={boletosActivos === 1 ? 'Boleto activo' : 'Boletos activos'}
-                  tinte={Colors.accentStrong}
-                  fondoTinte={Colors.accentLight}
                   onPress={() => router.push('/(tabs)/boletos')}
                 />
               ) : null}
               {encomiendasActivas > 0 ? (
                 <Mosaico
                   icono={Package}
+                  tono="coral"
                   cantidad={encomiendasActivas}
                   etiqueta={encomiendasActivas === 1 ? 'Encomienda activa' : 'Encomiendas activas'}
-                  tinte={Colors.secondary}
-                  fondoTinte={Colors.secondaryLight}
                   onPress={() => router.push('/(tabs)/encomiendas')}
                 />
               ) : null}
@@ -138,22 +150,20 @@ export default function HomeScreen() {
   );
 }
 
-// ─── Fila de actividad ───────────────────────────────────────────────────────
+// ─── Mosaico de actividad ────────────────────────────────────────────────────
 
-/** Acceso a una lista con algo en curso: icono del dominio, nombre y cuántos hay. */
+/** Acceso a una lista con algo en curso: la cifra es lo que se lee primero. */
 function Mosaico({
-  icono: Icono,
+  icono,
+  tono,
   cantidad,
   etiqueta,
-  tinte,
-  fondoTinte,
   onPress,
 }: {
   icono: React.ComponentType<IconProps>;
+  tono: IconTileTone;
   cantidad: number;
   etiqueta: string;
-  tinte: string;
-  fondoTinte: string;
   onPress: () => void;
 }) {
   return (
@@ -166,21 +176,28 @@ function Mosaico({
       accessibilityRole="button"
       accessibilityLabel={`${cantidad} ${etiqueta.toLowerCase()}`}
     >
-      <View style={[s.mosaicoIcono, { backgroundColor: fondoTinte }]}>
-        <Icono size={Sizes.icon.md} color={tinte} weight="bold" />
+      <View style={s.mosaicoArriba}>
+        <IconTile tone={tono} icon={icono} />
+        <CaretRight size={Sizes.icon.sm} color={Colors.placeholder} weight="bold" />
       </View>
-      <Text variant="bodyStrong" numberOfLines={1} style={s.mosaicoEtiqueta}>
-        {etiqueta}
-      </Text>
-      <Text variant="heading" compact>
+      <Text variant="title" compact tabular style={s.mosaicoCifra}>
         {String(cantidad)}
       </Text>
-      <CaretRight size={Sizes.icon.md} color={Colors.mutedForeground} weight="bold" />
+      <Text variant="secondary" color="muted" numberOfLines={2}>
+        {etiqueta}
+      </Text>
     </PressableScale>
   );
 }
 
 const s = StyleSheet.create({
+  portada: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: ALTO_PORTADA,
+  },
   scroll: {
     paddingHorizontal: Layout.screenPadding,
     paddingTop: Spacing.lg,
@@ -189,33 +206,37 @@ const s = StyleSheet.create({
   seccion: {
     marginBottom: Spacing['2xl'],
   },
+  saludo: {
+    marginBottom: Spacing.xl,
+  },
   pregunta: {
     marginTop: Spacing.xs,
-    marginBottom: Spacing.lg,
+  },
+  buscador: {
+    ...Shadows.raised,
   },
   actividad: {
-    marginTop: Spacing['2xl'],
+    marginTop: Layout.sectionGap,
   },
   mosaicos: {
+    flexDirection: 'row',
     gap: Spacing.md,
   },
   mosaico: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.md,
-    backgroundColor: Colors.surface,
-    borderRadius: Radius.xl,
-    paddingVertical: Spacing.md,
-    paddingHorizontal: Spacing.lg,
-  },
-  mosaicoEtiqueta: {
     flex: 1,
+    backgroundColor: Colors.card,
+    borderRadius: Radius.xl,
+    borderCurve: 'continuous',
+    padding: Spacing.lg,
+    ...Shadows.card,
   },
-  mosaicoIcono: {
-    width: Sizes.iconBox.md,
-    height: Sizes.iconBox.md,
-    borderRadius: Radius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
+  mosaicoArriba: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    marginBottom: Spacing.lg,
+  },
+  mosaicoCifra: {
+    marginBottom: Spacing.xs,
   },
 });

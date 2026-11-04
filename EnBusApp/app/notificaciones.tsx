@@ -31,6 +31,7 @@ import {
   EmptyState,
   ErrorState,
   IconButton,
+  IconTile,
   Screen,
   ScreenHeader,
   SectionLabel,
@@ -48,15 +49,7 @@ import {
   type TonoNotificacion,
 } from '@/src/utils/notificaciones';
 import type { Notificacion } from '@/src/types';
-import {
-  Colors,
-  Motion,
-  Radius,
-  Sizes,
-  Spacing,
-  StatusPalette,
-  type StatusTone,
-} from '@/src/theme';
+import { Colors, Motion, Radius, Shadows, Sizes, Spacing, type StatusTone } from '@/src/theme';
 
 type Seccion = { titulo: TituloGrupoDia; data: Notificacion[] };
 
@@ -219,6 +212,7 @@ export default function NotificacionesScreen() {
               label="Marcar todo como leído"
               onPress={handleMarkAllAsRead}
               disabled={markingAll}
+              variant="raised"
             />
           ) : null
         }
@@ -281,8 +275,7 @@ function FilaNotificacion({
   index: number;
   onPress: (n: Notificacion) => void;
 }) {
-  const { icon: Icon, tono } = iconoNotificacion(item);
-  const paleta = StatusPalette[TONO_PALETA[tono]];
+  const { icon, tono } = iconoNotificacion(item);
   const abre = tieneRecurso(item);
   const hace = formatHaceTiempo(item.created_at);
   const sinLeer = !item.leida;
@@ -308,16 +301,17 @@ function FilaNotificacion({
         accessibilityLabel={etiqueta}
         accessibilityHint={pista}
       >
-        <View style={[s.icon, { backgroundColor: paleta.bg }]}>
-          <Icon weight={sinLeer ? 'fill' : 'regular'} color={paleta.text} size={Sizes.icon.md} />
-        </View>
+        <IconTile
+          estado={TONO_PALETA[tono]}
+          icon={icon}
+          style={sinLeer && tono === 'info' ? s.tileSobreCielo : undefined}
+        />
 
         <View style={s.body}>
           <View style={s.titleRow}>
             <Text
               variant="bodyStrong"
-              size="sm"
-              weight={sinLeer ? 'bold' : 'medium'}
+              weight={sinLeer ? 'semibold' : 'medium'}
               numberOfLines={2}
               style={s.title}
             >
@@ -327,12 +321,12 @@ function FilaNotificacion({
           </View>
 
           {item.mensaje ? (
-            <Text variant="caption" color="muted" style={s.message}>
+            <Text variant="secondary" color="muted" style={s.message}>
               {item.mensaje}
             </Text>
           ) : null}
 
-          <Text variant="caption" size="xs" color="muted" weight="semibold" compact>
+          <Text variant="caption" color="muted" compact style={s.hace}>
             {hace}
           </Text>
         </View>
@@ -340,7 +334,7 @@ function FilaNotificacion({
         {abre ? (
           <CaretRight
             size={Sizes.icon.sm}
-            color={Colors.mutedForeground}
+            color={Colors.placeholder}
             weight="bold"
             style={s.chevron}
           />
@@ -352,7 +346,7 @@ function FilaNotificacion({
 
 const s = StyleSheet.create({
   seccion: {
-    marginTop: Spacing.lg,
+    marginTop: Spacing.xl,
   },
   card: {
     flexDirection: 'row',
@@ -360,22 +354,19 @@ const s = StyleSheet.create({
     gap: Spacing.md,
     padding: Spacing.lg,
     borderRadius: Radius.xl,
+    borderCurve: 'continuous',
     marginBottom: Spacing.md,
+    backgroundColor: Colors.card,
+    ...Shadows.card,
   },
-  cardRead: {
-    backgroundColor: Colors.white,
-    borderWidth: Sizes.hairline,
-    borderColor: Colors.borderLight,
-  },
+  cardRead: {},
+  // Lo no leído se tiñe de cielo: se ve al pasar la vista, sin gritar.
   cardUnread: {
-    backgroundColor: Colors.surface,
+    backgroundColor: Colors.accentLight,
   },
-  icon: {
-    width: Sizes.avatar.sm,
-    height: Sizes.avatar.sm,
-    borderRadius: Radius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
+  /** Un cuadrito azul sobre el tinte azul de lo no leído se perdería. */
+  tileSobreCielo: {
+    backgroundColor: Colors.background,
   },
   body: {
     flex: 1,
@@ -390,7 +381,10 @@ const s = StyleSheet.create({
     flex: 1,
   },
   message: {
-    marginBottom: Spacing.xs,
+    marginTop: Spacing.xs / 2,
+  },
+  hace: {
+    marginTop: Spacing.xs,
   },
   dot: {
     width: Spacing.sm,

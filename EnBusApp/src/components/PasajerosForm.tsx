@@ -30,7 +30,7 @@ import { useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } f
 import { StyleSheet, TextInput, View } from 'react-native';
 import { UserCircle, WarningCircle } from 'phosphor-react-native';
 import * as Haptics from 'expo-haptics';
-import { Card, Chip, Field, Text } from '@/src/components/ui';
+import { Aviso, Card, Chip, Field, IconTile, Text } from '@/src/components/ui';
 import { CedulaField } from '@/src/components/CedulaField';
 import { TelefonoField } from '@/src/components/TelefonoField';
 import {
@@ -46,7 +46,7 @@ import {
 } from '@/src/utils/validation';
 import { ordenarAsientos } from '@/src/hooks/useCheckoutBoletos';
 import type { PasajeroAsiento, PerfilUsuario } from '@/src/types';
-import { Colors, Radius, Sizes, Spacing } from '@/src/theme';
+import { Colors, Sizes, Spacing } from '@/src/theme';
 
 interface DatosTarjeta {
   nombre: string;
@@ -302,12 +302,7 @@ export function PasajerosForm({
   return (
     <View>
       {mensajeError ? (
-        <View style={s.errorGeneral} accessibilityRole="alert" accessibilityLiveRegion="polite">
-          <WarningCircle size={Sizes.icon.lg} color={Colors.dangerText} weight="fill" />
-          <Text variant="secondary" color="dangerText" style={s.flex}>
-            {mensajeError}
-          </Text>
-        </View>
+        <Aviso tono="danger" icon={WarningCircle} texto={mensajeError} alerta style={s.errorGeneral} />
       ) : null}
 
       {lista.map((asiento, index) => {
@@ -320,19 +315,17 @@ export function PasajerosForm({
         return (
           <Card
             key={asiento}
-            tone="sunken"
             padding="md"
             style={[s.tarjeta, marcado ? s.tarjetaError : null]}
           >
             <View style={s.cabecera}>
               <View style={s.titulo}>
-                <UserCircle size={Sizes.icon.lg} color={Colors.mutedForeground} weight="bold" />
+                <IconTile tone="sky" icon={UserCircle} />
                 <Text variant="subheading">{`Asiento ${asiento}`}</Text>
               </View>
               {perfilTieneDatos ? (
                 <Chip
                   label="Soy yo"
-                  sobre="surface"
                   selected={esYo}
                   onPress={() => elegirSoyYo(asiento)}
                   accessibilityLabel={`Asiento ${asiento}, Soy yo`}
@@ -349,10 +342,10 @@ export function PasajerosForm({
             <Field
               ref={registrar(`${asiento}:nombre`)}
               label="Nombre y apellido"
+              placeholder="Ej. María Pérez"
               value={d.nombre}
               onChangeText={(v) => actualizar(asiento, 'nombre', v)}
               error={e.nombre}
-              tone="light"
               autoCapitalize="words"
               autoComplete={esYo ? 'name' : 'off'}
               returnKeyType="next"
@@ -368,7 +361,6 @@ export function PasajerosForm({
               onChangeText={(v) => actualizar(asiento, 'cedula', v)}
               error={e.cedula}
               helper={index === 0 ? AYUDA_CEDULA : undefined}
-              tone="light"
               letras={LETRAS_PASAJERO}
               returnKeyType="next"
               onSubmitEditing={() => enfocar(`${asiento}:telefono`)}
@@ -382,7 +374,6 @@ export function PasajerosForm({
               value={d.telefono}
               onChangeText={(v) => actualizar(asiento, 'telefono', v)}
               error={e.telefono}
-              tone="light"
               autoComplete={esYo ? 'tel' : 'off'}
               returnKeyType={siguiente ? 'next' : 'done'}
               submitBehavior={siguiente ? 'submit' : undefined}
@@ -399,17 +390,7 @@ export function PasajerosForm({
 
 const s = StyleSheet.create({
   errorGeneral: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.md,
-    paddingVertical: Spacing.md,
-    paddingHorizontal: Spacing.lg,
-    borderRadius: Radius.lg,
-    backgroundColor: Colors.destructiveLight,
     marginBottom: Spacing.lg,
-  },
-  flex: {
-    flex: 1,
   },
   tarjeta: {
     marginBottom: Spacing.lg,
@@ -424,12 +405,12 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: Spacing.md,
-    marginBottom: Spacing.md,
+    marginBottom: Spacing.lg,
   },
   titulo: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.sm,
+    gap: Spacing.md,
     flexShrink: 1,
   },
   marcado: {

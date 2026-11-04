@@ -28,6 +28,7 @@ import {
   WarningCircle,
   type IconProps,
 } from 'phosphor-react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import Constants from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -50,16 +51,19 @@ import { CompletarPerfilSheet } from '@/src/components/CompletarPerfilSheet';
 import { CedulaField } from '@/src/components/CedulaField';
 import { TelefonoField } from '@/src/components/TelefonoField';
 import {
+  Aviso,
   Button,
   Card,
   ConfirmSheet,
   ErrorState,
   Field,
+  IconTile,
   Screen,
   ScreenHeader,
   SectionLabel,
   Text,
   scrollContent,
+  type IconTileTone,
 } from '@/src/components/ui';
 import {
   formatCedula,
@@ -68,7 +72,7 @@ import {
   validateCedula,
   validatePhone,
 } from '@/src/utils/validation';
-import { Colors, Motion, Radius, Sizes, Spacing } from '@/src/theme';
+import { Colors, Gradients, Layout, Motion, Radius, Shadows, Sizes, Spacing } from '@/src/theme';
 
 /** Versión real de la app (app.json / EAS), no un texto fijo (APP-52). */
 const APP_VERSION = Constants.expoConfig?.version ?? null;
@@ -266,9 +270,12 @@ export default function PerfilScreen() {
         >
           <StaggerItem index={0} style={s.avatarBlock}>
             <View style={s.avatar} importantForAccessibility="no" accessibilityElementsHidden>
-              <User weight="regular" color={Colors.mutedForeground} size={Sizes.icon['2xl']} />
+              <LinearGradient colors={[...Gradients.sun]} style={[StyleSheet.absoluteFill, s.avatarFondo]} />
+              <View>
+                <User weight="duotone" color={Colors.foreground} size={Sizes.icon['2xl']} />
+              </View>
             </View>
-            <Text variant="heading" align="center" accessibilityRole="header">
+            <Text variant="title" size="2xl" tracking="tight" align="center" accessibilityRole="header">
               {displayName}
             </Text>
             {email ? (
@@ -281,40 +288,37 @@ export default function PerfilScreen() {
           {/* ── Aviso: faltan datos para comprar (#24) ─────────────────── */}
           {!completo && !isEditing ? (
             <StaggerItem index={1} style={s.section}>
-              <Card tone="outline" padding="md" accessibilityRole="summary">
-                <View style={s.avisoHead}>
-                  <WarningCircle color={Colors.warningText} weight="fill" size={Sizes.icon.lg} />
-                  <View style={s.avisoBody}>
-                    <Text variant="bodyStrong">Faltan tus datos para comprar</Text>
-                    <Text variant="secondary" color="muted">
-                      {`Agrega ${listaCampos(faltan)} para comprar y enviar.`}
-                    </Text>
-                  </View>
-                </View>
-                <Button
-                  size="md"
-                  fullWidth
-                  onPress={() => setCompletarPerfil(true)}
-                  style={s.avisoAction}
-                >
-                  Completar datos
-                </Button>
-              </Card>
+              <Aviso
+                tono="warning"
+                icon={WarningCircle}
+                titulo="Faltan tus datos para comprar"
+                texto={`Agrega ${listaCampos(faltan)} para comprar y enviar.`}
+                extra={
+                  <Button
+                    size="md"
+                    fullWidth
+                    onPress={() => setCompletarPerfil(true)}
+                    style={s.avisoAction}
+                  >
+                    Completar datos
+                  </Button>
+                }
+              />
             </StaggerItem>
           ) : null}
 
           {/* ── Cuenta ───────────────────────────────────────────────────── */}
           <StaggerItem index={2} style={s.section}>
             <SectionLabel>Cuenta</SectionLabel>
-            <Card tone="sunken" padding="none">
+            <Card padding="none">
               <View style={s.cardHead}>
-                <Text variant="bodyStrong" accessibilityRole="header" style={s.cardHeadTitle}>
+                <Text variant="subheading" accessibilityRole="header" style={s.cardHeadTitle}>
                   Datos personales
                 </Text>
                 {perfil ? (
                   <Button
                     variant="ghost"
-                    size="sm"
+                    size="md"
                     onPress={isEditing ? handleCancel : empezarEdicion}
                     disabled={saving}
                     accessibilityLabel={
@@ -331,6 +335,7 @@ export default function PerfilScreen() {
                 <View style={s.form}>
                   <Field
                     label="Nombre y apellido"
+                    placeholder="Ej. María Pérez"
                     value={nombreCompleto}
                     onChangeText={(v) => {
                       setNombreCompleto(v.slice(0, 80));
@@ -375,15 +380,17 @@ export default function PerfilScreen() {
                 </View>
               ) : (
                 <>
-                  <ListRow icon={EnvelopeSimple} etiqueta="Correo" titulo={email || '—'} divided />
+                  <ListRow icon={EnvelopeSimple} tono="sky" etiqueta="Correo" titulo={email || '—'} divided />
                   <ListRow
                     icon={Phone}
+                    tono="sky"
                     etiqueta="Teléfono"
                     titulo={perfil?.telefono ? formatTelefono(perfil.telefono) : 'Sin agregar'}
                     divided
                   />
                   <ListRow
                     icon={IdentificationCard}
+                    tono="sky"
                     etiqueta="Cédula"
                     titulo={perfil?.cedula_rif ? formatCedula(perfil.cedula_rif) : 'Sin agregar'}
                     divided
@@ -392,9 +399,10 @@ export default function PerfilScreen() {
               )}
             </Card>
 
-            <Card tone="sunken" padding="none" style={s.cardSpaced}>
+            <Card padding="none" style={s.cardSpaced}>
               <ListRow
                 icon={Key}
+                tono="brand"
                 titulo={conContrasena ? 'Cambiar contraseña' : 'Crear una contraseña'}
                 detalle={conContrasena ? undefined : 'Para entrar también con tu correo'}
                 onPress={() => router.push('/cuenta/contrasena')}
@@ -412,7 +420,7 @@ export default function PerfilScreen() {
           {/* ── Avisos que recibes (AN-17) ───────────────────────────────── */}
           <StaggerItem index={3} style={s.section}>
             <SectionLabel>Avisos que recibes</SectionLabel>
-            <Card tone="sunken" padding="none">
+            <Card padding="none">
               {PREFERENCIAS.map((p, i) => (
                 <FilaSwitch
                   key={p.clave}
@@ -430,9 +438,10 @@ export default function PerfilScreen() {
           {/* ── Ayuda (#28); WhatsApp vive en Ayuda (AN-17) ──────────────── */}
           <StaggerItem index={4} style={s.section}>
             <SectionLabel>Ayuda</SectionLabel>
-            <Card tone="sunken" padding="none">
+            <Card padding="none">
               <ListRow
                 icon={Lifebuoy}
+                tono="mint"
                 titulo="Ayuda"
                 detalle="Preguntas frecuentes y reportes"
                 onPress={() => router.push('/ayuda')}
@@ -444,7 +453,7 @@ export default function PerfilScreen() {
           {SITIO_URL ? (
             <StaggerItem index={5} style={s.section}>
               <SectionLabel>Legal</SectionLabel>
-              <Card tone="sunken" padding="none">
+              <Card padding="none">
                 <ListRow
                   icon={FileText}
                   titulo="Términos y condiciones"
@@ -506,7 +515,8 @@ export default function PerfilScreen() {
  * `detalle`, con `onPress` y chevron si abre otra pantalla).
  */
 function ListRow({
-  icon: Icon,
+  icon,
+  tono = 'neutral',
   etiqueta,
   titulo,
   detalle,
@@ -515,6 +525,7 @@ function ListRow({
   divided,
 }: {
   icon: React.ComponentType<IconProps>;
+  tono?: IconTileTone;
   etiqueta?: string;
   titulo: string;
   detalle?: string;
@@ -524,9 +535,8 @@ function ListRow({
 }) {
   const contenido = (
     <>
-      <View style={s.filaIcon}>
-        <Icon size={Sizes.icon.md} color={Colors.foreground} weight="bold" />
-      </View>
+      {divided ? <View style={s.filaLinea} /> : null}
+      <IconTile tone={tono} icon={icon} />
       <View style={s.filaBody}>
         {etiqueta ? (
           <Text variant="caption" color="muted">
@@ -541,7 +551,7 @@ function ListRow({
         ) : null}
       </View>
       {onPress && chevron ? (
-        <CaretRight size={Sizes.icon.sm} color={Colors.mutedForeground} weight="bold" />
+        <CaretRight size={Sizes.icon.sm} color={Colors.placeholder} weight="bold" />
       ) : null}
     </>
   );
@@ -549,7 +559,7 @@ function ListRow({
   if (!onPress) {
     return (
       <View
-        style={[s.fila, divided && s.filaDivided]}
+        style={s.fila}
         accessible
         accessibilityLabel={etiqueta ? `${etiqueta}: ${titulo}` : titulo}
       >
@@ -564,7 +574,7 @@ function ListRow({
       haptic
       hapticType="selection"
       scaleValue={Motion.press.card}
-      style={[s.fila, divided && s.filaDivided]}
+      style={s.fila}
       accessibilityRole="button"
       accessibilityLabel={detalle ? `${titulo}. ${detalle}` : titulo}
     >
@@ -591,7 +601,8 @@ function FilaSwitch({
   divided?: boolean;
 }) {
   return (
-    <View style={[s.fila, divided && s.filaDivided]}>
+    <View style={s.fila}>
+      {divided ? <View style={s.filaLineaPlena} /> : null}
       <View
         style={s.filaBody}
         importantForAccessibility="no-hide-descendants"
@@ -611,9 +622,9 @@ function FilaSwitch({
           onCambiar(v);
         }}
         disabled={guardando}
-        trackColor={{ false: Colors.borderStrong, true: Colors.accentStrong }}
+        trackColor={{ false: Colors.borderControl, true: Colors.accentStrong }}
         thumbColor={Colors.white}
-        ios_backgroundColor={Colors.borderStrong}
+        ios_backgroundColor={Colors.borderControl}
         {...SWITCH_WEB}
         accessibilityLabel={detalle ? `${titulo}. ${detalle}` : titulo}
         accessibilityState={{ checked: valor, disabled: guardando, busy: guardando }}
@@ -625,29 +636,23 @@ function FilaSwitch({
 const s = StyleSheet.create({
   avatarBlock: {
     alignItems: 'center',
-    paddingTop: Spacing['2xl'],
-    gap: Spacing.xs,
+    paddingTop: Spacing.sm,
+    gap: Spacing.xs / 2,
   },
   avatar: {
     width: Sizes.avatar.lg,
     height: Sizes.avatar.lg,
     borderRadius: Radius.full,
-    backgroundColor: Colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: Spacing.md,
+    marginBottom: Spacing.lg,
+    ...Shadows.sun,
   },
-  avisoHead: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: Spacing.md,
-  },
-  avisoBody: {
-    flex: 1,
-    gap: Spacing.xs,
+  avatarFondo: {
+    borderRadius: Radius.full,
   },
   avisoAction: {
-    marginTop: Spacing.lg,
+    marginTop: Spacing.md,
   },
   cardHead: {
     flexDirection: 'row',
@@ -672,7 +677,7 @@ const s = StyleSheet.create({
     marginTop: Spacing.md,
   },
   section: {
-    marginTop: Spacing['2xl'],
+    marginTop: Layout.sectionGap,
   },
   pie: {
     marginTop: Spacing['2xl'],
@@ -687,17 +692,22 @@ const s = StyleSheet.create({
     paddingVertical: Spacing.md,
     minHeight: Sizes.control.lg,
   },
-  filaDivided: {
-    borderTopWidth: Sizes.hairline,
-    borderTopColor: Colors.border,
+  /** Línea entre filas: empieza donde empieza el texto, no en el icono. */
+  filaLinea: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    left: Spacing.lg + Sizes.tile.md + Spacing.md,
+    height: Sizes.hairline,
+    backgroundColor: Colors.border,
   },
-  filaIcon: {
-    width: Sizes.iconBox.md,
-    height: Sizes.iconBox.md,
-    borderRadius: Radius.full,
-    backgroundColor: Colors.white,
-    alignItems: 'center',
-    justifyContent: 'center',
+  filaLineaPlena: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    left: Spacing.lg,
+    height: Sizes.hairline,
+    backgroundColor: Colors.border,
   },
   filaBody: {
     flex: 1,

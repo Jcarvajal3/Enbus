@@ -200,7 +200,7 @@ export default function EncomiendasScreen() {
     );
 
   return (
-    <Screen>
+    <Screen atmosfera="calida">
       <ScreenHeader title="Mis encomiendas" right={<HeaderActions />} />
 
       {loading && sinDatos && !error ? (

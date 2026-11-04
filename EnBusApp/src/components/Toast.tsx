@@ -183,7 +183,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
               accessibilityLabel={toast.message}
               accessibilityHint={toast.type === 'error' ? undefined : 'Toca para cerrar'}
             >
-              <View style={[s.iconBox, { backgroundColor: alpha(visual.color, 0.12) }]}>
+              <View style={[s.iconBox, { backgroundColor: alpha(visual.color, 0.14) }]}>
                 <Icon size={Sizes.icon.md} color={visual.color} weight="fill" />
               </View>
               <Text variant="label" style={s.message} numberOfLines={5}>
@@ -202,7 +202,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
                 accessibilityRole="button"
                 accessibilityLabel={accion.label}
               >
-                <Text variant="label" color="link" style={s.actionText} compact>
+                <Text variant="label" weight="semibold" color="link" compact>
                   {accion.label}
                 </Text>
               </PressableScale>
@@ -232,9 +232,8 @@ const s = StyleSheet.create({
     paddingLeft: Spacing.md,
     paddingRight: Spacing.xs,
     backgroundColor: Colors.white,
-    borderWidth: Sizes.hairline,
-    borderColor: Colors.border,
-    borderRadius: Radius.lg,
+    borderRadius: Radius.xl,
+    borderCurve: 'continuous',
     ...Shadows.elevated,
   },
   body: {
@@ -253,9 +252,6 @@ const s = StyleSheet.create({
   },
   message: {
     flex: 1,
-  },
-  actionText: {
-    textDecorationLine: 'underline',
   },
   action: {
     minHeight: Sizes.touchTarget,

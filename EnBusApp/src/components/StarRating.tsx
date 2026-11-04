@@ -63,13 +63,10 @@ function AnimatedStar({
 
   const glyph = filled ? (
     <View>
-      <Star size={STAR_SIZE} weight="fill" color={Colors.primary} />
-      <View style={StyleSheet.absoluteFill} pointerEvents="none">
-        <Star size={STAR_SIZE} weight="regular" color={Colors.primaryText} />
-      </View>
+      <Star size={STAR_SIZE} weight="fill" color={Colors.primaryDeep} />
     </View>
   ) : (
-    <Star size={STAR_SIZE} weight="regular" color={Colors.mutedForeground} />
+    <Star size={STAR_SIZE} weight="regular" color={Colors.placeholder} />
   );
 
   // A read-only rating is a picture, not a disabled control: render it at full

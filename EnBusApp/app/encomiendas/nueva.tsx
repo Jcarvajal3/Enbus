@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Image, ScrollView, StyleSheet, View, type TextInput } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
+  Bus,
   Camera,
   Image as ImageIcon,
   Info,
@@ -22,6 +23,7 @@ import { CompletarPerfilSheet } from '@/src/components/CompletarPerfilSheet';
 import { CedulaField } from '@/src/components/CedulaField';
 import { TelefonoField } from '@/src/components/TelefonoField';
 import {
+  Aviso,
   BottomSheet,
   Button,
   Card,
@@ -30,7 +32,9 @@ import {
   EntityCard,
   ErrorState,
   Field,
+  EvitarTeclado,
   FloatingBar,
+  IconTile,
   Monto,
   Screen,
   ScreenHeader,
@@ -71,7 +75,7 @@ import type {
   OpcionCotizacionEnvio,
   SucursalPunto,
 } from '@/src/types';
-import { Colors, Motion, Radius, Sizes, Spacing } from '@/src/theme';
+import { Colors, Layout, Motion, Radius, Shadows, Sizes, Spacing } from '@/src/theme';
 
 interface RutaDisponible {
   id: string;
@@ -620,7 +624,7 @@ export default function NuevaEncomiendaWizard() {
   const textoBoton = step === 3 ? 'Generar código QR' : editando ? 'Volver al resumen' : 'Continuar';
 
   return (
-    <Screen>
+    <Screen atmosfera="calida">
       <ScreenHeader
         variant="steps"
         title={STEP_TITLES[step - 1]}
@@ -630,411 +634,409 @@ export default function NuevaEncomiendaWizard() {
         backLabel={step > 1 ? 'Paso anterior' : 'Salir'}
       />
 
-      <ScrollView
-        contentContainerStyle={scrollContent({ floatingAction: true, top: Spacing.lg })}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-      >
-        {/* ─── Paso 1: ruta, cooperativa y dónde entregarla ─────────────── */}
-        {step === 1 && (
-          <>
-            <RouteField
-              origen={origen}
-              destino={destino}
-              onOrigen={setOrigen}
-              onDestino={setDestino}
-              onIntercambiar={() => {
-                setOrigen(destino);
-                setDestino(origen);
-              }}
-              populares={CIUDADES_POPULARES}
-            />
+      <EvitarTeclado>
+        <ScrollView
+          contentContainerStyle={scrollContent({ floatingAction: true, top: Spacing.lg })}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          automaticallyAdjustKeyboardInsets
+        >
+          {/* ─── Paso 1: ruta, cooperativa y dónde entregarla ─────────────── */}
+          {step === 1 && (
+            <>
+              <Card>
+                <RouteField
+                  origen={origen}
+                  destino={destino}
+                  onOrigen={setOrigen}
+                  onDestino={setDestino}
+                  onIntercambiar={() => {
+                    setOrigen(destino);
+                    setDestino(origen);
+                  }}
+                  populares={CIUDADES_POPULARES}
+                />
+              </Card>
 
-            {origen && destino ? (
-              <View style={s.section}>
-                {loadingRutas ? (
-                  <>
-                    <SectionLabel>Cooperativa</SectionLabel>
-                    <CardSkeleton count={2} />
-                  </>
-                ) : errorRutas ? (
-                  <ErrorState
-                    title="No pudimos cargar las cooperativas"
-                    description={errorRutas}
-                    onRetry={() => setReintentoRutas((n) => n + 1)}
-                    compact
-                  />
-                ) : rutas.length === 0 ? (
-                  <EmptyState
-                    icon={Package}
-                    title="Sin cooperativas en esta ruta"
-                    description="Prueba con otro destino."
-                    compact
-                  />
-                ) : (
-                  <>
-                    <SectionLabel>Cooperativa</SectionLabel>
-                    <View accessibilityRole="radiogroup">
-                      {rutas.map((option, index) => {
-                        const nombreOpcion = option.cooperativas?.nombre ?? 'Cooperativa';
-                        const rating = option.cooperativas?.calificacion_promedio ?? 0;
-                        const ref = option.cooperativas?.id
-                          ? desde[option.cooperativas.id]
-                          : undefined;
-                        // M-38: `precio_pasaje` es el boleto de una persona, no el envío.
-                        const precio = ref
-                          ? `Desde ${
-                              formatMoney({
-                                usd: ref.costo_usd,
-                                bs: ref.costo_bs,
-                                tasa: tasaRefDe(tasaDesde.tasa, tasaDesde.fecha),
-                              }).principal
-                            } (1 kg)`
-                          : 'El costo depende del peso';
+              {origen && destino ? (
+                <View style={s.section}>
+                  {loadingRutas ? (
+                    <>
+                      <SectionLabel>Cooperativa</SectionLabel>
+                      <CardSkeleton count={2} />
+                    </>
+                  ) : errorRutas ? (
+                    <ErrorState
+                      title="No pudimos cargar las cooperativas"
+                      description={errorRutas}
+                      onRetry={() => setReintentoRutas((n) => n + 1)}
+                      compact
+                    />
+                  ) : rutas.length === 0 ? (
+                    <EmptyState
+                      icon={Package}
+                      title="Sin cooperativas en esta ruta"
+                      description="Prueba con otro destino."
+                      compact
+                    />
+                  ) : (
+                    <>
+                      <SectionLabel>Cooperativa</SectionLabel>
+                      <View accessibilityRole="radiogroup">
+                        {rutas.map((option, index) => {
+                          const nombreOpcion = option.cooperativas?.nombre ?? 'Cooperativa';
+                          const rating = option.cooperativas?.calificacion_promedio ?? 0;
+                          const ref = option.cooperativas?.id
+                            ? desde[option.cooperativas.id]
+                            : undefined;
+                          // M-38: `precio_pasaje` es el boleto de una persona, no el envío.
+                          const precio = ref
+                            ? `Desde ${
+                                formatMoney({
+                                  usd: ref.costo_usd,
+                                  bs: ref.costo_bs,
+                                  tasa: tasaRefDe(tasaDesde.tasa, tasaDesde.fecha),
+                                }).principal
+                              } (1 kg)`
+                            : 'El costo depende del peso';
 
-                        return (
-                          <StaggerItem key={option.id} index={index}>
-                            <EntityCard
-                              selectable
-                              selected={ruta?.id === option.id}
-                              onPress={() => setRuta(option)}
-                              title={nombreOpcion}
-                              subtitle={precio}
-                              badge={rating > 0 ? <Calificacion valor={rating} /> : undefined}
+                          return (
+                            <StaggerItem key={option.id} index={index}>
+                              <EntityCard
+                                selectable
+                                selected={ruta?.id === option.id}
+                                onPress={() => setRuta(option)}
+                                leading={<IconTile tone="coral" icon={Bus} />}
+                                title={nombreOpcion}
+                                subtitle={precio}
+                                adorno={rating > 0 ? <Calificacion valor={rating} /> : undefined}
+                              />
+                            </StaggerItem>
+                          );
+                        })}
+                      </View>
+
+                      {/* M-44: dónde llevarla */}
+                      {ruta ? (
+                        <View style={s.sectionTight}>
+                          <SectionLabel>Dónde entregarla</SectionLabel>
+                          {errorSucursales ? (
+                            <ErrorState
+                              title="No pudimos ver las taquillas"
+                              description={errorSucursales}
+                              onRetry={() => setReintentoSucursales((n) => n + 1)}
+                              compact
                             />
-                          </StaggerItem>
-                        );
-                      })}
-                    </View>
-
-                    {/* M-44: dónde llevarla */}
-                    {ruta ? (
-                      <View style={s.sectionTight}>
-                        <SectionLabel>Dónde entregarla</SectionLabel>
-                        {errorSucursales ? (
-                          <ErrorState
-                            title="No pudimos ver las taquillas"
-                            description={errorSucursales}
-                            onRetry={() => setReintentoSucursales((n) => n + 1)}
-                            compact
-                          />
-                        ) : (
-                          <Card tone="sunken" padding="sm">
-                            {loadingSucursales || !sucursales ? (
-                              <View style={s.sucursal} accessibilityLabel="Cargando">
-                                <SkeletonLoader width="70%" height={Sizes.icon.md} />
-                                <SkeletonLoader width="45%" height={Sizes.icon.xs} />
-                              </View>
-                            ) : sucursales.length === 0 ? (
-                              <Text variant="secondary" color="muted">
-                                {`Pregunta en la taquilla de ${nombreCoop} en ${origen.ciudad}.`}
-                              </Text>
-                            ) : (
-                              sucursales.map((suc, i) => (
-                                <View key={suc.id}>
-                                  {i > 0 ? <Divider spacing={Spacing.md} /> : null}
-                                  <View style={s.sucursal}>
-                                    <Text variant="bodyStrong">{suc.nombre}</Text>
-                                    {suc.direccion ? (
-                                      <Text variant="secondary" color="muted">
-                                        {suc.direccion}
-                                      </Text>
-                                    ) : null}
-                                    {suc.horario || suc.telefono ? (
-                                      <Text variant="caption" color="muted">
-                                        {[suc.horario, suc.telefono ? `Tel. ${suc.telefono}` : null]
-                                          .filter(Boolean)
-                                          .join(' · ')}
-                                      </Text>
-                                    ) : null}
-                                  </View>
+                          ) : (
+                            <Card padding="sm">
+                              {loadingSucursales || !sucursales ? (
+                                <View style={s.sucursal} accessibilityLabel="Cargando">
+                                  <SkeletonLoader width="70%" height={Sizes.icon.md} />
+                                  <SkeletonLoader width="45%" height={Sizes.icon.xs} />
                                 </View>
-                              ))
-                            )}
-                          </Card>
-                        )}
-                      </View>
-                    ) : null}
-                  </>
-                )}
-              </View>
-            ) : null}
-          </>
-        )}
-
-        {/* ─── Paso 2: destinatario, contenido y quién paga ─────────────── */}
-        {step === 2 && (
-          <>
-            <SectionLabel>Datos de quien recibe</SectionLabel>
-            {/* El último campo ya deja su margen: el pie de la tarjeta no lo duplica. */}
-            <Card tone="sunken" padding="none">
-              <View style={s.cardCampos}>
-                <Field
-                  label="Nombre y apellido"
-                  value={nombre}
-                  onChangeText={(v) => setNombre(v.slice(0, 80))}
-                  error={errors.nombre}
-                  autoCapitalize="words"
-                  autoComplete="off"
-                  returnKeyType="next"
-                  submitBehavior="submit"
-                  onSubmitEditing={() => cedulaRef.current?.focus()}
-                />
-                <CedulaField
-                  ref={cedulaRef}
-                  value={cedula}
-                  onChangeText={setCedula}
-                  error={errors.cedula}
-                  letras={['V', 'E', 'J', 'P']}
-                  returnKeyType="next"
-                  onSubmitEditing={() => telefonoRef.current?.focus()}
-                />
-                <TelefonoField
-                  ref={telefonoRef}
-                  value={telefono}
-                  onChangeText={setTelefono}
-                  error={errors.telefono}
-                  returnKeyType="done"
-                />
-              </View>
-            </Card>
-
-            <View style={s.section}>
-              <SectionLabel>Contenido</SectionLabel>
-              <Card tone="sunken">
-                <Field
-                  label="Descripción"
-                  placeholder="Ej. ropa y documentos"
-                  value={descripcion}
-                  onChangeText={(v) => setDescripcion(v.slice(0, 300))}
-                  error={errors.descripcion}
-                  multiline
-                  numberOfLines={3}
-                  containerStyle={s.campoConEnlace}
-                />
-                <View style={s.enlace}>
-                  <TextLink onPress={() => setVerProhibidos(true)}>Qué no se puede enviar</TextLink>
+                              ) : sucursales.length === 0 ? (
+                                <Text variant="secondary" color="muted">
+                                  {`Pregunta en la taquilla de ${nombreCoop} en ${origen.ciudad}.`}
+                                </Text>
+                              ) : (
+                                sucursales.map((suc, i) => (
+                                  <View key={suc.id}>
+                                    {i > 0 ? <Divider spacing={Spacing.md} /> : null}
+                                    <View style={s.sucursal}>
+                                      <Text variant="subheading">{suc.nombre}</Text>
+                                      {suc.direccion ? (
+                                        <Text variant="secondary" color="muted">
+                                          {suc.direccion}
+                                        </Text>
+                                      ) : null}
+                                      {suc.horario || suc.telefono ? (
+                                        <Text variant="caption" color="muted">
+                                          {[suc.horario, suc.telefono ? `Tel. ${suc.telefono}` : null]
+                                            .filter(Boolean)
+                                            .join(' · ')}
+                                        </Text>
+                                      ) : null}
+                                    </View>
+                                  </View>
+                                ))
+                              )}
+                            </Card>
+                          )}
+                        </View>
+                      ) : null}
+                    </>
+                  )}
                 </View>
+              ) : null}
+            </>
+          )}
 
-                <Field
-                  label="Peso aproximado (kg) · opcional"
-                  placeholder="Ej. 2,5"
-                  keyboardType="decimal-pad"
-                  value={pesoKg}
-                  onChangeText={setPesoKg}
-                  error={errors.peso}
-                />
-
-                {/* M-45: el estimado nunca desaparece en silencio. */}
-                {pesoKg.trim() && !errors.peso && cooperativaId ? (
-                  <View style={s.costRow} accessibilityLiveRegion="polite">
-                    {avisoPeso ? (
-                      <Text variant="caption" color="dangerText" style={s.flex}>
-                        {avisoPeso}
-                      </Text>
-                    ) : loadingCosto ? (
-                      <Text variant="caption" color="muted">
-                        Calculando el costo estimado…
-                      </Text>
-                    ) : errorCosto ? (
-                      <View style={[s.flex, s.costError]}>
-                        <Text variant="caption" color="muted" style={s.flex}>
-                          No pudimos calcular el estimado.
-                        </Text>
-                        <TextLink
-                          onPress={() => setReintentoCosto((n) => n + 1)}
-                          accessibilityLabel="Reintentar el costo estimado"
-                        >
-                          Reintentar
-                        </TextLink>
-                      </View>
-                    ) : estimado?.opcion ? (
-                      <>
-                        <Text variant="caption" color="muted" style={s.flex}>
-                          Costo estimado
-                        </Text>
-                        <Monto
-                          usd={estimado.opcion.costo_usd}
-                          bs={estimado.opcion.costo_bs}
-                          tasa={tasaRefDe(estimado.tasa, estimado.fecha)}
-                          align="right"
-                        />
-                      </>
-                    ) : estimado ? (
-                      <Text variant="caption" color="muted">
-                        {`Sin estimado para ${nombreCoop}.`}
-                      </Text>
-                    ) : null}
-                  </View>
-                ) : null}
-
-                <Field
-                  label="Valor del contenido (USD) · opcional"
-                  placeholder="Ej. 50"
-                  keyboardType="decimal-pad"
-                  value={valorDeclarado}
-                  onChangeText={setValorDeclarado}
-                  error={errors.valor}
-                />
-
-                {/* AU-23: la única mención del límite. */}
-                <View style={s.alert}>
-                  <Warning weight="fill" color={Colors.warningText} size={Sizes.icon.md} />
-                  <Text variant="caption" color="warningText" style={s.flex}>
-                    {`Máximo ${PESO_MAX_KG} kg y 50 × 50 × 50 cm.`}
-                  </Text>
+          {/* ─── Paso 2: destinatario, contenido y quién paga ─────────────── */}
+          {step === 2 && (
+            <>
+              <SectionLabel>Datos de quien recibe</SectionLabel>
+              {/* El último campo ya deja su margen: el pie de la tarjeta no lo duplica. */}
+              <Card padding="none">
+                <View style={s.cardCampos}>
+                  <Field
+                    label="Nombre y apellido"
+                    placeholder="Ej. María Pérez"
+                    value={nombre}
+                    onChangeText={(v) => setNombre(v.slice(0, 80))}
+                    error={errors.nombre}
+                    autoCapitalize="words"
+                    autoComplete="off"
+                    returnKeyType="next"
+                    submitBehavior="submit"
+                    onSubmitEditing={() => cedulaRef.current?.focus()}
+                  />
+                  <CedulaField
+                    ref={cedulaRef}
+                    value={cedula}
+                    onChangeText={setCedula}
+                    error={errors.cedula}
+                    letras={['V', 'E', 'J', 'P']}
+                    returnKeyType="next"
+                    onSubmitEditing={() => telefonoRef.current?.focus()}
+                  />
+                  <TelefonoField
+                    ref={telefonoRef}
+                    value={telefono}
+                    onChangeText={setTelefono}
+                    error={errors.telefono}
+                    returnKeyType="done"
+                  />
                 </View>
               </Card>
-            </View>
 
-            {/* M-43: quién paga, sin opción marcada de antemano */}
-            <View style={s.section}>
-              <SectionLabel>Quién paga</SectionLabel>
-              <View accessibilityRole="radiogroup">
-                {OPCIONES_PAGO.map((op) => (
-                  <OpcionRadio
-                    key={op.value}
-                    titulo={op.titulo}
-                    detalle={op.detalle}
-                    selected={modalidadPago === op.value}
-                    onPress={() => {
-                      setModalidadPago(op.value);
-                      setErrors((e) => {
-                        const resto = { ...e };
-                        delete resto.modalidad;
-                        return resto;
-                      });
-                    }}
+              <View style={s.section}>
+                <SectionLabel>Contenido</SectionLabel>
+                <Card>
+                  <Field
+                    label="Descripción"
+                    placeholder="Ej. ropa y documentos"
+                    value={descripcion}
+                    onChangeText={(v) => setDescripcion(v.slice(0, 300))}
+                    error={errors.descripcion}
+                    multiline
+                    numberOfLines={3}
+                    containerStyle={s.campoConEnlace}
                   />
-                ))}
-              </View>
-              {errors.modalidad ? (
-                <Text variant="caption" color="dangerText" accessibilityRole="alert" style={s.radioError}>
-                  {errors.modalidad}
-                </Text>
-              ) : null}
-            </View>
-
-            <View style={s.section}>
-              <SectionLabel>Foto · opcional</SectionLabel>
-              {foto ? (
-                <Card tone="sunken" padding="sm">
-                  <Image
-                    source={{ uri: foto }}
-                    style={s.photo}
-                    resizeMode="cover"
-                    accessibilityLabel="Foto de la encomienda"
-                  />
-                  <View style={s.photoActions}>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onPress={() => pickPhoto('library')}
-                      style={s.photoButton}
-                    >
-                      Cambiar foto
-                    </Button>
-                    <Button
-                      variant="dangerGhost"
-                      size="sm"
-                      onPress={() => setFoto(null)}
-                      style={s.photoButton}
-                    >
-                      Quitar foto
-                    </Button>
+                  <View style={s.enlace}>
+                    <TextLink onPress={() => setVerProhibidos(true)}>Qué no se puede enviar</TextLink>
                   </View>
+
+                  <Field
+                    label="Peso aproximado (kg) · opcional"
+                    placeholder="Ej. 2,5"
+                    keyboardType="decimal-pad"
+                    value={pesoKg}
+                    onChangeText={setPesoKg}
+                    error={errors.peso}
+                  />
+
+                  {/* M-45: el estimado nunca desaparece en silencio. */}
+                  {pesoKg.trim() && !errors.peso && cooperativaId ? (
+                    <View style={s.costRow} accessibilityLiveRegion="polite">
+                      {avisoPeso ? (
+                        <Text variant="caption" color="dangerText" style={s.flex}>
+                          {avisoPeso}
+                        </Text>
+                      ) : loadingCosto ? (
+                        <Text variant="caption" color="muted">
+                          Calculando el costo estimado…
+                        </Text>
+                      ) : errorCosto ? (
+                        <View style={[s.flex, s.costError]}>
+                          <Text variant="caption" color="muted" style={s.flex}>
+                            No pudimos calcular el estimado.
+                          </Text>
+                          <TextLink
+                            onPress={() => setReintentoCosto((n) => n + 1)}
+                            accessibilityLabel="Reintentar el costo estimado"
+                          >
+                            Reintentar
+                          </TextLink>
+                        </View>
+                      ) : estimado?.opcion ? (
+                        // Apilado: en una fila, el monto y su referencia no caben junto a la etiqueta.
+                        <View style={[s.flex, s.costEstimado]}>
+                          <Text variant="caption" color="muted">
+                            Costo estimado
+                          </Text>
+                          <Monto
+                            usd={estimado.opcion.costo_usd}
+                            bs={estimado.opcion.costo_bs}
+                            tasa={tasaRefDe(estimado.tasa, estimado.fecha)}
+                          />
+                        </View>
+                      ) : estimado ? (
+                        <Text variant="caption" color="muted">
+                          {`Sin estimado para ${nombreCoop}.`}
+                        </Text>
+                      ) : null}
+                    </View>
+                  ) : null}
+
+                  <Field
+                    label="Valor del contenido (USD) · opcional"
+                    placeholder="Ej. 50"
+                    keyboardType="decimal-pad"
+                    value={valorDeclarado}
+                    onChangeText={setValorDeclarado}
+                    error={errors.valor}
+                  />
+
+                  {/* La única mención del límite. */}
+                  <Aviso tono="warning" icon={Warning} texto={`Máximo ${PESO_MAX_KG} kg y 50 × 50 × 50 cm.`} />
                 </Card>
-              ) : (
-                <View style={s.photoActions}>
-                  <PhotoOption icon={Camera} label="Tomar foto" onPress={() => pickPhoto('camera')} />
-                  <PhotoOption
-                    icon={ImageIcon}
-                    label="Galería"
-                    onPress={() => pickPhoto('library')}
-                  />
+              </View>
+
+              {/* M-43: quién paga, sin opción marcada de antemano */}
+              <View style={s.section}>
+                <SectionLabel>Quién paga</SectionLabel>
+                <View accessibilityRole="radiogroup">
+                  {OPCIONES_PAGO.map((op) => (
+                    <OpcionRadio
+                      key={op.value}
+                      titulo={op.titulo}
+                      detalle={op.detalle}
+                      selected={modalidadPago === op.value}
+                      onPress={() => {
+                        setModalidadPago(op.value);
+                        setErrors((e) => {
+                          const resto = { ...e };
+                          delete resto.modalidad;
+                          return resto;
+                        });
+                      }}
+                    />
+                  ))}
                 </View>
-              )}
-            </View>
-          </>
-        )}
-
-        {/* ─── Paso 3: revisar antes de guardar (M-42, AN-15, AU-24) ─────── */}
-        {step === 3 && (
-          <>
-            <Card tone="sunken">
-              <BloqueResumen titulo="Trayecto" onEditar={() => editar(1)}>
-                <Text variant="bodyStrong">{trayecto ?? '—'}</Text>
-                <Text variant="caption" color="muted">
-                  {[
-                    nombreCoop,
-                    sucursales && sucursales.length === 1
-                      ? `Llévala a ${sucursales[0].nombre}`
-                      : null,
-                  ]
-                    .filter(Boolean)
-                    .join(' · ')}
-                </Text>
-              </BloqueResumen>
-
-              <Divider />
-
-              <BloqueResumen titulo="Quien recibe" onEditar={() => editar(2)}>
-                <Text variant="bodyStrong">{sanitizeText(nombre)}</Text>
-                <Text variant="caption" color="muted">
-                  {`C.I. ${formatCedula(cedula)} · Tel. ${formatTelefono(telefono)}`}
-                </Text>
-                {/* M-50: la base vincula el envío a la cuenta del destinatario. */}
-                <Text variant="caption" color="muted">
-                  Si tiene EnBus, la verá en su app.
-                </Text>
-              </BloqueResumen>
-
-              <Divider />
-
-              <BloqueResumen titulo="Contenido" onEditar={() => editar(2)}>
-                <Text variant="bodyStrong">{sanitizeText(descripcion)}</Text>
-                <Text variant="caption" color="muted">
-                  {[
-                    pesoKg.trim() ? textoPeso(pesoKg) : 'Peso sin indicar',
-                    valorDeclarado.trim() && Number.isFinite(leerDecimal(valorDeclarado))
-                      ? `Valor ${formatUsd(leerDecimal(valorDeclarado))}`
-                      : null,
-                    costoEstimadoTexto ? `Costo estimado ${costoEstimadoTexto}` : null,
-                  ]
-                    .filter(Boolean)
-                    .join(' · ')}
-                </Text>
-                {foto ? (
-                  <Image
-                    source={{ uri: foto }}
-                    style={s.photoSummary}
-                    resizeMode="cover"
-                    accessibilityLabel="Foto de la encomienda"
-                  />
+                {errors.modalidad ? (
+                  <Text variant="caption" color="dangerText" accessibilityRole="alert" style={s.radioError}>
+                    {errors.modalidad}
+                  </Text>
                 ) : null}
-              </BloqueResumen>
+              </View>
 
-              <Divider />
+              <View style={s.section}>
+                <SectionLabel>Foto · opcional</SectionLabel>
+                {foto ? (
+                  <Card padding="sm">
+                    <Image
+                      source={{ uri: foto }}
+                      style={s.photo}
+                      resizeMode="cover"
+                      accessibilityLabel="Foto de la encomienda"
+                    />
+                    <View style={s.photoActions}>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onPress={() => pickPhoto('library')}
+                        style={s.photoButton}
+                      >
+                        Cambiar foto
+                      </Button>
+                      <Button
+                        variant="dangerGhost"
+                        size="sm"
+                        onPress={() => setFoto(null)}
+                        style={s.photoButton}
+                      >
+                        Quitar foto
+                      </Button>
+                    </View>
+                  </Card>
+                ) : (
+                  <View style={s.photoActions}>
+                    <PhotoOption icon={Camera} label="Tomar foto" onPress={() => pickPhoto('camera')} />
+                    <PhotoOption
+                      icon={ImageIcon}
+                      label="Galería"
+                      onPress={() => pickPhoto('library')}
+                    />
+                  </View>
+                )}
+              </View>
+            </>
+          )}
 
-              <BloqueResumen titulo="Quién paga" onEditar={() => editar(2)}>
-                <Text variant="bodyStrong">
-                  {modalidadPago ? MODALIDAD_PAGO[modalidadPago].corto : '—'}
-                </Text>
-                <Text variant="caption" color="muted">
-                  {modalidadPago ? MODALIDAD_PAGO[modalidadPago].largo : ''}
-                </Text>
-              </BloqueResumen>
-            </Card>
+          {/* ─── Paso 3: revisar antes de guardar (M-42, AN-15, AU-24) ─────── */}
+          {step === 3 && (
+            <>
+              <Card>
+                <BloqueResumen titulo="Trayecto" onEditar={() => editar(1)}>
+                  <Text variant="bodyStrong">{trayecto ?? '—'}</Text>
+                  <Text variant="caption" color="muted">
+                    {[
+                      nombreCoop,
+                      sucursales && sucursales.length === 1
+                        ? `Llévala a ${sucursales[0].nombre}`
+                        : null,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </Text>
+                </BloqueResumen>
 
-            <View style={s.note}>
-              <Info weight="fill" color={Colors.mutedForeground} size={Sizes.icon.md} />
-              <Text variant="caption" color="muted" style={s.flex}>
-                La taquilla calcula el costo al pesar el paquete.
-              </Text>
-            </View>
-          </>
-        )}
-      </ScrollView>
+                <Divider />
+
+                <BloqueResumen titulo="Quien recibe" onEditar={() => editar(2)}>
+                  <Text variant="bodyStrong">{sanitizeText(nombre)}</Text>
+                  <Text variant="caption" color="muted">
+                    {`C.I. ${formatCedula(cedula)} · Tel. ${formatTelefono(telefono)}`}
+                  </Text>
+                  {/* M-50: la base vincula el envío a la cuenta del destinatario. */}
+                  <Text variant="caption" color="muted">
+                    Si tiene EnBus, la verá en su app.
+                  </Text>
+                </BloqueResumen>
+
+                <Divider />
+
+                <BloqueResumen titulo="Contenido" onEditar={() => editar(2)}>
+                  <Text variant="bodyStrong">{sanitizeText(descripcion)}</Text>
+                  <Text variant="caption" color="muted">
+                    {[
+                      pesoKg.trim() ? textoPeso(pesoKg) : 'Peso sin indicar',
+                      valorDeclarado.trim() && Number.isFinite(leerDecimal(valorDeclarado))
+                        ? `Valor ${formatUsd(leerDecimal(valorDeclarado))}`
+                        : null,
+                      costoEstimadoTexto ? `Costo estimado ${costoEstimadoTexto}` : null,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </Text>
+                  {foto ? (
+                    <Image
+                      source={{ uri: foto }}
+                      style={s.photoSummary}
+                      resizeMode="cover"
+                      accessibilityLabel="Foto de la encomienda"
+                    />
+                  ) : null}
+                </BloqueResumen>
+
+                <Divider />
+
+                <BloqueResumen titulo="Quién paga" onEditar={() => editar(2)}>
+                  <Text variant="bodyStrong">
+                    {modalidadPago ? MODALIDAD_PAGO[modalidadPago].corto : '—'}
+                  </Text>
+                  <Text variant="caption" color="muted">
+                    {modalidadPago ? MODALIDAD_PAGO[modalidadPago].largo : ''}
+                  </Text>
+                </BloqueResumen>
+              </Card>
+
+              <Aviso tono="info" icon={Info} texto="La taquilla calcula el costo al pesar el paquete." style={s.note} />
+            </>
+          )}
+        </ScrollView>
+      </EvitarTeclado>
 
       <FloatingBar resumen={resumenPaso}>
         <Button
@@ -1061,7 +1063,7 @@ export default function NuevaEncomiendaWizard() {
       >
         {ARTICULOS_PROHIBIDOS.map((a) => (
           <View key={a.nombre} style={s.prohibido}>
-            <Prohibit size={Sizes.icon.md} color={Colors.dangerText} weight="bold" />
+            <IconTile size="sm" estado="danger" icon={Prohibit} />
             <View style={s.flex}>
               <Text variant="bodyStrong">{a.nombre}</Text>
               <Text variant="caption" color="muted">
@@ -1095,7 +1097,7 @@ export default function NuevaEncomiendaWizard() {
 function Calificacion({ valor }: { valor: number }) {
   return (
     <View style={s.calificacion} accessibilityLabel={`Calificación ${formatNumeroVE(valor, 1)}`}>
-      <Star size={Sizes.icon.sm} color={Colors.primaryText} weight="fill" />
+      <Star size={Sizes.icon.sm} color={Colors.primaryDeep} weight="fill" />
       <Text variant="caption" weight="semibold" compact>
         {formatNumeroVE(valor, 1)}
       </Text>
@@ -1122,8 +1124,10 @@ function PhotoOption({
       accessibilityRole="button"
       accessibilityLabel={label}
     >
-      <Icon size={Sizes.icon.lg} color={Colors.foreground} weight="bold" />
-      <Text variant="label">{label}</Text>
+      <IconTile tone="coral" icon={Icon} />
+      <Text variant="label" weight="semibold">
+        {label}
+      </Text>
     </PressableScale>
   );
 }
@@ -1194,14 +1198,14 @@ const s = StyleSheet.create({
     flex: 1,
   },
   section: {
-    marginTop: Spacing['2xl'],
+    marginTop: Layout.sectionGap,
   },
-  /** Tras una lista de tarjetas (que ya dejan `md` debajo): 24 en total. */
+  /** Tras una lista de tarjetas (que ya dejan `md` debajo). */
   sectionTight: {
-    marginTop: Spacing.md,
+    marginTop: Spacing.xl,
   },
   sucursal: {
-    gap: Spacing.xs,
+    gap: Spacing.xs / 2,
   },
   calificacion: {
     flexDirection: 'row',
@@ -1217,32 +1221,26 @@ const s = StyleSheet.create({
     marginBottom: 0,
   },
   enlace: {
-    paddingLeft: Spacing.xl,
-    marginBottom: Spacing.sm,
+    marginBottom: Spacing.xs,
   },
   costRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: Spacing.md,
-    backgroundColor: Colors.background,
-    borderRadius: Radius.lg,
+    backgroundColor: Colors.primarySoft,
+    borderRadius: Radius.md,
+    borderCurve: 'continuous',
     padding: Spacing.lg,
     marginBottom: Spacing.lg,
+  },
+  costEstimado: {
+    gap: Spacing.xs / 2,
   },
   costError: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.sm,
-  },
-  alert: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.md,
-    backgroundColor: Colors.warningLight,
-    borderRadius: Radius.lg,
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
   },
   radio: {
     flexDirection: 'row',
@@ -1251,12 +1249,13 @@ const s = StyleSheet.create({
     padding: Spacing.lg,
     marginBottom: Spacing.md,
     borderRadius: Radius.xl,
-    backgroundColor: Colors.surface,
+    borderCurve: 'continuous',
+    backgroundColor: Colors.card,
     borderWidth: Sizes.borderSelected,
-    borderColor: Colors.transparent,
+    borderColor: Colors.card,
+    ...Shadows.card,
   },
   radioSelected: {
-    backgroundColor: Colors.background,
     borderColor: Colors.accentStrong,
   },
   radioCircle: {
@@ -1264,7 +1263,7 @@ const s = StyleSheet.create({
     height: Sizes.icon.lg,
     borderRadius: Radius.full,
     borderWidth: Sizes.borderSelected,
-    borderColor: Colors.borderStrong,
+    borderColor: Colors.borderControl,
     backgroundColor: Colors.background,
     alignItems: 'center',
     justifyContent: 'center',
@@ -1279,25 +1278,21 @@ const s = StyleSheet.create({
     backgroundColor: Colors.accentStrong,
   },
   radioError: {
-    marginLeft: Spacing.lg,
+    marginTop: Spacing.xs,
   },
   note: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
     marginTop: Spacing.lg,
-    paddingHorizontal: Spacing.xl,
   },
   photo: {
     width: '100%',
     height: 180,
-    borderRadius: Radius.lg,
+    borderRadius: Radius.md,
     marginBottom: Spacing.md,
   },
   photoSummary: {
     width: '100%',
     height: 160,
-    borderRadius: Radius.lg,
+    borderRadius: Radius.md,
     marginTop: Spacing.sm,
   },
   photoActions: {
@@ -1313,11 +1308,13 @@ const s = StyleSheet.create({
     justifyContent: 'center',
     gap: Spacing.sm,
     paddingVertical: Spacing.xl,
-    backgroundColor: Colors.surface,
+    backgroundColor: Colors.card,
     borderRadius: Radius.xl,
+    borderCurve: 'continuous',
+    ...Shadows.card,
   },
   bloque: {
-    gap: Spacing.xs,
+    gap: Spacing.xs / 2,
   },
   // El enlace conserva sus 44 pt de toque sin separar la etiqueta de su valor.
   bloqueHead: {
@@ -1328,11 +1325,13 @@ const s = StyleSheet.create({
   },
   prohibido: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     gap: Spacing.md,
     marginBottom: Spacing.lg,
+    paddingHorizontal: Layout.screenPadding,
   },
   prohibidoNota: {
     marginBottom: Spacing.md,
+    paddingHorizontal: Layout.screenPadding,
   },
 });

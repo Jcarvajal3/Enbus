@@ -152,6 +152,7 @@ export function CompletarPerfilSheet({
 
           <Field
             label="Nombre y apellido"
+            placeholder="Ej. María Pérez"
             value={nombre}
             onChangeText={(v) => {
               setNombre(v);

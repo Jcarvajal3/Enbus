@@ -1,24 +1,15 @@
 /**
  * Field — the single text input, and SelectField, its non-typing sibling.
  *
- * Five different inputs existed: `InputField` (beige, 10pt radius, 1.5pt
- * border), the private `Field` in login (white, pill, no border), `BrandInput`
- * in encomiendas/nueva (white, pill, uppercase label), and bare `TextInput`s in
- * PaymentFlow, recuperar and boletos/[id]. Same job, five appearances.
+ * Un campo es un pozo: relleno `surface`, esquinas `md`, sin ruido. Con valor sube a
+ * blanco con borde, y el texto pasa a semibold: se distingue por la caja y por el
+ * texto. Al enfocarlo, blanco con borde azul y anillo. Los errores se muestran en
+ * línea (en `dangerText`), no solo en un aviso que desaparece.
  *
- * The rule encoded here: single-line inputs are pills, multiline inputs use the
- * large radius, the focused border is always `accentStrong`, and errors are
- * shown inline (in `dangerText`) rather than only as a toast.
+ * Alineación: etiqueta, caja y ayuda/error comparten el mismo borde izquierdo.
  *
- * Alineación (AU-09): etiqueta, texto del campo y ayuda/error empiezan en el
- * mismo borde izquierdo (`Spacing.xl` dentro de la píldora). Borde en reposo
- * `borderStrong` (≥ 3:1, AU-08). Marcador solo de formato: "Ej. 0414-1234567".
- *
- * Accesibilidad (APP-57): el `TextInput` lleva la etiqueta como
- * `accessibilityLabel` y la ayuda como `accessibilityHint` (TalkBack leía el
- * placeholder); el error se anuncia solo (`accessibilityLiveRegion` +
- * `role="alert"`). En tono `light` el campo tiene borde en reposo (≥ 3:1 sobre
- * blanco), así se distingue del fondo.
+ * Accesibilidad: el `TextInput` lleva la etiqueta como `accessibilityLabel` y la
+ * ayuda como `accessibilityHint`; el error se anuncia solo.
  */
 import React, { useState } from 'react';
 import {
@@ -40,19 +31,21 @@ import { CaretDown, Eye, EyeSlash, type IconProps } from 'phosphor-react-native'
 import * as Haptics from 'expo-haptics';
 import { PressableScale } from '../PressableScale';
 import { Text, fontStyle } from './Text';
-import { Colors, Motion, Opacity, Radius, Sizes, Spacing } from '@/src/theme';
+import { alpha, Colors, Motion, Opacity, Radius, Sizes, Spacing } from '@/src/theme';
 
 export type FieldTone = 'light' | 'sunken';
 
-export interface FieldProps extends Omit<TextInputProps, 'style'> {
+export interface FieldProps extends Omit<TextInputProps, 'style' | 'placeholder'> {
   label?: string;
+  /** Obligatorio: un campo vacío siempre dice qué se espera ("Ej. María Pérez"). */
+  placeholder: string;
   /** Inline validation message — replaces the border with the danger colour */
   error?: string;
   /** Persistent hint under the input */
   helper?: string;
   /** Leading icon inside the input */
   icon?: React.ComponentType<IconProps>;
-  /** `light` = white on a beige surface, `sunken` = beige on a white surface */
+  /** `sunken` (por defecto) = pozo dentro de algo blanco; `light` = blanco sobre `canvas` */
   tone?: FieldTone;
   containerStyle?: ViewStyle;
   /**
@@ -67,14 +60,9 @@ const BACKGROUNDS: Record<FieldTone, string> = {
   sunken: Colors.surface,
 };
 
-/**
- * Borde en reposo. `light` va sobre fondos blancos o beige: sin borde no se
- * ve el control (WCAG 1.4.11, ≥ 3:1). `sunken` ya se distingue por el relleno.
- */
-const RESTING_BORDERS: Record<FieldTone, string> = {
-  light: Colors.borderStrong,
-  sunken: Colors.transparent,
-};
+/** Anillo de foco alrededor del borde azul. */
+const SOMBRA_FOCO = `0px 0px 0px 4px ${alpha(Colors.accentStrong, 0.14)}`;
+const SIN_SOMBRA = `0px 0px 0px 0px ${alpha(Colors.accentStrong, 0)}`;
 
 /** Error visible y anunciado en cuanto aparece; si no, la ayuda. */
 export function FieldMessage({ error, helper }: { error?: string | null; helper?: string | null }) {
@@ -82,6 +70,7 @@ export function FieldMessage({ error, helper }: { error?: string | null; helper?
     return (
       <Text
         variant="caption"
+        weight="medium"
         color="dangerText"
         style={s.message}
         accessibilityRole="alert"
@@ -106,7 +95,7 @@ export function Field({
   error,
   helper,
   icon: Icon,
-  tone = 'light',
+  tone = 'sunken',
   containerStyle,
   sinMensaje,
   multiline,
@@ -119,25 +108,31 @@ export function Field({
   ...rest
 }: FieldProps) {
   const [revealed, setRevealed] = useState(false);
+  const [enFoco, setEnFoco] = useState(false);
   const focus = useSharedValue(0);
   const reduceMotion = useReducedMotion();
 
   const isPassword = !!secureTextEntry;
-  const restingBorder = RESTING_BORDERS[tone];
+  const conValor = typeof rest.value === 'string' ? rest.value.length > 0 : !!rest.defaultValue;
+  const fondoReposo = conValor ? Colors.white : BACKGROUNDS[tone];
+  const bordeReposo = conValor ? Colors.borderControl : tone === 'light' ? Colors.borderControl : Colors.surface;
 
   const borderStyle = useAnimatedStyle(() => ({
+    backgroundColor: interpolateColor(focus.value, [0, 1], [fondoReposo, Colors.white]),
     borderColor: error
       ? Colors.dangerText
-      : interpolateColor(focus.value, [0, 1], [restingBorder, Colors.accentStrong]),
+      : interpolateColor(focus.value, [0, 1], [bordeReposo, Colors.accentStrong]),
   }));
 
   const handleFocus: TextInputProps['onFocus'] = (e) => {
     focus.value = reduceMotion ? 1 : withTiming(1, { duration: Motion.duration.fast });
+    setEnFoco(true);
     onFocus?.(e);
   };
 
   const handleBlur: TextInputProps['onBlur'] = (e) => {
     focus.value = reduceMotion ? 0 : withTiming(0, { duration: Motion.duration.instant });
+    setEnFoco(false);
     onBlur?.(e);
   };
 
@@ -164,15 +159,20 @@ export function Field({
         style={[
           s.box,
           {
-            backgroundColor: BACKGROUNDS[tone],
-            borderRadius: multiline ? Radius.lg : Radius.full,
             opacity: editable ? Opacity.full : Opacity.dimmed,
+            boxShadow: enFoco ? SOMBRA_FOCO : SIN_SOMBRA,
           },
           multiline ? s.boxMultiline : null,
           borderStyle,
         ]}
       >
-        {Icon && <Icon size={Sizes.icon.md} color={Colors.mutedForeground} weight="bold" />}
+        {Icon && (
+          <Icon
+            size={Sizes.icon.md}
+            color={enFoco ? Colors.accentStrong : Colors.mutedForeground}
+            weight={enFoco ? 'fill' : 'regular'}
+          />
+        )}
 
         <TextInput
           {...rest}
@@ -182,10 +182,16 @@ export function Field({
           editable={editable}
           multiline={multiline}
           secureTextEntry={isPassword && !revealed}
-          placeholderTextColor={Colors.mutedForeground}
+          placeholderTextColor={Colors.placeholder}
+          selectionColor={Colors.accentStrong}
           onFocus={handleFocus}
           onBlur={handleBlur}
-          style={[s.input, multiline ? s.inputMultiline : null, WEB_SIN_ANILLO]}
+          style={[
+            s.input,
+            conValor ? s.inputConValor : null,
+            multiline ? s.inputMultiline : null,
+            WEB_SIN_ANILLO,
+          ]}
         />
 
         {isPassword && (
@@ -200,9 +206,9 @@ export function Field({
             accessibilityLabel={revealed ? 'Ocultar contraseña' : 'Mostrar contraseña'}
           >
             {revealed ? (
-              <EyeSlash color={Colors.mutedForeground} size={Sizes.icon.lg} />
+              <EyeSlash color={Colors.mutedForeground} size={Sizes.icon.md} />
             ) : (
-              <Eye color={Colors.mutedForeground} size={Sizes.icon.lg} />
+              <Eye color={Colors.mutedForeground} size={Sizes.icon.md} />
             )}
           </PressableScale>
         )}
@@ -214,17 +220,16 @@ export function Field({
 }
 
 /**
- * En web el `TextInput` dibuja su propio anillo de foco dentro de la píldora
- * (doble anillo, AU-45); el borde animado ya marca el foco.
+ * En web el `TextInput` dibuja su propio anillo de foco dentro de la caja (doble
+ * anillo); el borde animado ya marca el foco.
  */
 const WEB_SIN_ANILLO = Platform.OS === 'web' ? ({ outlineStyle: 'none' } as object) : null;
 
 // ─── SelectField ─────────────────────────────────────────────────────────────
 
 /**
- * Looks exactly like a `Field` but opens a picker instead of a keyboard —
- * used for the bank selector, dates and locations, which previously each
- * styled their own trigger.
+ * Looks exactly like a `Field` but opens a picker instead of a keyboard — used for
+ * the bank selector, dates and locations.
  */
 export function SelectField({
   label,
@@ -232,7 +237,7 @@ export function SelectField({
   placeholder,
   onPress,
   icon: Icon,
-  tone = 'light',
+  tone = 'sunken',
   disabled,
   helper,
   error,
@@ -275,9 +280,14 @@ export function SelectField({
         style={[
           s.box,
           {
-            backgroundColor: BACKGROUNDS[tone],
-            borderRadius: Radius.full,
-            borderColor: error ? Colors.dangerText : RESTING_BORDERS[tone],
+            backgroundColor: value ? Colors.white : BACKGROUNDS[tone],
+            borderColor: error
+              ? Colors.dangerText
+              : value
+                ? Colors.borderControl
+                : tone === 'light'
+                  ? Colors.borderControl
+                  : Colors.surface,
             opacity: disabled ? Opacity.dimmed : Opacity.full,
           },
         ]}
@@ -286,13 +296,13 @@ export function SelectField({
           <Icon
             size={Sizes.icon.md}
             color={disabled ? Colors.mutedForeground : Colors.foreground}
-            weight="bold"
+            weight="regular"
           />
         )}
         <View style={s.selectLabel}>
           <Text
-            variant="bodyStrong"
-            color={value ? 'foreground' : 'muted'}
+            variant={value ? 'bodyStrong' : 'body'}
+            color={value ? 'foreground' : Colors.placeholder}
             numberOfLines={1}
             compact
           >
@@ -313,28 +323,32 @@ const s = StyleSheet.create({
   },
   label: {
     marginBottom: Spacing.sm,
-    marginLeft: Spacing.xl,
   },
   box: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.md,
     minHeight: Sizes.control.lg,
-    paddingHorizontal: Spacing.xl,
+    paddingHorizontal: Spacing.lg,
     borderWidth: Sizes.borderStrong,
-    borderColor: Colors.transparent,
+    borderColor: Colors.surface,
+    borderRadius: Radius.md,
+    borderCurve: 'continuous',
   },
   boxMultiline: {
     minHeight: Sizes.control.lg * 2,
     alignItems: 'flex-start',
-    paddingVertical: Spacing.lg,
+    paddingVertical: Spacing.md,
   },
   input: {
     flex: 1,
-    ...fontStyle('base', 'medium'),
+    ...fontStyle('base', 'regular'),
     color: Colors.foreground,
     padding: 0,
     margin: 0,
+  },
+  inputConValor: {
+    ...fontStyle('base', 'medium'),
   },
   inputMultiline: {
     textAlignVertical: 'top',
@@ -343,6 +357,7 @@ const s = StyleSheet.create({
   adornment: {
     width: Sizes.iconBox.md,
     height: Sizes.iconBox.md,
+    marginRight: -Spacing.sm,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -351,6 +366,5 @@ const s = StyleSheet.create({
   },
   message: {
     marginTop: Spacing.sm,
-    marginLeft: Spacing.xl,
   },
 });

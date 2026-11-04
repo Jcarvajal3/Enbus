@@ -31,11 +31,13 @@ export function HeaderActions() {
         }
         badgeCount={notificacionesSinLeer}
         iconWeight="regular"
+        variant="raised"
         onPress={() => router.push('/notificaciones')}
       />
       <IconButton
         icon={UserCircle}
         iconWeight="regular"
+        variant="raised"
         label="Mi perfil"
         onPress={() => router.push('/perfil')}
       />

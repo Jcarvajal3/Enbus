@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { CheckCircle, Clock, Truck, XCircle } from 'phosphor-react-native';
+import { Check, Truck, X } from 'phosphor-react-native';
 import Animated, {
   useAnimatedStyle,
   useReducedMotion,
@@ -12,7 +12,7 @@ import Animated, {
 import { Text } from '@/src/components/ui';
 import { formatDiaHoraVE } from '@/src/utils/formatters';
 import { getEncomiendaTimeline } from '@/src/utils/estados';
-import { Colors, Motion, Radius, Sizes, Spacing } from '@/src/theme';
+import { Colors, Motion, Radius, Shadows, Sizes, Spacing } from '@/src/theme';
 
 export interface EstadoItem {
   estado: string;
@@ -47,7 +47,7 @@ export function buildEncomiendaTimeline(
   }));
 }
 
-const ICON_BOX = Sizes.avatar.sm;
+const ICON_BOX = Sizes.iconBox.sm;
 
 /**
  * Vertical progress of a shipment. The connector between two completed steps is
@@ -60,17 +60,17 @@ export function StatusTimeline({ estados }: { estados: EstadoItem[] }) {
       {estados.map((item, index) => {
         const isLast = index === estados.length - 1;
         const tone = item.cortado
-          ? { fg: Colors.dangerText, bg: Colors.destructiveLight }
+          ? { fg: Colors.white, bg: Colors.destructive }
           : item.completado
-            ? { fg: Colors.success, bg: Colors.successLight }
+            ? { fg: Colors.white, bg: Colors.success }
             : item.activo
-              ? { fg: Colors.accentStrong, bg: Colors.accentLight }
-              : { fg: Colors.mutedForeground, bg: Colors.surface };
+              ? { fg: Colors.white, bg: Colors.accentStrong }
+              : { fg: Colors.placeholder, bg: Colors.surfaceDark };
 
         return (
           <View
             key={item.estado}
-            style={s.row}
+            style={[s.row, isLast && s.rowUltima]}
             accessible
             accessibilityLabel={[
               item.label,
@@ -91,7 +91,7 @@ export function StatusTimeline({ estados }: { estados: EstadoItem[] }) {
               <View
                 style={[
                   s.connector,
-                  { backgroundColor: item.completado ? Colors.success : Colors.border },
+                  { backgroundColor: item.completado ? Colors.success : Colors.surfaceDark },
                 ]}
               />
             )}
@@ -120,7 +120,7 @@ export function StatusTimeline({ estados }: { estados: EstadoItem[] }) {
                   {item.label}
                 </Text>
                 {item.timestamp ? (
-                  <Text variant="caption" color="muted" weight="semibold" compact>
+                  <Text variant="caption" color="muted" compact>
                     {item.timestamp}
                   </Text>
                 ) : null}
@@ -175,33 +175,36 @@ function TimelineIcon({
     transform: [{ scale: scale.value }],
   }));
 
-  const Icon = cortado ? XCircle : completado ? CheckCircle : activo ? Truck : Clock;
+  const Icon = cortado ? X : completado ? Check : activo ? Truck : null;
 
   return (
-    <Animated.View style={[s.icon, { backgroundColor: background }, animStyle]}>
-      <Icon
-        weight={completado || cortado ? 'fill' : 'bold'}
-        color={color}
-        size={Sizes.icon.lg}
-      />
+    <Animated.View style={[s.icon, activo && s.iconActivo, { backgroundColor: background }, animStyle]}>
+      {Icon ? (
+        <Icon weight={activo ? 'fill' : 'bold'} color={color} size={Sizes.icon.sm} />
+      ) : (
+        <View style={[s.pendiente, { backgroundColor: color }]} />
+      )}
     </Animated.View>
   );
 }
 
 const s = StyleSheet.create({
   container: {
-    marginTop: Spacing.sm,
+    marginTop: Spacing.lg,
   },
   row: {
     flexDirection: 'row',
-    marginBottom: Spacing['2xl'],
+    paddingBottom: Spacing.xl,
     position: 'relative',
+  },
+  rowUltima: {
+    paddingBottom: 0,
   },
   connector: {
     position: 'absolute',
     left: ICON_BOX / 2 - 1,
     top: ICON_BOX,
-    bottom: -Spacing['2xl'],
+    bottom: 0,
     width: 2,
     zIndex: 0,
   },
@@ -213,14 +216,23 @@ const s = StyleSheet.create({
     justifyContent: 'center',
     zIndex: 1,
   },
+  iconActivo: {
+    ...Shadows.sky,
+  },
+  pendiente: {
+    width: Spacing.sm,
+    height: Spacing.sm,
+    borderRadius: Radius.full,
+  },
   body: {
     flex: 1,
-    marginLeft: Spacing.lg,
-    paddingTop: Spacing.xs,
+    marginLeft: Spacing.md,
+    minHeight: ICON_BOX,
+    justifyContent: 'center',
   },
   /** Etapa y, debajo, su fecha: en 360 pt la fecha al lado partía la etapa en dos líneas. */
   header: {
-    gap: Spacing.xs,
+    gap: Spacing.xs / 2,
   },
   description: {
     marginTop: Spacing.xs,

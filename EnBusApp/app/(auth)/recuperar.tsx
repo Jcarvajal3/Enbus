@@ -76,7 +76,7 @@ export default function RecuperarPasswordScreen() {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          <Card tone="sunken" padding="md">
+          <Card padding="md">
             <Field
               label="Correo"
               placeholder="Ej. tu@correo.com"

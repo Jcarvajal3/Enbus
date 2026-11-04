@@ -1,10 +1,10 @@
 /**
- * boletos/[id] — un boleto. Ceja "Pase de abordaje" solo si está pagado; si
- * no, "Boleto" (AN-09). El estado va en la fila bajo el código.
+ * boletos/[id] — un boleto, dibujado como lo que es: un pase. Ceja "Pase de abordaje"
+ * solo si está pagado; si no, "Boleto". El estado va en la fila bajo el código.
  *
- * Lo que se vino a hacer va primero (AN-10): pagado → el QR tras la cabecera;
- * sin pagar → "Registrar pago" en la `FloatingBar` y "Cancelar reserva" en el
- * cuerpo. La reserva corre con `ReservaTimer` (aquí y en la hoja de pago).
+ * Lo que se vino a hacer va primero: pagado → el QR, dentro del pase, tras la ruta;
+ * sin pagar → "Registrar pago" en la `FloatingBar` y "Cancelar reserva" en el cuerpo.
+ * La reserva corre con `ReservaTimer` (aquí y en la hoja de pago).
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
@@ -18,6 +18,7 @@ import {
   MapPin,
   ShareNetwork,
   Ticket,
+  XCircle,
 } from 'phosphor-react-native';
 import ViewShot, { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
@@ -38,6 +39,8 @@ import { ReservaTimer } from '@/src/components/ReservaTimer';
 import { ScreenSkeleton, SkeletonLoader } from '@/src/components/SkeletonLoader';
 import { useVolver } from '@/src/hooks/useVolver';
 import {
+  Atmosfera,
+  Aviso,
   BottomSheet,
   Button,
   Card,
@@ -47,6 +50,8 @@ import {
   ErrorState,
   Field,
   FloatingBar,
+  IconTile,
+  Perforacion,
   RouteSummary,
   Screen,
   ScreenHeader,
@@ -91,7 +96,7 @@ import type {
   ResultadoCancelacionBoleto,
   SucursalPunto,
 } from '@/src/types';
-import { Colors, Layout, Radius, Sizes, Spacing } from '@/src/theme';
+import { Colors, Layout, Radius, Shadows, Sizes, Spacing } from '@/src/theme';
 
 /** Porcentaje del pasaje que se devuelve al cancelar un boleto pagado (lo calcula el servidor). */
 const REFUND_RATE = 0.95;
@@ -673,7 +678,7 @@ export default function DetalleBoletoScreen() {
   // ── Render ───────────────────────────────────────────────────────────────
   if (loading) {
     return (
-      <Screen>
+      <Screen atmosfera={null}>
         <ScreenHeader variant="compact" eyebrow="Boleto" title={id ?? ''} onBack={volver} />
         <ScreenSkeleton variante="detalle" />
       </Screen>
@@ -682,7 +687,7 @@ export default function DetalleBoletoScreen() {
 
   if (!boleto) {
     return (
-      <Screen>
+      <Screen atmosfera={null}>
         <ScreenHeader variant="compact" title="Boleto" onBack={volver} />
         {errorCarga ? (
           <ErrorState title="No pudimos cargar tu boleto" description={errorCarga} onRetry={cargar} />
@@ -771,46 +776,59 @@ export default function DetalleBoletoScreen() {
     </Button>
   ) : undefined;
 
-  const ticket = (
-    <View style={s.ticket}>
-      <View style={s.ticketCabecera}>
-        <Text variant="caption" color="muted">
+  const pase = (
+    <View style={s.pase}>
+      <View style={s.paseCabecera}>
+        <Atmosfera variante="sol" style={StyleSheet.absoluteFill} />
+        <Text variant="caption" weight="medium" color="muted">
           Cooperativa
         </Text>
         <Text variant="subheading" numberOfLines={2}>
           {boleto.cooperativas?.nombre ?? 'Cooperativa'}
         </Text>
+        <View style={s.paseRuta}>
+          <RouteSummary
+            origen={ruta?.ciudad_origen}
+            destino={ruta?.ciudad_destino}
+            duration={minutos > 0 ? formatDuracion(minutos) : undefined}
+          />
+        </View>
       </View>
 
-      <View style={s.ticketRuta}>
-        <RouteSummary
-          origen={ruta?.ciudad_origen}
-          destino={ruta?.ciudad_destino}
-          duration={minutos > 0 ? formatDuracion(minutos) : undefined}
-        />
-      </View>
+      {/* El QR primero: es a lo que se viene */}
+      {pagado ? (
+        <>
+          <Perforacion margen={0} />
+          <View style={s.qr}>
+            <QRCodeViewer
+              data={boleto.qr_embarque_data || `PASS-${boleto.codigo_boleto}`}
+              codigoLegible={codigoLegible}
+              ampliable
+              size={196}
+            />
+            <Text variant="secondary" color="muted" align="center" style={s.qrTexto}>
+              Muéstralo en la taquilla antes de subir. Si el lector falla, dicta el código.
+            </Text>
+          </View>
+        </>
+      ) : null}
 
-      {/* Perforación */}
-      <View style={s.perforation}>
-        <View style={[s.notch, s.notchLeft]} />
-        <View style={s.dashes} />
-        <View style={[s.notch, s.notchRight]} />
-      </View>
+      <Perforacion margen={0} />
 
-      <View style={s.ticketDetails}>
+      <View style={s.paseDatos}>
         <TicketField label="Asiento" value={boleto.asiento ?? '—'} highlight />
-        {/* Con la tarjeta "Salida" arriba, la fecha no se repite aquí (AU-18). */}
+        {/* Con la tarjeta "Salida" abajo, la fecha no se repite aquí. */}
         {!vigente ? <TicketField label="Salida" value={formatSalidaCorta(salidaIso)} completo /> : null}
         <TicketField label="Pasajero" value={pasajero} />
         <TicketField label="Cédula" value={cedula} />
         <TicketField label="Unidad" value={boleto.viajes?.numero_unidad ?? 'Por asignar'} />
         <TicketField label="Chofer" value={boleto.viajes?.nombre_chofer ?? 'Por asignar'} />
-        <TicketField label="Precio" value={precio.principal} hint={precio.secundario ?? undefined} />
+        <TicketField label="Precio" value={precio.principal} hint={precio.secundario ?? undefined} completo />
       </View>
 
       {reservaActiva || enVerificacion ? (
-        <View style={s.ticketPie}>
-          <Text variant="caption" color="muted" align="center">
+        <View style={s.pasePie}>
+          <Text variant="secondary" color="muted" align="center">
             El QR de abordaje aparece cuando la cooperativa confirme tu pago.
           </Text>
         </View>
@@ -819,7 +837,7 @@ export default function DetalleBoletoScreen() {
   );
 
   return (
-    <Screen>
+    <Screen atmosfera={null}>
       <ScreenHeader
         variant="compact"
         eyebrow={pagado ? 'Pase de abordaje' : 'Boleto'}
@@ -843,11 +861,14 @@ export default function DetalleBoletoScreen() {
         {/* ── Aviso de estado (uno solo) ──────────────────────────────── */}
         {reservaActiva ? (
           vencidaEnPantalla ? (
-            <View style={[s.aviso, s.avisoNeutro]} accessibilityRole="alert">
-              <ClockCounterClockwise size={Sizes.icon.lg} color={Colors.mutedForeground} weight="fill" />
-              <View style={s.avisoCuerpo}>
-                <Text variant="label">Se acabó el tiempo. Estamos liberando el asiento…</Text>
-                {recargasVencida >= RECARGAS_VENCIDA_MAX ? (
+            <Aviso
+              tono="neutral"
+              icon={ClockCounterClockwise}
+              texto="Se acabó el tiempo. Estamos liberando el asiento…"
+              alerta
+              style={s.bloque}
+              extra={
+                recargasVencida >= RECARGAS_VENCIDA_MAX ? (
                   <Button
                     variant="outline"
                     size="sm"
@@ -860,9 +881,9 @@ export default function DetalleBoletoScreen() {
                   >
                     Actualizar
                   </Button>
-                ) : null}
-              </View>
-            </View>
+                ) : null
+              }
+            />
           ) : (
             <View style={s.bloque}>
               <ReservaTimer
@@ -877,43 +898,27 @@ export default function DetalleBoletoScreen() {
             </View>
           )
         ) : enVerificacion ? (
-          <View style={[s.aviso, s.avisoInfo]}>
-            <Info size={Sizes.icon.lg} color={Colors.infoText} weight="fill" />
-            <Text variant="secondary" style={s.avisoCuerpo}>
-              Te avisaremos cuando la cooperativa confirme tu pago.
-            </Text>
-          </View>
+          <Aviso
+            tono="info"
+            icon={Info}
+            texto="Te avisaremos cuando la cooperativa confirme tu pago."
+            style={s.bloque}
+          />
         ) : estadoUi === 'EXPIRADO' && estadoVisual.hint ? (
-          <View style={[s.aviso, s.avisoNeutro]}>
-            <ClockCounterClockwise size={Sizes.icon.lg} color={Colors.mutedForeground} weight="fill" />
-            <Text variant="secondary" style={s.avisoCuerpo}>
-              {estadoVisual.hint}
-            </Text>
-          </View>
+          <Aviso tono="neutral" icon={ClockCounterClockwise} texto={estadoVisual.hint} style={s.bloque} />
         ) : null}
 
-        {/* ── Pase: el QR primero (AN-10) y el boleto, juntos para compartir ── */}
+        {/* ── El pase, entero para compartir ─────────────────────────────── */}
         {pagado ? (
           <ViewShot ref={viewShotRef} options={{ format: 'png', quality: 0.9 }} style={s.captura}>
-            <View style={s.qr}>
-              <QRCodeViewer
-                data={boleto.qr_embarque_data || `PASS-${boleto.codigo_boleto}`}
-                codigoLegible={codigoLegible}
-                ampliable
-                size={200}
-              />
-              <Text variant="caption" color="muted" align="center" style={s.qrTexto}>
-                Muéstralo en la taquilla antes de subir. Si el lector falla, dicta el código.
-              </Text>
-            </View>
-            {ticket}
+            {pase}
           </ViewShot>
         ) : null}
 
         {/* ── Cuándo y desde dónde sale (#26, M-33) ───────────────────── */}
         {vigente ? (
-          <Card tone="sunken" padding="md" style={s.bloque}>
-            <Text variant="caption" color="muted">
+          <Card padding="md" style={s.bloque}>
+            <Text variant="secondary" color="muted">
               Salida
             </Text>
             <Text variant="heading" style={s.salidaHora}>
@@ -926,7 +931,7 @@ export default function DetalleBoletoScreen() {
                 ciudad={formatCity(ruta?.ciudad_origen)}
               />
               <View style={s.salidaFila}>
-                <IdentificationCard size={Sizes.icon.md} color={Colors.mutedForeground} weight="bold" />
+                <IconTile size="sm" tone="brand" icon={IdentificationCard} />
                 <Text variant="secondary" style={s.salidaTexto}>
                   Llega 30 minutos antes con tu cédula.
                 </Text>
@@ -935,15 +940,23 @@ export default function DetalleBoletoScreen() {
           </Card>
         ) : null}
 
-        {!pagado ? <View style={s.bloque}>{ticket}</View> : null}
+        {!pagado ? <View style={s.bloque}>{pase}</View> : null}
 
         {/* ── Pago registrado ─────────────────────────────────────────── */}
         {pago && pago.tipo_pago === 'DIGITAL' && (enVerificacion || rechazado) ? (
-          <Card tone="sunken" padding="md" style={s.bloque}>
-            <Text variant="subheading">{rechazado ? 'Pago rechazado' : 'Tu pago registrado'}</Text>
+          <Card padding="md" style={s.bloque}>
+            <View style={s.pagoCabecera}>
+              <IconTile
+                estado={rechazado ? 'danger' : 'pending'}
+                icon={rechazado ? XCircle : ClockCounterClockwise}
+              />
+              <Text variant="subheading" style={s.pagoTitulo}>
+                {rechazado ? 'Pago rechazado' : 'Tu pago registrado'}
+              </Text>
+            </View>
             <View style={s.pagoRows}>
               {rechazado && pago.motivo_rechazo ? (
-                <Text variant="secondary" color="dangerText">
+                <Text variant="secondary" weight="medium" color="dangerText">
                   {`Motivo: ${pago.motivo_rechazo}`}
                 </Text>
               ) : null}
@@ -975,7 +988,7 @@ export default function DetalleBoletoScreen() {
 
         {/* ── Detalle de cancelación y reembolso ──────────────────────── */}
         {estadoUi === 'CANCELADO' && (
-          <Card tone="sunken" padding="md" style={s.bloque}>
+          <Card padding="md" style={s.bloque}>
             <View style={s.cancelRows}>
               {porCooperativa ? (
                 <Text variant="secondary">
@@ -1020,7 +1033,7 @@ export default function DetalleBoletoScreen() {
 
         {/* ── Calificación ────────────────────────────────────────────── */}
         {estadoUi === 'USADO' && (
-          <Card tone="sunken" padding="md" style={s.bloque}>
+          <Card padding="md" style={s.bloque}>
             <Text variant="subheading">Califica tu viaje</Text>
             <Text variant="secondary" color="muted" style={s.blockText}>
               {`¿Cómo estuvo viajar con ${cooperativa}?`}
@@ -1049,6 +1062,7 @@ export default function DetalleBoletoScreen() {
                 />
                 <Field
                   label="Comentario (opcional)"
+                  placeholder="Ej. El bus salió a tiempo"
                   value={comentario}
                   onChangeText={setComentario}
                   editable={!submittingRating}
@@ -1247,13 +1261,13 @@ export default function DetalleBoletoScreen() {
           {motivoChip === 'Otro' ? (
             <Field
               label="Cuéntanos el motivo"
+              placeholder="Ej. Ya no puedo viajar ese día"
               value={motivoOtro}
               onChangeText={(v) => {
                 setMotivoOtro(v);
                 if (motivoError) setMotivoError(undefined);
               }}
               error={motivoError}
-              tone="sunken"
               editable={!canceling}
               multiline
               numberOfLines={2}
@@ -1331,7 +1345,7 @@ function PuntoDeSalida({
 
   return (
     <View style={s.salidaFila}>
-      <MapPin size={Sizes.icon.md} color={Colors.mutedForeground} weight="bold" />
+      <IconTile size="sm" tone="sky" icon={MapPin} />
       <View style={s.salidaTexto}>
         <Text variant="secondary">{principal}</Text>
         {extras.map((linea) => (
@@ -1360,21 +1374,27 @@ function TicketField({
   /** A todo el ancho (la fecha y hora no caben en media columna a 360 pt) */
   completo?: boolean;
 }) {
+  if (highlight) {
+    // El asiento es lo que más se busca al subir al bus.
+    return (
+      <View style={s.asiento}>
+        <Text variant="body" weight="medium" color="primaryText">
+          {label}
+        </Text>
+        <Text variant="display" size="3xl" compact>
+          {value}
+        </Text>
+      </View>
+    );
+  }
   return (
     <View style={[s.ticketField, completo && s.ticketFieldCompleto]}>
       <Text variant="caption" color="muted">
         {label}
       </Text>
-      {highlight ? (
-        // El asiento es lo que más se busca al subir al bus: ≥ 30 pt (M-32).
-        <Text variant="title" compact>
-          {value}
-        </Text>
-      ) : (
-        <Text variant="bodyStrong" numberOfLines={2}>
-          {value}
-        </Text>
-      )}
+      <Text variant="bodyStrong" numberOfLines={2}>
+        {value}
+      </Text>
       {hint ? (
         <Text variant="caption" color="muted">
           {hint}
@@ -1384,130 +1404,94 @@ function TicketField({
   );
 }
 
-const NOTCH = Spacing.xl;
-
 const s = StyleSheet.create({
   bloque: {
     marginBottom: Spacing.lg,
   },
-  // ── Avisos
-  aviso: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.md,
-    paddingVertical: Spacing.md,
-    paddingHorizontal: Spacing.lg,
-    borderRadius: Radius.lg,
-    marginBottom: Spacing.lg,
-  },
-  avisoInfo: {
-    backgroundColor: Colors.infoLight,
-  },
-  avisoNeutro: {
-    backgroundColor: Colors.surface,
-  },
-  avisoCuerpo: {
-    flex: 1,
-    gap: Spacing.xs,
-  },
 
-  // ── QR
+  // ── El pase
   captura: {
-    backgroundColor: Colors.background,
-    gap: Spacing.lg,
+    backgroundColor: Colors.canvas,
     marginBottom: Spacing.lg,
+  },
+  pase: {
+    backgroundColor: Colors.background,
+    borderRadius: Radius.xl,
+    borderCurve: 'continuous',
+    overflow: 'hidden',
+    ...Shadows.card,
+  },
+  paseCabecera: {
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.xl,
+    gap: Spacing.xs / 2,
+  },
+  paseRuta: {
+    marginTop: Spacing.lg,
   },
   qr: {
     alignItems: 'center',
-    gap: Spacing.md,
-    paddingVertical: Spacing.xl,
+    gap: Spacing.sm,
+    paddingTop: Spacing.sm,
+    paddingBottom: Spacing.lg,
     paddingHorizontal: Spacing.xl,
-    borderRadius: Radius.xl,
-    backgroundColor: Colors.surface,
   },
   qrTexto: {
     maxWidth: 280,
   },
+  paseDatos: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'stretch',
+    columnGap: Spacing.lg,
+    rowGap: Spacing.lg,
+    paddingHorizontal: Spacing.xl,
+    paddingTop: Spacing.sm,
+    paddingBottom: Spacing.xl,
+  },
+  asiento: {
+    flexBasis: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
+    borderRadius: Radius.md,
+    borderCurve: 'continuous',
+    backgroundColor: Colors.primarySoft,
+  },
+  ticketField: {
+    flexBasis: '45%',
+    flexGrow: 1,
+    gap: Spacing.xs / 2,
+  },
+  ticketFieldCompleto: {
+    flexBasis: '100%',
+  },
+  pasePie: {
+    marginHorizontal: Spacing.xl,
+    marginBottom: Spacing.xl,
+    padding: Spacing.md,
+    borderRadius: Radius.md,
+    backgroundColor: Colors.surface,
+  },
 
   // ── Salida
   salidaHora: {
-    marginTop: Spacing.xs,
+    marginTop: Spacing.xs / 2,
   },
   salidaFilas: {
-    gap: Spacing.sm,
-    marginTop: Spacing.md,
+    gap: Spacing.md,
+    marginTop: Spacing.lg,
   },
   salidaFila: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: Spacing.sm,
+    alignItems: 'center',
+    gap: Spacing.md,
   },
   salidaTexto: {
     flex: 1,
-    gap: Spacing.xs,
-  },
-
-  // ── Ticket
-  ticket: {
-    backgroundColor: Colors.surface,
-    borderRadius: Radius.xl,
-    overflow: 'hidden',
-  },
-  ticketCabecera: {
-    paddingHorizontal: Spacing.xl,
-    paddingTop: Spacing.xl,
-    gap: Spacing.xs,
-  },
-  ticketRuta: {
-    paddingHorizontal: Spacing.xl,
-    paddingTop: Spacing.lg,
-    paddingBottom: Spacing.lg,
-  },
-  perforation: {
-    height: NOTCH,
-    justifyContent: 'center',
-  },
-  dashes: {
-    marginHorizontal: NOTCH,
-    borderTopWidth: Sizes.borderStrong,
-    borderStyle: 'dashed',
-    borderColor: Colors.borderStrong,
-  },
-  notch: {
-    position: 'absolute',
-    width: NOTCH,
-    height: NOTCH,
-    borderRadius: Radius.full,
-    backgroundColor: Colors.background,
-    top: 0,
-  },
-  notchLeft: {
-    left: -NOTCH / 2,
-  },
-  notchRight: {
-    right: -NOTCH / 2,
-  },
-  ticketDetails: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    paddingHorizontal: Spacing.xl,
-    paddingTop: Spacing.lg,
-    paddingBottom: Spacing.xs,
-  },
-  ticketField: {
-    width: '50%',
-    paddingRight: Spacing.md,
-    marginBottom: Spacing.lg,
-    gap: Spacing.xs,
-  },
-  ticketFieldCompleto: {
-    width: '100%',
-  },
-  ticketPie: {
-    paddingHorizontal: Spacing.xl,
-    paddingVertical: Spacing.lg,
-    borderTopWidth: Sizes.hairline,
-    borderTopColor: Colors.border,
+    gap: Spacing.xs / 2,
   },
 
   // ── Bloques inferiores
@@ -1519,8 +1503,16 @@ const s = StyleSheet.create({
     marginTop: Spacing.xs,
     marginBottom: Spacing.lg,
   },
+  pagoCabecera: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+  },
+  pagoTitulo: {
+    flex: 1,
+  },
   pagoRows: {
-    marginTop: Spacing.sm,
+    marginTop: Spacing.md,
     gap: Spacing.xs,
   },
   cancelRows: {
@@ -1528,7 +1520,7 @@ const s = StyleSheet.create({
   },
   inlineButton: {
     alignSelf: 'flex-start',
-    marginTop: Spacing.xs,
+    marginTop: Spacing.sm,
   },
   ratingDone: {
     gap: Spacing.md,
@@ -1537,7 +1529,7 @@ const s = StyleSheet.create({
     gap: Spacing.lg,
   },
   quoteText: {
-    fontStyle: 'italic',
+    color: Colors.mutedForeground,
   },
   ultimoCampo: {
     marginBottom: 0,
@@ -1554,7 +1546,7 @@ const s = StyleSheet.create({
   // ── Hoja de pago
   pagoSheet: {
     paddingHorizontal: Layout.screenPadding,
-    paddingTop: Spacing.lg,
+    paddingTop: Spacing.sm,
     paddingBottom: Spacing.sm,
   },
   esqueletoPago: {

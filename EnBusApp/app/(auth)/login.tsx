@@ -31,6 +31,7 @@ import { BrandMark } from '@/src/components/BrandMark';
 import { CedulaField } from '@/src/components/CedulaField';
 import { TelefonoField } from '@/src/components/TelefonoField';
 import {
+  Atmosfera,
   Button,
   Card,
   Field,
@@ -41,7 +42,7 @@ import {
   TextLink,
 } from '@/src/components/ui';
 import { CLAVE_AYUDA, CLAVE_ERROR, CLAVE_MINIMO } from '@/src/utils/formatters';
-import { Colors, Layout, Radius, Sizes, Spacing } from '@/src/theme';
+import { Colors, Layout, Radius, Shadows, Sizes, Spacing } from '@/src/theme';
 
 // Cierra la ventana del navegador si la app se abrió desde la redirección (web).
 WebBrowser.maybeCompleteAuthSession();
@@ -240,7 +241,8 @@ export default function LoginScreen() {
   const isRegister = mode === 'register';
 
   return (
-    <Screen>
+    <Screen atmosfera={null}>
+      <Atmosfera variante="amanecer" style={s.portada} />
       <KeyboardAvoidingView
         style={s.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -274,14 +276,13 @@ export default function LoginScreen() {
           ) : null}
 
           <StaggerItem index={1}>
-            <Card tone="sunken" padding="md" elevated={false}>
+            <Card padding="md" style={s.tarjeta}>
               <SegmentedControl<Mode>
                 value={mode}
                 onChange={(next) => {
                   setMode(next);
                   setErrors({});
                 }}
-                tone="raised"
                 options={[
                   { value: 'login', label: 'Entrar' },
                   { value: 'register', label: 'Crear cuenta' },
@@ -293,6 +294,7 @@ export default function LoginScreen() {
                 <>
                   <Field
                     label="Nombre y apellido"
+                    placeholder="Ej. María Pérez"
                     value={form.nombre_completo}
                     onChangeText={(v) => update('nombre_completo', v)}
                     error={errors.nombre_completo}
@@ -346,6 +348,7 @@ export default function LoginScreen() {
               <Field
                 ref={passwordRef}
                 label="Contraseña"
+                placeholder={isRegister ? 'Mínimo 8 caracteres' : 'Tu contraseña'}
                 secureTextEntry
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -367,6 +370,7 @@ export default function LoginScreen() {
                 <Field
                   ref={confirmRef}
                   label="Repite la contraseña"
+                  placeholder="Escríbela otra vez"
                   secureTextEntry
                   autoCapitalize="none"
                   autoCorrect={false}
@@ -434,15 +438,25 @@ export default function LoginScreen() {
 
 const s = StyleSheet.create({
   flex: { flex: 1 },
+  portada: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 620,
+  },
   scroll: {
     flexGrow: 1,
     justifyContent: 'center',
     paddingHorizontal: Layout.screenPadding,
-    paddingVertical: Spacing['5xl'],
+    paddingVertical: Spacing['3xl'],
   },
   brand: {
     alignItems: 'center',
-    marginBottom: Spacing['3xl'],
+    marginBottom: Spacing['2xl'],
+  },
+  tarjeta: {
+    ...Shadows.raised,
   },
   aviso: {
     flexDirection: 'row',
@@ -462,13 +476,14 @@ const s = StyleSheet.create({
   },
   forgot: {
     alignSelf: 'flex-end',
-    marginBottom: Spacing.sm,
+    marginTop: -Spacing.sm,
+    marginBottom: Spacing.xs,
   },
   divider: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.md,
-    marginVertical: Spacing.xl,
+    marginVertical: Spacing.lg,
   },
   dividerLine: {
     flex: 1,

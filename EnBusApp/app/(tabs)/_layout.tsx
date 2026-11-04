@@ -8,14 +8,14 @@ import Animated, {
   useAnimatedStyle,
   useReducedMotion,
   useSharedValue,
-  withTiming,
+  withSpring,
 } from 'react-native-reanimated';
 import { PressableScale } from '@/src/components/PressableScale';
 import { Text } from '@/src/components/ui';
 import { ActivityProvider, useActivity } from '@/src/contexts/ActivityContext';
 import { Colors, Layout, Motion, Radius, Shadows, Sizes, Spacing } from '@/src/theme';
 
-/** Pestañas: Inicio · Boletos · Encomiendas (D2, AN-04). */
+/** Pestañas: Inicio · Boletos · Encomiendas. */
 const TAB_ICONS: Record<string, React.ComponentType<IconProps>> = {
   index: House,
   boletos: Ticket,
@@ -34,6 +34,11 @@ interface TabBarProps {
   badges: Record<string, number>;
 }
 
+/**
+ * La barra es noche flotando sobre un fondo claro: el ancla oscura de la pantalla. La
+ * pestaña activa es una pastilla blanca que se desliza con un resorte: el sol queda
+ * reservado para la acción principal, que nunca compite con la navegación.
+ */
 function CustomTabBar({ state, descriptors, navigation, badges }: TabBarProps) {
   const insets = useSafeAreaInsets();
   const reduceMotion = useReducedMotion();
@@ -51,9 +56,7 @@ function CustomTabBar({ state, descriptors, navigation, badges }: TabBarProps) {
     indicatorWidth.value = tabWidth;
     const destino = state.index * tabWidth;
     // Con "reducir movimiento" la pastilla salta a la pestaña sin deslizarse.
-    translateX.value = reduceMotion
-      ? destino
-      : withTiming(destino, { duration: Motion.duration.base, easing: Motion.easing.out });
+    translateX.value = reduceMotion ? destino : withSpring(destino, Motion.spring.snappy);
   }, [state.index, tabWidth, indicatorWidth, translateX, reduceMotion]);
 
   const indicatorStyle = useAnimatedStyle(() => ({
@@ -63,8 +66,7 @@ function CustomTabBar({ state, descriptors, navigation, badges }: TabBarProps) {
 
   return (
     <View
-      // The bar floats, so it must clear the device's own bottom inset —
-      // previously it sat at a fixed 24pt and collided with the gesture bar.
+      // The bar floats, so it must clear the device's own bottom inset.
       style={[s.bar, { bottom: Layout.tabBar.bottomOffset + insets.bottom }]}
       onLayout={(e) => setBarWidth(e.nativeEvent.layout.width)}
       accessibilityRole="tablist"
@@ -107,12 +109,18 @@ function CustomTabBar({ state, descriptors, navigation, badges }: TabBarProps) {
             <View style={s.iconWrapper}>
               <Icon
                 size={Sizes.icon.lg}
-                color={isFocused ? Colors.white : Colors.tabInactive}
+                color={isFocused ? Colors.foreground : Colors.tabInactive}
                 weight={isFocused ? 'fill' : 'regular'}
               />
               {badgeCount > 0 && (
-                <View style={s.badge}>
-                  <Text variant="caption" size="micro" weight="heavy" color="foreground" compact>
+                <View style={[s.badge, isFocused && s.badgeActivo]}>
+                  <Text
+                    variant="caption"
+                    size="micro"
+                    weight="bold"
+                    color={isFocused ? 'inverse' : 'foreground'}
+                    compact
+                  >
                     {badgeCount > 9 ? '9+' : String(badgeCount)}
                   </Text>
                 </View>
@@ -121,8 +129,8 @@ function CustomTabBar({ state, descriptors, navigation, badges }: TabBarProps) {
             <Text
               variant="caption"
               size="xs"
-              weight={isFocused ? 'bold' : 'medium'}
-              color={isFocused ? 'inverse' : 'muted'}
+              weight={isFocused ? 'semibold' : 'medium'}
+              color={isFocused ? 'foreground' : Colors.tabInactive}
               compact
               numberOfLines={1}
               style={s.label}
@@ -147,7 +155,7 @@ function TabNavigator() {
   return (
     <Tabs
       tabBar={(props) => <CustomTabBar {...(props as unknown as TabBarProps)} badges={badges} />}
-      screenOptions={{ headerShown: false }}
+      screenOptions={{ headerShown: false, sceneStyle: { backgroundColor: Colors.canvas } }}
     >
       <Tabs.Screen name="index" options={{ title: 'Inicio' }} />
       <Tabs.Screen name="boletos" options={{ title: 'Boletos' }} />
@@ -171,20 +179,22 @@ const s = StyleSheet.create({
     right: Layout.tabBar.sideInset,
     height: Layout.tabBar.height,
     paddingHorizontal: Layout.tabBar.innerPadding,
-    backgroundColor: Colors.surface,
+    backgroundColor: Colors.tabBackground,
     borderRadius: Radius.full,
+    borderCurve: 'continuous',
     flexDirection: 'row',
     alignItems: 'center',
     zIndex: 100,
-    ...Shadows.elevated,
+    ...Shadows.tabBar,
   },
   indicator: {
     position: 'absolute',
     left: Layout.tabBar.innerPadding,
     height: Layout.tabBar.height - Layout.tabBar.innerPadding * 2,
-    // `accentStrong`: la etiqueta blanca llega a 5,7:1 (D1)
-    backgroundColor: Colors.tabActive,
     borderRadius: Radius.full,
+    borderCurve: 'continuous',
+    backgroundColor: Colors.background,
+    ...Shadows.subtle,
   },
   tab: {
     flex: 1,
@@ -195,26 +205,26 @@ const s = StyleSheet.create({
   },
   iconWrapper: {
     position: 'relative',
-    height: Sizes.icon.xl,
+    height: Sizes.icon.lg,
     justifyContent: 'center',
   },
   badge: {
     position: 'absolute',
     top: -Spacing.xs,
     right: -Spacing.md,
-    minWidth: Sizes.counter,
-    height: Sizes.counter,
+    minWidth: Sizes.counter - Spacing.xs / 2,
+    height: Sizes.counter - Spacing.xs / 2,
     paddingHorizontal: Spacing.xs,
     borderRadius: Radius.full,
-    // Texto oscuro sobre el amarillo de marca (≈ 13:1). Antes era blanco sobre
-    // coral (2,6:1), ilegible para muchos.
     backgroundColor: Colors.primary,
-    borderWidth: Sizes.hairline,
-    borderColor: Colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  // Sobre la pastilla blanca, la insignia se invierte para no perderse.
+  badgeActivo: {
+    backgroundColor: Colors.night,
+  },
   label: {
-    marginTop: Spacing.xs,
+    marginTop: Spacing.xs / 2,
   },
 });

@@ -1,17 +1,16 @@
 /**
  * IconButton — circular icon-only control (back, close, notifications, edit).
  *
- * Guarantees a 44pt touch target even when the glyph is small, which the
- * hand-rolled 36/40pt versions across the app did not.
+ * Guarantees a 44pt touch target even when the glyph is small.
  */
 import React from 'react';
 import { StyleSheet, View, ViewStyle } from 'react-native';
 import type { IconProps } from 'phosphor-react-native';
 import { PressableScale } from '../PressableScale';
 import { Text } from './Text';
-import { Colors, Motion, Radius, Sizes, Spacing } from '@/src/theme';
+import { Colors, Motion, Radius, Shadows, Sizes, Spacing } from '@/src/theme';
 
-export type IconButtonVariant = 'plain' | 'surface' | 'tinted' | 'inverse';
+export type IconButtonVariant = 'plain' | 'surface' | 'raised' | 'tinted' | 'inverse';
 
 export interface IconButtonProps {
   icon: React.ComponentType<IconProps>;
@@ -32,6 +31,8 @@ export interface IconButtonProps {
 const BACKGROUNDS: Record<IconButtonVariant, string> = {
   plain: Colors.transparent,
   surface: Colors.surface,
+  /** Blanco con sombra: sobre `canvas` o la atmósfera (cabeceras). */
+  raised: Colors.background,
   tinted: Colors.primaryLight,
   inverse: Colors.white,
 };
@@ -64,6 +65,7 @@ export function IconButton({
       style={[
         s.base,
         { width: box, height: box, backgroundColor: BACKGROUNDS[variant] },
+        variant === 'raised' || variant === 'inverse' ? Shadows.subtle : null,
         style,
       ]}
     >
@@ -71,7 +73,7 @@ export function IconButton({
 
       {badgeCount > 0 && (
         <View style={s.badge}>
-          <Text variant="caption" size="micro" weight="heavy" color="foreground" compact>
+          <Text variant="caption" size="micro" weight="bold" color="inverse" compact>
             {badgeCount > 9 ? '9+' : String(badgeCount)}
           </Text>
         </View>
@@ -87,16 +89,16 @@ const s = StyleSheet.create({
     justifyContent: 'center',
     position: 'relative',
   },
-  // Mismo contador que la barra de pestañas: amarillo + tinta (≈ 13:1, AU-27).
+  // Contador con aro blanco: se ve sobre cualquier fondo.
   badge: {
     position: 'absolute',
-    top: Spacing.xs,
-    right: Spacing.xs,
+    top: -Spacing.xs / 2,
+    right: -Spacing.xs / 2,
     minWidth: Sizes.counter,
     height: Sizes.counter,
     paddingHorizontal: Spacing.xs,
     borderRadius: Radius.full,
-    backgroundColor: Colors.primary,
+    backgroundColor: Colors.dangerText,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: Sizes.borderStrong,

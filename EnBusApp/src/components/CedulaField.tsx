@@ -10,9 +10,10 @@
  */
 import React, { useEffect, useState, type Ref } from 'react';
 import { StyleSheet, View, type ReturnKeyTypeOptions, type TextInput } from 'react-native';
-import { Chip, Field, FieldMessage, Text, type FieldTone } from '@/src/components/ui';
+import { Field, FieldMessage, Text, type FieldTone } from '@/src/components/ui';
+import { PressableScale } from './PressableScale';
 import { cedulaParaGuardar, separarCedula, type LetraCedula } from '@/src/utils/ve.generated';
-import { Spacing } from '@/src/theme';
+import { Colors, Motion, Radius, Shadows, Sizes, Spacing } from '@/src/theme';
 
 type LetraPermitida = 'V' | 'E' | 'J' | 'P';
 
@@ -27,7 +28,7 @@ const NOMBRE_LETRA: Record<LetraCedula, string> = {
 
 const MAX_DIGITOS = 10;
 /** Ancho en que caben "Ej. 12345678" y diez cifras sin recortar. */
-const NUMERO_ANCHO_MINIMO = 160;
+const NUMERO_ANCHO_MINIMO = 140;
 
 export interface CedulaFieldProps {
   label?: string;
@@ -40,7 +41,7 @@ export interface CedulaFieldProps {
   returnKeyType?: ReturnKeyTypeOptions;
   onSubmitEditing?: () => void;
   editable?: boolean;
-  /** Mismo `tone` que los demás campos de la tarjeta (AU-10). Por defecto `light`. */
+  /** Mismo `tone` que los demás campos de la tarjeta (AU-10). Por defecto `sunken`. */
   tone?: FieldTone;
   /** Al `TextInput` del número (para encadenar "Siguiente"). */
   ref?: Ref<TextInput>;
@@ -62,7 +63,7 @@ export function CedulaField({
   returnKeyType,
   onSubmitEditing,
   editable = true,
-  tone = 'light',
+  tone = 'sunken',
   ref,
 }: CedulaFieldProps) {
   const separada = separarCedula(value);
@@ -122,15 +123,26 @@ export function CedulaField({
       <View style={s.row}>
         <View style={s.letras} accessibilityRole="radiogroup" accessibilityLabel={nombreGrupo}>
           {opciones.map((l) => (
-            <Chip
+            <PressableScale
               key={l}
-              label={l}
-              selected={l === letra}
               onPress={() => elegirLetra(l)}
-              // Junto a un campo blanco (sobre beige) el chip sin elegir es blanco.
-              sobre={tone === 'light' ? 'surface' : 'background'}
+              haptic
+              hapticType="selection"
+              scaleValue={Motion.press.chip}
+              accessibilityRole="radio"
+              accessibilityState={{ selected: l === letra }}
               accessibilityLabel={`${NOMBRE_LETRA[l]} (${l})`}
-            />
+              style={[s.letra, tone === 'light' ? s.letraSobreCanvas : null, l === letra ? s.letraElegida : null]}
+            >
+              <Text
+                variant="body"
+                weight="semibold"
+                color={l === letra ? 'inverse' : 'foreground'}
+                compact
+              >
+                {l}
+              </Text>
+            </PressableScale>
           ))}
         </View>
 
@@ -167,7 +179,6 @@ const s = StyleSheet.create({
   },
   label: {
     marginBottom: Spacing.sm,
-    marginLeft: Spacing.xl,
   },
   // Si no cabe el número junto a las letras (cuatro letras en 360 pt), el campo
   // baja a su propia línea en vez de recortar la cifra.
@@ -180,6 +191,23 @@ const s = StyleSheet.create({
   letras: {
     flexDirection: 'row',
     gap: Spacing.xs,
+  },
+  // Misma altura y esquinas que el campo de al lado: se leen como un solo control.
+  letra: {
+    width: Sizes.iconBox.md,
+    height: Sizes.control.lg,
+    borderRadius: Radius.md,
+    borderCurve: 'continuous',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.surface,
+  },
+  letraSobreCanvas: {
+    backgroundColor: Colors.background,
+  },
+  letraElegida: {
+    backgroundColor: Colors.accentStrong,
+    ...Shadows.sky,
   },
   numero: {
     flexGrow: 1,

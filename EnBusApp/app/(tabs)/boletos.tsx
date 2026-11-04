@@ -64,13 +64,14 @@ const SELECT_BOLETOS = `id, codigo_boleto, asiento, estado, created_at, compra_i
     numero_referencia, banco_emisor, monto, monto_bs, moneda, monto_declarado,
     tasa_bcv, tasa_bcv_fecha, created_at )`;
 
-/** "Asiento 14 · Sale vie. 4 oct. · 8:30 a. m." (la salida, no la fecha de compra). */
+const SALTO_DE_LINEA = '\n';
+
+/** "Sale vie. 4 oct. · 8:30 a. m." y debajo "Asiento 14" (la salida, no la fecha de compra). */
 function subtituloBoleto(b: BoletoRow): string {
   const salida = b.viajes?.fecha_hora_salida;
-  const partes: string[] = [];
+  const partes: string[] = [salida ? `Sale ${formatSalidaCorta(salida)}` : 'Salida por confirmar'];
   if (b.asiento) partes.push(`Asiento ${b.asiento}`);
-  partes.push(salida ? `Sale ${formatSalidaCorta(salida)}` : 'Salida por confirmar');
-  return partes.join(' · ');
+  return partes.join(SALTO_DE_LINEA);
 }
 
 /** Milisegundos de la salida, o `null` si el boleto no la trae (o no se puede leer). */

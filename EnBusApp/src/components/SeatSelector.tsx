@@ -5,13 +5,20 @@
  * pone la acción ("Apartar asiento 6") en su `FloatingBar` (AN-03). El mapa
  * ocupa su altura y se desplaza con la pantalla, sin scroll interno (AU-22).
  *
- * Asientos (D24): disponible blanco con borde `borderStrong`; ocupado relleno
- * `surfaceDark` con el número en `mutedForeground`; elegido `accentStrong` con
- * el número en blanco. La leyenda usa la misma forma.
+ * Asientos: disponible blanco con relieve; ocupado hundido en `surfaceDark`; elegido
+ * azul con su resplandor, para que la selección se vea desde lejos. La leyenda usa la
+ * misma forma.
+ *
+ * El mapa se dibuja como el bus visto desde arriba, con el frente hacia arriba,
+ * para que la persona se ubique: parabrisas, chofer adelante a la izquierda,
+ * puerta adelante a la derecha (bus venezolano típico) y pasillo central. Cada
+ * asiento lleva el respaldo abajo, que es hacia donde queda al mirar al frente.
+ * La cabina es orientativa: la base de datos no guarda la distribución real.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { ArrowClockwise, WarningCircle } from 'phosphor-react-native';
+import { ArrowClockwise, DoorOpen, SteeringWheel } from 'phosphor-react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import Animated, {
   useAnimatedStyle,
@@ -21,10 +28,10 @@ import Animated, {
   withSpring,
 } from 'react-native-reanimated';
 import { PressableScale } from './PressableScale';
-import { Button, Text } from '@/src/components/ui';
+import { Aviso, Button, Text } from '@/src/components/ui';
 import { generarAsientos } from '@/src/utils/seatLayout';
 import { mensajeAsientosTomados, ordenarAsientos } from '@/src/hooks/useCheckoutBoletos';
-import { Colors, Motion, Radius, Sizes, Spacing } from '@/src/theme';
+import { alpha, Colors, Gradients, Motion, Radius, Shadows, Sizes, Spacing } from '@/src/theme';
 
 /** Mismo límite que `fn_reservar_asientos`. */
 export const MAX_ASIENTOS = 10;
@@ -51,12 +58,19 @@ interface SeatSelectorProps {
 /** Asiento = área táctil mínima (44 pt). */
 const SEAT_SIZE = Sizes.touchTarget;
 const LEYENDA = Sizes.icon.md;
+const ESPACIO_ASIENTOS = Spacing.sm;
+const ANCHO_PASILLO = Spacing.xl;
+/** Dos asientos y el espacio entre ellos: un lado del bus. */
+const ANCHO_LADO = SEAT_SIZE * 2 + ESPACIO_ASIENTOS;
+/** Los dos lados y el pasillo, con su espacio a cada lado. */
+const ANCHO_INTERIOR = ANCHO_LADO * 2 + ANCHO_PASILLO + ESPACIO_ASIENTOS * 2;
+const MARGEN_INTERIOR = Spacing.lg;
 
 type TipoAsiento = 'libre' | 'ocupado' | 'elegido';
 
 const COLORES: Record<TipoAsiento, { bg: string; border: string; fg: string }> = {
-  libre: { bg: Colors.background, border: Colors.borderStrong, fg: Colors.foreground },
-  ocupado: { bg: Colors.surfaceDark, border: Colors.surfaceDark, fg: Colors.mutedForeground },
+  libre: { bg: Colors.background, border: Colors.borderControl, fg: Colors.foreground },
+  ocupado: { bg: Colors.surfaceDark, border: Colors.surfaceDark, fg: Colors.placeholder },
   elegido: { bg: Colors.accentStrong, border: Colors.accentStrong, fg: Colors.accentStrongForeground },
 };
 
@@ -64,12 +78,14 @@ const COLORES: Record<TipoAsiento, { bg: string; border: string; fg: string }> =
 
 function SeatButton({
   seat,
+  ubicacion,
   ocupado,
   seleccionado,
   bloqueado,
   onToggle,
 }: {
   seat: string;
+  ubicacion: 'ventana' | 'pasillo';
   ocupado: boolean;
   seleccionado: boolean;
   bloqueado: boolean;
@@ -101,16 +117,21 @@ function SeatButton({
         dimWhenDisabled={false}
         scaleValue={Motion.press.chip}
         duration={Motion.duration.instant}
-        style={[s.seat, { backgroundColor: colores.bg, borderColor: colores.border }]}
+        style={[
+          s.seat,
+          { backgroundColor: colores.bg, borderColor: colores.border },
+          seleccionado ? Shadows.sky : !ocupado ? Shadows.subtle : null,
+        ]}
         accessibilityRole="button"
         accessibilityState={{ disabled: ocupado || bloqueado, selected: seleccionado }}
-        accessibilityLabel={`Asiento ${seat}${
+        accessibilityLabel={`Asiento ${seat}, ${ubicacion}${
           ocupado ? ', ocupado' : seleccionado ? ', elegido' : ', disponible'
         }`}
       >
         <Text variant="label" weight={seleccionado ? 'bold' : 'semibold'} color={colores.fg} compact>
           {seat}
         </Text>
+        <View style={[s.respaldo, { backgroundColor: alpha(colores.fg, seleccionado ? 0.5 : 0.22) }]} />
       </PressableScale>
     </Animated.View>
   );
@@ -173,14 +194,14 @@ export function SeatSelector({
   return (
     <View>
       {errorOcupados ? (
-        <View style={[s.aviso, s.avisoError]} accessibilityRole="alert" accessibilityLiveRegion="polite">
-          <WarningCircle size={Sizes.icon.lg} color={Colors.dangerText} weight="fill" />
-          <View style={s.avisoCuerpo}>
-            <Text variant="label">No pudimos ver qué asientos están libres</Text>
-            <Text variant="caption" color="muted">
-              {errorOcupados}
-            </Text>
-            {onReintentarOcupados ? (
+        <Aviso
+          tono="danger"
+          titulo="No pudimos ver qué asientos están libres"
+          texto={errorOcupados}
+          alerta
+          style={s.aviso}
+          extra={
+            onReintentarOcupados ? (
               <Button
                 variant="outline"
                 size="sm"
@@ -190,18 +211,18 @@ export function SeatSelector({
               >
                 Reintentar
               </Button>
-            ) : null}
-          </View>
-        </View>
+            ) : null
+          }
+        />
       ) : null}
 
       {avisoTomados || limiteAlcanzado ? (
-        <View style={[s.aviso, s.avisoPendiente]} accessibilityRole="alert" accessibilityLiveRegion="assertive">
-          <WarningCircle size={Sizes.icon.lg} color={Colors.warningText} weight="fill" />
-          <Text variant="label" style={s.avisoCuerpo}>
-            {avisoTomados ?? `Puedes apartar hasta ${MAX_ASIENTOS} asientos por compra.`}
-          </Text>
-        </View>
+        <Aviso
+          tono="warning"
+          texto={avisoTomados ?? `Puedes apartar hasta ${MAX_ASIENTOS} asientos por compra.`}
+          alerta
+          style={s.aviso}
+        />
       ) : null}
 
       <View style={s.leyenda}>
@@ -210,30 +231,80 @@ export function SeatSelector({
         <Leyenda tipo="ocupado" label="Ocupado" />
       </View>
 
-      <View style={s.bus} accessibilityLabel="Mapa de asientos">
-        <Text variant="caption" color="muted" align="center" style={s.frente}>
-          Frente del bus
-        </Text>
-        {filas.map((fila, rowIndex) => (
-          <View key={`fila-${rowIndex}`} style={s.fila}>
-            {completarFila(fila).map((seat, colIndex) =>
-              seat === HUECO ? (
-                <View key={`hueco-${rowIndex}-${colIndex}`} style={s.hueco} />
-              ) : seat === '' ? (
-                <View key={`pasillo-${rowIndex}-${colIndex}`} style={s.pasillo} />
-              ) : (
-                <SeatButton
-                  key={seat}
-                  seat={seat}
-                  ocupado={asientosOcupados.includes(seat)}
-                  seleccionado={seleccionados.includes(seat)}
-                  bloqueado={mapaBloqueado}
-                  onToggle={toggleSeat}
-                />
-              )
-            )}
+      <View style={s.bus} accessibilityLabel="Mapa de asientos. El frente del bus está arriba.">
+        <View style={s.parabrisas}>
+          <LinearGradient colors={[...Gradients.skySoft]} style={StyleSheet.absoluteFill} />
+          <Text variant="caption" weight="medium" color="infoText" align="center" compact>
+            Frente del bus
+          </Text>
+        </View>
+
+        <View style={s.interior}>
+          <View style={s.franjaPasillo} />
+
+          <View style={s.cabina}>
+            <View
+              style={[s.puesto, s.chofer]}
+              accessible
+              accessibilityLabel="Chofer, adelante a la izquierda"
+            >
+              <SteeringWheel size={Sizes.icon.md} color={Colors.mutedForeground} weight="duotone" />
+              <Text variant="caption" color="muted" compact>
+                Chofer
+              </Text>
+            </View>
+            <View
+              style={[s.puesto, s.puerta]}
+              accessible
+              accessibilityLabel="Puerta, adelante a la derecha"
+            >
+              <DoorOpen size={Sizes.icon.md} color={Colors.primaryText} weight="duotone" />
+              <Text variant="caption" weight="semibold" color="primaryText" compact>
+                Puerta
+              </Text>
+            </View>
+            {/* El hueco de la puerta en la carrocería, a la altura de la cabina. */}
+            <View style={s.huecoPuerta} />
           </View>
-        ))}
+
+          <View
+            style={s.fila}
+            importantForAccessibility="no-hide-descendants"
+            accessibilityElementsHidden
+          >
+            <Columna>Ventana</Columna>
+            <Columna>Pasillo</Columna>
+            <View style={s.pasillo} />
+            <Columna>Pasillo</Columna>
+            <Columna>Ventana</Columna>
+          </View>
+
+          {filas.map((fila, rowIndex) => (
+            <View key={`fila-${rowIndex}`} style={s.fila}>
+              {completarFila(fila).map((seat, colIndex) =>
+                seat === HUECO ? (
+                  <View key={`hueco-${rowIndex}-${colIndex}`} style={s.hueco} />
+                ) : seat === '' ? (
+                  <View key={`pasillo-${rowIndex}-${colIndex}`} style={s.pasillo} />
+                ) : (
+                  <SeatButton
+                    key={seat}
+                    seat={seat}
+                    ubicacion={colIndex === 0 || colIndex === 4 ? 'ventana' : 'pasillo'}
+                    ocupado={asientosOcupados.includes(seat)}
+                    seleccionado={seleccionados.includes(seat)}
+                    bloqueado={mapaBloqueado}
+                    onToggle={toggleSeat}
+                  />
+                )
+              )}
+            </View>
+          ))}
+        </View>
+
+        <Text variant="caption" color="muted" align="center" style={s.trasera}>
+          Parte trasera
+        </Text>
       </View>
     </View>
   );
@@ -253,6 +324,17 @@ function completarFila(fila: string[]): string[] {
   return [...izquierda, '', ...derecha];
 }
 
+/** Rótulo sobre una columna de asientos, del ancho justo de un asiento. */
+function Columna({ children }: { children: string }) {
+  return (
+    <View style={s.columna}>
+      <Text variant="caption" size="micro" color="muted" align="center" numberOfLines={1} compact>
+        {children}
+      </Text>
+    </View>
+  );
+}
+
 function Leyenda({ tipo, label }: { tipo: TipoAsiento; label: string }) {
   const colores = COLORES[tipo];
   return (
@@ -267,24 +349,7 @@ function Leyenda({ tipo, label }: { tipo: TipoAsiento; label: string }) {
 
 const s = StyleSheet.create({
   aviso: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.md,
-    paddingVertical: Spacing.md,
-    paddingHorizontal: Spacing.lg,
-    borderRadius: Radius.lg,
     marginBottom: Spacing.lg,
-  },
-  avisoError: {
-    alignItems: 'flex-start',
-    backgroundColor: Colors.destructiveLight,
-  },
-  avisoPendiente: {
-    backgroundColor: Colors.warningLight,
-  },
-  avisoCuerpo: {
-    flex: 1,
-    gap: Spacing.xs,
   },
   reintentar: {
     alignSelf: 'flex-start',
@@ -305,39 +370,114 @@ const s = StyleSheet.create({
     width: LEYENDA,
     height: LEYENDA,
     borderRadius: Radius.xs,
-    borderWidth: Sizes.borderStrong,
+    borderWidth: Sizes.hairline,
   },
+  // La carrocería abraza los asientos, así el mapa se lee como un bus y no como una
+  // tarjeta: el frente más redondeado que la cola.
   bus: {
-    backgroundColor: Colors.surface,
-    borderRadius: Radius.xl,
-    paddingHorizontal: Spacing.lg,
+    alignSelf: 'center',
+    backgroundColor: Colors.background,
+    borderTopLeftRadius: Radius['3xl'] + Spacing.md,
+    borderTopRightRadius: Radius['3xl'] + Spacing.md,
+    borderBottomLeftRadius: Radius.xl,
+    borderBottomRightRadius: Radius.xl,
+    borderCurve: 'continuous',
+    paddingHorizontal: MARGEN_INTERIOR,
     paddingTop: Spacing.lg,
-    paddingBottom: Spacing.sm,
+    paddingBottom: Spacing.md,
+    ...Shadows.raised,
   },
-  frente: {
+  parabrisas: {
+    width: ANCHO_INTERIOR,
+    paddingVertical: Spacing.md,
     marginBottom: Spacing.lg,
+    overflow: 'hidden',
+    borderTopLeftRadius: Radius['2xl'],
+    borderTopRightRadius: Radius['2xl'],
+    borderBottomLeftRadius: Radius.sm,
+    borderBottomRightRadius: Radius.sm,
+    borderCurve: 'continuous',
+  },
+  interior: {
+    width: ANCHO_INTERIOR,
+  },
+  franjaPasillo: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: (ANCHO_INTERIOR - ANCHO_PASILLO) / 2,
+    width: ANCHO_PASILLO,
+    backgroundColor: Colors.surface,
+  },
+  cabina: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: Spacing.lg,
+  },
+  puesto: {
+    width: ANCHO_LADO,
+    height: SEAT_SIZE,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.xs,
+    borderRadius: Radius.md,
+    borderCurve: 'continuous',
+  },
+  chofer: {
+    backgroundColor: Colors.surface,
+  },
+  puerta: {
+    backgroundColor: Colors.primarySoft,
+  },
+  huecoPuerta: {
+    position: 'absolute',
+    top: Spacing.xs,
+    bottom: Spacing.xs,
+    right: -MARGEN_INTERIOR,
+    width: Sizes.borderSelected + Sizes.hairline,
+    borderTopLeftRadius: Radius.full,
+    borderBottomLeftRadius: Radius.full,
+    backgroundColor: Colors.primary,
   },
   fila: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    gap: Spacing.sm,
-    marginBottom: Spacing.sm,
+    gap: ESPACIO_ASIENTOS,
+    marginBottom: ESPACIO_ASIENTOS,
+  },
+  columna: {
+    width: SEAT_SIZE,
   },
   seat: {
     width: SEAT_SIZE,
     height: SEAT_SIZE,
-    borderRadius: Radius.sm,
+    borderRadius: Radius.sm + Spacing.xs / 2,
+    borderCurve: 'continuous',
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: Sizes.borderStrong,
+    borderWidth: Sizes.hairline,
+    paddingBottom: Spacing.xs,
+  },
+  // Abajo: el respaldo queda detrás de quien mira al frente del bus.
+  respaldo: {
+    position: 'absolute',
+    bottom: Spacing.xs,
+    left: Spacing.md,
+    right: Spacing.md,
+    height: Sizes.borderSelected,
+    borderRadius: Radius.full,
   },
   hueco: {
     width: SEAT_SIZE,
     height: SEAT_SIZE,
   },
   pasillo: {
-    width: Spacing.xl,
+    width: ANCHO_PASILLO,
     height: SEAT_SIZE,
+  },
+  trasera: {
+    marginTop: Spacing.sm,
   },
 });

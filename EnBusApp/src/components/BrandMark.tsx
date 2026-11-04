@@ -1,7 +1,7 @@
 /**
- * BrandMark — la marca de EnBus (D6, SY-04, AU-06).
+ * BrandMark — la marca de EnBus.
  *
- * Bloque cuadrado amarillo `primary` con "EB" en tinta (800), radio = 30 % del
+ * Bloque cuadrado con el sol (gradiente amarillo) y "EB" en tinta, radio = 30 % del
  * lado y letra = 42 % del lado: la misma geometría que el icono de la app
  * (`shared/marca/eb.svg`), el panel y la landing. Con `conNombre`, "EnBus" a la
  * derecha y, si se pasa, una subzona debajo.
@@ -12,12 +12,13 @@
  */
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Text } from '@/src/components/ui';
-import { Colors, Spacing, type FontSizeToken } from '@/src/theme';
+import { Gradients, Shadows, Spacing, type FontSizeToken } from '@/src/theme';
 
 type TamanoMarca = 32 | 40 | 56;
 
-/** Geometría D6, en fracción del lado del bloque. */
+/** Geometría, en fracción del lado del bloque. */
 const RADIO_RELATIVO = 0.3;
 const LETRA_RELATIVA = 0.42;
 
@@ -47,11 +48,15 @@ export function BrandMark({
       accessibilityRole={conNombre ? undefined : 'image'}
       accessibilityLabel={conNombre ? undefined : 'EnBus'}
     >
+      <LinearGradient
+        colors={[...Gradients.sun]}
+        style={[StyleSheet.absoluteFill, { borderRadius: Math.round(size * RADIO_RELATIVO) }]}
+      />
       <Text
         variant="title"
         weight="heavy"
         color="foreground"
-        tracking="normal"
+        tracking="tight"
         compact
         allowFontScaling={false}
         style={{ fontSize: Math.round(size * LETRA_RELATIVA) }}
@@ -74,11 +79,11 @@ export function BrandMark({
     >
       {bloque}
       <View>
-        <Text variant="heading" size={NOMBRE[size]} weight="heavy" tracking="snug" compact>
+        <Text variant="heading" size={NOMBRE[size]} weight="bold" tracking="tight" compact>
           EnBus
         </Text>
         {subtitulo ? (
-          <Text variant="caption" color="muted" weight="semibold" compact style={s.subtitulo}>
+          <Text variant="caption" color="muted" weight="medium" compact style={s.subtitulo}>
             {subtitulo}
           </Text>
         ) : null}
@@ -89,9 +94,10 @@ export function BrandMark({
 
 const s = StyleSheet.create({
   bloque: {
-    backgroundColor: Colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
+    borderCurve: 'continuous',
+    ...Shadows.sun,
   },
   fila: {
     flexDirection: 'row',

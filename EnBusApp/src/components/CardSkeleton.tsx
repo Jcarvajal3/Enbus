@@ -1,7 +1,7 @@
 import React, { memo } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { SkeletonLoader } from './SkeletonLoader';
-import { Colors, Radius, Sizes, Spacing } from '@/src/theme';
+import { Colors, Radius, Shadows, Sizes, Spacing } from '@/src/theme';
 
 interface CardSkeletonProps {
   /** Number of placeholder rows to render. */
@@ -35,9 +35,11 @@ const s = StyleSheet.create({
   },
   card: {
     gap: Spacing.sm,
-    backgroundColor: Colors.surface,
+    backgroundColor: Colors.card,
     borderRadius: Radius.xl,
+    borderCurve: 'continuous',
     padding: Spacing.lg,
+    ...Shadows.card,
   },
   top: {
     flexDirection: 'row',

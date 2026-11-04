@@ -12,7 +12,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { CaretLeft, CaretRight } from 'phosphor-react-native';
 import { BottomSheet, Button, Chip, IconButton, Text } from '@/src/components/ui';
-import { Colors, Layout, Opacity, Radius, Sizes, Spacing } from '@/src/theme';
+import { Colors, Layout, Opacity, Radius, Shadows, Sizes, Spacing } from '@/src/theme';
 
 interface CalendarModalProps {
   visible: boolean;
@@ -244,9 +244,9 @@ export function CalendarModal({
               onPress={() => shiftMonth(-1)}
               disabled={!canGoBack}
               size="md"
-              variant="inverse"
+              variant="surface"
             />
-            <Text variant="subheading" align="center">
+            <Text variant="heading" align="center">
               {`${MONTHS[month]} ${year}`}
             </Text>
             <IconButton
@@ -255,7 +255,7 @@ export function CalendarModal({
               onPress={() => shiftMonth(1)}
               disabled={!canGoForward}
               size="md"
-              variant="inverse"
+              variant="surface"
             />
           </View>
 
@@ -305,7 +305,7 @@ export function CalendarModal({
                   >
                     <Text
                       variant="label"
-                      weight={active ? 'bold' : 'medium'}
+                      weight={active ? 'bold' : conSalida ? 'semibold' : 'medium'}
                       color={active ? 'inverse' : disabled ? 'muted' : 'foreground'}
                       compact
                     >
@@ -332,22 +332,18 @@ export function CalendarModal({
 const s = StyleSheet.create({
   contenido: {
     paddingHorizontal: Layout.screenPadding,
-    paddingTop: Spacing.lg,
+    paddingTop: Spacing.xs,
     paddingBottom: Spacing['2xl'],
   },
   shortcutsScroll: {
     marginHorizontal: -Layout.screenPadding,
-    marginBottom: Spacing.lg,
+    marginBottom: Spacing.xl,
   },
   shortcuts: {
     gap: Spacing.sm,
     paddingHorizontal: Layout.screenPadding,
   },
-  calendar: {
-    padding: Spacing.lg,
-    backgroundColor: Colors.surface,
-    borderRadius: Radius.xl,
-  },
+  calendar: {},
   monthRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -383,25 +379,26 @@ const s = StyleSheet.create({
   },
   dayActive: {
     backgroundColor: Colors.accentStrong,
+    ...Shadows.sky,
   },
   dayToday: {
     borderWidth: Sizes.borderStrong,
-    borderColor: Colors.accentStrong,
+    borderColor: Colors.accent,
   },
   dayDisabled: {
     opacity: Opacity.disabled,
   },
-  /** Punto bajo los días con salida */
+  /** Punto bajo los días con salida: el sol marca dónde hay viaje. */
   dot: {
     position: 'absolute',
     bottom: Spacing.xs,
-    width: Spacing.xs,
-    height: Spacing.xs,
+    width: Sizes.dot - Sizes.hairline,
+    height: Sizes.dot - Sizes.hairline,
     borderRadius: Radius.full,
-    backgroundColor: Colors.accentStrong,
+    backgroundColor: Colors.primaryDeep,
   },
   dotActive: {
-    backgroundColor: Colors.accentStrongForeground,
+    backgroundColor: Colors.primary,
   },
   hint: {
     marginTop: Spacing.md,

@@ -1,34 +1,29 @@
 /**
- * EnBus Design System — Brand Manual Tokens
+ * EnBus Design System — "Amanecer"
  *
- * Every screen and component imports from here. Nothing visual should be a
- * literal number or colour in a screen file (lint: no hex/rgba outside this file).
+ * La idea: el viaje por carretera al amanecer. Un cielo azul suave que se calienta
+ * con el sol (amarillo → coral) sobre un fondo neutro azulado y texto tinta. El sol
+ * (amarillo) es la acción; el cielo (azul) es la selección; el coral son las
+ * encomiendas. Todo lo demás es tinta y aire.
  *
- * Colours, radii and motion durations come from `shared/tokens.json` (the same
- * source as the panel and the landing) through `./tokens.generated.ts`, which
- * `node shared/generar.mjs` writes. Edit the JSON, never the generated file.
+ * Every screen and component imports from here. Nothing visual should be a literal
+ * number or colour in a screen file (lint: no hex/rgba outside this file).
  *
- * Palette:
- *   Primary   #FFC757  (warm yellow)
- *   Secondary #FF7648  (coral orange)
- *   Accent    #4A7FF8  (vibrant blue — tints, dots and borders only)
- *   Accent strong #2F5FD0 (selection and active state with white text, 5.7:1)
- *   Surface   #F0EFEB  (warm beige)
- *   Text      #202020  (soft black)
- *   White     #FFFFFF
+ * Colours, radii and motion durations come from `shared/tokens.json` through
+ * `./tokens.generated.ts`, which `node shared/generar.mjs` writes.
  *
- * Accessibility rule: the vivid brand/semantic colours are for surfaces,
- * borders and icons only. Text always uses `foreground`, `mutedForeground` or
- * one of the `*Text` tokens — all ≥ 4.5:1 on white, `surface` and `surfaceDark`.
+ * Figura y fondo: `canvas` (neutro azulado) queda atrás; `card` (blanco) flota sobre
+ * él con sombra suave y sin borde; `surface` (pozo) se hunde dentro de lo blanco.
+ * Los volúmenes se separan por tono y sombra, no por líneas de 1 px.
  *
  * Token groups:
  *   Colors      — palette + semantic roles
- *   Typography  — family, sizes, weights, line heights, tracking, presets
+ *   Typography  — family per weight, sizes, line heights, tracking, presets
  *   Spacing     — the 4pt rhythm used for margin/padding/gap ONLY
  *   Sizes       — component dimensions (heights, icons, avatars) — never Spacing
  *   Radius      — corner scale
- *   Shadows     — elevation
- *   Gradients   — brand gradients
+ *   Shadows     — elevation, tinted with navy (and the sun, for the main action)
+ *   Gradients   — sun, sky, coral, night
  *   Motion      — durations, easings, springs (all animation reads from here)
  *   Layout      — screen chrome: gutters, tab bar, safe bottom inset
  *   Opacity     — interaction states
@@ -65,58 +60,67 @@ export function alpha(color: string, a: number): string {
   return color;
 }
 
-// ─── Palette ─────────────────────────────────────────────────────────────────
-// Raw values (prefer the semantic Colors below) live in shared/tokens.json →
-// `palette` in ./tokens.generated.ts: yellow, coral, blue, blueDark, beige, ink,
-// grey, greyText, white, black, *Soft, *Text (≥ 4.5:1) and *Deep (≥ 6:1 on *Soft).
-
 // ─── Colors ──────────────────────────────────────────────────────────────────
 
 export const Colors = {
-  // Brand
+  // Sol: la marca y la acción principal
   primary: palette.yellow,
-  primaryLight: alpha(palette.yellow, 0.15),
-  primaryBorder: alpha(palette.yellow, 0.25),
-  primaryForeground: palette.ink,
-  /** Brand amber legible as text. `primary` is never a text colour. */
+  primaryDeep: palette.yellowDeep,
+  /** Tinte amarillo opaco: lo que debe destacar dentro de lo blanco. */
+  primarySoft: palette.yellowSoft,
+  primaryLight: palette.yellowTint,
+  primaryBorder: alpha(palette.yellow, 0.45),
+  primaryForeground: palette.navy,
+  /** Ámbar legible como texto. `primary` nunca es color de texto. */
   primaryText: palette.amberText,
 
+  // Coral: el dominio de encomiendas
   secondary: palette.coral,
-  secondaryLight: alpha(palette.coral, 0.12),
-  secondaryBorder: alpha(palette.coral, 0.22),
+  secondaryDeep: palette.coralDeepFill,
+  secondaryLight: palette.coralSoft,
+  secondaryBorder: alpha(palette.coral, 0.25),
   secondaryForeground: palette.white,
+  secondaryText: palette.coralDeep,
 
-  /** Vivid blue: tints, dots and borders. Never a fill behind white text (3.7:1). */
+  // Cielo: selección, foco y estado activo
+  /** Azul suave: tintes, puntos, bordes. Nunca relleno bajo texto blanco. */
   accent: palette.blue,
-  accentLight: alpha(palette.blue, 0.12),
-  accentBorder: alpha(palette.blue, 0.22),
+  accentLight: palette.blueSoft,
+  accentTint: palette.blueTint,
+  accentBorder: alpha(palette.blue, 0.3),
   accentForeground: palette.white,
-  /** Accent at rest inside a disabled CTA */
   accentMuted: alpha(palette.blue, 0.35),
-  /**
-   * Selection and active state (D1): selected chip, seat, option, checkbox,
-   * switch, focus ring, active tab, active counter. White text on it = 5.7:1.
-   * `shared/tokens.json` → `accent-strong` (= `paleta.blue-dark`).
-   */
-  accentStrong: tokens.claro.accentStrong,
-  accentStrongForeground: tokens.claro.accentStrongForeground,
+  /** Selección y estado activo. Texto blanco encima: 5,3:1. */
+  accentStrong: palette.blueDark,
+  accentStrongForeground: palette.white,
 
-  /** Links in running text and text buttons (≥ 4.5:1 on white and beige). */
+  /** Enlaces y botones de texto (≥ 4,5:1 sobre blanco y `canvas`). */
   link: palette.blueText,
 
-  // Surfaces
+  // Noche: la superficie oscura (barra de pestañas, tarjeta de monto)
+  night: palette.navy,
+  nightRaised: palette.navyRaised,
+  nightLine: palette.navyLine,
+  /** Texto secundario sobre noche: 8:1. */
+  nightMuted: alpha(palette.white, 0.68),
+
+  // Superficies
+  /** Fondo de toda pantalla: lo que queda más atrás. */
+  canvas: palette.canvas,
+  /** Blanco: lo que flota sobre `canvas` (tarjeta, hoja, barra). */
   background: palette.white,
-  surface: palette.beige,
-  surfaceDark: palette.beigeDark,
+  /** Pozo: bloque o campo hundido dentro de algo blanco. */
+  surface: palette.well,
+  /** Inerte: pista, deshabilitado, ocupado. */
+  surfaceDark: palette.canvasDark,
   card: palette.white,
 
-  // Text
+  // Texto
   foreground: palette.ink,
   mutedForeground: palette.greyText,
-  /** Neutral tint for inert chips/badges */
   neutralLight: alpha(palette.grey, 0.12),
 
-  // Semantic
+  // Semántica
   success: palette.green,
   successLight: palette.greenSoft,
   successText: palette.greenText,
@@ -129,48 +133,48 @@ export const Colors = {
   destructive: palette.red,
   destructiveLight: palette.redSoft,
   dangerText: palette.redText,
-  /** Tinted background + border for soft destructive buttons */
   destructiveSoft: alpha(palette.red, 0.07),
   destructiveBorder: alpha(palette.red, 0.22),
 
-  // Borders
-  border: palette.beigeDark,
-  borderLight: palette.beige,
-  /** Control borders that must read at ≥ 3:1 (inputs, checkboxes at rest) */
+  // Bordes
+  border: palette.line,
+  borderLight: palette.line,
+  /** Borde en reposo de un campo. */
+  borderControl: palette.borderControl,
+  /** Controles que deben leerse a ≥ 3:1 (casillas, radios). */
   borderStrong: palette.borderStrong,
+  /** Marcador de un campo, en peso regular. */
+  placeholder: palette.placeholder,
 
-  // Overlays (modals, bottom sheets)
-  scrim: alpha(palette.black, 0.4),
-  scrimStrong: alpha(palette.black, 0.55),
+  // Overlays
+  scrim: alpha(palette.navy, 0.42),
+  scrimStrong: alpha(palette.navy, 0.58),
 
   // Misc
   white: palette.white,
   black: palette.ink,
   transparent: 'transparent',
 
-  // Tab bar specific
-  /** Active pill behind the white label/icon (5.7:1) — `accentStrong` */
-  tabActive: tokens.claro.accentStrong,
-  /** Inactive label/icon on the beige bar (5.0:1) */
-  tabInactive: palette.greyText,
-  tabBackground: palette.white,
+  // Barra de pestañas (noche)
+  tabActive: palette.yellow,
+  tabInactive: alpha(palette.white, 0.66),
+  tabBackground: palette.navy,
 } as const;
 
 // ─── Typography ──────────────────────────────────────────────────────────────
 
 const sizes = {
-  /** Counters inside badges — the only size below `xs` */
-  micro: 9,
-  xs: 11,
-  /** Status badges only (SY-23: 12 pt semibold in app and web) */
+  /** Contadores dentro de insignias: lo único por debajo de `xs`. */
+  micro: 10,
+  xs: 12,
   badge: 12,
   sm: 13,
   base: 15,
   lg: 17,
-  xl: 20,
-  '2xl': 24,
-  '3xl': 30,
-  '4xl': 36,
+  xl: 22,
+  '2xl': 26,
+  '3xl': 32,
+  '4xl': 40,
 } as const;
 
 const weights = {
@@ -185,66 +189,77 @@ export type FontSizeToken = keyof typeof sizes;
 export type FontWeightToken = keyof typeof weights;
 
 /**
- * Line heights are absolute pixels (React Native has no unitless lineHeight).
- * Ratio drops as size grows — the standard optical correction.
+ * Una familia por peso. Nunca se combina `fontFamily` con `fontWeight`: en Android,
+ * `expo-font` registra cada fuente solo como NORMAL y un peso ≥ 700 caería a la
+ * fuente del sistema (Roboto). Con un archivo por peso, la letra es exactamente esa.
  */
-const lineHeights: Record<FontSizeToken, number> = {
-  micro: 12,
-  xs: 15,
-  badge: 16,
-  sm: 18,
-  base: 22,
-  lg: 24,
-  xl: 26,
-  '2xl': 30,
-  '3xl': 34,
-  '4xl': 40,
+const fonts: Record<FontWeightToken, string> = {
+  regular: 'Onest-Regular',
+  medium: 'Onest-Medium',
+  semibold: 'Onest-SemiBold',
+  bold: 'Onest-Bold',
+  heavy: 'Onest-ExtraBold',
 };
 
-/** Negative tracking on display sizes, positive on small caps. */
+/** Line heights are absolute pixels. Ratio drops as size grows. */
+const lineHeights: Record<FontSizeToken, number> = {
+  micro: 12,
+  xs: 16,
+  badge: 16,
+  sm: 19,
+  base: 22,
+  lg: 24,
+  xl: 28,
+  '2xl': 32,
+  '3xl': 38,
+  '4xl': 46,
+};
+
+/** Negative tracking on display sizes. */
 const tracking = {
+  tighter: -1,
   tight: -0.6,
   snug: -0.3,
   normal: 0,
-  wide: 0.4,
-  wider: 0.8,
-  widest: 1.4,
+  wide: 0.3,
+  wider: 0.6,
+  widest: 1.2,
 } as const;
 
 /**
- * Named text roles. `<Text variant="…">` maps straight onto these, so a screen
- * never has to spell out family/size/weight/lineHeight by hand.
+ * Named text roles. `<Text variant="…">` maps straight onto these. Pocos tamaños y
+ * muy separados: la jerarquía la da la escala, no la negrita. Lo grande va en
+ * semibold, nunca en heavy; solo lo que debe resaltar lleva peso.
  */
 const presets = {
-  /** Hero numbers and monumental figures */
-  display: { size: '4xl', weight: 'heavy', tracking: 'tight' },
-  /** Tab screen title (Mis boletos, Mis encomiendas) */
-  title: { size: '3xl', weight: 'bold', tracking: 'tight' },
-  /** Section / modal heading */
-  heading: { size: 'xl', weight: 'bold', tracking: 'snug' },
-  /** Card title */
-  subheading: { size: 'lg', weight: 'bold', tracking: 'snug' },
-  /** Default body copy */
+  /** Cifras monumentales (montos, PIN) */
+  display: { size: '4xl', weight: 'semibold', tracking: 'tighter' },
+  /** Título de pestaña y de portada */
+  title: { size: '3xl', weight: 'semibold', tracking: 'tighter' },
+  /** Título de detalle, paso de asistente y hoja */
+  heading: { size: 'xl', weight: 'semibold', tracking: 'tight' },
+  /** Título de tarjeta */
+  subheading: { size: 'lg', weight: 'semibold', tracking: 'snug' },
+  /** Cuerpo */
   body: { size: 'base', weight: 'regular', tracking: 'normal' },
-  /** Emphasised body */
+  /** Cuerpo enfatizado */
   bodyStrong: { size: 'base', weight: 'semibold', tracking: 'normal' },
-  /** Secondary / supporting copy */
+  /** Texto de apoyo */
   secondary: { size: 'sm', weight: 'regular', tracking: 'normal' },
-  /** Form labels, inline strong small text */
-  label: { size: 'sm', weight: 'semibold', tracking: 'normal' },
-  /** Metadata, timestamps */
-  caption: { size: 'xs', weight: 'medium', tracking: 'normal' },
-  /** Uppercase section label — only inside `SectionLabel` (a noun, never a question) */
-  overline: { size: 'xs', weight: 'bold', tracking: 'wider' },
-  /** Text inside buttons */
-  button: { size: 'base', weight: 'bold', tracking: 'wide' },
+  /** Etiquetas de formulario y texto fuerte pequeño */
+  label: { size: 'sm', weight: 'medium', tracking: 'normal' },
+  /** Metadatos, fechas */
+  caption: { size: 'xs', weight: 'regular', tracking: 'normal' },
+  /** Título de sección, encima de su tarjeta */
+  overline: { size: 'lg', weight: 'semibold', tracking: 'snug' },
+  /** Texto dentro de botones */
+  button: { size: 'base', weight: 'semibold', tracking: 'normal' },
 } as const;
 
 export type TextVariant = keyof typeof presets;
 
 export const Typography = {
-  /** Variable font — use fontWeight to select axis instances */
-  family: 'Roobert',
+  fonts,
   weights,
   sizes,
   lineHeights,
@@ -276,32 +291,32 @@ export const Spacing = {
 export const Sizes = {
   /** Interactive control heights (inputs, buttons, pills) */
   control: {
-    sm: 38,
-    md: 44,
-    lg: 52,
-    xl: 60,
+    sm: 40,
+    md: 48,
+    lg: 56,
+    xl: 64,
   },
   /** Icon glyph sizes */
   icon: {
     xs: 12,
-    sm: 14,
-    md: 18,
-    lg: 22,
-    xl: 26,
-    '2xl': 32,
+    sm: 16,
+    md: 20,
+    lg: 24,
+    xl: 28,
+    '2xl': 36,
   },
   /** Square icon containers / circular chips */
   iconBox: {
-    sm: 30,
-    md: 36,
+    sm: 32,
+    md: 40,
     lg: 44,
     xl: 56,
-    '2xl': 80,
+    '2xl': 88,
   },
   avatar: {
     sm: 40,
     md: 56,
-    lg: 88,
+    lg: 92,
   },
   /** Minimum accessible touch target (WCAG 2.5.5 / iOS HIG) */
   touchTarget: 44,
@@ -312,71 +327,105 @@ export const Sizes = {
   borderStrong: 1.5,
   /** Selected outline of a selectable card / option */
   borderSelected: 2,
-  /** Status badge heights (12 pt label, no icon) */
-  badge: { sm: 22, md: 28 },
+  /** Cuadrito redondeado con el icono de una fila o de un selector */
+  tile: { sm: 36, md: 44, lg: 56 },
+  /** Status badge heights */
+  badge: { sm: 24, md: 28 },
   /** Numeric counter pill (tab bar, bell, segmented control) */
   counter: 18,
+  /** Punto de una insignia */
+  dot: 6,
 } as const;
 
 // ─── Radius ──────────────────────────────────────────────────────────────────
 
-/** xs 6 · sm 10 · md 16 · lg 20 · xl 24 · 2xl 28 · 3xl 36 · full 999 (shared/tokens.json → radio) */
+/**
+ * xs 6 · sm 10 · md 16 · lg 20 · xl 24 · 2xl 28 · 3xl 36 · full 999.
+ * Por rol: botón y chip `full`; campo y bloque interno `md`; cuadrito `md`;
+ * tarjeta `xl`; hoja y portada `3xl`.
+ */
 export const Radius = tokens.radio;
 
 // ─── Shadows ─────────────────────────────────────────────────────────────────
 
+/**
+ * Sombras en `boxShadow` (mismo resultado en iOS, Android y web), teñidas de noche:
+ * una sombra gris sobre un fondo azulado se ve sucia. Dos capas: una cerca que
+ * asienta y una lejos que da aire.
+ */
+const tinta = (a: number) => alpha(palette.navy, a);
+
 export const Shadows = {
-  /** Barely-there separation — use on surfaces already tinted */
-  subtle: {
-    shadowColor: palette.black,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.03,
-    shadowRadius: 6,
-    elevation: 1,
+  /** Apenas separa: pastilla del segmentado, chips */
+  subtle: { boxShadow: `0px 1px 2px ${tinta(0.08)}, 0px 2px 6px ${tinta(0.05)}` },
+  /** Tarjeta sobre `canvas` */
+  card: { boxShadow: `0px 1px 2px ${tinta(0.04)}, 0px 8px 24px ${tinta(0.06)}` },
+  /** Tarjeta protagonista (buscador, pase) */
+  raised: { boxShadow: `0px 2px 4px ${tinta(0.04)}, 0px 18px 40px ${tinta(0.11)}` },
+  /** Elementos flotantes */
+  elevated: { boxShadow: `0px 4px 10px ${tinta(0.08)}, 0px 16px 32px ${tinta(0.14)}` },
+  /** Hojas */
+  overlay: { boxShadow: `0px -8px 40px ${tinta(0.16)}` },
+  /** Muelle inferior: separa sin ensuciar las tarjetas blancas que pasan por debajo */
+  dock: { boxShadow: `0px -6px 24px ${tinta(0.08)}` },
+  /** Barra de pestañas */
+  tabBar: { boxShadow: `0px 6px 14px ${tinta(0.18)}, 0px 18px 40px ${tinta(0.28)}` },
+  /** Botón principal: el sol ilumina lo que tiene debajo */
+  sun: {
+    boxShadow: `0px 1px 2px ${alpha(palette.yellowDeep, 0.3)}, 0px 10px 22px ${alpha(palette.yellowDeep, 0.32)}`,
   },
-  /** Subtle card elevation */
-  card: {
-    shadowColor: palette.black,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 12,
-    elevation: 3,
-  },
-  /** Floating elements (FABs, tab bars) */
-  elevated: {
-    shadowColor: palette.black,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 16,
-    elevation: 8,
-  },
-  /** Modals and bottom sheets */
-  overlay: {
-    shadowColor: palette.black,
-    shadowOffset: { width: 0, height: -6 },
-    shadowOpacity: 0.12,
-    shadowRadius: 24,
-    elevation: 16,
-  },
-  /** Tab bar floating shadow */
-  tabBar: {
-    shadowColor: palette.black,
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.06,
-    shadowRadius: 16,
-    elevation: 12,
-  },
+  /** Elemento elegido en azul */
+  sky: { boxShadow: `0px 6px 16px ${alpha(palette.blueDark, 0.32)}` },
+  /** Elemento coral */
+  coral: { boxShadow: `0px 8px 20px ${alpha(palette.coralDeepFill, 0.3)}` },
 } as const;
 
 // ─── Gradients ───────────────────────────────────────────────────────────────
 
+/**
+ * Tuplas para `LinearGradient`. El cielo y la atmósfera con radiales viven en
+ * `Atmosfera` (react-native-svg), con estos mismos colores.
+ */
 export const Gradients = {
-  /** Fade used to let content scroll out under a floating bar */
+  /** Acción principal: sol de arriba hacia abajo */
+  sun: [palette.yellowLight, palette.yellow, palette.yellowDeep] as const,
+  /** Cuadrito de marca */
+  sunSoft: [palette.yellowSoft, palette.yellowTint] as const,
+  /** Selección fuerte */
+  sky: [palette.blue, palette.blueDark] as const,
+  skySoft: [palette.blueSoft, palette.blueTint] as const,
+  /** Encomiendas */
+  coral: [palette.coralLight, palette.coralDeepFill] as const,
+  coralSoft: [palette.coralSoft, alpha(palette.coralLight, 0.35)] as const,
+  /** Superficie noche con relieve */
+  night: [palette.navyRaised, palette.navy] as const,
+  /** Éxito */
+  mint: [palette.greenSoft, alpha(palette.green, 0.22)] as const,
+  /** Deja pasar el contenido bajo una barra flotante */
   fadeToBackground: [
-    alpha(palette.white, 0),
-    alpha(palette.white, 0.9),
-    palette.white,
+    alpha(palette.canvas, 0),
+    alpha(palette.canvas, 0.92),
+    palette.canvas,
   ] as const,
+} as const;
+
+/** Colores crudos de la atmósfera (radiales en `Atmosfera`). */
+export const Cielo = {
+  horizonte: palette.skyHaze,
+  azul: palette.blueBright,
+  azulProfundo: palette.blue,
+  /** Casi blanco: por donde el azul pasa al amarillo sin ensuciarse */
+  albaBlanca: palette.dawnWhite,
+  alba: palette.dawn,
+  rubor: palette.blush,
+  sol: palette.yellow,
+  solClaro: palette.yellowLight,
+  coral: palette.coral,
+  coralClaro: palette.coralLight,
+  fondo: palette.canvas,
+  noche: palette.navy,
+  nocheAlta: palette.navyRaised,
+  nocheAzul: palette.navyBlue,
 } as const;
 
 // ─── Motion ──────────────────────────────────────────────────────────────────
@@ -443,35 +492,41 @@ export const Motion = {
  * every floating action bar must sit at `Layout.floatingBarBottom`.
  */
 /** Altura de la barra de pestañas flotante. */
-const TAB_BAR_HEIGHT = 70;
+const TAB_BAR_HEIGHT = 68;
+const TAB_BAR_OFFSET = Spacing.xl;
 
 export const Layout = {
   /** Horizontal gutter for all screen content */
-  screenPadding: Spacing['2xl'],
+  screenPadding: Spacing.xl,
   /** Tighter gutter used by the home hero */
   screenPaddingCompact: Spacing.lg,
   /** Vertical padding above a screen header */
-  headerPaddingTop: Spacing.lg,
+  headerPaddingTop: Spacing.md,
   headerPaddingBottom: Spacing.md,
+  /** Separación entre secciones de una pantalla */
+  sectionGap: Spacing['3xl'],
 
   tabBar: {
     height: TAB_BAR_HEIGHT,
     /** Distance from the bottom safe-area inset */
-    bottomOffset: Spacing['2xl'],
+    bottomOffset: TAB_BAR_OFFSET,
     /** Left/right inset of the floating pill */
     sideInset: Spacing.xl,
     /** Inner padding around the sliding indicator */
     innerPadding: 6,
-    /** Tab label size — `xs` (11 pt) from the type scale (AU-47) */
+    /** Tab label size */
     labelSize: sizes.xs,
   },
 
-  /** Bottom padding for lists/scrollviews on tabbed screens (clears the bar) */
-  scrollBottomInset: TAB_BAR_HEIGHT + Spacing['2xl'] + Spacing['3xl'], // 126
+  /**
+   * Bottom padding for lists/scrollviews on tabbed screens: despeja la barra y deja
+   * margen para el área segura del teléfono (la barra de gestos o de botones).
+   */
+  scrollBottomInset: TAB_BAR_HEIGHT + TAB_BAR_OFFSET + Spacing['5xl'] + Spacing['2xl'],
   /** Bottom padding for lists on non-tabbed (stacked) screens */
   scrollBottomInsetPlain: Spacing['5xl'],
   /** Where a floating CTA bar sits above the tab bar */
-  floatingBarBottom: TAB_BAR_HEIGHT + Spacing['2xl'] + Spacing.lg, // 110
+  floatingBarBottom: TAB_BAR_HEIGHT + TAB_BAR_OFFSET + Spacing.md,
 
   /** Max width for centred modal cards */
   modalMaxWidth: 360,
@@ -510,16 +565,16 @@ export const StatusPalette: Record<
     border: string;
   }
 > = {
-  /** Anulado o inactivo (cancelado): contorno, fondo blanco (SY-22). */
+  /** Anulado o inactivo (cancelado): contorno, fondo blanco. */
   neutral: {
-    fg: Colors.mutedForeground,
+    fg: Colors.placeholder,
     text: Colors.mutedForeground,
-    bg: Colors.white,
-    border: Colors.border,
+    bg: Colors.surface,
+    border: Colors.borderControl,
   },
   /** Terminado sin incidencia (viaje realizado, vencido, devuelta): relleno sólido. */
   done: {
-    fg: Colors.foreground,
+    fg: Colors.mutedForeground,
     text: Colors.foreground,
     bg: Colors.surfaceDark,
     border: Colors.surfaceDark,
@@ -531,10 +586,10 @@ export const StatusPalette: Record<
     border: alpha(palette.amber, 0.25),
   },
   progress: {
-    fg: Colors.info,
+    fg: Colors.accentStrong,
     text: palette.blueDeep,
     bg: Colors.infoLight,
-    border: alpha(palette.sky, 0.25),
+    border: alpha(palette.blueDark, 0.2),
   },
   success: {
     fg: Colors.success,

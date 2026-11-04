@@ -62,7 +62,7 @@ export function QRCodeViewer({ data, size = 200, codigoLegible, ampliable }: QRC
       </View>
 
       {codigoLegible ? (
-        <Text variant="bodyStrong" align="center" selectable style={s.code}>
+        <Text variant="subheading" align="center" tracking="wide" selectable tabular style={s.code}>
           {codigoLegible}
         </Text>
       ) : null}
@@ -102,12 +102,12 @@ export function QRCodeViewer({ data, size = 200, codigoLegible, ampliable }: QRC
                 />
               </View>
               {codigoLegible ? (
-                <Text variant="heading" align="center" selectable style={s.fullscreenCode}>
+                <Text variant="heading" align="center" selectable tabular style={s.fullscreenCode}>
                   {codigoLegible}
                 </Text>
               ) : null}
               <View style={s.ayuda}>
-                <SunDim size={Sizes.icon.md} color={Colors.mutedForeground} weight="bold" />
+                <SunDim size={Sizes.icon.md} color={Colors.primaryDeep} weight="fill" />
                 <Text variant="secondary" color="muted" align="center" style={s.ayudaTexto}>
                   Sube el brillo de tu pantalla para que lo lean más rápido.
                 </Text>
@@ -127,18 +127,16 @@ const s = StyleSheet.create({
     alignSelf: 'center',
   },
   frame: {
-    padding: Spacing.xl,
+    padding: Spacing.md,
     backgroundColor: Colors.white,
     borderRadius: Radius.lg,
-    borderWidth: Sizes.hairline,
-    borderColor: Colors.border,
+    borderCurve: 'continuous',
   },
   code: {
-    marginTop: Spacing.md,
-    letterSpacing: Typography.tracking.wide,
+    marginTop: Spacing.sm,
   },
   ampliar: {
-    marginTop: Spacing.sm,
+    marginTop: Spacing.xs,
   },
   fullscreen: {
     flex: 1,
@@ -152,7 +150,7 @@ const s = StyleSheet.create({
   },
   fullscreenCode: {
     marginTop: Spacing.xl,
-    letterSpacing: Typography.tracking.wider,
+    letterSpacing: Typography.tracking.wide,
   },
   ayuda: {
     flexDirection: 'row',

@@ -9,7 +9,14 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { CalendarBlank, MapPin, SlidersHorizontal, Star } from 'phosphor-react-native';
+import {
+  CalendarBlank,
+  CheckCircle,
+  CircleIcon as Circle,
+  MapPin,
+  SlidersHorizontal,
+  Star,
+} from 'phosphor-react-native';
 import * as Haptics from 'expo-haptics';
 import { RouteField } from '@/src/components/RouteField';
 import { CalendarModal } from '@/src/components/CalendarModal';
@@ -34,10 +41,9 @@ import {
   Button,
   Card,
   Chip,
-  Divider,
   EmptyState,
-  EntityCard,
   ErrorState,
+  EvitarTeclado,
   FloatingBar,
   Monto,
   RouteSummary,
@@ -75,7 +81,7 @@ import {
   useSegundosRestantes,
 } from '@/src/hooks/useCheckoutBoletos';
 import type { PasajeroAsiento, ResumenCompra } from '@/src/types';
-import { Colors, Layout, Motion, Radius, Sizes, Spacing } from '@/src/theme';
+import { Colors, Layout, Motion, Radius, Shadows, Sizes, Spacing } from '@/src/theme';
 
 /**
  * Fecha que llega por parámetro: 'YYYY-MM-DD' (día local, p. ej. desde
@@ -887,315 +893,294 @@ export default function BuscarBoletoScreen() {
         backLabel={step > 1 || metodoPago ? 'Volver al paso anterior' : 'Salir de la compra'}
       />
 
-      <ScrollView
-        contentContainerStyle={scrollContent({
-          top: Spacing.lg,
-          floatingAction: !!barra,
-        })}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-      >
-        {/* ─── Paso 1: elegir la salida ─────────────────────────────────── */}
-        {step === 1 && (
-          <>
-            <View style={s.busqueda}>
-              <RouteField
-                origen={origen}
-                destino={destino}
-                onOrigen={setOrigen}
-                onDestino={setDestino}
-                onIntercambiar={() => {
-                  setOrigen(destino);
-                  setDestino(origen);
-                }}
-                recientes={recientes}
-                populares={CIUDADES_POPULARES}
-                registrarAbrirDestino={registrarAbrirDestino}
-              />
-              <CampoFecha
-                valor={
-                  !origen || !destino ? 'Elige origen y destino' : formatDiaVE(toDateKey(fecha))
-                }
-                pendiente={!calendarEnabled}
-                onPress={() => setShowCalendar(true)}
-              />
-              {errorFechas ? (
-                <View style={s.fechasAviso} accessibilityRole="alert">
-                  <Text variant="caption" color="warningText" style={s.fechasAvisoTexto}>
-                    No pudimos ver qué días tienen salidas. Puedes buscar igual.
-                  </Text>
-                  <TextLink
-                    onPress={() => setReintentoFechas((n) => n + 1)}
-                    accessibilityLabel="Reintentar la carga de fechas con salidas"
-                  >
-                    Reintentar
-                  </TextLink>
-                </View>
-              ) : null}
-            </View>
-
-            {viajes.length > 0 && !loadingViajes && (
-              <>
-                <View style={s.filterRow}>
-                  <Text variant="label">
-                    {`${visibles.length} ${visibles.length === 1 ? 'salida' : 'salidas'}`}
-                    {selectedCoop ? ` · ${selectedCoop}` : ''}
-                  </Text>
-                  {puedeFiltrar ? (
-                    <PressableScale
-                      onPress={() => setFiltersVisible(true)}
-                      haptic
-                      hapticType="selection"
-                      scaleValue={Motion.press.button}
-                      style={s.filterTrigger}
-                      accessibilityRole="button"
-                      accessibilityLabel={
-                        selectedCoop
-                          ? `Filtrar por cooperativa. Ahora: ${selectedCoop}`
-                          : 'Filtrar por cooperativa'
-                      }
-                    >
-                      <SlidersHorizontal
-                        color={Colors.foreground}
-                        weight="bold"
-                        size={Sizes.icon.md}
-                      />
-                      <Text variant="label">Filtrar</Text>
-                      {filtroActivo && <View style={s.filterDot} />}
-                    </PressableScale>
-                  ) : null}
-                </View>
-
-                {/* Orden en línea (APP-21); con una sola salida no hay nada que ordenar. */}
-                {visibles.length > 1 ? (
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    style={s.sortScroll}
-                    contentContainerStyle={s.sortRow}
-                    accessibilityRole="radiogroup"
-                    accessibilityLabel="Ordenar salidas"
-                  >
-                    {SORT_OPTIONS.map((option) => (
-                      <Chip
-                        key={option.id}
-                        label={option.label}
-                        selected={sortType === option.id}
-                        onPress={() => setSortType(option.id)}
-                        accessibilityLabel={`Ordenar: ${option.label}`}
-                      />
-                    ))}
-                  </ScrollView>
-                ) : null}
-              </>
-            )}
-
-            <View style={s.results}>
-              {loadingViajes ? (
-                <CardSkeleton count={3} />
-              ) : !origen || !destino ? (
-                <EmptyState
-                  icon={MapPin}
-                  title="Elige tu ruta"
-                  description="Elige origen y destino para ver las salidas."
-                  compact
-                />
-              ) : errorViajes ? (
-                <ErrorState
-                  title="No pudimos cargar las salidas"
-                  description={errorViajes}
-                  onRetry={() => setReintentoViajes((n) => n + 1)}
-                  compact
-                />
-              ) : viajes.length === 0 &&
-                !errorFechas &&
-                !loadingDates &&
-                activeDates?.length === 0 ? (
-                // La ruta no tiene ninguna salida (no solo ese día): otros destinos (M-09).
-                <SinSalidasRuta
+      <EvitarTeclado>
+        <ScrollView
+          contentContainerStyle={scrollContent({
+            top: Spacing.lg,
+            floatingAction: !!barra,
+          })}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          automaticallyAdjustKeyboardInsets
+        >
+          {/* ─── Paso 1: elegir la salida ─────────────────────────────────── */}
+          {step === 1 && (
+            <>
+              <Card style={s.busqueda}>
+                <RouteField
                   origen={origen}
                   destino={destino}
-                  onElegirDestino={setDestino}
-                  onCambiarDestino={() => abrirDestinoRef.current?.()}
-                />
-              ) : viajes.length === 0 ? (
-                <EmptyState
-                  icon={CalendarBlank}
-                  title="Sin salidas ese día"
-                  description="Prueba con otra fecha."
-                  action={
-                    calendarEnabled
-                      ? {
-                          children: 'Cambiar fecha',
-                          variant: 'secondary',
-                          onPress: () => setShowCalendar(true),
-                        }
-                      : undefined
-                  }
-                  compact
-                />
-              ) : visibles.length === 0 ? (
-                <EmptyState
-                  icon={SlidersHorizontal}
-                  title="Sin coincidencias"
-                  description="Ninguna salida es de esa cooperativa."
-                  action={{
-                    children: 'Quitar filtro',
-                    variant: 'secondary',
-                    onPress: () => setSelectedCoop(null),
+                  onOrigen={setOrigen}
+                  onDestino={setDestino}
+                  onIntercambiar={() => {
+                    setOrigen(destino);
+                    setDestino(origen);
                   }}
-                  compact
+                  recientes={recientes}
+                  populares={CIUDADES_POPULARES}
+                  registrarAbrirDestino={registrarAbrirDestino}
+                />
+                <CampoFecha
+                  valor={
+                    !origen || !destino ? 'Elige origen y destino' : formatDiaVE(toDateKey(fecha))
+                  }
+                  pendiente={!calendarEnabled}
+                  onPress={() => setShowCalendar(true)}
+                />
+                {errorFechas ? (
+                  <View style={s.fechasAviso} accessibilityRole="alert">
+                    <Text variant="caption" color="warningText" style={s.fechasAvisoTexto}>
+                      No pudimos ver qué días tienen salidas. Puedes buscar igual.
+                    </Text>
+                    <TextLink
+                      onPress={() => setReintentoFechas((n) => n + 1)}
+                      accessibilityLabel="Reintentar la carga de fechas con salidas"
+                    >
+                      Reintentar
+                    </TextLink>
+                  </View>
+                ) : null}
+              </Card>
+
+              {viajes.length > 0 && !loadingViajes && (
+                <>
+                  <View style={s.filterRow}>
+                    <Text variant="subheading" numberOfLines={1} style={s.filterTitulo}>
+                      {`${visibles.length} ${visibles.length === 1 ? 'salida' : 'salidas'}`}
+                      {selectedCoop ? ` · ${selectedCoop}` : ''}
+                    </Text>
+                    {puedeFiltrar ? (
+                      <PressableScale
+                        onPress={() => setFiltersVisible(true)}
+                        haptic
+                        hapticType="selection"
+                        scaleValue={Motion.press.button}
+                        style={s.filterTrigger}
+                        accessibilityRole="button"
+                        accessibilityLabel={
+                          selectedCoop
+                            ? `Filtrar por cooperativa. Ahora: ${selectedCoop}`
+                            : 'Filtrar por cooperativa'
+                        }
+                      >
+                        <SlidersHorizontal
+                          color={Colors.accentStrong}
+                          weight="bold"
+                          size={Sizes.icon.md}
+                        />
+                        <Text variant="label" weight="semibold" color="link">
+                          Filtrar
+                        </Text>
+                        {filtroActivo && <View style={s.filterDot} />}
+                      </PressableScale>
+                    ) : null}
+                  </View>
+
+                  {/* Orden en línea (APP-21); con una sola salida no hay nada que ordenar. */}
+                  {visibles.length > 1 ? (
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      style={s.sortScroll}
+                      contentContainerStyle={s.sortRow}
+                      accessibilityRole="radiogroup"
+                      accessibilityLabel="Ordenar salidas"
+                    >
+                      {SORT_OPTIONS.map((option) => (
+                        <Chip
+                          key={option.id}
+                          label={option.label}
+                          selected={sortType === option.id}
+                          sobre="surface"
+                          onPress={() => setSortType(option.id)}
+                          accessibilityLabel={`Ordenar: ${option.label}`}
+                        />
+                      ))}
+                    </ScrollView>
+                  ) : null}
+                </>
+              )}
+
+              <View style={s.results}>
+                {loadingViajes ? (
+                  <CardSkeleton count={3} />
+                ) : !origen || !destino ? (
+                  <EmptyState
+                    icon={MapPin}
+                    title="Elige tu ruta"
+                    description="Elige origen y destino para ver las salidas."
+                    compact
+                  />
+                ) : errorViajes ? (
+                  <ErrorState
+                    title="No pudimos cargar las salidas"
+                    description={errorViajes}
+                    onRetry={() => setReintentoViajes((n) => n + 1)}
+                    compact
+                  />
+                ) : viajes.length === 0 &&
+                  !errorFechas &&
+                  !loadingDates &&
+                  activeDates?.length === 0 ? (
+                  // La ruta no tiene ninguna salida (no solo ese día): otros destinos (M-09).
+                  <SinSalidasRuta
+                    origen={origen}
+                    destino={destino}
+                    onElegirDestino={setDestino}
+                    onCambiarDestino={() => abrirDestinoRef.current?.()}
+                  />
+                ) : viajes.length === 0 ? (
+                  <EmptyState
+                    icon={CalendarBlank}
+                    title="Sin salidas ese día"
+                    description="Prueba con otra fecha."
+                    action={
+                      calendarEnabled
+                        ? {
+                            children: 'Cambiar fecha',
+                            variant: 'secondary',
+                            onPress: () => setShowCalendar(true),
+                          }
+                        : undefined
+                    }
+                    compact
+                  />
+                ) : visibles.length === 0 ? (
+                  <EmptyState
+                    icon={SlidersHorizontal}
+                    title="Sin coincidencias"
+                    description="Ninguna salida es de esa cooperativa."
+                    action={{
+                      children: 'Quitar filtro',
+                      variant: 'secondary',
+                      onPress: () => setSelectedCoop(null),
+                    }}
+                    compact
+                  />
+                ) : (
+                  <View accessibilityRole="radiogroup" accessibilityLabel="Salidas">
+                    {visibles.map((viaje, index) => (
+                      <StaggerItem key={viaje.id} index={index}>
+                        {/* Tocar elige la salida; "Continuar" avanza. */}
+                        <TarjetaSalida
+                          viaje={viaje}
+                          elegida={seleccionado?.id === viaje.id}
+                          precio={formatMoney({ usd: viaje.precio, tasa: tasaRef }).principal}
+                          onPress={() => {
+                            if (estaEnCurso()) return;
+                            elegirSalida(viaje);
+                          }}
+                          accessibilityLabel={etiquetaSalida(
+                            viaje,
+                            formatMoney({ usd: viaje.precio, tasa: tasaRef }).accesible
+                          )}
+                        />
+                      </StaggerItem>
+                    ))}
+                  </View>
+                )}
+              </View>
+            </>
+          )}
+
+          {/* ─── Paso 2: asientos ─────────────────────────────────────────── */}
+          {step === 2 && seleccionado && (
+            <>
+              <TripCard viaje={seleccionado} />
+              <SeatSelector
+                asientosTotales={seleccionado.asientosTotales ?? 0}
+                asientosOcupados={ocupadosAjenos}
+                seleccionados={asientosElegidos}
+                onChange={setAsientosElegidos}
+                confirmando={checkout.enCurso}
+                cargandoOcupados={cargandoOcupados}
+                errorOcupados={errorOcupados}
+                onReintentarOcupados={() => {
+                  setErrorOcupados(null);
+                  setAsientosVersion((v) => v + 1);
+                }}
+              />
+            </>
+          )}
+
+          {/* ─── Paso 3: pasajeros ────────────────────────────────────────── */}
+          {step === 3 && seleccionado && (
+            <>
+              {reservaVencida ? (
+                <ReservaVencida
+                  texto="Liberamos tus asientos. Si ya pagaste, elige de nuevo y registra la misma referencia."
+                  onElegirDeNuevo={volverAElegirAsientos}
                 />
               ) : (
-                <View accessibilityRole="radiogroup" accessibilityLabel="Salidas">
-                  {visibles.map((viaje, index) => (
-                    <StaggerItem key={viaje.id} index={index}>
-                      {/* Tocar elige la salida; "Continuar" avanza (§2.1 regla 6). */}
-                      <EntityCard
-                        selectable
-                        selected={seleccionado?.id === viaje.id}
-                        onPress={() => {
-                          if (estaEnCurso()) return;
-                          elegirSalida(viaje);
-                        }}
-                        title={viaje.cooperativa}
-                        subtitle={[
-                          viaje.horaLlegada
-                            ? `${viaje.horaSalida} → ${viaje.horaLlegada}`
-                            : viaje.horaSalida,
-                          viaje.duracion,
-                        ]
-                          .filter(Boolean)
-                          .join(' · ')}
-                        subtitleLines={2}
-                        badge={<Valoracion calificacion={viaje.calificacion} />}
-                        meta={
-                          <View style={s.priceMeta}>
-                            <Monto
-                              usd={viaje.precio}
-                              tasa={tasaRef}
-                              size="sm"
-                              align="right"
-                              sinReferencia
-                            />
-                            {viaje.asientosDisponibles <= POCOS_ASIENTOS ? (
-                              <Badge tone="pending">{`Quedan ${viaje.asientosDisponibles}`}</Badge>
-                            ) : (
-                              <Text variant="caption" color="muted" compact>
-                                {`${viaje.asientosDisponibles} libres`}
-                              </Text>
-                            )}
-                          </View>
-                        }
-                        accessibilityLabel={etiquetaSalida(
-                          viaje,
-                          formatMoney({ usd: viaje.precio, tasa: tasaRef }).accesible
-                        )}
-                      />
-                    </StaggerItem>
-                  ))}
-                </View>
+                <>
+                  <View style={s.bloque}>
+                    <ReservaTimer
+                      segundos={segundosReserva}
+                      titulo={tituloReserva}
+                      detalle="Termina antes de que venza."
+                    />
+                  </View>
+                  <PasajerosForm
+                    ref={pasajerosRef}
+                    asientos={checkout.asientosApartados}
+                    perfil={perfil}
+                    perfilCargando={perfilCargando}
+                    inicial={pasajerosIniciales}
+                    asientosConError={asientosSinDatos}
+                    mensajeError={errorPasajeros}
+                    guardando={checkout.enCurso}
+                    onSubmit={guardarPasajeros}
+                  />
+                </>
               )}
-            </View>
-          </>
-        )}
+            </>
+          )}
 
-        {/* ─── Paso 2: asientos ─────────────────────────────────────────── */}
-        {step === 2 && seleccionado && (
-          <>
-            <TripCard viaje={seleccionado} />
-            <SeatSelector
-              asientosTotales={seleccionado.asientosTotales ?? 0}
-              asientosOcupados={ocupadosAjenos}
-              seleccionados={asientosElegidos}
-              onChange={setAsientosElegidos}
-              confirmando={checkout.enCurso}
-              cargandoOcupados={cargandoOcupados}
-              errorOcupados={errorOcupados}
-              onReintentarOcupados={() => {
-                setErrorOcupados(null);
-                setAsientosVersion((v) => v + 1);
-              }}
-            />
-          </>
-        )}
-
-        {/* ─── Paso 3: pasajeros ────────────────────────────────────────── */}
-        {step === 3 && seleccionado && (
-          <>
-            {reservaVencida ? (
-              <ReservaVencida
-                texto="Liberamos tus asientos. Si ya pagaste, elige de nuevo y registra la misma referencia."
-                onElegirDeNuevo={volverAElegirAsientos}
-              />
-            ) : (
-              <>
-                <View style={s.bloque}>
-                  <ReservaTimer
-                    segundos={segundosReserva}
-                    titulo={tituloReserva}
-                    detalle="Termina antes de que venza."
-                  />
-                </View>
-                <PasajerosForm
-                  ref={pasajerosRef}
-                  asientos={checkout.asientosApartados}
-                  perfil={perfil}
-                  perfilCargando={perfilCargando}
-                  inicial={pasajerosIniciales}
-                  asientosConError={asientosSinDatos}
-                  mensajeError={errorPasajeros}
-                  guardando={checkout.enCurso}
-                  onSubmit={guardarPasajeros}
+          {/* ─── Paso 4: pago ─────────────────────────────────────────────── */}
+          {step === 4 && seleccionado && (
+            <>
+              {reservaVencida ? (
+                <ReservaVencida
+                  texto="Liberamos tus asientos. Si ya pagaste, elige de nuevo y registra la misma referencia."
+                  onElegirDeNuevo={volverAElegirAsientos}
                 />
-              </>
-            )}
-          </>
-        )}
-
-        {/* ─── Paso 4: pago ─────────────────────────────────────────────── */}
-        {step === 4 && seleccionado && (
-          <>
-            {reservaVencida ? (
-              <ReservaVencida
-                texto="Liberamos tus asientos. Si ya pagaste, elige de nuevo y registra la misma referencia."
-                onElegirDeNuevo={volverAElegirAsientos}
-              />
-            ) : (
-              <>
-                <View style={s.bloque}>
-                  <ReservaTimer segundos={segundosReserva} titulo={tituloReserva} />
-                </View>
-                {/* Una fila compacta del viaje (AN-14): el total va una sola vez, abajo. */}
-                <View style={s.viajeFila}>
-                  <Text variant="bodyStrong" numberOfLines={1}>
-                    {`${formatCity(seleccionado.ciudadOrigen)} → ${formatCity(seleccionado.ciudadDestino)}`}
-                  </Text>
-                  <Text variant="secondary" color="muted" numberOfLines={1}>
-                    {`${formatDiaVE(seleccionado.fecha_hora_salida)} · ${seleccionado.horaSalida} · ${seleccionado.cooperativa}`}
-                  </Text>
-                </View>
-                {cotizacion ? (
-                  <PaymentFlow
-                    cooperativaId={seleccionado.cooperativa_id}
-                    concepto={`${nBoletos === 1 ? '1 boleto' : `${nBoletos} boletos`} · ${formatCity(
-                      seleccionado.ciudadOrigen
-                    )} → ${formatCity(seleccionado.ciudadDestino)}`}
-                    tipoRecurso="boleto"
-                    cotizacion={cotizacion}
-                    onRegistrar={checkout.onRegistrar}
-                    onEfectivo={() => irACompra(checkout.reserva, 'reserva')}
-                    bloqueado={checkout.enCurso}
-                    metodo={metodoPago}
-                    onMetodo={setMetodoPago}
-                    onAccion={setAccionPago}
-                  />
-                ) : null}
-              </>
-            )}
-          </>
-        )}
-      </ScrollView>
+              ) : (
+                <>
+                  <View style={s.bloque}>
+                    <ReservaTimer segundos={segundosReserva} titulo={tituloReserva} />
+                  </View>
+                  {/* Una fila compacta del viaje: el total va una sola vez, abajo. */}
+                  <View style={s.viajeFila}>
+                    <Text variant="subheading" numberOfLines={1}>
+                      {`${formatCity(seleccionado.ciudadOrigen)} → ${formatCity(seleccionado.ciudadDestino)}`}
+                    </Text>
+                    <Text variant="secondary" color="muted" numberOfLines={1}>
+                      {`${formatDiaVE(seleccionado.fecha_hora_salida)} · ${seleccionado.horaSalida} · ${seleccionado.cooperativa}`}
+                    </Text>
+                  </View>
+                  {cotizacion ? (
+                    <PaymentFlow
+                      cooperativaId={seleccionado.cooperativa_id}
+                      concepto={`${nBoletos === 1 ? '1 boleto' : `${nBoletos} boletos`} · ${formatCity(
+                        seleccionado.ciudadOrigen
+                      )} → ${formatCity(seleccionado.ciudadDestino)}`}
+                      tipoRecurso="boleto"
+                      cotizacion={cotizacion}
+                      onRegistrar={checkout.onRegistrar}
+                      onEfectivo={() => irACompra(checkout.reserva, 'reserva')}
+                      bloqueado={checkout.enCurso}
+                      metodo={metodoPago}
+                      onMetodo={setMetodoPago}
+                      onAccion={setAccionPago}
+                    />
+                  ) : null}
+                </>
+              )}
+            </>
+          )}
+        </ScrollView>
+      </EvitarTeclado>
 
       {barra ? <FloatingBar resumen={barra.resumen}>{barra.boton}</FloatingBar> : null}
 
@@ -1261,17 +1246,114 @@ export default function BuscarBoletoScreen() {
 
 // ─── Valoración ──────────────────────────────────────────────────────────────
 
-/** Insignia neutra con estrella (SY-27): la valoración no es un estado pendiente. */
+/** Estrella + nota: la valoración no es un estado pendiente, va sin fondo. */
 function Valoracion({ calificacion }: { calificacion: number }) {
   if (!(calificacion > 0)) return <Badge tone="neutral">Nueva</Badge>;
   const valor = formatNumeroVE(calificacion, 1);
   return (
     <View style={s.valoracion} accessible accessibilityLabel={`Valoración ${valor} de 5`}>
-      <Star size={Sizes.icon.xs} color={Colors.primaryText} weight="fill" />
-      <Text variant="caption" size="badge" weight="semibold" compact>
+      <Star size={Sizes.icon.xs} color={Colors.primaryDeep} weight="fill" />
+      <Text variant="caption" weight="semibold" compact>
         {valor}
       </Text>
     </View>
+  );
+}
+
+// ─── Tarjeta de salida ───────────────────────────────────────────────────────
+
+/** "6:15 a. m. (+1)" → la hora y, aparte, cuántos días después llega. */
+function partirLlegada(hora: string): { hora: string; dias: string | null } {
+  const m = /^(.*?)\s*\((\+\d+)\)$/.exec(hora);
+  return m ? { hora: m[1], dias: m[2] } : { hora, dias: null };
+}
+
+/**
+ * Una salida se decide por la hora y el precio: esos dos mandan. Arriba la cooperativa
+ * y su nota, en medio el camino con las dos horas, abajo el precio y los asientos.
+ */
+function TarjetaSalida({
+  viaje,
+  elegida,
+  precio,
+  onPress,
+  accessibilityLabel,
+}: {
+  viaje: ViajeResumen;
+  elegida: boolean;
+  precio: string;
+  onPress: () => void;
+  accessibilityLabel: string;
+}) {
+  const llegada = viaje.horaLlegada ? partirLlegada(viaje.horaLlegada) : null;
+  const pocos = viaje.asientosDisponibles <= POCOS_ASIENTOS;
+
+  return (
+    <PressableScale
+      onPress={onPress}
+      haptic
+      hapticType="selection"
+      scaleValue={Motion.press.card}
+      accessibilityRole="radio"
+      accessibilityState={{ selected: elegida }}
+      accessibilityLabel={accessibilityLabel}
+      style={[s.salida, elegida && s.salidaElegida]}
+    >
+      <View style={s.salidaCabecera}>
+        <Text variant="bodyStrong" numberOfLines={1} style={s.salidaCoop}>
+          {viaje.cooperativa}
+        </Text>
+        <Valoracion calificacion={viaje.calificacion} />
+        {elegida ? (
+          <CheckCircle size={Sizes.icon.lg} color={Colors.accentStrong} weight="fill" />
+        ) : (
+          <Circle size={Sizes.icon.lg} color={Colors.borderControl} weight="regular" />
+        )}
+      </View>
+
+      <View style={s.salidaHoras}>
+        <Text variant="heading" tracking="snug" compact numberOfLines={1}>
+          {viaje.horaSalida}
+        </Text>
+        <View style={s.salidaCamino}>
+          <View style={s.salidaTrazo}>
+            <View style={s.salidaPunto} />
+            <View style={s.salidaLinea} />
+            <View style={[s.salidaPunto, s.salidaPuntoFin]} />
+          </View>
+          {viaje.duracion ? (
+            <Text variant="caption" weight="medium" color="muted" align="center" compact numberOfLines={1}>
+              {viaje.duracion}
+            </Text>
+          ) : null}
+        </View>
+        {llegada ? (
+          <View style={s.salidaLlegada}>
+            <Text variant="heading" tracking="snug" compact numberOfLines={1}>
+              {llegada.hora}
+            </Text>
+            {llegada.dias ? (
+              <Text variant="caption" weight="semibold" color="link" compact>
+                {llegada.dias}
+              </Text>
+            ) : null}
+          </View>
+        ) : null}
+      </View>
+
+      <View style={s.salidaPie}>
+        {pocos ? (
+          <Badge tone="pending">{`Quedan ${viaje.asientosDisponibles}`}</Badge>
+        ) : (
+          <Text variant="secondary" color="muted" compact>
+            {`${viaje.asientosDisponibles} libres`}
+          </Text>
+        )}
+        <Text variant="subheading" weight="bold" compact>
+          {precio}
+        </Text>
+      </View>
+    </PressableScale>
   );
 }
 
@@ -1279,25 +1361,23 @@ function Valoracion({ calificacion }: { calificacion: number }) {
 
 function TripCard({ viaje }: { viaje: ViajeResumen }) {
   return (
-    <Card tone="sunken" padding="md" style={s.tripCard}>
+    <Card padding="md" style={s.tripCard}>
       <View style={s.tripHeader}>
-        <Text variant="subheading" numberOfLines={1} style={s.tripName}>
+        <Text variant="bodyStrong" numberOfLines={1} style={s.tripName}>
           {viaje.cooperativa}
         </Text>
         <Valoracion calificacion={viaje.calificacion} />
       </View>
 
-      <Divider spacing={Spacing.lg} />
-
-      <RouteSummary
-        origen={viaje.ciudadOrigen}
-        destino={viaje.ciudadDestino}
-        duration={viaje.duracion || undefined}
-        horaSalida={viaje.horaSalida}
-        horaLlegada={viaje.horaLlegada || undefined}
-      />
-
-      <Divider spacing={Spacing.lg} />
+      <View style={s.tripRuta}>
+        <RouteSummary
+          origen={viaje.ciudadOrigen}
+          destino={viaje.ciudadDestino}
+          duration={viaje.duracion || undefined}
+          horaSalida={viaje.horaSalida}
+          horaLlegada={viaje.horaLlegada || undefined}
+        />
+      </View>
 
       <View style={s.tripFooter}>
         <View style={s.fechaBlock}>
@@ -1317,16 +1397,19 @@ function TripCard({ viaje }: { viaje: ViajeResumen }) {
   );
 }
 
+const PUNTO_CAMINO = Spacing.sm;
+
 const s = StyleSheet.create({
   busqueda: {
     gap: Spacing.md,
+    marginBottom: Spacing.lg,
   },
   fechasAviso: {
     flexDirection: 'row',
     alignItems: 'center',
     flexWrap: 'wrap',
     columnGap: Spacing.xs,
-    paddingHorizontal: Spacing.lg,
+    paddingHorizontal: Spacing.xs,
   },
   fechasAvisoTexto: {
     flexShrink: 1,
@@ -1336,6 +1419,9 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     marginTop: Spacing['2xl'],
+  },
+  filterTitulo: {
+    flexShrink: 1,
   },
   filterTrigger: {
     flexDirection: 'row',
@@ -1355,32 +1441,94 @@ const s = StyleSheet.create({
   },
   sortRow: {
     gap: Spacing.sm,
-    paddingTop: Spacing.sm,
+    paddingTop: Spacing.xs,
     paddingHorizontal: Layout.screenPadding,
   },
   results: {
     marginTop: Spacing.lg,
   },
-  priceMeta: {
-    alignItems: 'flex-end',
-    gap: Spacing.xs,
-  },
   valoracion: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.xs,
-    minHeight: Sizes.badge.sm,
-    paddingHorizontal: Spacing.sm,
-    borderRadius: Radius.full,
-    borderWidth: Sizes.hairline,
-    borderColor: Colors.border,
-    backgroundColor: Colors.background,
   },
+
+  // Tarjeta de salida
+  salida: {
+    backgroundColor: Colors.card,
+    borderRadius: Radius.xl,
+    borderCurve: 'continuous',
+    // El borde conserva su ancho para que elegir no mueva el contenido.
+    borderWidth: Sizes.borderSelected,
+    borderColor: Colors.card,
+    padding: Spacing.lg,
+    marginBottom: Spacing.md,
+    ...Shadows.card,
+  },
+  salidaElegida: {
+    borderColor: Colors.accentStrong,
+  },
+  salidaCabecera: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  salidaCoop: {
+    flex: 1,
+  },
+  salidaHoras: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    marginTop: Spacing.lg,
+  },
+  salidaCamino: {
+    flex: 1,
+    gap: Spacing.xs,
+    minWidth: Spacing['5xl'],
+  },
+  salidaTrazo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs / 2,
+  },
+  salidaPunto: {
+    width: PUNTO_CAMINO,
+    height: PUNTO_CAMINO,
+    borderRadius: Radius.full,
+    borderWidth: Sizes.borderSelected,
+    borderColor: Colors.placeholder,
+  },
+  salidaPuntoFin: {
+    backgroundColor: Colors.placeholder,
+  },
+  salidaLinea: {
+    flex: 1,
+    height: Sizes.borderStrong,
+    borderRadius: Radius.full,
+    backgroundColor: Colors.surfaceDark,
+  },
+  salidaLlegada: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: Spacing.xs / 2,
+  },
+  salidaPie: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.sm,
+    marginTop: Spacing.md,
+    paddingTop: Spacing.md,
+    borderTopWidth: Sizes.hairline,
+    borderTopColor: Colors.border,
+  },
+
   bloque: {
     marginBottom: Spacing.lg,
   },
   viajeFila: {
-    gap: Spacing.xs,
+    gap: Spacing.xs / 2,
     marginBottom: Spacing.lg,
   },
   tripCard: {
@@ -1395,22 +1543,29 @@ const s = StyleSheet.create({
   tripName: {
     flex: 1,
   },
+  tripRuta: {
+    marginTop: Spacing.md,
+  },
   tripFooter: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
     gap: Spacing.md,
+    marginTop: Spacing.md,
+    paddingTop: Spacing.md,
+    borderTopWidth: Sizes.hairline,
+    borderTopColor: Colors.border,
   },
   fechaBlock: {
-    gap: Spacing.xs,
+    gap: Spacing.xs / 2,
   },
   totalBlock: {
     alignItems: 'flex-end',
-    gap: Spacing.xs,
+    gap: Spacing.xs / 2,
   },
   sheetContent: {
     paddingHorizontal: Layout.screenPadding,
-    paddingVertical: Spacing.xl,
+    paddingVertical: Spacing.lg,
   },
   chipGrid: {
     flexDirection: 'row',

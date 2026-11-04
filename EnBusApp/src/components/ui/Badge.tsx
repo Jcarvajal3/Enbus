@@ -1,23 +1,22 @@
 /**
  * Badge / StatusBadge / Chip / CountPill — the small pills.
  *
- * `StatusBadge` is the only correct way to show an `estado`: it resolves the
- * label through `getEstadoVisual` and the colour through `StatusPalette`, so a
- * new backend state can never render as an unstyled raw enum string again.
+ * `StatusBadge` is the only correct way to show an `estado`: it resolves the label
+ * through `getEstadoVisual` and the colour through `StatusPalette`, so a new backend
+ * state can never render as an unstyled raw enum string again.
  *
- * Insignias (SY-23): 12 pt semibold, sin icono (el icono va en avisos y
- * banners). `neutral` es un contorno (fondo blanco) y `done` un relleno sólido
- * `surfaceDark`, así "Cancelado" y "Viaje realizado" no se confunden (SY-22).
+ * Insignias: punto de color + etiqueta 12 pt semibold sobre el tinte del tono. El
+ * punto hace que el estado se lea de un vistazo, también en una lista larga.
  *
- * Selección (D1): `Chip` elegido y `CountPill` activa en `accentStrong` con
- * texto blanco (5,7:1); chip sin elegir = relleno `surface` sin borde.
+ * Selección: `Chip` elegido y `CountPill` activa en `accentStrong` con texto blanco;
+ * chip sin elegir = blanco o pozo, sin competir con el contenido.
  */
 import React from 'react';
 import { StyleSheet, View, ViewStyle } from 'react-native';
 import type { IconProps } from 'phosphor-react-native';
 import { PressableScale } from '../PressableScale';
 import { Text } from './Text';
-import { Colors, Motion, Radius, Sizes, Spacing, StatusPalette, type StatusTone } from '@/src/theme';
+import { Colors, Motion, Radius, Shadows, Sizes, Spacing, StatusPalette, type StatusTone } from '@/src/theme';
 import { getEstadoVisual, type EstadoDominio } from '@/src/utils/estados';
 
 export interface BadgeProps {
@@ -46,6 +45,7 @@ export function Badge({ children, tone = 'neutral', size = 'sm', bordered, style
         style,
       ]}
     >
+      <View style={[s.punto, { backgroundColor: colors.fg }]} />
       {/* Texto oscuro del tono sobre su tinte: ≥ 4,5:1 (WCAG AA). */}
       <Text variant="caption" size="badge" weight="semibold" color={colors.text} compact numberOfLines={1}>
         {children}
@@ -86,7 +86,7 @@ export function CountPill({ value, active }: { value: number; active?: boolean }
     <View style={[s.count, active && s.countActive]}>
       <Text
         variant="caption"
-        size="xs"
+        size="micro"
         weight="bold"
         color={active ? 'inverse' : 'foreground'}
         compact
@@ -115,8 +115,8 @@ export function Chip({
   icon?: React.ComponentType<IconProps>;
   fullWidth?: boolean;
   /**
-   * Fondo sobre el que va el chip: en una pantalla blanca (por defecto) el chip
-   * sin elegir es `surface`; dentro de una tarjeta `surface`, blanco.
+   * Fondo sobre el que va el chip: dentro de algo blanco (por defecto) el chip sin
+   * elegir es `surface`; sobre `canvas` o dentro de un pozo, blanco.
    */
   sobre?: 'background' | 'surface';
   /** Cuando `label` solo no basta, p. ej. "Asiento 14, Soy yo" o "Categoría: Pago" */
@@ -144,7 +144,7 @@ export function Chip({
           weight="bold"
         />
       )}
-      <Text variant="label" color={selected ? 'inverse' : 'foreground'} compact>
+      <Text variant="label" weight={selected ? 'semibold' : 'medium'} color={selected ? 'inverse' : 'foreground'} compact>
         {label}
       </Text>
     </PressableScale>
@@ -157,15 +157,21 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     alignSelf: 'flex-start',
+    gap: Spacing.xs + Sizes.hairline,
     borderRadius: Radius.full,
   },
   badgeSm: {
     minHeight: Sizes.badge.sm,
-    paddingHorizontal: Spacing.sm,
+    paddingHorizontal: Spacing.sm + Spacing.xs / 2,
   },
   badgeMd: {
     minHeight: Sizes.badge.md,
     paddingHorizontal: Spacing.md,
+  },
+  punto: {
+    width: Sizes.dot,
+    height: Sizes.dot,
+    borderRadius: Radius.full,
   },
   count: {
     minWidth: Sizes.counter,
@@ -184,7 +190,7 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: Spacing.sm,
-    height: Sizes.control.md,
+    height: Sizes.control.sm,
     paddingHorizontal: Spacing.lg,
     borderRadius: Radius.full,
   },
@@ -197,8 +203,10 @@ const s = StyleSheet.create({
   },
   chipIdleOnSurface: {
     backgroundColor: Colors.background,
+    ...Shadows.subtle,
   },
   chipSelected: {
     backgroundColor: Colors.accentStrong,
+    ...Shadows.sky,
   },
 });

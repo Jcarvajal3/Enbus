@@ -1,16 +1,10 @@
 /**
  * SegmentedControl — the sliding pill toggle.
  *
- * This exact control (track, absolutely-positioned indicator, onLayout width
- * maths, withTiming translate) was reimplemented four times: boletos, paquetes,
- * SearchForm and the login screen — the last one without animation at all, so
- * the same interaction felt different depending on where you were. One
- * implementation now serves all of them.
- *
- * D19: pastilla `background` sobre pista `surface`; activo `foreground`
- * semibold, inactivo `mutedForeground`. No usa azul (es superficie, no
- * selección de un dato). Con "reducir movimiento" la pastilla salta sin
- * deslizarse.
+ * Pastilla blanca con relieve sobre pista `surfaceDark` (lo oscuro queda atrás);
+ * activo en tinta semibold con su icono relleno, inactivo apagado. No usa azul: es
+ * superficie, no selección de un dato. Con "reducir movimiento" la pastilla salta
+ * sin deslizarse.
  */
 import React, { useCallback, useEffect, useState } from 'react';
 import { StyleSheet, View, ViewStyle } from 'react-native';
@@ -38,8 +32,6 @@ export interface SegmentedControlProps<T extends string> {
   options: SegmentOption<T>[];
   value: T;
   onChange: (value: T) => void;
-  /** `sunken` sits on a white screen, `raised` sits inside a beige card */
-  tone?: 'sunken' | 'raised';
   style?: ViewStyle;
 }
 
@@ -49,7 +41,6 @@ export function SegmentedControl<T extends string>({
   options,
   value,
   onChange,
-  tone = 'sunken',
   style,
 }: SegmentedControlProps<T>) {
   const reduceMotion = useReducedMotion();
@@ -88,7 +79,7 @@ export function SegmentedControl<T extends string>({
 
   return (
     <View
-      style={[s.track, tone === 'raised' ? s.trackRaised : s.trackSunken, style]}
+      style={[s.track, style]}
       onLayout={onLayout}
       accessibilityRole="tablist"
     >
@@ -114,10 +105,19 @@ export function SegmentedControl<T extends string>({
               <Icon
                 size={Sizes.icon.sm}
                 color={isActive ? Colors.foreground : Colors.mutedForeground}
-                weight="bold"
+                weight={isActive ? 'fill' : 'regular'}
               />
             )}
-            <Text variant="label" color={isActive ? 'foreground' : 'muted'} compact numberOfLines={1}>
+            <Text
+              variant="label"
+              weight={isActive ? 'semibold' : 'medium'}
+              color={isActive ? 'foreground' : 'muted'}
+              compact
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.82}
+              style={s.etiqueta}
+            >
               {option.label}
             </Text>
             {option.badge ? <CountPill value={option.badge} active={isActive} /> : null}
@@ -133,11 +133,6 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     borderRadius: Radius.full,
     padding: TRACK_PADDING,
-  },
-  trackSunken: {
-    backgroundColor: Colors.surface,
-  },
-  trackRaised: {
     backgroundColor: Colors.surfaceDark,
   },
   indicator: {
@@ -149,12 +144,15 @@ const s = StyleSheet.create({
     backgroundColor: Colors.background,
     ...Shadows.subtle,
   },
+  etiqueta: {
+    flexShrink: 1,
+  },
   segment: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: Spacing.xs,
+    gap: Spacing.xs + Spacing.xs / 2,
     minHeight: Sizes.control.sm,
     paddingHorizontal: Spacing.xs,
     borderRadius: Radius.full,

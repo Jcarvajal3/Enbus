@@ -22,7 +22,7 @@ export interface TelefonoFieldProps {
   returnKeyType?: ReturnKeyTypeOptions;
   onSubmitEditing?: () => void;
   editable?: boolean;
-  /** Mismo `tone` que los demás campos de la tarjeta. Por defecto `light`. */
+  /** Mismo `tone` que los demás campos de la tarjeta. Por defecto `sunken`. */
   tone?: FieldTone;
   /** Al `TextInput` (para encadenar "Siguiente"). */
   ref?: Ref<TextInput>;

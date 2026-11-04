@@ -26,11 +26,13 @@ import { PressableScale } from '@/src/components/PressableScale';
 import { useVolver } from '@/src/hooks/useVolver';
 import { useToast } from '@/src/components/Toast';
 import {
+  Aviso,
   Button,
   Card,
   Chip,
   Field,
   FieldMessage,
+  IconTile,
   Screen,
   ScreenHeader,
   SectionLabel,
@@ -43,7 +45,7 @@ import { CATEGORIA_REPORTE } from '@/src/utils/estados';
 import { formatCodigoBoleto } from '@/src/utils/codigos';
 import { SOPORTE_WHATSAPP, abrirSoporteWhatsApp } from '@/src/utils/soporte';
 import type { CategoriaReporte, ReporteCreado } from '@/src/types';
-import { Colors, Motion, Radius, Sizes, Spacing } from '@/src/theme';
+import { Colors, Motion, Sizes, Spacing } from '@/src/theme';
 
 const MINIMO_DESCRIPCION = 10;
 const MAXIMO_DESCRIPCION = 1000;
@@ -202,19 +204,17 @@ export default function AyudaScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <ScrollView
-          contentContainerStyle={scrollContent({ top: Spacing['2xl'] })}
+          contentContainerStyle={scrollContent({ top: Spacing.lg })}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
           {/* ── WhatsApp (solo si hay número configurado) ───────────────── */}
           {SOPORTE_WHATSAPP ? (
-            <Card tone="sunken" padding="md" style={s.card}>
+            <Card padding="md" style={s.card}>
               <View style={s.row}>
-                <View style={s.iconBox}>
-                  <WhatsappLogo size={Sizes.icon.lg} color={Colors.successText} weight="fill" />
-                </View>
+                <IconTile tone="mint" icon={WhatsappLogo} />
                 <View style={s.flex}>
-                  <Text variant="bodyStrong">Escríbenos por WhatsApp</Text>
+                  <Text variant="subheading">Escríbenos por WhatsApp</Text>
                   <Text variant="secondary" color="muted">
                     Para algo urgente, como un viaje que sale hoy.
                   </Text>
@@ -236,13 +236,11 @@ export default function AyudaScreen() {
           {/* ── Reportar un problema ────────────────────────────────────── */}
           <SectionLabel>Reportar un problema</SectionLabel>
           {creado ? (
-            <Card tone="sunken" padding="md" style={s.card} accessibilityRole="alert">
+            <Card padding="md" style={s.card} accessibilityRole="alert">
               <View style={s.row}>
-                <View style={s.iconBox}>
-                  <CheckCircle size={Sizes.icon.lg} color={Colors.successText} weight="fill" />
-                </View>
+                <IconTile tone="mint" icon={CheckCircle} />
                 <View style={s.flex}>
-                  <Text variant="bodyStrong">{`Recibimos tu reporte ${creado.codigo}`}</Text>
+                  <Text variant="subheading">{`Recibimos tu reporte ${creado.codigo}`}</Text>
                   <Text variant="secondary" color="muted">
                     Te responderemos por WhatsApp o por correo en menos de 24 horas hábiles.
                   </Text>
@@ -253,7 +251,7 @@ export default function AyudaScreen() {
               </Button>
             </Card>
           ) : (
-            <Card tone="sunken" padding="md" style={s.card}>
+            <Card padding="md" style={s.card}>
               {recurso ? (
                 <Text variant="secondary" style={s.recurso}>
                   <Text variant="secondary" color="muted">
@@ -272,7 +270,6 @@ export default function AyudaScreen() {
                     key={c}
                     label={CATEGORIA_REPORTE[c]}
                     selected={categoria === c}
-                    sobre="surface"
                     onPress={() => {
                       setCategoria(c);
                       setErrores((e) => ({ ...e, categoria: undefined }));
@@ -285,6 +282,7 @@ export default function AyudaScreen() {
 
               <Field
                 label="Cuéntanos qué pasó"
+                placeholder="Ej. Pagué y mi boleto sigue sin confirmar"
                 value={descripcion}
                 onChangeText={(v) => {
                   setDescripcion(v.slice(0, MAXIMO_DESCRIPCION));
@@ -299,12 +297,7 @@ export default function AyudaScreen() {
               />
 
               {errorGeneral ? (
-                <View style={s.errorGeneral} accessibilityRole="alert" accessibilityLiveRegion="polite">
-                  <WarningCircle size={Sizes.icon.md} color={Colors.dangerText} weight="fill" />
-                  <Text variant="secondary" color="dangerText" style={s.flex}>
-                    {errorGeneral}
-                  </Text>
-                </View>
+                <Aviso tono="danger" icon={WarningCircle} texto={errorGeneral} alerta style={s.errorGeneral} />
               ) : null}
 
               <Button icon={PaperPlaneTilt} fullWidth loading={enviando} onPress={enviar}>
@@ -315,7 +308,7 @@ export default function AyudaScreen() {
 
           {/* ── Preguntas frecuentes ────────────────────────────────────── */}
           <SectionLabel>Preguntas frecuentes</SectionLabel>
-          <Card tone="sunken" padding="none">
+          <Card padding="none">
             {PREGUNTAS.map((p, i) => {
               const expandida = abierta === i;
               return (
@@ -334,9 +327,9 @@ export default function AyudaScreen() {
                       {p.pregunta}
                     </Text>
                     {expandida ? (
-                      <CaretUp size={Sizes.icon.sm} color={Colors.mutedForeground} weight="bold" />
+                      <CaretUp size={Sizes.icon.sm} color={Colors.accentStrong} weight="bold" />
                     ) : (
-                      <CaretDown size={Sizes.icon.sm} color={Colors.mutedForeground} weight="bold" />
+                      <CaretDown size={Sizes.icon.sm} color={Colors.placeholder} weight="bold" />
                     )}
                   </PressableScale>
                   {expandida ? (
@@ -359,32 +352,22 @@ const s = StyleSheet.create({
     flex: 1,
   },
   card: {
-    marginBottom: Spacing['2xl'],
+    marginBottom: Spacing['3xl'],
   },
   cardAction: {
     marginTop: Spacing.lg,
   },
   row: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: Spacing.md,
-  },
-  iconBox: {
-    width: Sizes.iconBox.lg,
-    height: Sizes.iconBox.lg,
-    borderRadius: Radius.full,
-    backgroundColor: Colors.white,
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: Spacing.md,
   },
   recurso: {
     marginBottom: Spacing.lg,
-    marginLeft: Spacing.xl,
   },
-  /** Mismo borde que la etiqueta de `Field` (AU-09). */
+  /** Mismo borde que la etiqueta de `Field`. */
   label: {
     marginBottom: Spacing.sm,
-    marginLeft: Spacing.xl,
   },
   chips: {
     flexDirection: 'row',
@@ -395,12 +378,6 @@ const s = StyleSheet.create({
     marginTop: Spacing.lg,
   },
   errorGeneral: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: Spacing.sm,
-    padding: Spacing.md,
-    borderRadius: Radius.lg,
-    backgroundColor: Colors.destructiveLight,
     marginBottom: Spacing.lg,
   },
   faqHead: {

@@ -1,15 +1,12 @@
 /**
- * Screen shell primitives: Screen, FloatingBar, EmptyState, ErrorState,
- * StaleBanner.
+ * Screen shell primitives: Screen, FloatingBar, EmptyState, ErrorState, StaleBanner.
  *
- * These encode the layout rules that screens kept re-deriving by hand:
- * the horizontal gutter, and — critically — the bottom inset needed to clear
- * the floating tab bar. Lists used to hardcode `paddingBottom: 128` and FABs
- * `bottom: 110`; both now come from `Layout`, so moving the tab bar moves
- * everything with it.
+ * These encode the layout rules that screens kept re-deriving by hand: the
+ * horizontal gutter, the bottom inset needed to clear the floating tab bar, and the
+ * atmosphere behind the content (`Atmosfera`), so every screen breathes the same air.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { StyleSheet, View, ViewStyle } from 'react-native';
+import { KeyboardAvoidingView, Platform, StyleSheet, View, ViewStyle } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets, type Edge } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
@@ -19,27 +16,57 @@ import {
   type IconProps,
 } from 'phosphor-react-native';
 import { PressableScale } from '../PressableScale';
+import { Atmosfera, type AtmosferaVariante } from './Atmosfera';
 import { Button, type ButtonProps } from './Button';
 import { Text } from './Text';
-import { Colors, Gradients, Layout, Radius, Sizes, Spacing } from '@/src/theme';
+import { Colors, Gradients, Layout, Radius, Shadows, Sizes, Spacing } from '@/src/theme';
 
 // ─── Screen ──────────────────────────────────────────────────────────────────
 
+/** Alto del velo de atmósfera detrás de la cabecera de una pantalla. */
+const ALTO_ATMOSFERA = 300;
+
 export function Screen({
   children,
-  background = Colors.background,
+  background = Colors.canvas,
   edges = ['top'],
+  atmosfera = 'suave',
   style,
 }: {
   children: React.ReactNode;
   background?: string;
   edges?: readonly Edge[];
+  /** El velo detrás de la cabecera. `null`: sin velo (la pantalla pone su propia portada). */
+  atmosfera?: AtmosferaVariante | null;
   style?: ViewStyle;
 }) {
   return (
     <SafeAreaView edges={edges} style={[s.screen, { backgroundColor: background }, style]}>
+      {atmosfera ? <Atmosfera variante={atmosfera} style={s.velo} /> : null}
       {children}
     </SafeAreaView>
+  );
+}
+
+/**
+ * Encoge un formulario para que el teclado no lo tape. Envuelve el `ScrollView`;
+ * la `FloatingBar` va fuera, para que el teclado la cubra mientras se escribe y
+ * deje el espacio a los campos.
+ *
+ * Con `edgeToEdgeEnabled` Android no redimensiona la ventana al abrir el teclado:
+ * hay que hacerlo aquí, y al encoger, el `ScrollView` lleva el campo enfocado a
+ * la vista. En iOS eso lo hace `automaticallyAdjustKeyboardInsets` del
+ * `ScrollView`. Usar con `keyboardDismissMode="on-drag"`: el teclado numérico de
+ * iOS no tiene tecla para cerrarse, y cerrarlo es lo que devuelve la barra.
+ */
+export function EvitarTeclado({ children }: { children: React.ReactNode }) {
+  return (
+    <KeyboardAvoidingView
+      style={s.screen}
+      behavior={Platform.OS === 'android' ? 'padding' : undefined}
+    >
+      {children}
+    </KeyboardAvoidingView>
   );
 }
 
@@ -51,10 +78,8 @@ export function Gutter({ children, style }: { children: React.ReactNode; style?:
 /**
  * Content padding for scrollables.
  *
- * `tabbed` reserves room for the floating tab bar; `floatingAction` reserves
- * room for a `<FloatingBar>` on top of it. Screens used to hardcode
- * `paddingBottom: 128` regardless of whether a FAB was present, so the last
- * card sat underneath it.
+ * `tabbed` reserves room for the floating tab bar; `floatingAction` reserves room
+ * for a `<FloatingBar>` on top of it.
  */
 export function scrollContent({
   tabbed = false,
@@ -69,9 +94,10 @@ export function scrollContent({
 } = {}): ViewStyle {
   const base = tabbed ? Layout.scrollBottomInset : Layout.scrollBottomInsetPlain;
   const withAction = tabbed
-    ? Layout.floatingBarBottom + Sizes.control.lg + Spacing.lg
-    : // botón + márgenes de la barra + la línea de resumen (si la hay)
-      Sizes.control.lg + Spacing['4xl'] + Spacing['3xl'];
+    ? // la barra de pestañas + el botón flotante + margen para el área segura del teléfono
+      Layout.floatingBarBottom + Sizes.control.lg + Spacing['5xl'] + Spacing.lg
+    : // el muelle: botón + resumen + márgenes + área segura
+      Sizes.control.lg + Spacing['5xl'] + Spacing['4xl'] + Spacing['2xl'];
 
   return {
     paddingHorizontal: horizontal ? Layout.screenPadding : 0,
@@ -83,12 +109,9 @@ export function scrollContent({
 // ─── Floating action bar ─────────────────────────────────────────────────────
 
 /**
- * Pinned bottom action area. On tabbed screens it floats above the tab bar; on
- * stacked screens it sits on the bottom edge (over the safe area) with a fade so
- * content scrolling underneath doesn't collide with the button.
- *
- * `resumen`: una línea sobre el botón con lo elegido en el paso
- * ("Asiento 6 · Bs 17.822,11"), §2.1 regla 6.
+ * La acción de la pantalla, siempre a mano. Sobre las pestañas flota encima de la
+ * barra; en una pantalla apilada es un muelle blanco anclado abajo, con el resumen de
+ * lo elegido ("Asiento 6 · Bs 17.822,11") justo encima del botón.
  */
 export function FloatingBar({
   children,
@@ -106,27 +129,27 @@ export function FloatingBar({
   return (
     <View
       pointerEvents="box-none"
-      style={[s.floatingBar, { bottom: tabbed ? Layout.floatingBarBottom : 0 }]}
+      style={[s.floatingBar, { bottom: tabbed ? Layout.floatingBarBottom + insets.bottom : 0 }]}
     >
-      {fade && !tabbed && (
+      {fade && tabbed ? (
         <LinearGradient
           colors={[...Gradients.fadeToBackground]}
           locations={FADE_LOCATIONS}
           style={s.floatingFade}
           pointerEvents="none"
         />
-      )}
+      ) : null}
       <View
         style={[
           s.floatingInner,
-          !tabbed && s.floatingInnerPlain,
-          !tabbed && { paddingBottom: Spacing['2xl'] + insets.bottom },
+          !tabbed && s.floatingMuelle,
+          !tabbed && { paddingBottom: Spacing.xl + insets.bottom },
         ]}
       >
         {resumen ? (
           <Text
             variant="label"
-            align="center"
+            weight="semibold"
             numberOfLines={1}
             style={s.floatingResumen}
             accessibilityLiveRegion="polite"
@@ -140,8 +163,8 @@ export function FloatingBar({
   );
 }
 
-/** El degradado se vuelve opaco antes del texto del resumen y del botón. */
-const FADE_LOCATIONS = [0, 0.3, 0.45] as const;
+/** El degradado se vuelve opaco antes del botón. */
+const FADE_LOCATIONS = [0, 0.45, 0.8] as const;
 
 // ─── Empty state ─────────────────────────────────────────────────────────────
 
@@ -152,12 +175,9 @@ export type EmptyStateAction = Pick<
 >;
 
 /**
- * Every "nothing here yet" block. Previously five copies with icon circles of
- * 64 or 96pt and titles between 16 and 20pt.
- *
- * Las acciones van bajo el texto (no en una `FloatingBar`): `action` es la
- * principal y `secondaryAction`, si la hay, una salida `ghost` debajo
- * ("Revisa tu correo": "Reenviar correo" + "Usar otro correo").
+ * Every "nothing here yet" block: el icono en un sol pequeño, título y una línea, y
+ * la salida debajo. `action` es la principal y `secondaryAction`, si la hay, una
+ * salida `ghost` ("Revisa tu correo": "Reenviar correo" + "Usar otro correo").
  */
 export function EmptyState({
   icon: Icon,
@@ -178,18 +198,21 @@ export function EmptyState({
 }) {
   return (
     <View style={[s.empty, compact && s.emptyCompact]}>
-      <View style={[s.emptyIcon, compact && s.emptyIconCompact]}>
-        <Icon
-          size={compact ? Sizes.icon.xl : Sizes.icon['2xl']}
-          color={Colors.mutedForeground}
-          weight="regular"
-        />
+      <View style={[s.emptyHalo, compact && s.emptyHaloCompact]}>
+        <LinearGradient colors={[...Gradients.sunSoft]} style={StyleSheet.absoluteFill} />
+        <View style={[s.emptyIcon, compact && s.emptyIconCompact]}>
+          <Icon
+            size={compact ? Sizes.icon.lg : Sizes.icon['2xl']}
+            color={Colors.primaryDeep}
+            weight="duotone"
+          />
+        </View>
       </View>
-      <Text variant="subheading" align="center">
+      <Text variant={compact ? 'subheading' : 'heading'} align="center">
         {title}
       </Text>
       {description ? (
-        <Text variant="secondary" color="muted" align="center" style={s.emptyDescription}>
+        <Text variant="body" color="muted" align="center" style={s.emptyDescription}>
           {description}
         </Text>
       ) : null}
@@ -208,10 +231,9 @@ export function EmptyState({
 // ─── Error state ─────────────────────────────────────────────────────────────
 
 /**
- * Lo que se muestra cuando una carga falla y no hay nada que enseñar (DS-08).
- * El botón "Reintentar" muestra carga mientras corre `onRetry`, así el usuario
- * sabe que su toque hizo algo (antes "Intentar de nuevo" no daba señal).
- * `description` suele ser `humanizeError(err, …)`.
+ * Lo que se muestra cuando una carga falla y no hay nada que enseñar. El botón
+ * "Reintentar" muestra carga mientras corre `onRetry`, así el usuario sabe que su
+ * toque hizo algo. `description` suele ser `humanizeError(err, …)`.
  */
 export function ErrorState({
   title,
@@ -257,22 +279,24 @@ export function ErrorState({
       accessibilityRole="alert"
       accessibilityLiveRegion="polite"
     >
-      <View style={[s.emptyIcon, s.errorIcon, compact && s.emptyIconCompact]}>
-        <WarningCircle
-          size={compact ? Sizes.icon.xl : Sizes.icon['2xl']}
-          color={Colors.dangerText}
-          weight="regular"
-        />
+      <View style={[s.emptyHalo, s.errorHalo, compact && s.emptyHaloCompact]}>
+        <View style={[s.emptyIcon, compact && s.emptyIconCompact]}>
+          <WarningCircle
+            size={compact ? Sizes.icon.lg : Sizes.icon['2xl']}
+            color={Colors.destructive}
+            weight="duotone"
+          />
+        </View>
       </View>
-      <Text variant="subheading" align="center">
+      <Text variant={compact ? 'subheading' : 'heading'} align="center">
         {title}
       </Text>
       {description ? (
-        <Text variant="secondary" color="muted" align="center" style={s.emptyDescription}>
+        <Text variant="body" color="muted" align="center" style={s.emptyDescription}>
           {description}
         </Text>
       ) : null}
-      <View style={s.emptyAction}>
+      <View style={s.emptyActions}>
         <Button
           size="md"
           variant="secondary"
@@ -322,7 +346,7 @@ export function StaleBanner({
   return (
     <View style={s.stale} accessibilityRole="alert" accessibilityLiveRegion="polite">
       <ClockCounterClockwise size={Sizes.icon.sm} color={Colors.warningText} weight="bold" />
-      <Text variant="caption" color="warningText" style={s.staleText}>
+      <Text variant="caption" weight="medium" color="warningText" style={s.staleText}>
         {texto}
       </Text>
       {onRetry ? (
@@ -334,7 +358,7 @@ export function StaleBanner({
           accessibilityRole="button"
           accessibilityLabel="Reintentar la carga"
         >
-          <Text variant="caption" weight="bold" color="warningText" style={s.staleAction}>
+          <Text variant="caption" weight="bold" color="warningText">
             Reintentar
           </Text>
         </PressableScale>
@@ -346,6 +370,13 @@ export function StaleBanner({
 const s = StyleSheet.create({
   screen: {
     flex: 1,
+  },
+  velo: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: ALTO_ATMOSFERA,
   },
   gutter: {
     paddingHorizontal: Layout.screenPadding,
@@ -359,55 +390,70 @@ const s = StyleSheet.create({
     position: 'absolute',
     left: 0,
     right: 0,
-    bottom: 0,
+    bottom: -Spacing['5xl'],
     top: -Spacing['3xl'],
   },
   floatingInner: {
     paddingHorizontal: Layout.screenPadding,
   },
-  floatingInnerPlain: {
+  floatingMuelle: {
     paddingTop: Spacing.lg,
+    backgroundColor: Colors.background,
+    borderTopLeftRadius: Radius['2xl'],
+    borderTopRightRadius: Radius['2xl'],
+    borderCurve: 'continuous',
+    ...Shadows.dock,
   },
   floatingResumen: {
-    marginBottom: Spacing.sm,
+    marginBottom: Spacing.md,
   },
   empty: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: Spacing['5xl'] + Spacing['3xl'],
+    paddingVertical: Spacing['5xl'],
     paddingHorizontal: Spacing.xl,
   },
   emptyCompact: {
-    paddingVertical: Spacing['4xl'],
+    paddingVertical: Spacing['3xl'],
   },
-  emptyIcon: {
+  emptyHalo: {
     width: Sizes.iconBox['2xl'],
     height: Sizes.iconBox['2xl'],
     borderRadius: Radius.full,
-    backgroundColor: Colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
     marginBottom: Spacing.xl,
   },
-  emptyIconCompact: {
+  emptyHaloCompact: {
     width: Sizes.iconBox.xl,
     height: Sizes.iconBox.xl,
     marginBottom: Spacing.lg,
+  },
+  emptyIcon: {
+    width: Sizes.iconBox.xl,
+    height: Sizes.iconBox.xl,
+    borderRadius: Radius.full,
+    backgroundColor: Colors.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...Shadows.subtle,
+  },
+  emptyIconCompact: {
+    width: Sizes.iconBox.md,
+    height: Sizes.iconBox.md,
+  },
+  errorHalo: {
+    backgroundColor: Colors.destructiveLight,
   },
   emptyDescription: {
     marginTop: Spacing.sm,
     maxWidth: 300,
   },
-  emptyAction: {
-    marginTop: Spacing.xl,
-  },
   emptyActions: {
     marginTop: Spacing.xl,
     alignItems: 'center',
     gap: Spacing.sm,
-  },
-  errorIcon: {
-    backgroundColor: Colors.destructiveLight,
   },
   stale: {
     flexDirection: 'row',
@@ -415,15 +461,12 @@ const s = StyleSheet.create({
     gap: Spacing.sm,
     paddingHorizontal: Spacing.lg,
     paddingVertical: Spacing.sm,
-    borderRadius: Radius.lg,
+    borderRadius: Radius.md,
     backgroundColor: Colors.warningLight,
     marginBottom: Spacing.md,
   },
   staleText: {
     flex: 1,
-  },
-  staleAction: {
-    textDecorationLine: 'underline',
   },
   /** Área táctil cómoda alrededor de un enlace de texto pequeño */
   staleActionBox: {
