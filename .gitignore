@@ -22,6 +22,11 @@ next-env.d.ts
 supabase/.temp/
 supabase/.branches/
 
+# Claude Code: worktrees y enlaces locales a skills (EAS copia lo que no esté en
+# .gitignore y en Windows falla al recrear los enlaces simbólicos)
+.claude/worktrees/
+.claude/skills/
+
 # Claves y certificados
 *.pem
 *.p8
