@@ -5,8 +5,8 @@
 //   node shared/marca/generar-iconos.mjs
 //
 // Sin dependencias del repo: usa el Playwright instalado de forma global (Chromium) para
-// rasterizar con la fuente Roobert, y escribe el .ico (PNG embebidos) a mano.
-// Si falta Playwright o la fuente RoobertVF.ttf, falla con un mensaje claro: nunca genera
+// rasterizar con la fuente Onest, y escribe el .ico (PNG embebidos) a mano.
+// Si falta Playwright o la fuente Onest-ExtraBold.ttf, falla con un mensaje claro: nunca genera
 // iconos con otra letra.
 
 import { createRequire } from "node:module";
@@ -31,9 +31,9 @@ try {
   fallar("no encuentro Playwright. Instálalo de forma global (npm i -g playwright && npx playwright install chromium).");
 }
 
-const FUENTES = ["PanelCooperativas/public/fonts/RoobertVF.ttf", "LandingEnBus/public/fonts/RoobertVF.ttf"];
+const FUENTES = ["PanelCooperativas/public/fonts/Onest-ExtraBold.ttf", "LandingEnBus/public/fonts/Onest-ExtraBold.ttf"];
 const rutaFuente = FUENTES.map((f) => join(RAIZ, f)).find((f) => existsSync(f));
-if (!rutaFuente) fallar(`falta la fuente RoobertVF.ttf (busqué en ${FUENTES.join(", ")}).`);
+if (!rutaFuente) fallar(`falta la fuente Onest-ExtraBold.ttf (busqué en ${FUENTES.join(", ")}).`);
 
 const svg = readFileSync(join(MARCA, "eb.svg"), "utf8");
 
@@ -95,14 +95,14 @@ await pagina.setContent(
 const fuenteB64 = readFileSync(rutaFuente).toString("base64");
 const cargada = await pagina.evaluate(async (b64) => {
   const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
-  const cara = new FontFace("Roobert", bytes.buffer, { weight: "300 900" });
+  const cara = new FontFace("Onest", bytes.buffer, { weight: "800" });
   try {
     await cara.load();
   } catch {
     return false;
   }
   document.fonts.add(cara);
-  return document.fonts.check('800 42px "Roobert"');
+  return document.fonts.check('800 42px "Onest"');
 }, fuenteB64);
 if (!cargada) fallar(`Chromium no pudo cargar ${relative(RAIZ, rutaFuente)}.`);
 
@@ -117,7 +117,7 @@ const metricas = await pagina.evaluate(() => {
   lienzo.width = 1400;
   lienzo.height = 1200;
   const ctx = lienzo.getContext("2d");
-  ctx.font = '800 1000px "Roobert"';
+  ctx.font = '800 1000px "Onest"';
   const eb = ctx.measureText("EB");
   const e = ctx.measureText("E");
   const b = ctx.measureText("B");

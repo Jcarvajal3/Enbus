@@ -4,9 +4,16 @@ import "./globals.css"
 
 import { correoSoporte, numeroSoporteWhatsApp, sitioUrl } from "@/lib/urls"
 
-const roobert = localFont({
-  src: "../public/fonts/RoobertVF.ttf",
-  variable: "--font-roobert",
+// Onest (SIL OFL 1.1: public/fonts/OFL.txt). Un archivo estático por cada peso que usa la landing.
+const onest = localFont({
+  src: [
+    { path: "../public/fonts/Onest-Regular.ttf", weight: "400", style: "normal" },
+    { path: "../public/fonts/Onest-Medium.ttf", weight: "500", style: "normal" },
+    { path: "../public/fonts/Onest-SemiBold.ttf", weight: "600", style: "normal" },
+    { path: "../public/fonts/Onest-Bold.ttf", weight: "700", style: "normal" },
+    { path: "../public/fonts/Onest-ExtraBold.ttf", weight: "800", style: "normal" },
+  ],
+  variable: "--font-onest",
   display: "swap",
 })
 
@@ -85,7 +92,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="es-VE" className={`${roobert.variable} font-sans antialiased`}>
+    <html lang="es-VE" className={`${onest.variable} font-sans antialiased`}>
       <body>
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: organizacionJsonLd() }} />
         {children}

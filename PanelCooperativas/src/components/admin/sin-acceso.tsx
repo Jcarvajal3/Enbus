@@ -11,7 +11,7 @@ export function SinAccesoAdmin() {
   return (
     <main className="flex min-h-screen flex-col items-center justify-center gap-4 bg-background p-6 text-center text-foreground">
       <div className="rounded-full bg-muted p-4">
-        <LockKey size={48} className="text-muted-foreground" weight="duotone" aria-hidden />
+        <LockKey size={48} className="text-muted-foreground" aria-hidden />
       </div>
       <h1 className="text-2xl font-bold">Esta cuenta no es de administrador de EnBus</h1>
       <p className="max-w-md text-muted-foreground">
