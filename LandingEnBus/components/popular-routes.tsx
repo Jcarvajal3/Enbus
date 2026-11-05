@@ -56,7 +56,7 @@ export function PopularRoutes({ rutas, tasa }: PopularRoutesProps) {
                   <span className="sr-only">a</span>
                   <span>{formatCiudad(ruta.ciudad_destino)}</span>
                 </p>
-                <p className="mt-3 text-sm tabular-nums">
+                <p className="mt-3 text-sm tracking-tight tabular-nums">
                   <span className="sr-only">{`Desde ${monto.accesible}`}</span>
                   <span aria-hidden>
                     <span className="font-semibold text-foreground">Desde {usdCorto(ruta.desde_usd)}</span>

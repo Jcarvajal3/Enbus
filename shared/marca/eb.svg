@@ -2,13 +2,13 @@
   <!--
     Marca EnBus (D6 de Audits/fase5/fase5_spec.md): bloque "EB".
     Cuadrado primary (#FFC757), radio = 30 % del lado, "EB" en ink (#202020),
-    Roobert 800 al 42 % del lado, centrado por la tinta: en vertical por la altura de
-    las mayúsculas (0,703 em) y en horizontal por el ancho real de "EB" (no por el avance).
+    Onest 800 al 42 % del lado, centrado por la tinta: en vertical por la altura de
+    las mayúsculas (0,719 em) y en horizontal por el ancho real de "EB" (no por el avance).
     Fuente de todos los iconos: node shared/marca/generar-iconos.mjs
-    (el script carga RoobertVF.ttf; sin ella, este SVG se ve con otra letra).
+    (el script carga Onest-ExtraBold.ttf; sin ella, este SVG se ve con otra letra).
   -->
   <rect id="fondo" x="0" y="0" width="100" height="100" rx="30" ry="30" fill="#FFC757"/>
-  <text id="letras" x="23.7" y="64.75" text-anchor="start" fill="#202020"
-        font-family="Roobert, sans-serif" font-weight="800" font-size="42"
+  <text id="letras" x="21.98" y="65.09" text-anchor="start" fill="#202020"
+        font-family="Onest, sans-serif" font-weight="800" font-size="42"
         letter-spacing="-0.4">EB</text>
 </svg>

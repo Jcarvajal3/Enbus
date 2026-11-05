@@ -4,8 +4,8 @@ import { ImageResponse } from "next/og"
 
 // Vista previa al compartir el enlace (WhatsApp, redes): 1200 × 630, fondo blanco con franja amarilla.
 // Satori no lee variables CSS: los colores son los de shared/tokens.json (primary, foreground).
-// Usa la fuente por defecto de next/og: RoobertVF.ttf (740 KB, variable) supera el límite de 500 KB.
-// Por eso la marca va como imagen: app/icon.png (bloque "EB" en Roobert, de shared/marca/eb.svg).
+// Usa la fuente por defecto de next/og (no carga ningún archivo de fuente).
+// Por eso la marca va como imagen: app/icon.png (bloque "EB", de shared/marca/eb.svg).
 
 export const alt = "EnBus: boletos de bus y encomiendas por toda Venezuela"
 export const size = { width: 1200, height: 630 }
@@ -33,6 +33,7 @@ export default async function Image() {
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 28 }}>
+          {/* eslint-disable-next-line @next/next/no-img-element -- Satori (next/og) no admite next/image. */}
           <img src={marca} width={112} height={112} alt="" />
           <div style={{ fontSize: 120, fontWeight: 700, letterSpacing: -4 }}>EnBus</div>
         </div>

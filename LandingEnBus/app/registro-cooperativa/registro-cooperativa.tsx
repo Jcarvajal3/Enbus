@@ -247,7 +247,7 @@ export function RegistroCooperativa() {
             {BENEFICIOS.map((b) => (
               <li key={b.titulo} className="rounded-md border border-border bg-surface p-5">
                 <CheckCircle className="size-6 text-foreground" weight="fill" aria-hidden />
-                <h3 className="mt-3 font-semibold">{b.titulo}</h3>
+                <h3 className="mt-3 font-semibold tracking-tight">{b.titulo}</h3>
                 <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">{b.texto}</p>
               </li>
             ))}
