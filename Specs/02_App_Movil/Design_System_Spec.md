@@ -16,7 +16,7 @@
 
 ## Tipografía
 
-Una sola fuente: **Roobert** (variable; el peso elige la instancia). Nunca se escribe
+Una sola fuente: **Onest** (licencia libre OFL; un archivo por peso). Nunca se escribe
 `fontFamily`, `fontSize` ni `fontWeight` a mano: `<Text variant="…">` con los roles
 `display`, `title`, `heading`, `subheading`, `body`, `bodyStrong`, `secondary`, `label`,
 `caption`, `overline` y `button`. Escala: `micro 9 · xs 11 · sm 13 · base 15 · lg 17 ·
