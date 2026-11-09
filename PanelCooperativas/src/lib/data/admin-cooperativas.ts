@@ -1,4 +1,5 @@
 import { createClient, createAdminClient } from "@/lib/supabase/server";
+import { leerCooperativasPrivadas } from "@/lib/supabase/cooperativas-privadas";
 import { humanizeError } from "@/lib/errores";
 import { requireSuperAdmin, esUuid } from "./admin-auth";
 import { aCentavos, deCentavos, enLotes } from "./admin-consultas";
@@ -15,19 +16,20 @@ import type {
 export async function fetchCooperativas(filters?: { estado?: string; search?: string }): Promise<Cooperativa[]> {
   await requireSuperAdmin();
   const supabase = await createClient();
-  let query = supabase.from("cooperativas").select("*");
-
-  if (filters?.estado && filters.estado !== "ALL") {
-    query = query.eq("estado", filters.estado);
-  }
-
   // Sin comas, paréntesis ni comodines: romperían el filtro `or` de PostgREST (?search=a,b → error).
   const termino = (filters?.search ?? "").replace(/[,()*%\\"]/g, " ").trim().slice(0, 80);
-  if (termino) {
-    query = query.or(`nombre.ilike.%${termino}%,rif.ilike.%${termino}%`);
-  }
 
-  const { data, error } = await query.order("nombre", { ascending: true });
+  // Todas las columnas (comisión, RIF, contactos): por la RPC, no por la tabla.
+  const { data, error } = await leerCooperativasPrivadas(supabase, (cooperativas) => {
+    let query = cooperativas.select("*");
+    if (filters?.estado && filters.estado !== "ALL") {
+      query = query.eq("estado", filters.estado);
+    }
+    if (termino) {
+      query = query.or(`nombre.ilike.%${termino}%,rif.ilike.%${termino}%`);
+    }
+    return query.order("nombre", { ascending: true });
+  });
 
   if (error) {
     console.error("Error fetching cooperativas:", error);
@@ -48,11 +50,9 @@ export async function fetchCooperativaById(id: string): Promise<CooperativaDetal
   const adminSupabase = createAdminClient();
 
   // 1. Fetch basic cooperativa data
-  const { data: cooperativa, error: coopError } = await supabase
-    .from("cooperativas")
-    .select("*")
-    .eq("id", id)
-    .maybeSingle();
+  const { data: cooperativa, error: coopError } = await leerCooperativasPrivadas(supabase, (cooperativas) =>
+    cooperativas.select("*").eq("id", id).maybeSingle()
+  );
 
   if (coopError) {
     // Un id mal formado (22P02) es "no existe"; cualquier otro error va a error.tsx con "Reintentar".

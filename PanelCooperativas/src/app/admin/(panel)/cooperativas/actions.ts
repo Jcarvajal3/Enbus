@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient, createAdminClient } from "@/lib/supabase/server";
+import { leerCooperativasPrivadas } from "@/lib/supabase/cooperativas-privadas";
 import { requireSuperAdmin, esUuid } from "@/lib/data/admin-auth";
 
 const NO_ENCONTRADA = "No encontramos la cooperativa. Actualiza la página e intenta de nuevo.";
@@ -91,7 +92,8 @@ export async function createCooperativa(formData: FormData) {
         comision_porcentaje: comision,
         estado: "ACTIVA"
       })
-      .select()
+      // Solo columnas legibles (20261109000009): .select() pediría todas y respondería 42501.
+      .select("id")
       .single();
 
     if (insertError || !cooperativa) {
@@ -259,11 +261,9 @@ export async function updateCooperativa(id: string, formData: FormData) {
     // estaba guardado (registros antiguos sin dígito verificador), se conserva para no bloquear la edición.
     let rif = normalizeRif(rifInput);
     if (!rif) {
-      const { data: actual } = await supabase
-        .from("cooperativas")
-        .select("rif")
-        .eq("id", id)
-        .maybeSingle();
+      const { data: actual } = await leerCooperativasPrivadas(supabase, (c) =>
+        c.select("rif").eq("id", id).maybeSingle()
+      );
       if (actual?.rif && actual.rif === rifInput) {
         rif = rifInput;
       } else {

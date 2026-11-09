@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { leerCooperativasPrivadas } from "@/lib/supabase/cooperativas-privadas";
 import { ComisionCiclo } from "../types/admin-comisiones";
 import { humanizeError } from "@/lib/errores";
 import { requireSuperAdmin, esUuid } from "./admin-auth";
@@ -81,11 +82,12 @@ export const ESTADOS_CON_VENTAS = ["ACTIVA", "SUSPENDIDA", "DESACTIVADA"] as con
 export async function fetchCooperativasList() {
   await requireSuperAdmin();
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("cooperativas")
-    .select("id, nombre, comision_porcentaje, estado")
-    .in("estado", [...ESTADOS_CON_VENTAS])
-    .order("nombre", { ascending: true });
+  const { data, error } = await leerCooperativasPrivadas(supabase, (cooperativas) =>
+    cooperativas
+      .select("id, nombre, comision_porcentaje, estado")
+      .in("estado", [...ESTADOS_CON_VENTAS])
+      .order("nombre", { ascending: true })
+  );
 
   if (error) {
     console.error("Error fetching cooperativas list:", error);

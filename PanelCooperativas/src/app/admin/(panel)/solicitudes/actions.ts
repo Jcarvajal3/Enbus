@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { leerCooperativasPrivadas } from "@/lib/supabase/cooperativas-privadas";
 import { requireSuperAdmin, esUuid } from "@/lib/data/admin-auth";
 import { revalidatePath } from "next/cache";
 import { sendApprovalEmail, sendRejectionEmail } from "@/lib/email";
@@ -65,11 +66,10 @@ export async function aprobarSolicitud(cooperativaId: string, comisionPorcentaje
       return { success: false, error: "La comisión debe ser un número entre 0 y 100." };
     }
 
-    const { data: cooperativa, error: fetchError } = await supabase
-      .from("cooperativas")
-      .select("nombre, email, estado")
-      .eq("id", cooperativaId)
-      .maybeSingle();
+    // El correo se lee por la RPC: no es legible en la tabla.
+    const { data: cooperativa, error: fetchError } = await leerCooperativasPrivadas(supabase, (c) =>
+      c.select("nombre, email, estado").eq("id", cooperativaId).maybeSingle()
+    );
 
     if (fetchError || !cooperativa) {
       console.error("[aprobarSolicitud] cooperativa:", fetchError);
@@ -151,11 +151,10 @@ export async function rechazarSolicitud(cooperativaId: string, motivo: string): 
       return { success: false, error: `Escribe el motivo del rechazo (mínimo ${MINIMO_MOTIVO} caracteres).` };
     }
 
-    const { data: cooperativa, error: fetchError } = await supabase
-      .from("cooperativas")
-      .select("nombre, email, estado")
-      .eq("id", cooperativaId)
-      .maybeSingle();
+    // El correo se lee por la RPC: no es legible en la tabla.
+    const { data: cooperativa, error: fetchError } = await leerCooperativasPrivadas(supabase, (c) =>
+      c.select("nombre, email, estado").eq("id", cooperativaId).maybeSingle()
+    );
 
     if (fetchError || !cooperativa) {
       console.error("[rechazarSolicitud] cooperativa:", fetchError);

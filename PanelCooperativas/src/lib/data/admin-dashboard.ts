@@ -1,5 +1,6 @@
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
+import { leerCooperativasPrivadas } from "@/lib/supabase/cooperativas-privadas";
 import { hoyVE, rangoDiaVE, sumarDiasVE } from "@/lib/fechas";
 import { formatCiudad } from "@/lib/ciudades";
 import { requireSuperAdmin } from "./admin-auth";
@@ -20,20 +21,35 @@ import {
  */
 const BOLETO_VENDIDO = ["PAGADO", "USADO"];
 
-type PagoConCooperativa = {
+type PagoVerificado = {
   monto: number | string;
   monto_bs: number | string | null;
-  cooperativa: { comision_porcentaje: number | string } | null;
+  cooperativa_id: string | null;
 };
+
+/** Comisión (%) de cada cooperativa. Por la RPC: la columna no es legible en la tabla. */
+type ComisionesPorCooperativa = { porcentajes: Map<string, number>; error: unknown };
+
+async function leerComisionesPorCooperativa(
+  supabase: Awaited<ReturnType<typeof createClient>>
+): Promise<ComisionesPorCooperativa> {
+  const { data, error } = await leerCooperativasPrivadas(supabase, (cooperativas) =>
+    cooperativas.select("id, comision_porcentaje")
+  );
+  if (error) console.error("[fetchDashboardKPIs] comisiones de las cooperativas:", error);
+  const filas = (data ?? []) as { id: string; comision_porcentaje: number | string | null }[];
+  return { porcentajes: new Map(filas.map((c) => [c.id, Number(c.comision_porcentaje ?? 0)])), error };
+}
 
 /** Encomiendas, boletos y pagos verificados de un día (rango ISO en hora de Venezuela). */
 async function actividadDelDia(
   supabase: Awaited<ReturnType<typeof createClient>>,
   rango: { desde: string; hasta: string },
   tasaHoy: number | null,
-  etiqueta: string
+  etiqueta: string,
+  comisiones: Promise<ComisionesPorCooperativa>
 ) {
-  const [encomiendasRes, boletosRes, pagosRes] = await Promise.all([
+  const [encomiendasRes, boletosRes, pagosRes, comisionesRes] = await Promise.all([
     supabase
       .from("encomiendas")
       .select("id", { count: "exact", head: true })
@@ -47,19 +63,22 @@ async function actividadDelDia(
       .lte("created_at", rango.hasta),
     // Por verificado_at: un pago registrado ayer y aprobado hoy es ingreso de hoy.
     // Todas las páginas: PostgREST corta en 1000 filas y la suma saldría de menos.
-    leerTodas<PagoConCooperativa>((desde, hasta) =>
+    // La comisión no se embebe (cooperativas!cooperativa_id(comision_porcentaje) ya no es
+    // legible en la tabla): se cruza con las comisiones leídas por la RPC.
+    leerTodas<PagoVerificado>((desde, hasta) =>
       supabase
         .from("pagos")
-        .select("monto, monto_bs, cooperativa:cooperativas!cooperativa_id(comision_porcentaje)")
+        .select("monto, monto_bs, cooperativa_id")
         .eq("verificado", true)
         .gte("verificado_at", rango.desde)
         .lte("verificado_at", rango.hasta)
         .order("id", { ascending: true })
-        .range(desde, hasta) as unknown as PromiseLike<{ data: PagoConCooperativa[] | null; error: unknown }>
+        .range(desde, hasta) as unknown as PromiseLike<{ data: PagoVerificado[] | null; error: unknown }>
     ).then(
       ({ filas, truncado }) => ({ filas, error: truncado ? new Error("Demasiados pagos en un día") : null }),
-      (error: unknown) => ({ filas: [] as PagoConCooperativa[], error })
+      (error: unknown) => ({ filas: [] as PagoVerificado[], error })
     ),
+    comisiones,
   ]);
 
   if (encomiendasRes.error) console.error(`[fetchDashboardKPIs] encomiendas (${etiqueta}):`, encomiendasRes.error);
@@ -68,13 +87,14 @@ async function actividadDelDia(
 
   const pagos = pagosRes.error ? [] : pagosRes.filas;
   const errorPagos = Boolean(pagosRes.error);
+  const porcentajes = comisionesRes.porcentajes;
   return {
     encomiendas: encomiendasRes.error ? null : encomiendasRes.count ?? 0,
     boletos: boletosRes.error ? null : boletosRes.count ?? 0,
     ingresos: { ...resumirIngresos(pagos, tasaHoy), error: errorPagos },
     comisiones: {
-      ...resumirIngresos(pagos, tasaHoy, (p) => Number(p.cooperativa?.comision_porcentaje ?? 0) / 100),
-      error: errorPagos,
+      ...resumirIngresos(pagos, tasaHoy, (p) => (porcentajes.get(p.cooperativa_id ?? "") ?? 0) / 100),
+      error: errorPagos || Boolean(comisionesRes.error),
     },
   };
 }
@@ -88,10 +108,12 @@ export async function fetchDashboardKPIs(tasaHoy: number | null = null): Promise
   await requireSuperAdmin();
   const supabase = await createClient();
   const hoy = hoyVE();
+  // Una sola lectura de las comisiones para hoy y ayer.
+  const comisiones = leerComisionesPorCooperativa(supabase);
 
   const [deHoy, deAyer, cooperativasRes, alertasRes, solicitudesRes] = await Promise.all([
-    actividadDelDia(supabase, rangoDiaVE(hoy), tasaHoy, "hoy"),
-    actividadDelDia(supabase, rangoDiaVE(sumarDiasVE(hoy, -1)), tasaHoy, "ayer"),
+    actividadDelDia(supabase, rangoDiaVE(hoy), tasaHoy, "hoy", comisiones),
+    actividadDelDia(supabase, rangoDiaVE(sumarDiasVE(hoy, -1)), tasaHoy, "ayer", comisiones),
     supabase.from("cooperativas").select("id", { count: "exact", head: true }).eq("estado", "ACTIVA"),
     // Más de 72 h en tránsito sin resolver (abiertas o en proceso), como el enlace del Resumen.
     supabase
@@ -321,15 +343,17 @@ export async function fetchCooperativasConBalance(): Promise<CooperativaBalance[
   const supabase = await createClient();
 
   // Solo los ciclos impagos (filtro sobre el embed): no se trae todo el historial.
-  const { data, error } = await supabase
-    .from("cooperativas")
-    .select(`
-      id,
-      nombre,
-      comision_porcentaje,
-      comisiones_ciclo(monto_comision, pagado)
-    `)
-    .eq("comisiones_ciclo.pagado", false);
+  // Por la RPC (comision_porcentaje no es legible en la tabla); PostgREST embebe igual.
+  const { data, error } = await leerCooperativasPrivadas(supabase, (cooperativas) =>
+    cooperativas
+      .select(`
+        id,
+        nombre,
+        comision_porcentaje,
+        comisiones_ciclo(monto_comision, pagado)
+      `)
+      .eq("comisiones_ciclo.pagado", false)
+  );
 
   if (error) console.error("[fetchCooperativasConBalance]:", error);
 

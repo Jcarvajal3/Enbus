@@ -1,4 +1,5 @@
 import { createClient, createAdminClient } from "@/lib/supabase/server";
+import { leerCooperativasPrivadas } from "@/lib/supabase/cooperativas-privadas";
 import { humanizeError } from "@/lib/errores";
 import { requireSuperAdmin } from "./admin-auth";
 import { enLotes } from "./admin-consultas";
@@ -37,19 +38,16 @@ export async function fetchSolicitudes(): Promise<SolicitudesAdmin> {
   await requireSuperAdmin();
   const supabase = await createClient();
 
-  let resultado = await supabase
-    .from("cooperativas")
-    .select("*")
-    .in("estado", ["PENDIENTE", "RECHAZADA"])
-    .order("created_at", { ascending: false });
+  // Todas las columnas (correo, teléfono, representante, mensaje): por la RPC.
+  let resultado = await leerCooperativasPrivadas(supabase, (cooperativas) =>
+    cooperativas.select("*").in("estado", ["PENDIENTE", "RECHAZADA"]).order("created_at", { ascending: false })
+  );
 
   // 22P02: el enum aún no tiene RECHAZADA (migración 20260720000001 sin aplicar).
   if (resultado.error?.code === "22P02") {
-    resultado = await supabase
-      .from("cooperativas")
-      .select("*")
-      .eq("estado", "PENDIENTE")
-      .order("created_at", { ascending: false });
+    resultado = await leerCooperativasPrivadas(supabase, (cooperativas) =>
+      cooperativas.select("*").eq("estado", "PENDIENTE").order("created_at", { ascending: false })
+    );
   }
 
   if (resultado.error) {
@@ -124,7 +122,7 @@ export async function countSolicitudesPendientes(): Promise<number> {
 
   const { count, error } = await supabase
     .from("cooperativas")
-    .select("*", { count: "exact", head: true })
+    .select("id", { count: "exact", head: true })
     .eq("estado", "PENDIENTE");
 
   if (error) {

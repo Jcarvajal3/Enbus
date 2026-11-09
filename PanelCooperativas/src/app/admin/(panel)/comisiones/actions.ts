@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { leerCooperativasPrivadas } from "@/lib/supabase/cooperativas-privadas";
 import { revalidatePath } from "next/cache";
 import { METODOS_PAGO_COMISION, type GenerarCicloInput, type CicloPreview, type MetodoPagoComision } from "@/lib/types/admin-comisiones";
 import { fechaHoraVEaISO, hoyVE, rangoDiaVE } from "@/lib/fechas";
@@ -147,20 +148,20 @@ async function calcularPreviews(supabase: Supabase, input: GenerarCicloInput): P
   // la comisión de lo que vendieron antes de la suspensión).
   let cooperativas: { id: string; nombre: string; comision_porcentaje: number; estado: string }[];
   if (unaCooperativa) {
-    const { data: coop, error } = await supabase
-      .from("cooperativas")
-      .select("id, nombre, comision_porcentaje, estado")
-      .eq("id", unaCooperativa)
-      .maybeSingle();
+    // La comisión se lee por la RPC: no es legible en la tabla.
+    const { data: coop, error } = await leerCooperativasPrivadas(supabase, (c) =>
+      c.select("id, nombre, comision_porcentaje, estado").eq("id", unaCooperativa).maybeSingle()
+    );
     if (error) throw error;
     if (!coop) return { error: "La cooperativa seleccionada no existe." };
     cooperativas = [{ ...coop, comision_porcentaje: Number(coop.comision_porcentaje) }];
   } else {
-    const { data: coops, error } = await supabase
-      .from("cooperativas")
-      .select("id, nombre, comision_porcentaje, estado")
-      .in("estado", [...ESTADOS_CON_VENTAS])
-      .order("nombre", { ascending: true });
+    const { data: coops, error } = await leerCooperativasPrivadas(supabase, (c) =>
+      c
+        .select("id, nombre, comision_porcentaje, estado")
+        .in("estado", [...ESTADOS_CON_VENTAS])
+        .order("nombre", { ascending: true })
+    );
     if (error) throw error;
     cooperativas = (coops ?? []).map((c) => ({ ...c, comision_porcentaje: Number(c.comision_porcentaje) }));
   }

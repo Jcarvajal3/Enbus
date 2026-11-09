@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { leerCooperativasPrivadas } from "@/lib/supabase/cooperativas-privadas";
 import { exigirRolPanel } from "@/lib/supabase/auth-guards";
 import { PageHeader } from "@/components/page-header";
 import { humanizeError } from "@/lib/errores";
@@ -16,11 +17,10 @@ export default async function ConfiguracionPage() {
   const supabase = await createClient();
 
   const [cooperativaResult, metodosResult, sucursalesResult] = await Promise.all([
-    supabase
-      .from("cooperativas")
-      .select("id, nombre, rif, logo_url, comision_porcentaje, estado")
-      .eq("id", user.cooperativa_id)
-      .single(),
+    // RIF y comisión: por la RPC (no son legibles en la tabla).
+    leerCooperativasPrivadas(supabase, (cooperativas) =>
+      cooperativas.select("id, nombre, rif, logo_url, comision_porcentaje, estado").eq("id", user.cooperativa_id).single()
+    ),
     supabase
       .from("metodos_pago_cooperativa")
       .select("*")
