@@ -29,7 +29,10 @@ import { ErrorState } from "@/components/error-state";
 import { humanizeError } from "@/lib/errores";
 import { CIUDADES_POR_ESTADO, ESTADOS_VENEZUELA } from "@/lib/data/venezuela";
 import { formatTelefono, telefonoValido, TELEFONO_ERROR } from "@/lib/ve";
+import { normalizarCiudad } from "@/lib/ciudades";
 import { cn } from "@/lib/utils";
+import { errorHorario, leerHorario, type HorarioSemana } from "@/lib/horario";
+import { CampoHorario } from "./editor-horario";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Estados y ciudades (mismas claves que las rutas: "carabobo", "valencia")
@@ -52,7 +55,9 @@ function claveEstado(texto: string | null | undefined): string {
 
 function claveCiudad(estado: string, texto: string | null | undefined): string {
   const k = aClave(texto);
-  return CIUDADES_POR_ESTADO[estado]?.find((c) => c.value === k || aClave(c.label) === k)?.value ?? "";
+  // `normalizarCiudad` = `normalizar_localidad` de SQL (alias como "san_juan").
+  const n = normalizarCiudad(texto);
+  return CIUDADES_POR_ESTADO[estado]?.find((c) => c.value === k || c.value === n || aClave(c.label) === k)?.value ?? "";
 }
 
 /** Nombre legible de una ciudad o estado guardado como clave o como texto libre (datos antiguos). */
@@ -84,8 +89,13 @@ interface FormState {
   ciudad: string;
   direccion: string;
   telefono: string;
-  horario: string;
+  /** Horario por días (editor). null = sin horario o con el texto libre antiguo. */
+  horarioSemana: HorarioSemana | null;
+  /** Texto libre antiguo; se conserva hasta guardar con el editor por días. */
+  horarioTexto: string;
 }
+
+type CampoTexto = "nombre" | "estado" | "ciudad" | "direccion" | "telefono";
 
 const EMPTY_FORM: FormState = {
   nombre: "",
@@ -93,10 +103,11 @@ const EMPTY_FORM: FormState = {
   ciudad: "",
   direccion: "",
   telefono: "",
-  horario: "",
+  horarioSemana: null,
+  horarioTexto: "",
 };
 
-type Errores = Partial<Record<keyof FormState, string>>;
+type Errores = Partial<Record<CampoTexto | "horario", string>>;
 
 function validar(form: FormState): Errores {
   const e: Errores = {};
@@ -106,6 +117,10 @@ function validar(form: FormState): Errores {
   if (form.direccion.trim().length < 5) e.direccion = "Escribe la dirección para que los clientes la encuentren.";
   if (form.telefono.trim() && !telefonoValido(form.telefono)) {
     e.telefono = TELEFONO_ERROR;
+  }
+  // El detalle se ve en la fila del día; aquí solo el aviso para enfocar el campo.
+  if (form.horarioSemana && errorHorario(form.horarioSemana)) {
+    e.horario = "Revisa el horario: hay un día con horas que no cuadran.";
   }
   return e;
 }
@@ -117,7 +132,9 @@ function formToInput(form: FormState): SucursalInput {
     ciudad: form.ciudad,
     direccion: form.direccion || null,
     telefono: form.telefono || null,
-    horario: form.horario || null,
+    // Con horario por días el servidor genera el texto; si no, se guarda el texto antiguo tal cual.
+    horario_semana: form.horarioSemana,
+    horario: form.horarioSemana ? null : form.horarioTexto || null,
   };
 }
 
@@ -147,7 +164,17 @@ export function SucursalesTab({ sucursales: initialSucursales, errorCarga = null
   const [eliminarOpen, setEliminarOpen] = useState(false);
   const [conRelaciones, setConRelaciones] = useState(false);
 
-  const setField = (key: keyof FormState, value: string) => {
+  const setHorario = (horarioSemana: HorarioSemana | null, horarioTexto: string) => {
+    setForm((prev) => ({ ...prev, horarioSemana, horarioTexto }));
+    setErrores((prev) => {
+      if (!("horario" in prev)) return prev;
+      const siguiente = { ...prev };
+      delete siguiente.horario;
+      return siguiente;
+    });
+  };
+
+  const setField = (key: CampoTexto, value: string) => {
     // Cambiar de estado vacía la ciudad (volver a elegir el mismo estado la conserva).
     setForm((prev) => ({
       ...prev,
@@ -172,6 +199,7 @@ export function SucursalesTab({ sucursales: initialSucursales, errorCarga = null
 
   function openEdit(s: SucursalGuardada) {
     const estado = claveEstado(estadoDe(s));
+    const horarioSemana = leerHorario(s.horario_semana);
     setEditingId(s.id);
     setForm({
       nombre: s.nombre,
@@ -179,7 +207,9 @@ export function SucursalesTab({ sucursales: initialSucursales, errorCarga = null
       ciudad: estado ? claveCiudad(estado, s.ciudad) : "",
       direccion: s.direccion ?? "",
       telefono: s.telefono && telefonoValido(s.telefono) ? formatTelefono(s.telefono).replace(/\./g, "") : s.telefono ?? "",
-      horario: s.horario ?? "",
+      horarioSemana,
+      // Solo las sucursales sin horario por días traen texto libre que conservar.
+      horarioTexto: horarioSemana ? "" : (s.horario ?? "").trim(),
     });
     setErrores({});
     setErrorGeneral(null);
@@ -375,12 +405,11 @@ export function SucursalesTab({ sucursales: initialSucursales, errorCarga = null
                 error={errores.telefono}
                 disabled={guardando}
               />
-              <Campo
+              <CampoHorario
                 id={id("horario")}
-                label="Horario de atención (opcional)"
-                value={form.horario}
-                onChange={(v) => setField("horario", v)}
-                placeholder="Ej.: Lun a sáb 7:00 a. m. – 6:00 p. m."
+                semana={form.horarioSemana}
+                textoAnterior={form.horarioTexto}
+                onChange={setHorario}
                 error={errores.horario}
                 disabled={guardando}
               />

@@ -465,6 +465,14 @@ entrypoint = "./functions/enviar-push/index.ts"
 # For example, if you want to serve static HTML pages in your function:
 # static_files = [ "./functions/enviar-push/*.html" ]
 
+[functions.push-panel]
+enabled = true
+# Interna: exige la service role (la llaman el trigger de pagos y el cron procesar_push_panel con
+# pg_net). Web Push con VAPID al personal de la cooperativa. Ver Audits/pendientes_push_panel.md.
+verify_jwt = true
+import_map = "./functions/push-panel/deno.json"
+entrypoint = "./functions/push-panel/index.ts"
+
 [functions.generar-guia-pdf]
 enabled = true
 # Con el JWT del empleado: solo personal de la cooperativa de la encomienda o super admin.

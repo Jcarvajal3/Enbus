@@ -109,7 +109,8 @@ export function useEncomiendas(
     try {
       const { data: result, error: err } = await supabase
         .from('encomiendas')
-        .select('*')
+        // La cooperativa (nombre y logo) para la fila de la lista.
+        .select('*, cooperativas ( nombre, logo_url )')
         .or(`sender_id.eq.${userId},receiver_user_id.eq.${userId}`)
         .order('created_at', { ascending: false })
         .limit(pedidas);
@@ -202,7 +203,16 @@ export function useEncomiendas(
         } else if (payload.eventType === 'UPDATE') {
           const updated = payload.new as Encomienda;
           if (current.some((item) => item.id === updated.id)) {
-            updatedList = current.map((item) => (item.id === updated.id ? updated : item));
+            // Realtime trae la fila sin embeds: se conserva la cooperativa si no cambió.
+            updatedList = current.map((item) =>
+              item.id === updated.id
+                ? {
+                    ...updated,
+                    cooperativas:
+                      item.cooperativa_id === updated.cooperativa_id ? item.cooperativas : null,
+                  }
+                : item
+            );
           } else if (updated.sender_id === userId || updated.receiver_user_id === userId) {
             // M-50: la base vinculó al destinatario después de crear el envío
             // (se registró o completó su cédula o teléfono): aparece en "Para mí".

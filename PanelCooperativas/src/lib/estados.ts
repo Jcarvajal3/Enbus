@@ -522,11 +522,15 @@ export const MODALIDAD_PAGO: Record<"ORIGEN" | "DESTINO", { corto: string; largo
   DESTINO: { corto: "Paga al retirar", largo: "Paga quien recibe, al retirarlo" },
 };
 
-export const METODO_PAGO: Record<"PAGO_MOVIL" | "TRANSFERENCIA_BANCARIA" | "ZELLE" | "EFECTIVO" | "DIGITAL", string> = {
+export const METODO_PAGO: Record<
+  "PAGO_MOVIL" | "TRANSFERENCIA_BANCARIA" | "ZELLE" | "EFECTIVO" | "PUNTO_DE_VENTA" | "DIGITAL",
+  string
+> = {
   PAGO_MOVIL: "Pago Móvil",
   TRANSFERENCIA_BANCARIA: "Transferencia",
   ZELLE: "Zelle",
   EFECTIVO: "Efectivo",
+  PUNTO_DE_VENTA: "Punto de venta",
   DIGITAL: "Pago digital",
 };
 

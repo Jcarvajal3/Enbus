@@ -8,6 +8,7 @@ import { createClient } from "@/lib/supabase/client";
 import { AuthLayout } from "@/components/auth-layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { FieldGroup, Field, FieldLabel } from "@/components/ui/field";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Spinner } from "@/components/ui/spinner";
@@ -117,6 +118,7 @@ export default function LoginPageClient({ aviso }: { aviso: AvisoLogin | null })
     <AuthLayout
       zona="cooperativas"
       titulo="Iniciar sesión"
+      descripcion="Accede a la taquilla y la operación de tu cooperativa."
       pie={
         <>
           ¿No tienes cuenta?{" "}
@@ -144,14 +146,17 @@ export default function LoginPageClient({ aviso }: { aviso: AvisoLogin | null })
           </Alert>
         )}
 
-        <FieldGroup>
+        <FieldGroup className="gap-5">
           <Field>
             <FieldLabel htmlFor="email">Correo</FieldLabel>
             <Input
               id="email"
               type="email"
+              inputMode="email"
               placeholder="tu@correo.com"
-              autoComplete="email"
+              autoComplete="username"
+              autoCapitalize="none"
+              spellCheck={false}
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -165,9 +170,8 @@ export default function LoginPageClient({ aviso }: { aviso: AvisoLogin | null })
                 ¿Olvidaste tu contraseña?
               </Link>
             </div>
-            <Input
+            <PasswordInput
               id="password"
-              type="password"
               autoComplete="current-password"
               required
               value={password}
@@ -178,8 +182,8 @@ export default function LoginPageClient({ aviso }: { aviso: AvisoLogin | null })
         </FieldGroup>
 
         <Button type="submit" className="w-full" disabled={loading} aria-busy={loading || undefined}>
-          {loading && <Spinner size="sm" data-icon="inline-start" />}
-          Entrar
+          {loading && <Spinner size="sm" aria-hidden />}
+          {loading ? "Entrando…" : "Entrar"}
         </Button>
       </form>
     </AuthLayout>

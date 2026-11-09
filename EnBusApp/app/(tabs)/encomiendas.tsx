@@ -150,6 +150,11 @@ export default function EncomiendasScreen() {
               : 'Encomienda'
           }
           subtitulo={item.created_at ? `Creada ${formatDiaVE(item.created_at)}` : ''}
+          cooperativa={
+            item.cooperativas
+              ? { nombre: item.cooperativas.nombre, logoUrl: item.cooperativas.logo_url }
+              : null
+          }
           onPress={() =>
             router.push({
               pathname:

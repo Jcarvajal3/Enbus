@@ -3,14 +3,14 @@
 // ─── Cobro de una encomienda en taquilla ────────────────────────────────────
 // - Si el cliente ya reportó un pago desde la app: se verifica con el diálogo
 //   único de pagos (VerificarPagoDialog embebido).
-// - Si no: "¿Cómo pagó el cliente?" (Efectivo Bs, Efectivo USD, Pago Móvil,
-//   Transferencia, Zelle) con confirmación antes de registrar el cobro.
+// - Si no: "¿Cómo pagó el cliente?" (Efectivo Bs, Efectivo USD, Punto de venta,
+//   Pago Móvil, Transferencia, Zelle) con confirmación antes de registrar el cobro.
 // `CobroEncomiendaForm` también lo usa la entrega en destino (entrega-modal).
 
 import { formatCiudad } from "@/lib/ciudades";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
-import { Bank, CheckCircle, CurrencyDollar, DeviceMobile, Money, Warning, type Icon } from "@phosphor-icons/react";
+import { Bank, CheckCircle, CreditCard, CurrencyDollar, DeviceMobile, Money, Warning, type Icon } from "@phosphor-icons/react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -80,12 +80,13 @@ function formatEnMoneda(monto: number, moneda: MonedaPago) {
   return moneda === "USD" ? formatUsd(monto) : formatBs(monto);
 }
 
-type OpcionCobro = "EFECTIVO_VES" | "EFECTIVO_USD" | "PAGO_MOVIL" | "TRANSFERENCIA_BANCARIA" | "ZELLE";
+type OpcionCobro = "EFECTIVO_VES" | "EFECTIVO_USD" | "PUNTO_DE_VENTA" | "PAGO_MOVIL" | "TRANSFERENCIA_BANCARIA" | "ZELLE";
 
 // Mismos mosaicos e iconos que el cobro de boletos (PU-16, §2.3).
 const OPCIONES: { valor: OpcionCobro; etiqueta: string; tipo: TipoMetodoPago; moneda: MonedaPago; icono: Icon }[] = [
   { valor: "EFECTIVO_VES", etiqueta: "Efectivo Bs", tipo: "EFECTIVO", moneda: "VES", icono: Money },
   { valor: "EFECTIVO_USD", etiqueta: "Efectivo USD", tipo: "EFECTIVO", moneda: "USD", icono: Money },
+  { valor: "PUNTO_DE_VENTA", etiqueta: "Punto de venta", tipo: "PUNTO_DE_VENTA", moneda: "VES", icono: CreditCard },
   { valor: "PAGO_MOVIL", etiqueta: "Pago Móvil", tipo: "PAGO_MOVIL", moneda: "VES", icono: DeviceMobile },
   { valor: "TRANSFERENCIA_BANCARIA", etiqueta: "Transferencia", tipo: "TRANSFERENCIA_BANCARIA", moneda: "VES", icono: Bank },
   { valor: "ZELLE", etiqueta: "Zelle", tipo: "ZELLE", moneda: "USD", icono: CurrencyDollar },
@@ -93,6 +94,7 @@ const OPCIONES: { valor: OpcionCobro; etiqueta: string; tipo: TipoMetodoPago; mo
 
 const NOMBRE_METODO: Record<TipoMetodoPago, string> = {
   EFECTIVO: "efectivo",
+  PUNTO_DE_VENTA: "punto de venta",
   PAGO_MOVIL: "Pago Móvil",
   TRANSFERENCIA_BANCARIA: "transferencia",
   ZELLE: "Zelle",
@@ -160,6 +162,8 @@ export function CobroEncomiendaForm({ encomienda, onCobrado, onCambioExterno, di
 
   const opcionActual = OPCIONES.find((o) => o.valor === opcion) ?? null;
   const efectivo = opcionActual?.tipo === "EFECTIVO";
+  // Punto de venta: solo referencia del comprobante y fecha (sin cuenta, banco ni vuelto).
+  const puntoVenta = opcionActual?.tipo === "PUNTO_DE_VENTA";
   const moneda: MonedaPago = opcionActual?.moneda ?? "VES";
   const costoUsd = Number(encomienda.costo_calculado ?? 0);
   const totalBs = tasa ? usdABs(costoUsd, tasa.tasa) : null;
@@ -167,7 +171,7 @@ export function CobroEncomiendaForm({ encomienda, onCobrado, onCambioExterno, di
   const montoRecibido = parseMontoVE(recibido);
   const diferencia = efectivo && esperado != null && montoRecibido != null ? montoRecibido - esperado : null;
 
-  const cuentasDelTipo = opcionActual && !efectivo ? cuentas.filter((c) => c.tipo === opcionActual.tipo) : [];
+  const cuentasDelTipo = opcionActual && !efectivo && !puntoVenta ? cuentas.filter((c) => c.tipo === opcionActual.tipo) : [];
   const cuentaId =
     cuentaElegida && cuentasDelTipo.some((c) => c.id === cuentaElegida)
       ? cuentaElegida
@@ -202,6 +206,10 @@ export function CobroEncomiendaForm({ encomienda, onCobrado, onCambioExterno, di
         if (!/^[A-Z0-9]{4,40}$/.test(ref)) {
           nuevos.referencia = "Escribe el código de confirmación de Zelle completo (mínimo 4 caracteres).";
         }
+      } else if (puntoVenta) {
+        if (!/^\d{4,30}$/.test(ref)) {
+          nuevos.referencia = "Escribe la referencia del comprobante del punto: solo números, mínimo 4.";
+        }
       } else {
         if (!/^\d{4,30}$/.test(ref)) {
           nuevos.referencia = "Escribe el número de referencia completo: solo números, mínimo 4.";
@@ -232,12 +240,12 @@ export function CobroEncomiendaForm({ encomienda, onCobrado, onCambioExterno, di
           encomiendaId: encomienda.id,
           cobro: {
             metodoTipo: opcionActual.tipo,
-            metodoPagoId: efectivo ? null : cuentaId,
+            metodoPagoId: efectivo || puntoVenta ? null : cuentaId,
             moneda: efectivo ? opcionActual.moneda : null,
             montoRecibido: efectivo ? montoRecibido : null,
             referencia: efectivo ? null : referencia,
             fecha: efectivo ? null : fecha,
-            banco: efectivo || opcionActual.tipo === "ZELLE" ? null : banco,
+            banco: efectivo || puntoVenta || opcionActual.tipo === "ZELLE" ? null : banco,
             idemKey,
           },
         })
@@ -301,7 +309,7 @@ export function CobroEncomiendaForm({ encomienda, onCobrado, onCambioExterno, di
 
       <div className="flex flex-col gap-2">
         <p className="text-sm font-medium">¿Cómo pagó?</p>
-        <GrupoOpciones etiqueta="¿Cómo pagó?" className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+        <GrupoOpciones etiqueta="¿Cómo pagó?" className="grid grid-cols-2 gap-2 sm:grid-cols-3">
           {OPCIONES.map((o) => (
             <OpcionTile
               key={o.valor}
@@ -370,31 +378,37 @@ export function CobroEncomiendaForm({ encomienda, onCobrado, onCambioExterno, di
             </div>
           ) : (
             <div className="grid gap-4">
-              <div className="flex flex-col gap-2">
-                <p className="text-sm font-medium">Cuenta que recibió el pago</p>
-                {cuentasDelTipo.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    Sin cuentas de {NOMBRE_METODO[opcionActual.tipo]} activas: se registra sin cuenta.
-                  </p>
-                ) : (
-                  <GrupoOpciones etiqueta="Cuenta que recibió el pago" className="grid gap-2 sm:grid-cols-2">
-                    {cuentasDelTipo.map((c) => (
-                      <OpcionTile
-                        key={c.id}
-                        seleccionado={cuentaId === c.id}
-                        onSelect={() => setCuentaElegida(c.id)}
-                        disabled={disabled || enviando}
-                        titulo={etiquetaCuenta(c)}
-                      />
-                    ))}
-                  </GrupoOpciones>
-                )}
-              </div>
+              {!puntoVenta && (
+                <div className="flex flex-col gap-2">
+                  <p className="text-sm font-medium">Cuenta que recibió el pago</p>
+                  {cuentasDelTipo.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      Sin cuentas de {NOMBRE_METODO[opcionActual.tipo]} activas: se registra sin cuenta.
+                    </p>
+                  ) : (
+                    <GrupoOpciones etiqueta="Cuenta que recibió el pago" className="grid gap-2 sm:grid-cols-2">
+                      {cuentasDelTipo.map((c) => (
+                        <OpcionTile
+                          key={c.id}
+                          seleccionado={cuentaId === c.id}
+                          onSelect={() => setCuentaElegida(c.id)}
+                          disabled={disabled || enviando}
+                          titulo={etiquetaCuenta(c)}
+                        />
+                      ))}
+                    </GrupoOpciones>
+                  )}
+                </div>
+              )}
 
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="flex flex-col gap-2">
                   <Label htmlFor={id("referencia")}>
-                    {opcionActual.tipo === "ZELLE" ? "Código de confirmación" : "Número de referencia"}
+                    {opcionActual.tipo === "ZELLE"
+                      ? "Código de confirmación"
+                      : puntoVenta
+                        ? "Referencia del comprobante"
+                        : "Número de referencia"}
                   </Label>
                   <Input
                     id={id("referencia")}
@@ -438,7 +452,7 @@ export function CobroEncomiendaForm({ encomienda, onCobrado, onCambioExterno, di
                     </p>
                   )}
                 </div>
-                {opcionActual.tipo !== "ZELLE" && (
+                {opcionActual.tipo !== "ZELLE" && !puntoVenta && (
                   <div className="flex flex-col gap-2 sm:col-span-2">
                     <Label htmlFor={id("banco")}>Banco del cliente</Label>
                     <Input
@@ -468,7 +482,9 @@ export function CobroEncomiendaForm({ encomienda, onCobrado, onCambioExterno, di
                   </div>
                 )}
               </div>
-              <p className="text-sm text-muted-foreground">Regístralo cuando ya lo veas en la cuenta.</p>
+              <p className="text-sm text-muted-foreground">
+                {puntoVenta ? "Regístralo cuando el punto apruebe el pago." : "Regístralo cuando ya lo veas en la cuenta."}
+              </p>
             </div>
           )}
 
@@ -499,6 +515,12 @@ export function CobroEncomiendaForm({ encomienda, onCobrado, onCambioExterno, di
                 </>
               )}{" "}
               No se puede deshacer.
+            </p>
+          ) : puntoVenta ? (
+            <p>
+              Confirma que el punto de venta aprobó{" "}
+              <strong className="text-foreground">{esperado != null ? formatEnMoneda(esperado, moneda) : formatUsd(costoUsd)}</strong>{" "}
+              con la referencia <strong className="font-mono text-foreground">{referencia.trim()}</strong>. No se puede deshacer.
             </p>
           ) : (
             <p>
@@ -573,8 +595,8 @@ export function PagoModal({ encomienda, isOpen, onClose, onSuccess }: PagoModalP
   if (cargando && !cobro) {
     cuerpo = (
       <div className="flex flex-col gap-4" role="status" aria-label="Revisando si el cliente ya reportó un pago">
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
-          {[0, 1, 2, 3, 4].map((i) => (
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+          {[0, 1, 2, 3, 4, 5].map((i) => (
             <Skeleton key={i} className="h-20 rounded-md" />
           ))}
         </div>

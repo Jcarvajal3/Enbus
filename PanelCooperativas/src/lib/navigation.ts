@@ -2,7 +2,7 @@ import {
   ChartBar, Package, Ticket, TruckTrailer,
   MapTrifold, Users, Gear, CalendarBlank,
   DownloadSimple, Handshake, Receipt, ArrowCounterClockwise, Printer,
-  Bus, QrCode,
+  Bus, QrCode, UserCheck,
 } from "@phosphor-icons/react/dist/ssr";
 // Iconos de la entrada SSR: este módulo lo importan el proxy y los Server Components,
 // donde la entrada normal (con React context) no se puede evaluar.
@@ -54,6 +54,8 @@ export const ICONO_SECCION = {
   impresora: Printer,
   unidad: Bus,
   escanear: QrCode,
+  embarque: UserCheck,
+  buses: Bus,
 } satisfies Record<string, Icon>;
 
 const AMBOS: RolPanel[] = ["admin_cooperativa", "taquillero"];
@@ -84,7 +86,9 @@ export const NAV_GRUPOS: NavGrupo[] = [
   {
     titulo: "Operación",
     items: [
+      { title: "Embarque", href: "/cooperativas/embarque", icon: ICONO_SECCION.embarque, roles: AMBOS },
       { title: "Viajes", href: "/cooperativas/viajes", icon: ICONO_SECCION.viajes, roles: AMBOS },
+      { title: "Buses", href: "/cooperativas/buses", icon: ICONO_SECCION.buses, roles: ADMIN },
       { title: "Rutas", href: "/cooperativas/rutas", icon: ICONO_SECCION.rutas, roles: ADMIN },
     ],
   },

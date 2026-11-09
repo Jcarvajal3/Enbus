@@ -33,6 +33,7 @@ import {
 } from '@/src/components/PaymentFlow';
 import { ReservaTimer, ReservaVencida } from '@/src/components/ReservaTimer';
 import { CardSkeleton } from '@/src/components/CardSkeleton';
+import { LogoCooperativa } from '@/src/components/LogoCooperativa';
 import { PressableScale } from '@/src/components/PressableScale';
 import { StaggerItem } from '@/src/components/StaggerItem';
 import {
@@ -111,6 +112,8 @@ interface ViajeResumen {
   id: string;
   cooperativa_id: string;
   cooperativa: string;
+  /** `cooperativas.logo_url` (null sin logo: se ven sus iniciales) */
+  cooperativaLogo: string | null;
   calificacion: number;
   fecha_hora_salida: string;
   /** Llegada estimada (`viajes.fecha_hora_llegada_est` o salida + duración de la ruta) */
@@ -178,6 +181,8 @@ export default function BuscarBoletoScreen() {
     fecha?: string;
     /** Salida a preseleccionar (llega desde `viajes/[id]`) */
     viajeId?: string;
+    /** Cooperativa por la que filtrar las salidas (llega desde `cooperativas/[id]`) */
+    cooperativaId?: string;
   }>();
   const toast = useToast();
   const mostrarToast = toast.show;
@@ -423,7 +428,7 @@ export default function BuscarBoletoScreen() {
           .select(
             `id, fecha_hora_salida, fecha_hora_llegada_est, asientos_disponibles, asientos_totales,
              rutas!inner ( id, ciudad_origen, ciudad_destino, duracion_estimada_min, precio_pasaje ),
-             cooperativas!inner ( id, nombre, calificacion_promedio )`
+             cooperativas!inner ( id, nombre, calificacion_promedio, logo_url )`
           )
           .eq('estado', 'PROGRAMADO')
           .gt('asientos_disponibles', 0)
@@ -469,6 +474,7 @@ export default function BuscarBoletoScreen() {
             id: viaje.id,
             cooperativa_id: coop?.id ?? '',
             cooperativa: coop?.nombre ?? 'Cooperativa',
+            cooperativaLogo: coop?.logo_url ?? null,
             calificacion: coop?.calificacion_promedio ?? 0,
             fecha_hora_salida: viaje.fecha_hora_salida,
             llegada,
@@ -614,6 +620,35 @@ export default function BuscarBoletoScreen() {
   /** La hoja "Filtrar" solo sirve para elegir cooperativa, y solo si hay más de una. */
   const puedeFiltrar = cooperativas.length > 1;
   const filtroActivo = selectedCoop !== null;
+
+  // Llegando desde una cooperativa (`?cooperativaId=`), la primera lista que trae
+  // salidas suyas queda filtrada por ella (si hoy no tiene, se aplica al cambiar a
+  // un día en que sí). Se aplica una sola vez: después el filtro es del usuario.
+  const coopPedidaRef = useRef<string | null>(
+    typeof params.cooperativaId === 'string' && params.cooperativaId ? params.cooperativaId : null
+  );
+  useEffect(() => {
+    const pedida = coopPedidaRef.current;
+    if (!pedida || loadingViajes || viajes.length === 0) return;
+    const suya = viajes.find((v) => v.cooperativa_id === pedida);
+    if (!suya) return;
+    coopPedidaRef.current = null;
+    setSelectedCoop(suya.cooperativa);
+  }, [viajes, loadingViajes]);
+
+  // Si el usuario cambia la ruta a mano, el filtro pedido deja de tener sentido.
+  const rutaPedidaRef = useRef<string | null>(null);
+  useEffect(() => {
+    const clave = origen && destino ? `${origen.ciudad}|${destino.ciudad}` : null;
+    if (rutaPedidaRef.current === null) {
+      rutaPedidaRef.current = clave;
+      return;
+    }
+    if (clave !== rutaPedidaRef.current) {
+      rutaPedidaRef.current = clave;
+      coopPedidaRef.current = null;
+    }
+  }, [origen, destino]);
 
   // Si la cooperativa elegida ya no está en la lista (otro día), se quita el filtro.
   useEffect(() => {
@@ -1300,6 +1335,7 @@ function TarjetaSalida({
       style={[s.salida, elegida && s.salidaElegida]}
     >
       <View style={s.salidaCabecera}>
+        <LogoCooperativa nombre={viaje.cooperativa} logoUrl={viaje.cooperativaLogo} size="sm" decorativo />
         <Text variant="bodyStrong" numberOfLines={1} style={s.salidaCoop}>
           {viaje.cooperativa}
         </Text>
@@ -1363,6 +1399,7 @@ function TripCard({ viaje }: { viaje: ViajeResumen }) {
   return (
     <Card padding="md" style={s.tripCard}>
       <View style={s.tripHeader}>
+        <LogoCooperativa nombre={viaje.cooperativa} logoUrl={viaje.cooperativaLogo} size="md" decorativo />
         <Text variant="bodyStrong" numberOfLines={1} style={s.tripName}>
           {viaje.cooperativa}
         </Text>

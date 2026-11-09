@@ -32,13 +32,13 @@ interface FilaProximo {
     fecha_hora_llegada_est: string | null;
     rutas: { ciudad_origen: string | null; ciudad_destino: string | null } | null;
   } | null;
-  cooperativas: { nombre: string | null } | null;
+  cooperativas: { nombre: string | null; logo_url: string | null } | null;
 }
 
 const SELECT = `id, codigo_boleto, compra_id, viaje_id, asiento,
   viajes!inner ( fecha_hora_salida, fecha_hora_llegada_est,
                  rutas ( ciudad_origen, ciudad_destino ) ),
-  cooperativas ( nombre )`;
+  cooperativas ( nombre, logo_url )`;
 
 /** "9" < "14" < "15A" */
 const ordenAsiento = (a: string, b: string) => a.localeCompare(b, 'es', { numeric: true });
@@ -78,6 +78,7 @@ function elegirProximo(filas: FilaProximo[]): ProximoViaje | null {
     ciudadOrigen: ciudad(primero.viajes.rutas?.ciudad_origen),
     ciudadDestino: ciudad(primero.viajes.rutas?.ciudad_destino),
     cooperativa: (cabeza.cooperativas?.nombre ?? primero.cooperativas?.nombre ?? '').trim(),
+    cooperativaLogo: cabeza.cooperativas?.logo_url ?? primero.cooperativas?.logo_url ?? null,
   };
 }
 

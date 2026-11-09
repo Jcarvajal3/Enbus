@@ -8,6 +8,7 @@ import { TelefonoField } from "@/components/ve-fields";
 import { AuthLayout } from "@/components/auth-layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Textarea } from "@/components/ui/textarea";
 import { FieldGroup, Field, FieldLabel, FieldDescription, FieldError } from "@/components/ui/field";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -227,10 +228,9 @@ export default function RegistroCooperativaPage() {
 
             <Field data-invalid={errores.password ? true : undefined}>
               <FieldLabel htmlFor="password">Contraseña</FieldLabel>
-              <Input
+              <PasswordInput
                 id="password"
                 ref={(el) => { refs.current.password = el; }}
-                type="password"
                 autoComplete="new-password"
                 aria-invalid={errores.password ? true : undefined}
                 aria-describedby={errores.password ? "password-error" : "password-ayuda"}
@@ -247,10 +247,9 @@ export default function RegistroCooperativaPage() {
 
             <Field data-invalid={errores.confirmPassword ? true : undefined}>
               <FieldLabel htmlFor="confirmPassword">Repite la contraseña</FieldLabel>
-              <Input
+              <PasswordInput
                 id="confirmPassword"
                 ref={(el) => { refs.current.confirmPassword = el; }}
-                type="password"
                 autoComplete="new-password"
                 aria-invalid={errores.confirmPassword ? true : undefined}
                 aria-describedby={ayuda("confirmPassword")}

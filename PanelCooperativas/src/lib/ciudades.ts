@@ -11,3 +11,7 @@
 //   mismaCiudad("San_Cristóbal", "SAN CRISTOBAL") → true
 
 export { formatCiudad, formatRuta, normalizarCiudad, mismaCiudad } from "./ve.generated";
+
+// Catálogo de estados y ciudades (el de los selectores: ver ./data/venezuela.ts).
+export { ESTADOS_VE, estadoVE, ciudadVE } from "./ve.generated";
+export type { EstadoVE, CiudadVE } from "./ve.generated";

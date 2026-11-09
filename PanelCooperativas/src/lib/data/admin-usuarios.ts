@@ -321,7 +321,8 @@ export async function fetchUsuarioById(id: string): Promise<UsuarioDetalle | nul
     tasa_bcv: p.tasa_bcv != null ? Number(p.tasa_bcv) : null,
     tasa_bcv_fecha: p.tasa_bcv_fecha ?? null,
     tipo_pago: p.tipo_pago,
-    metodo_tipo: (Array.isArray(p.metodo) ? p.metodo[0]?.tipo : p.metodo?.tipo) ?? null,
+    // pagos.metodo_tipo (punto de venta, efectivo…) y, en pagos sin esa columna, el tipo de la cuenta.
+    metodo_tipo: p.metodo_tipo ?? (Array.isArray(p.metodo) ? p.metodo[0]?.tipo : p.metodo?.tipo) ?? null,
     verificado: p.verificado,
     // Antes de la migración 01 no existe estado_verificacion: se deduce de verificado / rechazado_at.
     estado_verificacion:

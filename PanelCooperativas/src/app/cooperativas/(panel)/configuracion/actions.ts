@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { codigoEB, humanizeError } from "@/lib/errores";
 import { normalizeRif, RIF_ERROR } from "@/lib/rif";
 import { cedulaParaGuardar, telefonoParaGuardar } from "@/lib/ve";
+import { horarioATexto, normalizarHorario, type HorarioSemana } from "@/lib/horario";
 import type {
   TipoMetodoPago,
   MetodoPagoCooperativa,
@@ -387,15 +388,34 @@ export type SucursalInput = {
   ciudad: string;
   direccion: string | null;
   telefono: string | null;
+  /**
+   * Horario por día (editor del panel). Si viene, el servidor genera `horario` a partir de él
+   * e ignora el texto que mande el cliente.
+   */
+  horario_semana: HorarioSemana | null;
+  /** Texto libre antiguo: solo se usa sin `horario_semana` (sucursales que aún no pasan al editor). */
   horario: string | null;
 };
 
 /** Fila de sucursal tal como la guarda la tabla (con las columnas de la fase 3). */
 export type SucursalGuardada = Sucursal;
 
+/** Largo del texto libre antiguo (el input lo cortaba en 120). */
+const HORARIO_LIBRE_MAX = 120;
+
+type FilaSucursal = {
+  nombre: string;
+  estado_geografico: string;
+  ciudad: string;
+  direccion: string;
+  telefono: string | null;
+  horario: string | null;
+  horario_semana: HorarioSemana | null;
+};
+
 function prepararSucursal(
   input: SucursalInput
-): { ok: true; data: Record<string, string | null> } | { ok: false; error: string; campo: string } {
+): { ok: true; data: FilaSucursal } | { ok: false; error: string; campo: string } {
   const nombre = (input.nombre ?? "").trim().replace(/\s+/g, " ");
   if (nombre.length < 3) return { ok: false, error: "Escribe el nombre de la sucursal (mínimo 3 caracteres).", campo: "nombre" };
   if (!input.estado) return { ok: false, error: "Elige el estado donde queda la sucursal.", campo: "estado" };
@@ -412,6 +432,15 @@ function prepararSucursal(
       return { ok: false, error: "Escribe un teléfono venezolano, por ejemplo 0241-1234567.", campo: "telefono" };
     }
   }
+  // Con horario por días, el texto que ve la app se genera aquí (no se confía en el del cliente).
+  let horario: string | null = (input.horario ?? "").trim().slice(0, HORARIO_LIBRE_MAX) || null;
+  let horarioSemana: HorarioSemana | null = null;
+  if (input.horario_semana != null) {
+    const normalizado = normalizarHorario(input.horario_semana);
+    if (!normalizado.ok) return { ok: false, error: normalizado.error, campo: "horario" };
+    horarioSemana = normalizado.data;
+    horario = horarioATexto(horarioSemana);
+  }
   return {
     ok: true,
     data: {
@@ -420,21 +449,10 @@ function prepararSucursal(
       ciudad: input.ciudad,
       direccion,
       telefono,
-      horario: (input.horario ?? "").trim().slice(0, 120) || null,
+      horario,
+      horario_semana: horarioSemana,
     },
   };
-}
-
-/** 42703/PGRST204: la columna `horario` aún no existe (migración 20260720000002 sin aplicar). */
-function sinColumnaHorario(fallaDb: { code?: string; message?: string } | null): boolean {
-  if (!fallaDb || (fallaDb.code !== "42703" && fallaDb.code !== "PGRST204")) return false;
-  return /horario/i.test(fallaDb.message ?? "");
-}
-
-function sinHorario(fila: Record<string, string | null>): Record<string, string | null> {
-  const resto = { ...fila };
-  delete resto.horario;
-  return resto;
 }
 
 export async function crearSucursal(input: SucursalInput): Promise<ResultadoConfig<SucursalGuardada>> {
@@ -444,14 +462,12 @@ export async function crearSucursal(input: SucursalInput): Promise<ResultadoConf
   if (!preparado.ok) return preparado;
 
   const supabase = await createClient();
-  const insertar = (fila: Record<string, string | null>) =>
-    supabase
-      .from("sucursales")
-      .insert({ ...fila, cooperativa_id: admin.cooperativaId, activa: true })
-      .select()
-      .single();
-  let { data, error } = await insertar(preparado.data);
-  if (sinColumnaHorario(error)) ({ data, error } = await insertar(sinHorario(preparado.data)));
+  // horario_semana necesita la migración 20261109000002.
+  const { data, error } = await supabase
+    .from("sucursales")
+    .insert({ ...preparado.data, cooperativa_id: admin.cooperativaId, activa: true })
+    .select()
+    .single();
   if (error || !data) {
     console.error("[crearSucursal] Error:", error);
     return fallo(error, "crear la sucursal");
@@ -470,16 +486,13 @@ export async function actualizarSucursal(id: string, input: SucursalInput): Prom
   if (!preparado.ok) return preparado;
 
   const supabase = await createClient();
-  const actualizar = (fila: Record<string, string | null>) =>
-    supabase
-      .from("sucursales")
-      .update(fila)
-      .eq("id", id)
-      .eq("cooperativa_id", admin.cooperativaId)
-      .select()
-      .single();
-  let { data, error } = await actualizar(preparado.data);
-  if (sinColumnaHorario(error)) ({ data, error } = await actualizar(sinHorario(preparado.data)));
+  const { data, error } = await supabase
+    .from("sucursales")
+    .update(preparado.data)
+    .eq("id", id)
+    .eq("cooperativa_id", admin.cooperativaId)
+    .select()
+    .single();
   if (error || !data) {
     console.error("[actualizarSucursal] Error:", error);
     return fallo(error, "guardar la sucursal");

@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Image, ScrollView, StyleSheet, View, type TextInput } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
-  Bus,
   Camera,
   Image as ImageIcon,
   Info,
@@ -18,6 +17,7 @@ import { RouteField } from '@/src/components/RouteField';
 import { PressableScale } from '@/src/components/PressableScale';
 import { StaggerItem } from '@/src/components/StaggerItem';
 import { CardSkeleton } from '@/src/components/CardSkeleton';
+import { LogoCooperativa } from '@/src/components/LogoCooperativa';
 import { SkeletonLoader } from '@/src/components/SkeletonLoader';
 import { CompletarPerfilSheet } from '@/src/components/CompletarPerfilSheet';
 import { CedulaField } from '@/src/components/CedulaField';
@@ -80,7 +80,12 @@ import { Colors, Layout, Motion, Radius, Shadows, Sizes, Spacing } from '@/src/t
 interface RutaDisponible {
   id: string;
   precio_pasaje?: number;
-  cooperativas?: { id: string; nombre: string; calificacion_promedio?: number };
+  cooperativas?: {
+    id: string;
+    nombre: string;
+    calificacion_promedio?: number;
+    logo_url?: string | null;
+  };
 }
 
 const STEP_TITLES = ['¿A dónde la envías?', 'Detalles de la encomienda', 'Revisa y genera tu código'];
@@ -243,7 +248,7 @@ export default function NuevaEncomiendaWizard() {
         setErrorRutas(null);
         const { data, error } = await supabase
           .from('rutas')
-          .select('id, precio_pasaje, cooperativa_id, cooperativas!inner ( id, nombre, calificacion_promedio )')
+          .select('id, precio_pasaje, cooperativa_id, cooperativas!inner ( id, nombre, calificacion_promedio, logo_url )')
           .eq('ciudad_origen', normalizeCityForDb(origen.ciudad))
           .eq('ciudad_destino', normalizeCityForDb(destino.ciudad))
           .eq('activa', true)
@@ -386,10 +391,11 @@ export default function NuevaEncomiendaWizard() {
       return;
     }
 
+    // La foto se acepta tal cual, con su proporción: sin la pantalla de recorte
+    // (antes obligaba a 4:3). Solo se comprime en JPEG para que pese menos.
     const options: ImagePicker.ImagePickerOptions = {
       mediaTypes: ['images'],
-      allowsEditing: true,
-      aspect: [4, 3],
+      allowsEditing: false,
       quality: 0.8,
     };
 
@@ -707,7 +713,14 @@ export default function NuevaEncomiendaWizard() {
                                 selectable
                                 selected={ruta?.id === option.id}
                                 onPress={() => setRuta(option)}
-                                leading={<IconTile tone="coral" icon={Bus} />}
+                                leading={
+                                  <LogoCooperativa
+                                    nombre={nombreOpcion}
+                                    logoUrl={option.cooperativas?.logo_url}
+                                    size="md"
+                                    decorativo
+                                  />
+                                }
                                 title={nombreOpcion}
                                 subtitle={precio}
                                 adorno={rating > 0 ? <Calificacion valor={rating} /> : undefined}
@@ -928,7 +941,7 @@ export default function NuevaEncomiendaWizard() {
                     <Image
                       source={{ uri: foto }}
                       style={s.photo}
-                      resizeMode="cover"
+                      resizeMode="contain"
                       accessibilityLabel="Foto de la encomienda"
                     />
                     <View style={s.photoActions}>
@@ -1014,7 +1027,7 @@ export default function NuevaEncomiendaWizard() {
                     <Image
                       source={{ uri: foto }}
                       style={s.photoSummary}
-                      resizeMode="cover"
+                      resizeMode="contain"
                       accessibilityLabel="Foto de la encomienda"
                     />
                   ) : null}
@@ -1283,17 +1296,20 @@ const s = StyleSheet.create({
   note: {
     marginTop: Spacing.lg,
   },
+  // La foto conserva su proporción (no se recorta): se muestra entera, sobre un fondo.
   photo: {
     width: '100%',
     height: 180,
     borderRadius: Radius.md,
     marginBottom: Spacing.md,
+    backgroundColor: Colors.surface,
   },
   photoSummary: {
     width: '100%',
     height: 160,
     borderRadius: Radius.md,
     marginTop: Spacing.sm,
+    backgroundColor: Colors.surface,
   },
   photoActions: {
     flexDirection: 'row',

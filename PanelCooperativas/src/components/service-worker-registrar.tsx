@@ -1,13 +1,18 @@
 "use client";
 
 import { useEffect } from "react";
+import { InvitacionPush } from "@/components/push/invitacion-push";
+import { sincronizarPush } from "@/components/push/push-navegador";
 
 /**
  * Registra el Service Worker en el navegador del usuario.
  * Solo se activa en producción o si la variable NEXT_PUBLIC_SW_ENABLED="true".
  *
- * Se renderiza como un componente vacío (sin output visual) para que pueda
- * colocarse en layouts Server Components sin necesidad de "use client" en ellos.
+ * Se monta en el shell del panel (sesión de personal de una cooperativa). Además:
+ * - Si este navegador ya tenía las notificaciones push activadas, vuelve a guardar
+ *   la suscripción para la sesión actual (otra persona pudo entrar en el mismo
+ *   equipo o el navegador pudo renovarla).
+ * - Con el panel instalado, invita una sola vez a activarlas (InvitacionPush).
  */
 export function ServiceWorkerRegistrar() {
   useEffect(() => {
@@ -41,12 +46,14 @@ export function ServiceWorkerRegistrar() {
         if (process.env.NODE_ENV === "development") {
           console.info("[SW] Registrado con scope:", registration.scope);
         }
+        void sincronizarPush(registration);
       })
       .catch(() => {
         // Sin service worker el panel funciona igual: solo se pierde la caché para
-        // abrir sin conexión. No hay nada que la persona pueda hacer, así que no se avisa.
+        // abrir sin conexión y las notificaciones. No hay nada que la persona pueda
+        // hacer, así que no se avisa.
       });
   }, []);
 
-  return null;
+  return <InvitacionPush />;
 }

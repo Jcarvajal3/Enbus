@@ -12,6 +12,7 @@ import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ErrorState } from "@/components/error-state";
+import { BarraAccion, TotalCorto } from "./barra-accion";
 import { cn } from "@/lib/utils";
 import { humanizeError } from "@/lib/errores";
 
@@ -22,6 +23,8 @@ interface SeatSelectorProps {
   seleccionInicial?: string[];
   /** Máximo de asientos por venta (el servidor acepta hasta 10). */
   maxSeleccion?: number;
+  /** Precio de un pasaje (USD de referencia), para el total en la barra de acción. */
+  precioUsd?: number;
   onConfirm: (asientos: string[]) => void;
   onCancel: () => void;
 }
@@ -75,6 +78,7 @@ export function SeatSelector({
   totalAsientos,
   seleccionInicial = [],
   maxSeleccion = 10,
+  precioUsd,
   onConfirm,
   onCancel,
 }: SeatSelectorProps) {
@@ -128,7 +132,26 @@ export function SeatSelector({
   };
 
   const pie = (
-    <div className="flex w-full flex-col-reverse gap-2 border-t border-border pt-4 sm:flex-row sm:justify-between">
+    <BarraAccion
+      className="self-stretch"
+      resumen={
+        seleccion.length === 0 ? (
+          "Toca los asientos que quiere el pasajero."
+        ) : (
+          <span className="flex flex-wrap items-center gap-x-2">
+            <span className="font-medium text-foreground">
+              {seleccion.length === 1 ? "Asiento" : `${seleccion.length} asientos:`} {listaAsientos(seleccion)}
+            </span>
+            {precioUsd !== undefined && precioUsd > 0 && (
+              <>
+                <span aria-hidden>·</span>
+                <TotalCorto usd={precioUsd * seleccion.length} />
+              </>
+            )}
+          </span>
+        )
+      }
+    >
       <Button variant="outline" onClick={onCancel}>
         Atrás
       </Button>
@@ -137,7 +160,7 @@ export function SeatSelector({
           Continuar
         </Button>
       )}
-    </div>
+    </BarraAccion>
   );
 
   if (errorCarga) {
@@ -210,16 +233,8 @@ export function SeatSelector({
             Elegido
           </span>
         </div>
-        <p className="tabular-nums" aria-live="polite">
-          {libres} libres de {totalAsientos} · máx. {maxSeleccion}
-          {seleccion.length > 0 && (
-            <>
-              {" · "}
-              <span className="font-medium text-foreground">
-                {seleccion.length === 1 ? "Asiento" : "Asientos"} {listaAsientos(seleccion)}
-              </span>
-            </>
-          )}
+        <p className="tabular-nums">
+          {libres} libres de {totalAsientos} · máx. {maxSeleccion} por venta
         </p>
       </div>
 

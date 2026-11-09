@@ -3,9 +3,12 @@ import { getUserProfile } from "@/lib/supabase/cached";
 import { redirect } from "next/navigation";
 import { humanizeError } from "@/lib/errores";
 import { hoyVE, rangoDiaVE, sumarDiasVE } from "@/lib/fechas";
+import type { BusParaViaje } from "@/lib/types/operacion";
 import { ViajesClient, type VistaViajes } from "./client";
 
 const FECHA_RE = /^\d{4}-\d{2}-\d{2}$/;
+/** "Unidad 2" antes que "Unidad 10". */
+const ORDEN_UNIDAD = new Intl.Collator("es", { numeric: true, sensitivity: "base" });
 const LIMITE_HISTORIAL = 100;
 const LIMITE_LISTA = 300;
 const SELECT_VIAJES =
@@ -71,7 +74,8 @@ export default async function ViajesPage({
     return base().or(filtroHoy).order("fecha_hora_salida", { ascending: true }).limit(LIMITE_LISTA);
   };
 
-  const [rutasResult, viajesResult, hoyResult] = await Promise.all([
+  const esAdmin = user.role === "admin_cooperativa";
+  const [rutasResult, viajesResult, hoyResult, busesResult] = await Promise.all([
     supabase
       .from("rutas")
       .select("id, ciudad_origen, ciudad_destino")
@@ -84,12 +88,26 @@ export default async function ViajesPage({
       .select("id", { count: "exact", head: true })
       .eq("cooperativa_id", user.cooperativa_id)
       .or(filtroHoy),
+    // Buses activos para "Programar viaje" y "Editar viaje" (solo el administrador programa).
+    esAdmin
+      ? supabase
+          .from("buses")
+          .select("id, numero_unidad, placa, asientos, chofer_nombre")
+          .eq("cooperativa_id", user.cooperativa_id)
+          .eq("activo", true)
+          .limit(500)
+      : Promise.resolve(null),
   ]);
 
   // Si falla la carga, la lista no se muestra vacía: el cliente enseña el error con "Reintentar".
   const error = viajesResult.error ?? rutasResult.error;
   if (error) console.error("[ViajesPage] Error al cargar viajes o rutas:", error);
+  // Si fallan los buses, la lista se ve igual; el formulario de programar avisa del error.
+  if (busesResult?.error) console.error("[ViajesPage] Error al cargar los buses:", busesResult.error);
   const viajes = viajesResult.data ?? [];
+  const busesActivos = ((busesResult?.data ?? []) as BusParaViaje[]).sort((a, b) =>
+    ORDEN_UNIDAD.compare(a.numero_unidad, b.numero_unidad)
+  );
 
   return (
     <ViajesClient
@@ -97,6 +115,8 @@ export default async function ViajesPage({
       key={`${vista}:${fecha ?? ""}`}
       viajes={viajes}
       rutasActivas={rutasResult.data || []}
+      busesActivos={busesActivos}
+      errorBuses={busesResult?.error ? humanizeError(busesResult.error, "cargar los buses") : null}
       userRole={user.role}
       vista={vista}
       fecha={fecha}

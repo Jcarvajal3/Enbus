@@ -550,7 +550,7 @@ export default function DetalleRecibirScreen() {
                 key={uri}
                 source={{ uri }}
                 style={[s.photo, i > 0 ? s.photoSecond : null]}
-                resizeMode="cover"
+                resizeMode="contain"
                 accessibilityLabel="Foto de la encomienda"
               />
             ))}
@@ -694,6 +694,7 @@ const s = StyleSheet.create({
     width: '100%',
     height: 200,
     borderRadius: Radius.md,
+    backgroundColor: Colors.surface,
   },
   photoSecond: {
     marginTop: Spacing.lg,

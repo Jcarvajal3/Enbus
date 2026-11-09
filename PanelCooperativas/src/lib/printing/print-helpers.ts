@@ -57,7 +57,9 @@ function remitenteGuia(e: Encomienda): { nombre: string; cedula: string | null; 
       telefono: e.remitente_telefono ? formatTelefono(e.remitente_telefono) : null,
     };
   }
-  return { nombre: e.sender?.nombre_completo || "", cedula: null, telefono: null };
+  // En las de la app el nombre está en `remitente_nombre` (copia del perfil, 20261109000005):
+  // el personal no puede leer el perfil del cliente y `sender` llega vacío.
+  return { nombre: e.remitente_nombre || e.sender?.nombre_completo || "", cedula: null, telefono: null };
 }
 
 /** Datos extra de la guía: el PIN solo se imprime en la copia para quien envía. */

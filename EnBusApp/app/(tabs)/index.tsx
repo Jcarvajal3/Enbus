@@ -1,6 +1,7 @@
 /**
  * Inicio — el amanecer de fondo, tu próximo viaje si lo hay, la pregunta y el
- * buscador como protagonista, y "Tu actividad" solo con algo en curso.
+ * buscador como protagonista, "Tu actividad" solo con algo en curso y, al final,
+ * las cooperativas aliadas con sus logos.
  */
 import { ScrollView, StatusBar, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -14,6 +15,7 @@ import { PressableScale } from '@/src/components/PressableScale';
 import { HeaderActions } from '@/src/components/HeaderActions';
 import { BrandMark } from '@/src/components/BrandMark';
 import { ProximoViajeCard } from '@/src/components/ProximoViajeCard';
+import { CooperativasAliadas } from '@/src/components/CooperativasAliadas';
 import {
   Atmosfera,
   Card,
@@ -145,6 +147,14 @@ export default function HomeScreen() {
             </View>
           </StaggerItem>
         ) : null}
+
+        {/* ── Cooperativas aliadas: atajo al buscador de cooperativas ─────── */}
+        <StaggerItem index={3} style={s.actividad}>
+          <CooperativasAliadas
+            onVerTodas={() => router.push('/cooperativas')}
+            onAbrir={(id) => router.push({ pathname: '/cooperativas/[id]', params: { id } })}
+          />
+        </StaggerItem>
       </ScrollView>
     </Screen>
   );

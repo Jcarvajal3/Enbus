@@ -8,7 +8,7 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { VENEZUELA_LOCATIONS, normalizeCityForDb, type Localidad } from './venezuela';
+import { VENEZUELA_LOCATIONS, localidadDeDb, normalizeCityForDb, type Localidad } from './venezuela';
 
 const CLAVE = 'enbus.busquedas_recientes.v1';
 const MAX_BUSQUEDAS = 5;
@@ -20,17 +20,20 @@ const claveCiudad = (l: Localidad) => normalizeCityForDb(l.ciudad);
 
 /**
  * La entrada del catálogo con esa ciudad (misma referencia que usa el
- * selector), o `null` si el valor guardado no es una localidad conocida.
+ * selector), una reconstruida si no está en el catálogo, o `null` si el valor
+ * guardado está vacío.
  */
 function localidadValida(v: unknown): Localidad | null {
   if (!v || typeof v !== 'object') return null;
   const { estado, ciudad } = v as Record<string, unknown>;
   if (typeof estado !== 'string' || typeof ciudad !== 'string') return null;
   const clave = normalizeCityForDb(ciudad);
+  // Fuera del catálogo (ciudad que solo viene de una ruta activa) se reconstruye
+  // con `localidadDeDb` en vez de descartar la búsqueda.
   return (
     VENEZUELA_LOCATIONS.find((l) => l.estado === estado && claveCiudad(l) === clave) ??
     VENEZUELA_LOCATIONS.find((l) => claveCiudad(l) === clave) ??
-    null
+    localidadDeDb(ciudad, estado)
   );
 }
 

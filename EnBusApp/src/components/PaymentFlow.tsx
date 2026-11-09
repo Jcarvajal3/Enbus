@@ -366,8 +366,10 @@ export function PaymentFlow({
       .then(({ data, error }) => {
         if (error) return fallar(error);
         if (isMounted) {
-          // El efectivo no se registra desde la app: se paga en taquilla.
-          setMetodos(((data ?? []) as MetodoPago[]).filter((m) => m.tipo !== 'EFECTIVO'));
+          // El efectivo y el punto de venta no se registran desde la app: se pagan en taquilla.
+          setMetodos(
+            ((data ?? []) as MetodoPago[]).filter((m) => m.tipo !== 'EFECTIVO' && m.tipo !== 'PUNTO_DE_VENTA')
+          );
           setLoadingMetodos(false);
         }
       }, fallar);

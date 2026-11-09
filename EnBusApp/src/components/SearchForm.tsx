@@ -15,12 +15,7 @@ import { RouteField } from './RouteField';
 import { CalendarModal } from './CalendarModal';
 import { PressableScale } from './PressableScale';
 import { Button, Chip, SegmentedControl, Text, TextLink } from '@/src/components/ui';
-import {
-  CIUDADES_POPULARES,
-  Localidad,
-  VENEZUELA_LOCATIONS,
-  normalizeCityForDb,
-} from '../utils/venezuela';
+import { CIUDADES_POPULARES, Localidad, localidadDeDb, normalizeCityForDb } from '../utils/venezuela';
 import { ciudadesRecientes, guardarBusquedaReciente } from '../utils/busquedasRecientes';
 import { fechaVE, formatCity, formatDiaVE, toDateKey } from '../utils/formatters';
 import { supabase } from '../utils/supabase';
@@ -369,17 +364,6 @@ export function CampoFecha({
 /** Como mucho, seis destinos alternativos. */
 const MAX_ALTERNATIVAS = 6;
 
-/** La entrada del catálogo para una ciudad de la base ("merida" → Mérida, Mérida). */
-function localidadDeDb(valor: string): Localidad {
-  const clave = normalizeCityForDb(valor);
-  return (
-    VENEZUELA_LOCATIONS.find((l) => normalizeCityForDb(l.ciudad) === clave) ?? {
-      ciudad: formatCity(valor),
-      estado: '',
-    }
-  );
-}
-
 type EstadoAlternativas =
   | { tipo: 'cargando' }
   | { tipo: 'error' }
@@ -415,7 +399,9 @@ export function SinSalidasRuta({
       try {
         const { data, error } = await supabase
           .from('viajes')
-          .select('rutas!inner ( ciudad_origen, ciudad_destino ), cooperativas!inner ( estado )')
+          .select(
+            'rutas!inner ( ciudad_origen, ciudad_destino, estado_destino ), cooperativas!inner ( estado )'
+          )
           .eq('estado', 'PROGRAMADO')
           .gt('asientos_disponibles', 0)
           .eq('rutas.ciudad_origen', claveOrigen)
@@ -431,15 +417,18 @@ export function SinSalidasRuta({
         const destinos: Localidad[] = [];
         for (const fila of (data ?? []) as { rutas: unknown }[]) {
           const ruta = (Array.isArray(fila.rutas) ? fila.rutas[0] : fila.rutas) as
-            | { ciudad_destino?: string | null }
+            | { ciudad_destino?: string | null; estado_destino?: string | null }
             | null
             | undefined;
           const valor = ruta?.ciudad_destino;
           if (!valor) continue;
           const clave = normalizeCityForDb(valor);
           if (!clave || vistos.has(clave) || clave === claveOrigen) continue;
+          // Con el nombre legible aunque la ciudad no esté en el catálogo.
+          const localidad = localidadDeDb(valor, ruta?.estado_destino);
+          if (!localidad) continue;
           vistos.add(clave);
-          destinos.push(localidadDeDb(valor));
+          destinos.push(localidad);
           if (destinos.length >= MAX_ALTERNATIVAS) break;
         }
         setEstado({ tipo: 'listo', destinos });

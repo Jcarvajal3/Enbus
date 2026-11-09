@@ -1,7 +1,8 @@
 // GENERADO por shared/generar.mjs — no editar a mano. Fuente: shared/ve.ts
 
 // ─── Formatos venezolanos (fuente única) ─────────────────────────────────────
-// Cédula, teléfono, RIF, contraseña, ciudades, fechas en hora de Venezuela y duraciones.
+// Cédula, teléfono, RIF, contraseña, ciudades (y el catálogo de estados y ciudades), fechas en
+// hora de Venezuela y duraciones.
 // Espejo de `normalizar_cedula`, `normalizar_telefono` y `normalizar_localidad`
 // (SQL, migración 20260719000001): lo que aceptan la app, el panel y la landing es
 // lo que acepta la base. Los marcadores `PENDIENTE-<id>` (perfiles creados con
@@ -234,40 +235,96 @@ export function normalizarCiudad(v: string | null | undefined): string {
   return ALIAS_LOCALIDAD[base] ?? base.replace(/ /g, "_");
 }
 
-/** Nombres con tildes o minúsculas internas, por clave sin tildes (con espacios). */
-const NOMBRES_CIUDAD: Record<string, string> = {
-  merida: "Mérida",
-  falcon: "Falcón",
-  bolivar: "Bolívar",
-  tachira: "Táchira",
-  anzoategui: "Anzoátegui",
-  guarico: "Guárico",
-  "nueva esparta": "Nueva Esparta",
-  "la guaira": "La Guaira",
-  maturin: "Maturín",
-  cumana: "Cumaná",
-  carupano: "Carúpano",
-  bocono: "Boconó",
-  tariba: "Táriba",
-  socopo: "Socopó",
-  cua: "Cúa",
-  "san fernando": "San Fernando de Apure",
-  "san juan": "San Juan de los Morros",
-  "puerto la cruz": "Puerto La Cruz",
-  lecheria: "Lechería",
-  "ciudad bolivar": "Ciudad Bolívar",
-  "san felix": "San Félix",
-  "valle de la pascua": "Valle de la Pascua",
-  "el vigia": "El Vigía",
-  "punta de mata": "Punta de Mata",
-  "la asuncion": "La Asunción",
-  "san cristobal": "San Cristóbal",
-  "san antonio del tachira": "San Antonio del Táchira",
-  maiquetia: "Maiquetía",
-  "catia la mar": "Catia La Mar",
-  "ocumare del tuy": "Ocumare del Tuy",
-  "santa teresa del tuy": "Santa Teresa del Tuy",
-};
+// ─── Catálogo de estados y ciudades ──────────────────────────────────────────
+// Fuente única de las ciudades que se ofrecen al crear rutas y sucursales (panel), al
+// elegir origen y destino (app) y de sus nombres legibles (`formatCiudad`). La clave
+// de cada estado y ciudad se calcula con `normalizarCiudad` (= `normalizar_localidad`
+// de SQL): es lo que guardan `rutas`, `sucursales` y `encomiendas`
+// ("socopo", "san_juan", "puerto_la_cruz"). Para añadir una ciudad basta con
+// escribir su nombre aquí y ejecutar `node shared/generar.mjs`.
+//
+// La clave de una ciudad es única en todo el país (la app la busca sin el estado).
+
+/** Ciudad del catálogo: `clave` = normalizarCiudad(nombre) ("socopo"), `nombre` legible ("Socopó"). */
+export type CiudadVE = { readonly clave: string; readonly nombre: string };
+
+/** Estado del catálogo con sus ciudades (la capital primero). */
+export type EstadoVE = { readonly clave: string; readonly nombre: string; readonly ciudades: readonly CiudadVE[] };
+
+/** Nombre del estado → nombres de sus ciudades, la capital primero. */
+const CATALOGO_FUENTE: readonly (readonly [string, readonly string[]])[] = [
+  ["Amazonas", ["Puerto Ayacucho"]],
+  ["Anzoátegui", ["Barcelona", "Puerto La Cruz", "Lechería", "El Tigre", "Anaco"]],
+  ["Apure", ["San Fernando de Apure", "Guasdualito"]],
+  ["Aragua", ["Maracay", "Turmero", "Cagua", "La Victoria"]],
+  ["Barinas", ["Barinas", "Socopó"]],
+  ["Bolívar", ["Ciudad Bolívar", "Ciudad Guayana", "Puerto Ordaz", "San Félix", "Upata"]],
+  ["Carabobo", ["Valencia", "Puerto Cabello", "Guacara", "San Diego"]],
+  ["Cojedes", ["San Carlos", "Tinaquillo"]],
+  ["Delta Amacuro", ["Tucupita"]],
+  ["Distrito Capital", ["Caracas"]],
+  ["Falcón", ["Coro", "Punto Fijo"]],
+  ["Guárico", ["San Juan de los Morros", "Valle de la Pascua", "Calabozo"]],
+  ["La Guaira", ["La Guaira", "Maiquetía", "Catia La Mar"]],
+  ["Lara", ["Barquisimeto", "Cabudare", "Carora"]],
+  ["Mérida", ["Mérida", "El Vigía", "Tovar"]],
+  [
+    "Miranda",
+    ["Los Teques", "Guarenas", "Guatire", "Charallave", "Cúa", "Ocumare del Tuy", "Santa Teresa del Tuy"],
+  ],
+  ["Monagas", ["Maturín", "Punta de Mata"]],
+  ["Nueva Esparta", ["Porlamar", "La Asunción", "Pampatar"]],
+  ["Portuguesa", ["Guanare", "Acarigua", "Araure"]],
+  ["Sucre", ["Cumaná", "Carúpano"]],
+  ["Táchira", ["San Cristóbal", "Táriba", "Rubio", "San Antonio del Táchira"]],
+  ["Trujillo", ["Valera", "Trujillo", "Boconó"]],
+  ["Yaracuy", ["San Felipe", "Yaritagua", "Chivacoa"]],
+  ["Zulia", ["Maracaibo", "Cabimas", "Ciudad Ojeda", "Machiques"]],
+];
+
+/**
+ * Los 24 estados de Venezuela con sus ciudades, en orden alfabético:
+ * `{ clave: "barinas", nombre: "Barinas", ciudades: [{ clave: "socopo", nombre: "Socopó" }, …] }`.
+ */
+export const ESTADOS_VE: readonly EstadoVE[] = CATALOGO_FUENTE.map(([nombre, ciudades]) => ({
+  clave: normalizarCiudad(nombre),
+  nombre,
+  ciudades: ciudades.map((c) => ({ clave: normalizarCiudad(c), nombre: c })),
+}));
+
+/** El estado del catálogo por su clave o su nombre ("barinas", "Mérida", "DISTRITO CAPITAL"), o null. */
+export function estadoVE(v: string | null | undefined): EstadoVE | null {
+  const clave = normalizarCiudad(v);
+  if (!clave) return null;
+  for (const e of ESTADOS_VE) if (e.clave === clave) return e;
+  return null;
+}
+
+/**
+ * La ciudad del catálogo y su estado, por clave o nombre ("socopo", "Socopó",
+ * "San Juan de los Morros"), o null si no está en el catálogo. Con `estado`, solo
+ * busca en ese estado.
+ */
+export function ciudadVE(
+  v: string | null | undefined,
+  estado?: string | null
+): { estado: EstadoVE; ciudad: CiudadVE } | null {
+  const clave = normalizarCiudad(v);
+  if (!clave) return null;
+  const claveEstado = estado ? normalizarCiudad(estado) : "";
+  for (const e of ESTADOS_VE) {
+    if (claveEstado && e.clave !== claveEstado) continue;
+    for (const c of e.ciudades) if (c.clave === clave) return { estado: e, ciudad: c };
+  }
+  return null;
+}
+
+/** Nombres legibles por clave ("san_juan" → "San Juan de los Morros"): estados y ciudades del catálogo. */
+const NOMBRES_CIUDAD: Record<string, string> = {};
+for (const e of ESTADOS_VE) {
+  NOMBRES_CIUDAD[e.clave] = e.nombre;
+  for (const c of e.ciudades) NOMBRES_CIUDAD[c.clave] = c.nombre;
+}
 
 /** Partículas que van en minúscula dentro de un nombre ("Valle de la Pascua"), salvo al inicio. */
 const PARTICULAS_CIUDAD: Record<string, true> = { de: true, del: true, la: true, las: true, los: true, y: true };
@@ -281,7 +338,7 @@ const PARTICULAS_CIUDAD: Record<string, true> = { de: true, del: true, la: true,
 export function formatCiudad(v: string | null | undefined): string {
   const clave = normalizarCiudad(v);
   if (!clave) return "";
-  const conocido = NOMBRES_CIUDAD[clave.replace(/_/g, " ")];
+  const conocido = NOMBRES_CIUDAD[clave];
   if (conocido) return conocido;
   return (v ?? "")
     .replace(/_/g, " ")

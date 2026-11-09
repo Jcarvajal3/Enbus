@@ -221,6 +221,7 @@ export const METODO_PAGO: Record<TipoMetodoPago, string> = {
   TRANSFERENCIA_BANCARIA: 'Transferencia',
   ZELLE: 'Zelle',
   EFECTIVO: 'Efectivo',
+  PUNTO_DE_VENTA: 'Punto de venta',
 };
 
 /** Categorías de "Reportar un problema" (`fn_reportar_problema`). */

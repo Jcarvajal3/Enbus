@@ -1,53 +1,18 @@
-export const ESTADOS_VENEZUELA = [
-  { value: "amazonas", label: "Amazonas" },
-  { value: "anzoategui", label: "Anzoátegui" },
-  { value: "apure", label: "Apure" },
-  { value: "aragua", label: "Aragua" },
-  { value: "barinas", label: "Barinas" },
-  { value: "bolivar", label: "Bolívar" },
-  { value: "carabobo", label: "Carabobo" },
-  { value: "cojedes", label: "Cojedes" },
-  { value: "delta_amacuro", label: "Delta Amacuro" },
-  { value: "distrito_capital", label: "Distrito Capital" },
-  { value: "falcon", label: "Falcón" },
-  { value: "guarico", label: "Guárico" },
-  { value: "lara", label: "Lara" },
-  { value: "merida", label: "Mérida" },
-  { value: "miranda", label: "Miranda" },
-  { value: "monagas", label: "Monagas" },
-  { value: "nueva_esparta", label: "Nueva Esparta" },
-  { value: "portuguesa", label: "Portuguesa" },
-  { value: "sucre", label: "Sucre" },
-  { value: "tachira", label: "Táchira" },
-  { value: "trujillo", label: "Trujillo" },
-  { value: "la_guaira", label: "La Guaira" },
-  { value: "yaracuy", label: "Yaracuy" },
-  { value: "zulia", label: "Zulia" }
-];
+// Estados y ciudades para los selectores de rutas, sucursales y encomiendas.
+// La fuente es el catálogo de shared/ve.ts (`ESTADOS_VE`, copiado en ../ve.generated.ts
+// por shared/generar.mjs): el mismo que ofrece la app al elegir origen y destino. Para
+// añadir una ciudad se edita shared/ve.ts, no este archivo.
+//
+// `value` es la clave que se guarda en la base (= normalizar_localidad de SQL:
+// "socopo", "san_juan", "puerto_la_cruz") y `label`, el nombre legible ("Socopó").
 
-export const CIUDADES_POR_ESTADO: Record<string, { value: string; label: string }[]> = {
-  "amazonas": [{ value: "puerto_ayacucho", label: "Puerto Ayacucho" }],
-  "anzoategui": [{ value: "barcelona", label: "Barcelona" }, { value: "puerto_la_cruz", label: "Puerto La Cruz" }, { value: "lecheria", label: "Lechería" }, { value: "el_tigre", label: "El Tigre" }],
-  "apure": [{ value: "san_fernando", label: "San Fernando de Apure" }, { value: "guadualito", label: "Guadualito" }],
-  "aragua": [{ value: "maracay", label: "Maracay" }, { value: "turmero", label: "Turmero" }, { value: "cagua", label: "Cagua" }, { value: "la_victoria", label: "La Victoria" }],
-  "barinas": [{ value: "barinas", label: "Barinas" }, { value: "socopo", label: "Socopó" }],
-  "bolivar": [{ value: "ciudad_bolivar", label: "Ciudad Bolívar" }, { value: "puerto_ordaz", label: "Puerto Ordaz" }, { value: "san_felix", label: "San Félix" }, { value: "upata", label: "Upata" }],
-  "carabobo": [{ value: "valencia", label: "Valencia" }, { value: "puerto_cabello", label: "Puerto Cabello" }, { value: "guacara", label: "Guacara" }, { value: "san_diego", label: "San Diego" }],
-  "cojedes": [{ value: "san_carlos", label: "San Carlos" }, { value: "tinaquillo", label: "Tinaquillo" }],
-  "delta_amacuro": [{ value: "tucupita", label: "Tucupita" }],
-  "distrito_capital": [{ value: "caracas", label: "Caracas" }],
-  "falcon": [{ value: "coro", label: "Coro" }, { value: "punto_fijo", label: "Punto Fijo" }],
-  "guarico": [{ value: "san_juan", label: "San Juan de los Morros" }, { value: "valle_de_la_pascua", label: "Valle de la Pascua" }, { value: "calabozo", label: "Calabozo" }],
-  "lara": [{ value: "barquisimeto", label: "Barquisimeto" }, { value: "cabudare", label: "Cabudare" }, { value: "carora", label: "Carora" }],
-  "merida": [{ value: "merida", label: "Mérida" }, { value: "el_vigia", label: "El Vigía" }, { value: "tovar", label: "Tovar" }],
-  "miranda": [{ value: "los_teques", label: "Los Teques" }, { value: "guarenas", label: "Guarenas" }, { value: "guatire", label: "Guatire" }, { value: "charallave", label: "Charallave" }],
-  "monagas": [{ value: "maturin", label: "Maturín" }, { value: "punta_de_mata", label: "Punta de Mata" }],
-  "nueva_esparta": [{ value: "porlamar", label: "Porlamar" }, { value: "la_asuncion", label: "La Asunción" }, { value: "pampatar", label: "Pampatar" }],
-  "portuguesa": [{ value: "guanare", label: "Guanare" }, { value: "acarigua", label: "Acarigua" }, { value: "araure", label: "Araure" }],
-  "sucre": [{ value: "cumana", label: "Cumaná" }, { value: "carupano", label: "Carúpano" }],
-  "tachira": [{ value: "san_cristobal", label: "San Cristóbal" }, { value: "tario", label: "Táriba" }, { value: "rubio", label: "Rubio" }],
-  "trujillo": [{ value: "valera", label: "Valera" }, { value: "trujillo", label: "Trujillo" }, { value: "bocono", label: "Boconó" }],
-  "la_guaira": [{ value: "la_guaira", label: "La Guaira" }, { value: "maiquetia", label: "Maiquetía" }, { value: "catia_la_mar", label: "Catia La Mar" }],
-  "yaracuy": [{ value: "san_felipe", label: "San Felipe" }, { value: "yritagua", label: "Yaritagua" }, { value: "chivacoa", label: "Chivacoa" }],
-  "zulia": [{ value: "maracaibo", label: "Maracaibo" }, { value: "cabimas", label: "Cabimas" }, { value: "ciudad_ojeda", label: "Ciudad Ojeda" }, { value: "machiques", label: "Machiques" }]
-};
+import { ESTADOS_VE } from "@/lib/ve.generated";
+
+export const ESTADOS_VENEZUELA: { value: string; label: string }[] = ESTADOS_VE.map((e) => ({
+  value: e.clave,
+  label: e.nombre,
+}));
+
+export const CIUDADES_POR_ESTADO: Record<string, { value: string; label: string }[]> = Object.fromEntries(
+  ESTADOS_VE.map((e) => [e.clave, e.ciudades.map((c) => ({ value: c.clave, label: c.nombre }))])
+);

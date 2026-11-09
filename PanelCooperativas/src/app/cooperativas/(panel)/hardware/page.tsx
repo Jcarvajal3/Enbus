@@ -1,16 +1,19 @@
 "use client";
 
 // ─── Impresora y lector (#53, P-60, PC-51) ───────────────────────────────────
-// Para ambos roles (menú "Impresora y lector"). Tres bloques:
+// Para ambos roles (menú "Impresora y lector"). Cuatro bloques:
 // - Impresora: estado, conectar o cambiar, ticket de prueba y ancho del papel.
 //   Al abrir el panel la impresora guardada se reconecta sola (use-impresora).
 // - Lector: campo de prueba que distingue un lector (todo el código en menos de
 //   medio segundo) de lo escrito a mano.
 // - Sonido: "Sonar al escanear" (lib/sonido, preferencia de este equipo) y pruebas.
+// - Notificaciones: avisos push de pagos por verificar en este equipo
+//   (components/push, edge function push-panel).
 
 import { useEffect, useId, useRef, useState, useSyncExternalStore, type ChangeEvent, type KeyboardEvent } from "react";
 import { CheckCircle, Info, Scan, SpeakerHigh, WarningCircle } from "@phosphor-icons/react";
 import { PageHeader } from "@/components/page-header";
+import { NotificacionesPushCard } from "@/components/push/notificaciones-push-card";
 import { GrupoOpciones, OpcionTile } from "@/components/opcion-tile";
 import { avisarError, avisarExito } from "@/lib/avisos";
 import { ICONO_SECCION } from "@/lib/navigation";
@@ -297,9 +300,12 @@ function SeccionSonido() {
 export default function ImpresoraYLectorPage() {
   return (
     <div className="flex w-full max-w-4xl flex-col gap-6">
-      <PageHeader title="Impresora y lector" description="La impresora y el lector de este equipo." />
+      <PageHeader title="Impresora y lector" description="La impresora, el lector y las notificaciones de este equipo." />
       <div className="grid gap-6 lg:grid-cols-2">
-        <SeccionImpresora />
+        <div className="flex flex-col gap-6">
+          <SeccionImpresora />
+          <NotificacionesPushCard />
+        </div>
         <div className="flex flex-col gap-6">
           <SeccionLector />
           <SeccionSonido />

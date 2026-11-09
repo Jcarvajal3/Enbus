@@ -7,12 +7,12 @@ pueden importar archivos fuera de su raíz. Por eso lo común vive aquí y un sc
 ```
 shared/
   tokens.json     colores (claro y oscuro), paleta de la app, radios y duraciones
-  ve.ts           formatos venezolanos: cédula, teléfono, RIF, ciudades, fechas VE, duración
+  ve.ts           formatos venezolanos: cédula, teléfono, RIF, ciudades (y su catálogo), fechas VE, duración
   artefactos.ts   código de boleto, QR del pase, código de seguimiento, PIN de retiro
   errores.ts      catálogo común de mensajes de error (MSG, mensajeAuth, mensajePostgres)
   dinero.ts       formato de montos: Bs, USD, tasa BCV (formatMoney)
   generar.mjs     node shared/generar.mjs [--check]   (Node ≥ 18, sin dependencias)
-  tests/          pruebas de ve.ts y artefactos.ts      (npm test, Node ≥ 22.6)
+  tests/          pruebas de ve.ts, del catálogo de ciudades y de artefactos.ts (npm test, Node ≥ 22.6)
 ```
 
 ## Uso
@@ -135,7 +135,8 @@ RIF y fechas) y la de la app para los nombres de ciudad con tildes.
 `telefonoWhatsApp`, `mascaraTelefono`, `OPERADORAS_MOVILES`, `TELEFONO_PLACEHOLDER`,
 `TELEFONO_ERROR`; `normalizeRif`, `isValidRif`, `digitoVerificadorRif`, `rifDigitoValido`,
 `RIF_PLACEHOLDER`, `RIF_AYUDA`, `RIF_ERROR`, `RIF_DIGITO_ERROR`; `normalizarCiudad` (= `normalizar_localidad` de SQL), `formatCiudad`,
-`formatRuta`, `mismaCiudad`; `ZONA_VE`, `fechaVE`, `hoyVE`, `sumarDiasVE`,
+`formatRuta`, `mismaCiudad`; `ESTADOS_VE`, `estadoVE`, `ciudadVE` y los tipos `EstadoVE`,
+`CiudadVE` (catálogo de estados y ciudades); `ZONA_VE`, `fechaVE`, `hoyVE`, `sumarDiasVE`,
 `fechaHoraVEaISO`, `rangoDiaVE`, `formatFechaVE`, `formatHoraVE`, `formatFechaHoraVE`,
 `formatFechaCalendario`, `formatHaceTiempo`, `formatDuracion`; `CLAVE_MINIMO` (8),
 `CLAVE_AYUDA`, `CLAVE_ERROR`; `formatDiaVE`, `formatDiaHoraVE`,
@@ -152,6 +153,19 @@ Fechas (D4), siempre 12 h y hora de Venezuela, separador " · ":
 | `formatFechaHoraVE` | "03/11/2026 · 2:30 p. m." | panel y admin |
 | `formatFechaHoraCortaVE` | "03/11 · 2:30 p. m." | tablas del panel |
 | `formatHaceTiempo` | "hace 5 min", "ayer a las 8:30 p. m.", "vie. 04/10" | listas |
+
+### Catálogo de estados y ciudades
+
+`ESTADOS_VE` es la única lista de estados y ciudades: la usan el panel para crear rutas,
+sucursales y encomiendas (`src/lib/data/venezuela.ts`: `ESTADOS_VENEZUELA`,
+`CIUDADES_POR_ESTADO`), la app para elegir origen y destino (`src/utils/venezuela.ts`:
+`VENEZUELA_LOCATIONS`, `CIUDADES_POPULARES`) y `formatCiudad` para los nombres legibles.
+Se escribe solo el nombre ("Socopó"); la clave ("socopo") es `normalizarCiudad(nombre)`,
+que es lo que guarda la base (= `normalizar_localidad`). Una clave de ciudad no se repite
+en todo el país. `tests/catalogo.test.ts` compara `normalizarCiudad` con una réplica de
+`normalizar_localidad` armada desde su definición vigente en `supabase/migrations`.
+Además, el selector de la app añade las ciudades de las rutas activas que no estén en el
+catálogo (con su nombre legible), para que una ruta nunca quede sin poder elegirse.
 
 `formatCiudad` sin nombre conocido pone mayúscula inicial salvo en de/del/la/las/los/y
 ("San Jose de Guanipa").

@@ -1,9 +1,9 @@
 "use client";
 
 // ─── Hoja del viaje (PN-09, PN-17, PN-23) ────────────────────────────────────
-// Una sola forma de ver un viaje, desde Viajes y desde la Taquilla de boletos:
+// Una sola forma de ver un viaje, desde Viajes, la Taquilla de boletos y Embarque:
 // título = identidad ("Caracas → Valencia · 2:30 p. m.") + estado; datos del
-// bus; acciones (Marcar salida / Marcar llegada, Ir a Despacho, Imprimir
+// bus; acciones (Marcar salida / Marcar llegada, Ir a Embarque, Ir a Despacho, Imprimir
 // manifiesto y, solo en Viajes, Editar y Cancelar); pasajeros con el embarque
 // y encomiendas, cada una enlazada a su detalle.
 
@@ -47,6 +47,8 @@ export type ViajeDetalle = {
   asientos_disponibles: number;
   numero_unidad: string | null;
   nombre_chofer: string | null;
+  /** Bus registrado (null en viajes anteriores a 20261109000001): lo usa "Editar viaje". */
+  bus_id?: string | null;
   ruta: { ciudad_origen: string; ciudad_destino: string } | null;
 };
 
@@ -74,7 +76,7 @@ type EncomiendaViaje = {
 };
 
 const SELECT_VIAJE =
-  "id, estado, fecha_hora_salida, fecha_hora_llegada_est, asientos_totales, asientos_disponibles, numero_unidad, nombre_chofer, ruta:rutas!ruta_id(ciudad_origen, ciudad_destino)";
+  "id, estado, fecha_hora_salida, fecha_hora_llegada_est, asientos_totales, asientos_disponibles, numero_unidad, nombre_chofer, bus_id, ruta:rutas!ruta_id(ciudad_origen, ciudad_destino)";
 const SELECT_BOLETOS =
   "id, codigo_boleto, asiento, estado, embarcado_at, pasajero_nombre, pasajero_cedula, comprador:profiles!comprador_id(nombre_completo, cedula_rif), pago:pagos!boletos_pago_id_fkey(estado_verificacion)";
 const SELECT_ENCOMIENDAS =
@@ -109,6 +111,7 @@ export function ViajeSheet({
   onCancelar,
   cancelando = false,
   recarga = 0,
+  desdeEmbarque = false,
 }: {
   viajeId: string | null;
   onOpenChange(o: boolean): void;
@@ -121,6 +124,8 @@ export function ViajeSheet({
   cancelando?: boolean;
   /** Cambia para volver a cargar el viaje (p. ej. tras editarlo). */
   recarga?: number;
+  /** Abierta desde Embarque: no ofrece "Ir a Embarque". */
+  desdeEmbarque?: boolean;
 }) {
   const supabase = useMemo(() => createClient(), []);
   const { user } = useUser();
@@ -283,6 +288,12 @@ export function ViajeSheet({
               <div className="flex flex-wrap items-center gap-2">
                 {programado && <Button onClick={() => setSalidaOpen(true)}>Marcar salida</Button>}
                 {enCurso && <Button onClick={() => setLlegadaOpen(true)}>Marcar llegada</Button>}
+                {(programado || enCurso) && !desdeEmbarque && (
+                  <Link href={`/cooperativas/embarque?viaje=${viaje.id}`} className={buttonVariants({ variant: "outline" })}>
+                    <ICONO_SECCION.embarque aria-hidden />
+                    Ir a Embarque
+                  </Link>
+                )}
                 {programado && (
                   <Link href={`/cooperativas/despacho?viaje=${viaje.id}`} className={buttonVariants({ variant: "outline" })}>
                     <ICONO_SECCION.despacho aria-hidden />

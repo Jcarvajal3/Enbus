@@ -38,8 +38,35 @@ export type ResultadoEditarViaje = {
   llegada_estimada: string;
   asientos_totales: number;
   asientos_disponibles: number;
+  /** Desde 20261109000001: bus asignado y copia de su unidad y chofer. */
+  bus_id?: string | null;
+  numero_unidad?: string | null;
+  nombre_chofer?: string | null;
   pasajeros_avisados: number;
 };
+
+// ─── Buses (migración 20261109000001) ────────────────────────────────────────
+// Cada viaje guarda `bus_id` y una copia (snapshot) de la unidad, el chofer y los
+// asientos del bus al programarlo: editar el bus no cambia los viajes ya creados.
+
+/** Fila de `buses`. */
+export type Bus = {
+  id: string;
+  /** Identificador de la unidad ("Unidad 12", "U-045"). Único por cooperativa. */
+  numero_unidad: string;
+  /** Placa sin separadores ("AB123CD"), o null. */
+  placa: string | null;
+  /** 1 a 80. */
+  asientos: number;
+  chofer_nombre: string | null;
+  /** "0414-1234567", o null. */
+  chofer_telefono: string | null;
+  activo: boolean;
+  created_at: string;
+};
+
+/** Bus activo para el selector de "Programar viaje" y "Editar viaje". */
+export type BusParaViaje = Pick<Bus, "id" | "numero_unidad" | "placa" | "asientos" | "chofer_nombre">;
 
 /** Respuesta de `fn_completar_viaje(p_viaje_id)`. */
 export type ResultadoCompletarViaje = {

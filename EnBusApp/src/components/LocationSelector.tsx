@@ -8,8 +8,12 @@
  * atajos, que resuelven la mayoría de las búsquedas. `opciones` limita las ciudades (p.
  * ej. solo las que tienen ruta); `excluir` muestra una deshabilitada con su
  * motivo ("Ya es tu origen").
+ *
+ * Sin `opciones` se ofrece el catálogo compartido (`VENEZUELA_LOCATIONS`, el mismo
+ * del panel) más cualquier ciudad de una ruta activa que no esté en él: una ruta
+ * nueva nunca queda sin poder elegirse en la app.
  */
-import React, { memo, useCallback, useMemo, useState } from 'react';
+import React, { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { FlatList, StyleSheet, View } from 'react-native';
 import { CaretDown, CaretUp, MagnifyingGlass, MapPin } from 'phosphor-react-native';
 import { PressableScale } from './PressableScale';
@@ -21,7 +25,14 @@ import {
   SelectField,
   Text,
 } from '@/src/components/ui';
-import { Localidad, VENEZUELA_LOCATIONS, normalizeCityForDb } from '../utils/venezuela';
+import {
+  Localidad,
+  VENEZUELA_LOCATIONS,
+  localidadDeDb,
+  normalizeCityForDb,
+  unirLocalidades,
+} from '../utils/venezuela';
+import { supabase } from '../utils/supabase';
 import { Colors, Layout, Motion, Radius, Sizes, Spacing } from '@/src/theme';
 
 interface LocationSelectorProps {
@@ -50,6 +61,83 @@ const mismaCiudad = (a?: Localidad | null, b?: Localidad | null) =>
 
 const claveLocalidad = (l: Localidad) => `${l.estado}-${l.ciudad}`;
 
+/** Grupo de las ciudades de una ruta que no traen estado. */
+const SIN_ESTADO = 'Otras ciudades';
+
+// ─── Ciudades de las rutas activas ───────────────────────────────────────────
+
+/** Las ciudades de las rutas se vuelven a leer como mucho cada 10 minutos. */
+const VIGENCIA_RUTAS_MS = 10 * 60 * 1000;
+let rutasCache: { at: number; lista: Localidad[] } | null = null;
+let rutasEnCurso: Promise<Localidad[]> | null = null;
+
+/**
+ * Orígenes y destinos de las rutas activas (de cooperativas activas) que no están
+ * en el catálogo, como `Localidad` con su nombre legible. Una sola consulta para
+ * todos los selectores abiertos; ante un error devuelve [] (queda el catálogo).
+ */
+function localidadesDeRutas(): Promise<Localidad[]> {
+  if (rutasCache && Date.now() - rutasCache.at < VIGENCIA_RUTAS_MS) {
+    return Promise.resolve(rutasCache.lista);
+  }
+  if (rutasEnCurso) return rutasEnCurso;
+  rutasEnCurso = (async () => {
+    try {
+      const { data, error } = await supabase
+        .from('rutas')
+        .select(
+          'estado_origen, ciudad_origen, estado_destino, ciudad_destino, cooperativas!inner ( estado )'
+        )
+        // Sin filtro de precio: el selector sirve también a encomiendas, y una ruta
+        // de solo encomiendas (sin pasaje) es válida allí.
+        .eq('activa', true)
+        .eq('cooperativas.estado', 'ACTIVA')
+        .limit(1000);
+      if (error) throw error;
+      const encontradas: Localidad[] = [];
+      for (const r of (data ?? []) as Record<string, unknown>[]) {
+        const texto = (v: unknown) => (typeof v === 'string' && v.trim() ? v : null);
+        // Sin estado no se puede registrar una encomienda (la validación compara el
+        // estado con la ruta): esas ciudades se dejan fuera.
+        const origen = texto(r.estado_origen)
+          ? localidadDeDb(texto(r.ciudad_origen), texto(r.estado_origen))
+          : null;
+        const destino = texto(r.estado_destino)
+          ? localidadDeDb(texto(r.ciudad_destino), texto(r.estado_destino))
+          : null;
+        if (origen) encontradas.push(origen);
+        if (destino) encontradas.push(destino);
+      }
+      const lista = unirLocalidades(VENEZUELA_LOCATIONS, encontradas).slice(
+        VENEZUELA_LOCATIONS.length
+      );
+      rutasCache = { at: Date.now(), lista };
+      return lista;
+    } catch {
+      return [];
+    } finally {
+      rutasEnCurso = null;
+    }
+  })();
+  return rutasEnCurso;
+}
+
+/** Catálogo + ciudades de rutas activas que faltan en él. Con `activo` en false, solo el catálogo. */
+function useCatalogoConRutas(activo: boolean): Localidad[] {
+  const [extra, setExtra] = useState<Localidad[]>(() => rutasCache?.lista ?? []);
+  useEffect(() => {
+    if (!activo) return;
+    let vivo = true;
+    void localidadesDeRutas().then((lista) => {
+      if (vivo) setExtra((antes) => (antes === lista ? antes : lista));
+    });
+    return () => {
+      vivo = false;
+    };
+  }, [activo]);
+  return useMemo(() => unirLocalidades(VENEZUELA_LOCATIONS, extra), [extra]);
+}
+
 /** Accent-insensitive, whitespace-insensitive comparison key. */
 function normalize(text: string): string {
   return text
@@ -75,10 +163,11 @@ export function LocationSelector({
   const [search, setSearch] = useState('');
 
   const esExcluida = useCallback((loc: Localidad) => mismaCiudad(loc, excluir), [excluir]);
+  const catalogoCompleto = useCatalogoConRutas(!opciones);
 
   const grouped = useMemo(() => {
     const needle = normalize(search);
-    const catalogo = opciones ?? VENEZUELA_LOCATIONS;
+    const catalogo = opciones ?? catalogoCompleto;
     const matches = needle
       ? catalogo.filter(
           (l) => normalize(l.ciudad).includes(needle) || normalize(l.estado).includes(needle)
@@ -87,9 +176,10 @@ export function LocationSelector({
 
     const groups = new Map<string, Localidad[]>();
     matches.forEach((loc) => {
-      const list = groups.get(loc.estado) ?? [];
+      const estado = loc.estado || SIN_ESTADO;
+      const list = groups.get(estado) ?? [];
       list.push(loc);
-      groups.set(loc.estado, list);
+      groups.set(estado, list);
     });
 
     return Array.from(groups.keys())
@@ -97,6 +187,9 @@ export function LocationSelector({
         // Distrito Capital first — it's the most common origin/destination.
         if (a.toLowerCase().includes('distrito capital')) return -1;
         if (b.toLowerCase().includes('distrito capital')) return 1;
+        // Las ciudades sin estado, al final.
+        if (a === SIN_ESTADO) return 1;
+        if (b === SIN_ESTADO) return -1;
         return a.localeCompare(b, 'es');
       })
       .map((estado) => ({
@@ -105,7 +198,7 @@ export function LocationSelector({
           a.ciudad.localeCompare(b.ciudad, 'es')
         ),
       }));
-  }, [search, opciones]);
+  }, [search, opciones, catalogoCompleto]);
 
   const handleSelect = useCallback(
     (loc: Localidad) => {
@@ -168,7 +261,7 @@ export function LocationSelector({
       ) : (
         <SelectField
           label={label}
-          value={value ? `${value.ciudad}, ${value.estado}` : undefined}
+          value={value ? (value.estado ? `${value.ciudad}, ${value.estado}` : value.ciudad) : undefined}
           placeholder={placeholder ?? 'Elige la ciudad'}
           icon={MapPin}
           onPress={open}

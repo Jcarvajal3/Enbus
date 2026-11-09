@@ -49,7 +49,7 @@ const ENVIO: Record<string, { etiqueta: string; tono: Tono }> = {
 
 const ENLACE = "font-medium text-info-text underline-offset-4 hover:underline focus-visible:underline";
 
-/** Pago Móvil, Transferencia, Zelle, Efectivo (glosario); los pagos digitales viejos sin método, "Pago digital". */
+/** Pago Móvil, Transferencia, Zelle, Efectivo, Punto de venta (glosario); los pagos digitales viejos sin método, "Pago digital". */
 function metodoDePago(p: PagoUsuario) {
   if (p.metodo_tipo) return etiquetaMetodoPago(p.metodo_tipo);
   return etiquetaMetodoPago(p.tipo_pago === "EFECTIVO" ? "EFECTIVO" : "DIGITAL");

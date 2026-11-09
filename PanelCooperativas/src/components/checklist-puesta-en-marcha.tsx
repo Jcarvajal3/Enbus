@@ -17,6 +17,8 @@ export type ChecklistCooperativa = {
   metodos_pago: number;
   metodos_digitales: number;
   rutas: number;
+  /** Buses activos (desde 20261109000001; ausente si la migración no está aplicada). */
+  buses?: number;
   viajes_proximos: number;
   taquilleros: number;
   invitaciones_pendientes: number;
@@ -43,6 +45,13 @@ function pasos(c: ChecklistCooperativa): Paso[] {
       ayuda: "El precio va en USD; el pasajero paga en Bs a la tasa BCV del día.",
       href: "/cooperativas/rutas",
       hecho: Number(c.rutas) > 0,
+    },
+    {
+      titulo: "Registra tus buses",
+      ayuda: "Unidad, asientos y chofer: luego solo eliges el bus al programar un viaje.",
+      href: "/cooperativas/buses",
+      // Sin el dato (función anterior a los buses) no se bloquea la puesta en marcha.
+      hecho: typeof c.buses !== "number" || c.buses > 0,
     },
     {
       titulo: "Programa tu primer viaje",

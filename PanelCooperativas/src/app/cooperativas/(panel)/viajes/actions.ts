@@ -37,25 +37,36 @@ export async function guardarViaje(
   const rutaId = payload?.ruta_id;
   if (!rutaId || !UUID_RE.test(rutaId)) return { error: "Elige la ruta del viaje." };
   if (!profile.cooperativa_id) return { error: "Solo el administrador de la cooperativa puede programar viajes." };
-  // Textos libres: sin espacios sobrantes y con un largo razonable.
-  const numeroUnidad = String(payload.numero_unidad ?? "").trim().slice(0, 40) || null;
-  const nombreChofer = String(payload.nombre_chofer ?? "").trim().replace(/\s+/g, " ").slice(0, 120) || null;
+  // El bus es obligatorio: de él salen la unidad, los asientos y el chofer (copia en el viaje).
+  const busId = payload?.bus_id;
+  if (!busId || !UUID_RE.test(busId)) return { error: "Elige el bus del viaje." };
 
-  const { data: ruta } = await supabase
-    .from("rutas")
-    .select("duracion_estimada_min, activa")
-    .eq("id", rutaId)
-    .eq("cooperativa_id", profile.cooperativa_id)
-    .single();
+  const [{ data: ruta }, { data: bus }] = await Promise.all([
+    supabase
+      .from("rutas")
+      .select("duracion_estimada_min, activa")
+      .eq("id", rutaId)
+      .eq("cooperativa_id", profile.cooperativa_id)
+      .maybeSingle(),
+    supabase
+      .from("buses")
+      .select("numero_unidad, asientos, chofer_nombre, activo")
+      .eq("id", busId)
+      .eq("cooperativa_id", profile.cooperativa_id)
+      .maybeSingle(),
+  ]);
 
   if (!ruta) return { error: "No encontramos la ruta. Actualiza la página y vuelve a elegirla." };
   if (!ruta.activa) return { error: "Esa ruta está desactivada. Reactívala en Rutas o elige otra." };
+  if (!bus) return { error: "No encontramos ese bus. Actualiza la página y vuelve a elegirlo." };
+  if (!bus.activo) return { error: "Ese bus está desactivado. Reactívalo en Buses o elige otro." };
 
-  // Parse numeric fields — FormData always delivers strings
-  const asientosTotales = Number(payload.asientos_totales);
-  if (!Number.isInteger(asientosTotales) || asientosTotales < 1 || asientosTotales > 80) {
-    return { error: "El bus debe tener entre 1 y 80 asientos." };
-  }
+  // Copia del bus al programar (la base la vuelve a copiar en proteger_viajes_cliente_fn).
+  // El chofer se puede cambiar solo para estas salidas; vacío = el del bus.
+  const asientosTotales = Number(bus.asientos);
+  const numeroUnidad = bus.numero_unidad as string;
+  const nombreChofer =
+    String(payload.nombre_chofer ?? "").trim().replace(/\s+/g, " ").slice(0, 80) || (bus.chofer_nombre as string | null) || null;
 
   // Las fechas y horas del formulario son hora de Venezuela. Se convierten a ISO con
   // lib/fechas para no depender de la zona horaria del servidor (Vercel corre en UTC).
@@ -76,6 +87,7 @@ export async function guardarViaje(
       fecha_hora_llegada_est: llegadaEstimada(salida, ruta.duracion_estimada_min),
       asientos_totales: asientosTotales,
       asientos_disponibles: asientosTotales,
+      bus_id: busId,
       numero_unidad: numeroUnidad,
       nombre_chofer: nombreChofer,
       estado: "PROGRAMADO",
@@ -108,6 +120,7 @@ export async function guardarViaje(
       fecha_hora_llegada_est: llegadaEstimada(salida, ruta.duracion_estimada_min),
       asientos_totales: asientosTotales,
       asientos_disponibles: asientosTotales,
+      bus_id: busId,
       numero_unidad: numeroUnidad,
       nombre_chofer: nombreChofer,
       estado: "PROGRAMADO",
@@ -262,7 +275,7 @@ type FalloViaje = {
   data?: undefined;
   error: string;
   codigo?: string;
-  /** Campo con el error (`detail.campo`): "salida", "asientos" o "motivo". */
+  /** Campo con el error (`detail.campo`): "salida", "asientos", "motivo" o "bus". */
   campo?: string;
   /** EB_DATOS_INVALIDOS en asientos: mínimo que admite el bus. */
   minimo?: number;
@@ -284,7 +297,9 @@ function falloViaje(error: unknown, accion: string): FalloViaje {
  * Edita un viaje programado (solo el administrador; lo valida fn_editar_viaje).
  * `undefined` = sin cambio; `""` en unidad o chofer lo borra. La salida llega en
  * hora de Venezuela ('YYYY-MM-DDTHH:mm'). Si cambia la hora y hay pasajeros, el
- * motivo es obligatorio y se avisa a cada comprador.
+ * motivo es obligatorio y se avisa a cada comprador. `busId` cambia de bus: la base
+ * copia su unidad, su chofer (salvo `nombreChofer`) y sus asientos (salvo
+ * `asientosTotales`), sin bajar de los asientos ya vendidos.
  */
 export async function editarViaje(input: {
   viajeId: string;
@@ -292,10 +307,14 @@ export async function editarViaje(input: {
   numeroUnidad?: string;
   nombreChofer?: string;
   asientosTotales?: number;
+  busId?: string;
   motivo?: string;
 }): Promise<{ success: true; data: ResultadoEditarViaje; error?: undefined } | FalloViaje> {
   if (!UUID_RE.test(input.viajeId ?? "")) {
     return { success: false, error: "No encontramos ese viaje. Actualiza la página e intenta de nuevo." };
+  }
+  if (input.busId !== undefined && !UUID_RE.test(input.busId)) {
+    return { success: false, error: "No encontramos ese bus. Actualiza la página y vuelve a elegirlo.", campo: "bus" };
   }
   let salidaISO: string | null = null;
   if (input.salida !== undefined) {
@@ -322,6 +341,8 @@ export async function editarViaje(input: {
     p_fecha_hora_salida: salidaISO,
     p_asientos_totales: asientos,
     p_motivo: input.motivo?.trim() || null,
+    // Solo si cambia el bus (p_bus_id existe desde 20261109000001).
+    ...(input.busId !== undefined ? { p_bus_id: input.busId } : {}),
   });
   if (error) {
     console.error("[editarViaje] Error:", error);

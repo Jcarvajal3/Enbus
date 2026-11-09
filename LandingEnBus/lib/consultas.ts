@@ -7,7 +7,7 @@
 import type { PostgrestError } from "@supabase/supabase-js";
 import { obtenerSupabaseAdmin } from "@/lib/supabase";
 import type { TasaRef } from "@/lib/dinero";
-import { formatCiudad } from "@/lib/ve.generated";
+import { formatCiudad, normalizarCiudad } from "@/lib/ve.generated";
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 
@@ -108,13 +108,12 @@ function errorDeNegocio(error: PostgrestError): { mensaje: string; campo?: strin
   return { mensaje: error.hint, campo };
 }
 
-/** Quita tildes y mayúsculas para comparar nombres de ciudades. */
+/**
+ * Clave para comparar ciudades: la misma que `normalizar_localidad` de SQL (sin
+ * tildes ni mayúsculas, y con alias: "San Juan de los Morros" = "san_juan").
+ */
 function claveCiudad(ciudad: string): string {
-  return ciudad
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .trim()
-    .toLowerCase();
+  return normalizarCiudad(ciudad);
 }
 
 // ─── Consultas ───────────────────────────────────────────────────────────────

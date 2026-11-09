@@ -7,7 +7,7 @@ import { ArrowLeft, CheckCircle, WarningCircle } from "@phosphor-icons/react";
 import { createClient } from "@/lib/supabase/client";
 import { AuthLayout } from "@/components/auth-layout";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { FieldGroup, Field, FieldLabel, FieldDescription, FieldError } from "@/components/ui/field";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -142,9 +142,8 @@ export default function RestablecerPage() {
           <FieldGroup>
             <Field data-invalid={errorCampo.password ? true : undefined}>
               <FieldLabel htmlFor="password">Contraseña nueva</FieldLabel>
-              <Input
+              <PasswordInput
                 id="password"
-                type="password"
                 autoComplete="new-password"
                 required
                 minLength={CLAVE_MINIMO}
@@ -165,9 +164,8 @@ export default function RestablecerPage() {
             </Field>
             <Field data-invalid={errorCampo.confirmPassword ? true : undefined}>
               <FieldLabel htmlFor="confirmPassword">Repite la contraseña</FieldLabel>
-              <Input
+              <PasswordInput
                 id="confirmPassword"
-                type="password"
                 autoComplete="new-password"
                 required
                 aria-invalid={errorCampo.confirmPassword ? true : undefined}

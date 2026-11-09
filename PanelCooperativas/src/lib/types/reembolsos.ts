@@ -9,8 +9,8 @@ export type FiltroReembolsos = "PENDIENTE" | "PROCESADO" | "TODOS";
 
 export type CanceladoPor = "PASAJERO" | "COOPERATIVA";
 
-/** Medio con que la cooperativa devolvió el dinero. */
-export type MetodoReembolso = TipoMetodoPago;
+/** Medio con que la cooperativa devolvió el dinero (el punto de venta no es un medio de devolución). */
+export type MetodoReembolso = Exclude<TipoMetodoPago, "PUNTO_DE_VENTA">;
 
 /** Fila de `fn_reembolsos(p_estado)`. */
 export interface Reembolso {

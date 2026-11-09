@@ -25,7 +25,7 @@ const PUBLICAS_COOPERATIVAS = [
 const PUBLICAS_ADMIN = ["/admin/login", "/admin/auth/callback"];
 
 /** Mismas secciones que `exigirRolPanel(["admin_cooperativa"])` protege en sus páginas. */
-const SOLO_ADMIN_COOPERATIVA = ["/cooperativas/rutas", "/cooperativas/empleados", "/cooperativas/configuracion"];
+const SOLO_ADMIN_COOPERATIVA = ["/cooperativas/rutas", "/cooperativas/buses", "/cooperativas/empleados", "/cooperativas/configuracion"];
 
 /** true si `pathname` es `ruta` o una subruta suya ("/cooperativas/login" no incluye "/cooperativas/loginx"). */
 function dentroDe(pathname: string, ruta: string) {

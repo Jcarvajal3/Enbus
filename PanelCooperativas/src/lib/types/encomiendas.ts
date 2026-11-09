@@ -50,7 +50,11 @@ export interface Encomienda {
   // ── Fase 3 ──
   /** 'APP' (la registró el cliente) o 'TAQUILLA' (alta presencial: `sender_id` es el empleado). */
   origen_registro?: OrigenRegistro;
-  /** Remitente real en el alta presencial (usar si `origen_registro === 'TAQUILLA'`). */
+  /**
+   * Nombre de quien envía. TAQUILLA: el remitente real (`sender_id` es el empleado).
+   * APP: copia del nombre del perfil del cliente al registrarla (el personal no
+   * puede leer `profiles` del cliente). Cédula y teléfono solo en las de TAQUILLA.
+   */
   remitente_nombre?: string | null;
   remitente_cedula?: string | null;
   remitente_telefono?: string | null;

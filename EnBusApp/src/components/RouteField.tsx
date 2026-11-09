@@ -44,9 +44,9 @@ export function RouteField({
   onDestino(l: Localidad): void;
   /** Botón ⇅; oculto si falta */
   onIntercambiar?: () => void;
-  /** Ciudades de origen que se ofrecen (por defecto, todas) */
+  /** Ciudades de origen que se ofrecen (por defecto, el catálogo y las de las rutas activas) */
   origenes?: Localidad[];
-  /** Ciudades de destino que se ofrecen (por defecto, todas) */
+  /** Ciudades de destino que se ofrecen (por defecto, el catálogo y las de las rutas activas) */
   destinos?: Localidad[];
   recientes?: Localidad[];
   populares?: Localidad[];

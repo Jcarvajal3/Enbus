@@ -5,6 +5,8 @@
 // archivo" (en el teléfono abre la cámara trasera) u "Omitir por ahora" con un
 // motivo; la encomienda queda marcada "Falta foto" y se agrega desde el detalle.
 // La foto va al bucket privado en "<encomiendaId>/<ts>.jpg" y se guarda la RUTA.
+// Se guarda entera, con la proporción que tenga (sin recortes): solo se reduce a
+// 1600 px por el lado mayor y se comprime en JPEG para que suba rápido.
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { ArrowUUpLeft, Camera, CameraSlash, Check, FastForward, UploadSimple } from "@phosphor-icons/react";
@@ -42,7 +44,23 @@ interface PhotoCaptureModalProps {
 
 type Modo = "camara" | "vista" | "omitir";
 
-/** Reduce la foto a 1600 px por lado (JPEG 80 %) para que suba rápido. Si falla, deja la original. */
+/**
+ * Cámara trasera con su cuadro nativo. Pedir un tamaño fijo (p. ej. 1280×720)
+ * hacía que el navegador recortara la imagen del sensor a 16:9; con
+ * `resizeMode: "none"` solo se usan los modos reales de la cámara, y las
+ * preferencias de tamaño solo eligen el de mejor resolución.
+ */
+const VIDEO_CAMARA: MediaTrackConstraints & { resizeMode?: "none" | "crop-and-scale" } = {
+  facingMode: "environment",
+  width: { ideal: 1920 },
+  height: { ideal: 1440 },
+  resizeMode: "none",
+};
+
+/**
+ * Reduce la foto a 1600 px por el lado mayor (JPEG 80 %) para que suba rápido,
+ * con su misma proporción: nunca recorta. Si falla, deja la original.
+ */
 async function prepararImagen(archivo: Blob): Promise<Blob> {
   if (typeof createImageBitmap !== "function") return archivo;
   try {
@@ -119,7 +137,7 @@ export function PhotoCaptureModal({ encomiendaId, trackingId, isOpen, onClose, o
     }
     let vigente = true;
     navigator.mediaDevices
-      .getUserMedia({ video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } } })
+      .getUserMedia({ video: VIDEO_CAMARA })
       .then((s) => {
         if (!vigente) {
           s.getTracks().forEach((t) => t.stop());
@@ -302,23 +320,19 @@ export function PhotoCaptureModal({ encomiendaId, trackingId, isOpen, onClose, o
               </Alert>
             ) : (
               <div className="relative flex aspect-video w-full items-center justify-center overflow-hidden rounded-md border border-border bg-black">
+                {/* Se ve el cuadro completo que se guardará: object-contain, sin recortar los bordes. */}
                 <video
                   ref={videoRef}
                   autoPlay
                   playsInline
                   muted
                   aria-label="Vista de la cámara"
-                  className={cn("size-full object-cover", !stream && "invisible")}
+                  className={cn("size-full object-contain", !stream && "invisible")}
                 />
                 {!stream && (
                   <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-white/80">
                     <Spinner size="md" />
                     <span className="text-sm">Encendiendo la cámara…</span>
-                  </div>
-                )}
-                {stream && (
-                  <div className="pointer-events-none absolute inset-0 flex items-center justify-center" aria-hidden>
-                    <div className="size-3/4 rounded-sm border-2 border-dashed border-white/60" />
                   </div>
                 )}
               </div>
@@ -339,9 +353,14 @@ export function PhotoCaptureModal({ encomiendaId, trackingId, isOpen, onClose, o
 
         {modo === "vista" && previewUrl && (
           <div className="flex flex-col gap-4">
-            <div className="aspect-video w-full overflow-hidden rounded-md border border-border bg-black">
+            {/* Con su proporción (vertical u horizontal): la foto se guarda tal cual. */}
+            <div className="flex w-full justify-center overflow-hidden rounded-md border border-border bg-black">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={previewUrl} alt="Vista previa de la foto del paquete" className="size-full object-contain" />
+              <img
+                src={previewUrl}
+                alt="Vista previa de la foto del paquete"
+                className="h-auto max-h-[min(60vh,28rem)] w-auto max-w-full object-contain"
+              />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <Button size="lg" variant="outline" onClick={otraFoto} disabled={guardando}>

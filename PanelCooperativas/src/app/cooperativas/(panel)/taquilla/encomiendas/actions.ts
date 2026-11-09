@@ -7,8 +7,8 @@
 //   una encomienda de un cliente sin la app (queda POR_PAGAR con su PIN).
 // - fn_rechazar_encomienda_origen cancela una encomienda que no se recibe.
 // - fn_confirmar_recepcion_origen pesa la encomienda y calcula el costo en USD.
-// - fn_cobrar_encomienda_taquilla registra el cobro (efectivo Bs/USD, Pago Móvil,
-//   transferencia o Zelle) a la tasa BCV del día, de forma idempotente.
+// - fn_cobrar_encomienda_taquilla registra el cobro (efectivo Bs/USD, punto de venta,
+//   Pago Móvil, transferencia o Zelle) a la tasa BCV del día, de forma idempotente.
 // - Los pagos que el cliente reportó desde la app se aprueban con aprobarPago
 //   (pagos/actions), que también pasa la encomienda a PAGADA si estaba por pagar.
 
@@ -121,7 +121,7 @@ export async function confirmarRecepcion(
 export type CobrarEncomiendaInput = {
   encomiendaId: string;
   metodoTipo: TipoMetodoPago;
-  /** Cuenta de la cooperativa que recibió el pago (opcional; se valida en el servidor). */
+  /** Cuenta de la cooperativa que recibió el pago (opcional; se valida en el servidor; no en punto de venta). */
   metodoPagoId?: string | null;
   /** Solo efectivo: 'VES' o 'USD'. */
   moneda?: MonedaPago | null;
@@ -135,7 +135,7 @@ export type CobrarEncomiendaInput = {
   idemKey: string;
 };
 
-const METODOS: TipoMetodoPago[] = ["EFECTIVO", "PAGO_MOVIL", "TRANSFERENCIA_BANCARIA", "ZELLE"];
+const METODOS: TipoMetodoPago[] = ["EFECTIVO", "PUNTO_DE_VENTA", "PAGO_MOVIL", "TRANSFERENCIA_BANCARIA", "ZELLE"];
 
 /** Registra un cobro hecho en la taquilla (queda aprobado; POR_PAGAR pasa a PAGADA). */
 export async function cobrarEncomienda(input: CobrarEncomiendaInput): Promise<ResultadoTaquilla<CobroEncomienda>> {
@@ -147,7 +147,10 @@ export async function cobrarEncomienda(input: CobrarEncomiendaInput): Promise<Re
     return { success: false, error: "Falta la clave de la operación. Cierra la ventana y vuelve a abrirla." };
   }
   const efectivo = input.metodoTipo === "EFECTIVO";
-  const metodoPagoId = input.metodoPagoId && UUID_RE.test(input.metodoPagoId) ? input.metodoPagoId : null;
+  // Punto de venta: solo referencia del comprobante y fecha (sin cuenta ni banco).
+  const puntoVenta = input.metodoTipo === "PUNTO_DE_VENTA";
+  const metodoPagoId =
+    !puntoVenta && input.metodoPagoId && UUID_RE.test(input.metodoPagoId) ? input.metodoPagoId : null;
   const fecha = input.fecha && FECHA_RE.test(input.fecha) ? input.fecha : null;
   const monto =
     efectivo && typeof input.montoRecibido === "number" && Number.isFinite(input.montoRecibido)
@@ -163,7 +166,7 @@ export async function cobrarEncomienda(input: CobrarEncomiendaInput): Promise<Re
     p_monto_recibido: monto,
     p_numero_referencia: efectivo ? null : (input.referencia ?? "").trim() || null,
     p_fecha_transaccion: efectivo ? null : fecha,
-    p_banco_emisor: efectivo ? null : (input.banco ?? "").trim() || null,
+    p_banco_emisor: efectivo || puntoVenta ? null : (input.banco ?? "").trim() || null,
     p_idempotency_key: input.idemKey,
   });
   if (error) {

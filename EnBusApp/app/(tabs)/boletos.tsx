@@ -50,6 +50,8 @@ interface BoletoRow {
   };
   /** Embed del último pago de la compra: separa "Sin pagar" de "Pago en verificación" */
   pago?: PagoBoletoEmbed | PagoBoletoEmbed[] | null;
+  /** La cooperativa del viaje, con su logo */
+  cooperativas?: { nombre?: string | null; logo_url?: string | null } | null;
 }
 
 /**
@@ -60,6 +62,7 @@ interface BoletoRow {
 const SELECT_BOLETOS = `id, codigo_boleto, asiento, estado, created_at, compra_id, reserva_expira_at,
   monto_reembolso, reembolso_procesado,
   viajes ( fecha_hora_salida, rutas ( ciudad_origen, ciudad_destino ) ),
+  cooperativas ( nombre, logo_url ),
   pago:pagos!boletos_pago_id_fkey ( id, estado_verificacion, tipo_pago, motivo_rechazo,
     numero_referencia, banco_emisor, monto, monto_bs, moneda, monto_declarado,
     tasa_bcv, tasa_bcv_fecha, created_at )`;
@@ -196,6 +199,11 @@ export default function BoletosScreen() {
             formatCity(item.viajes?.rutas?.ciudad_destino) || 'Destino'
           }`}
           subtitulo={subtituloBoleto(item)}
+          cooperativa={
+            item.cooperativas
+              ? { nombre: item.cooperativas.nombre, logoUrl: item.cooperativas.logo_url }
+              : null
+          }
           onPress={() =>
             router.push({
               pathname: '/boletos/[id]',

@@ -638,7 +638,7 @@ export default function DetalleEnvioScreen() {
                 <Image
                   source={{ uri: fotoCliente }}
                   style={s.photo}
-                  resizeMode="cover"
+                  resizeMode="contain"
                   accessibilityLabel="Foto que subiste"
                 />
                 <Text variant="caption" color="muted" style={s.photoCaption}>
@@ -651,7 +651,7 @@ export default function DetalleEnvioScreen() {
                 <Image
                   source={{ uri: fotoTaquilla }}
                   style={[s.photo, fotoCliente ? s.photoSecond : null]}
-                  resizeMode="cover"
+                  resizeMode="contain"
                   accessibilityLabel="Foto que tomó la taquilla"
                 />
                 <Text variant="caption" color="muted" style={s.photoCaption}>
@@ -789,6 +789,7 @@ const s = StyleSheet.create({
     width: '100%',
     height: 200,
     borderRadius: Radius.md,
+    backgroundColor: Colors.surface,
   },
   photoSecond: {
     marginTop: Spacing.lg,

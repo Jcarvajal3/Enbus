@@ -45,19 +45,27 @@ export type RemitenteEncomienda = { nombre: string; cedula: string | null; telef
 /**
  * Quién envía. En el alta presencial (`origen_registro = 'TAQUILLA'`) `sender`
  * es el empleado que la registró: el remitente real está en `remitente_*`.
+ * En las de la app el nombre sale de `remitente_nombre` (copia del perfil del
+ * cliente al registrarla, 20261109000005): el embed `sender:profiles` llega
+ * vacío al personal porque la RLS de `profiles` no le deja leer a los clientes.
  */
 export function remitenteDe(
   e: Pick<Encomienda, "origen_registro" | "remitente_nombre" | "remitente_cedula" | "remitente_telefono" | "sender">
 ): RemitenteEncomienda {
   if (e.origen_registro === "TAQUILLA") {
     return {
-      nombre: e.remitente_nombre || "Sin nombre",
+      nombre: e.remitente_nombre?.trim() || "Sin nombre",
       cedula: e.remitente_cedula ?? null,
       telefono: e.remitente_telefono ?? null,
       presencial: true,
     };
   }
-  return { nombre: e.sender?.nombre_completo || "Sin nombre", cedula: null, telefono: null, presencial: false };
+  return {
+    nombre: e.remitente_nombre?.trim() || e.sender?.nombre_completo?.trim() || "Sin nombre",
+    cedula: null,
+    telefono: null,
+    presencial: false,
+  };
 }
 
 /** true si a la encomienda le falta la foto de la taquilla. */
@@ -123,7 +131,7 @@ function FotoFirmada({ valor, alt }: { valor: string; alt: string }) {
     };
   }, [supabase, valor]);
 
-  if (!resultado || resultado.valor !== valor) return <Skeleton className="aspect-video w-full rounded-md" />;
+  if (!resultado || resultado.valor !== valor) return <Skeleton className="aspect-[4/3] w-full rounded-md" />;
   if (!resultado.url) {
     return (
       <p className="rounded-md border border-dashed border-border p-3 text-sm text-muted-foreground">
@@ -136,10 +144,11 @@ function FotoFirmada({ valor, alt }: { valor: string; alt: string }) {
       href={resultado.url}
       target="_blank"
       rel="noreferrer"
-      className="block aspect-video w-full overflow-hidden rounded-md border border-border outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+      className="block aspect-[4/3] w-full overflow-hidden rounded-md border border-border bg-muted outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
     >
+      {/* Entera y sin deformar, sea vertical u horizontal (la foto se guarda con su proporción). */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={resultado.url} alt={alt} className="size-full object-cover" />
+      <img src={resultado.url} alt={alt} className="size-full object-contain" />
     </a>
   );
 }

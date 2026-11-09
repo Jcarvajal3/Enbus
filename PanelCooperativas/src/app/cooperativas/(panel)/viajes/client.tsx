@@ -41,6 +41,7 @@ import { estadosDe, etiquetaEstado } from "@/lib/estados";
 import { fechaVE, formatDiaVE, formatFechaHoraCortaVE, formatFechaVE } from "@/lib/fechas";
 import { ICONO_SECCION } from "@/lib/navigation";
 import type { ImpactoCancelarViaje } from "@/lib/types/reembolsos";
+import type { BusParaViaje } from "@/lib/types/operacion";
 import { formatCiudad } from "@/lib/ciudades";
 import { cn } from "@/lib/utils";
 
@@ -108,15 +109,37 @@ function lineasImpacto(impacto: ImpactoCancelarViaje | null) {
 
 // ─── Programar viaje (#52, PC-44) ────────────────────────────────────────────
 
+/** "Unidad 12 · 42 asientos" (opciones del selector de bus). */
+function etiquetaBus(bus: BusParaViaje) {
+  return `${bus.numero_unidad} · ${plural(bus.asientos, "1 asiento", "{n} asientos")}`;
+}
+
+/** Aviso bajo el selector de bus cuando no hay buses activos (o no se pudieron cargar). */
+function AvisoSinBuses({ errorBuses }: { errorBuses: string | null }) {
+  if (errorBuses) return <p className="text-sm text-destructive-text">{errorBuses}</p>;
+  return (
+    <p className="text-sm text-muted-foreground">
+      No tienes buses activos.{" "}
+      <Link href="/cooperativas/buses" className="font-medium text-info-text underline underline-offset-4">
+        Registra un bus
+      </Link>
+    </p>
+  );
+}
+
 /* eslint-disable @typescript-eslint/no-explicit-any */
 function ProgramarViajeDialog({
   open,
   onOpenChange,
   rutasActivas,
+  busesActivos,
+  errorBuses,
 }: {
   open: boolean;
   onOpenChange(abierto: boolean): void;
   rutasActivas: any[];
+  busesActivos: BusParaViaje[];
+  errorBuses: string | null;
 }) {
   const [isPending, startTransition] = useTransition();
   return (
@@ -124,6 +147,8 @@ function ProgramarViajeDialog({
       {open && (
         <FormularioProgramar
           rutasActivas={rutasActivas}
+          busesActivos={busesActivos}
+          errorBuses={errorBuses}
           isPending={isPending}
           startTransition={startTransition}
           onCerrar={() => onOpenChange(false)}
@@ -136,11 +161,15 @@ function ProgramarViajeDialog({
 /** Se monta al abrir: el formulario empieza limpio cada vez. */
 function FormularioProgramar({
   rutasActivas,
+  busesActivos,
+  errorBuses,
   isPending,
   startTransition,
   onCerrar,
 }: {
   rutasActivas: any[];
+  busesActivos: BusParaViaje[];
+  errorBuses: string | null;
   isPending: boolean;
   startTransition: TransitionStartFunction;
   onCerrar(): void;
@@ -149,6 +178,11 @@ function FormularioProgramar({
   const [formError, setFormError] = useState<string | null>(null);
   const [isRecurring, setIsRecurring] = useState(false);
   const [rutaSeleccionada, setRutaSeleccionada] = useState<string>("");
+  // Bus (obligatorio): trae unidad, asientos y chofer. Con uno solo, ya viene elegido.
+  const [busId, setBusId] = useState<string>(busesActivos.length === 1 ? busesActivos[0].id : "");
+  const bus = busesActivos.find((b) => b.id === busId) ?? null;
+  // Chofer de este viaje: el del bus, salvo que se escriba otro.
+  const [chofer, setChofer] = useState<string>(busesActivos.length === 1 ? busesActivos[0].chofer_nombre ?? "" : "");
   // Recurrente (controlado para el resumen en vivo)
   const [dias, setDias] = useState<string[]>([]);
   const [hora, setHora] = useState("");
@@ -157,9 +191,6 @@ function FormularioProgramar({
   const [intentado, setIntentado] = useState(false);
   // Único
   const [salida, setSalida] = useState("");
-  const [asientos, setAsientos] = useState("");
-  const [unidad, setUnidad] = useState("");
-  const [chofer, setChofer] = useState("");
 
   const plan = useMemo(() => planificarSalidas({ dias, desde, hasta, hora }), [dias, desde, hasta, hora]);
   const mostrarPlan = intentado || Boolean(desde && hasta && hora);
@@ -168,6 +199,13 @@ function FormularioProgramar({
     value: r.id as string,
     label: `${formatCiudad(r.ciudad_origen)} → ${formatCiudad(r.ciudad_destino)}`,
   }));
+  const opcionesBus = busesActivos.map((b) => ({ value: b.id, label: etiquetaBus(b) }));
+
+  function elegirBus(id: string) {
+    setBusId(id);
+    setChofer(busesActivos.find((b) => b.id === id)?.chofer_nombre ?? "");
+    if (formError) setFormError(null);
+  }
 
   const alternarDia = (valor: string) =>
     setDias((prev) => (prev.includes(valor) ? prev.filter((d) => d !== valor) : [...prev, valor]));
@@ -180,14 +218,23 @@ function FormularioProgramar({
       setFormError("Elige la ruta del viaje.");
       return;
     }
+    if (!bus) {
+      setFormError(
+        busesActivos.length === 0
+          ? errorBuses ?? "Registra un bus en Buses para programar viajes."
+          : "Elige el bus del viaje."
+      );
+      document.getElementById(`${uid}-bus`)?.focus();
+      return;
+    }
     if (isRecurring && !plan.ok) {
       document.getElementById(`${uid}-${plan.campo}`)?.focus();
       return;
     }
     const payload: Record<string, string> = {
       ruta_id: rutaSeleccionada,
-      asientos_totales: asientos,
-      numero_unidad: unidad.trim(),
+      bus_id: bus.id,
+      // Vacío = el chofer del bus.
       nombre_chofer: chofer.trim(),
       hora_fija: hora,
       fecha_hora_salida: salida,
@@ -245,6 +292,52 @@ function FormularioProgramar({
                 </Link>
               </p>
             )}
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="grid content-start gap-2">
+              <Label htmlFor={`${uid}-bus`}>Bus</Label>
+              <Select value={busId} onValueChange={(val) => elegirBus(val ?? "")} items={opcionesBus}>
+                <SelectTrigger id={`${uid}-bus`} className="w-full" aria-describedby={`${uid}-bus-ayuda`}>
+                  <SelectValue placeholder="Elige un bus activo" />
+                </SelectTrigger>
+                <SelectContent>
+                  {busesActivos.map((b) => (
+                    <SelectItem key={b.id} value={b.id}>
+                      {etiquetaBus(b)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <div id={`${uid}-bus-ayuda`}>
+                {busesActivos.length === 0 ? (
+                  <AvisoSinBuses errorBuses={errorBuses} />
+                ) : bus ? (
+                  <p className="text-sm text-muted-foreground">
+                    {plural(bus.asientos, "1 asiento a la venta", "{n} asientos a la venta")}
+                    {bus.placa ? ` · Placa ${bus.placa}` : ""}
+                  </p>
+                ) : null}
+              </div>
+            </div>
+            <div className="grid content-start gap-2">
+              <Label htmlFor={`${uid}-chofer`}>Chofer</Label>
+              <Input
+                id={`${uid}-chofer`}
+                type="text"
+                maxLength={80}
+                value={chofer}
+                disabled={!bus}
+                placeholder={bus ? (bus.chofer_nombre ?? "Sin chofer asignado") : undefined}
+                onChange={(e) => setChofer(e.target.value)}
+                aria-describedby={`${uid}-chofer-ayuda`}
+              />
+              <p id={`${uid}-chofer-ayuda`} className="text-sm text-muted-foreground">
+                {bus && chofer.trim() && chofer.trim() !== (bus.chofer_nombre ?? "")
+                  ? "Solo para este viaje: el bus conserva su chofer."
+                  : "El del bus. Cámbialo si hoy maneja otro."}
+              </p>
+            </div>
           </div>
 
           <div className="flex items-center justify-between gap-4 rounded-md border border-border p-4">
@@ -327,29 +420,6 @@ function FormularioProgramar({
             </div>
           )}
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <div className="grid content-start gap-2">
-              <Label htmlFor={`${uid}-asientos`}>Asientos</Label>
-              <Input
-                id={`${uid}-asientos`}
-                type="number"
-                inputMode="numeric"
-                min={1}
-                max={80}
-                value={asientos}
-                onChange={(e) => setAsientos(e.target.value)}
-                required
-              />
-            </div>
-            <div className="grid content-start gap-2">
-              <Label htmlFor={`${uid}-unidad`}>Unidad (opcional)</Label>
-              <Input id={`${uid}-unidad`} type="text" maxLength={40} value={unidad} onChange={(e) => setUnidad(e.target.value)} />
-            </div>
-            <div className="grid content-start gap-2">
-              <Label htmlFor={`${uid}-chofer`}>Chofer (opcional)</Label>
-              <Input id={`${uid}-chofer`} type="text" maxLength={80} value={chofer} onChange={(e) => setChofer(e.target.value)} />
-            </div>
-          </div>
         </div>
         <DialogFooter className="sm:justify-between">
           <Button type="button" variant="outline" onClick={onCerrar} disabled={isPending}>
@@ -371,10 +441,14 @@ function EditarViajeDialog({
   viaje,
   open,
   onOpenChange,
+  busesActivos,
+  errorBuses,
 }: {
   viaje: any | null;
   open: boolean;
   onOpenChange(abierto: boolean): void;
+  busesActivos: BusParaViaje[];
+  errorBuses: string | null;
 }) {
   const [enviando, setEnviando] = useState(false);
   return (
@@ -383,6 +457,8 @@ function EditarViajeDialog({
         <FormularioEditar
           key={viaje.id}
           viaje={viaje}
+          busesActivos={busesActivos}
+          errorBuses={errorBuses}
           enviando={enviando}
           setEnviando={setEnviando}
           onCerrar={() => onOpenChange(false)}
@@ -392,15 +468,19 @@ function EditarViajeDialog({
   );
 }
 
-type CampoEditar = "salida" | "asientos" | "motivo";
+type CampoEditar = "salida" | "bus" | "asientos" | "motivo";
 
 function FormularioEditar({
   viaje,
+  busesActivos,
+  errorBuses,
   enviando,
   setEnviando,
   onCerrar,
 }: {
   viaje: any;
+  busesActivos: BusParaViaje[];
+  errorBuses: string | null;
   enviando: boolean;
   setEnviando(v: boolean): void;
   onCerrar(): void;
@@ -410,9 +490,23 @@ function FormularioEditar({
   const enviandoRef = useRef(false);
   const salidaInicial = isoALocalVE(viaje.fecha_hora_salida);
   const [salida, setSalida] = useState(salidaInicial);
+  const busInicial: string = viaje.bus_id ?? "";
+  const [busId, setBusId] = useState<string>(busInicial);
   const [unidad, setUnidad] = useState<string>(viaje.numero_unidad ?? "");
   const [chofer, setChofer] = useState<string>(viaje.nombre_chofer ?? "");
   const [asientos, setAsientos] = useState<string>(String(viaje.asientos_totales ?? ""));
+  const cambiaBus = busId !== "" && busId !== busInicial;
+  // Bus elegido (null si el viaje no tiene bus o el suyo ya está desactivado).
+  const bus = busesActivos.find((b) => b.id === busId) ?? null;
+  // Tope de asientos: los del bus, si se conoce; si no, el máximo general.
+  const capacidad = bus?.asientos ?? 80;
+  // El bus actual puede estar desactivado: sigue como opción (sin cambio) con su unidad.
+  const opcionesBus = [
+    ...(busInicial && !busesActivos.some((b) => b.id === busInicial)
+      ? [{ value: busInicial, label: `${viaje.numero_unidad ?? "Bus actual"} (desactivado)` }]
+      : []),
+    ...busesActivos.map((b) => ({ value: b.id, label: etiquetaBus(b) })),
+  ];
   const [motivo, setMotivo] = useState("");
   const [errores, setErrores] = useState<Partial<Record<CampoEditar, string>>>({});
   const [errorGeneral, setErrorGeneral] = useState<string | null>(null);
@@ -462,12 +556,14 @@ function FormularioEditar({
       encontrados.asientos = "El bus debe tener entre 1 y 80 asientos.";
     } else if (minimoAsientos && nAsientos < minimoAsientos) {
       encontrados.asientos = `Ya hay pasajeros hasta el asiento ${minimoAsientos}: el bus debe tener al menos ${minimoAsientos} asientos.`;
+    } else if (bus && nAsientos > bus.asientos && (cambiaBus || nAsientos !== Number(viaje.asientos_totales))) {
+      encontrados.asientos = `El bus ${bus.numero_unidad} tiene ${bus.asientos} asientos: el viaje no puede tener más.`;
     }
     if (pideMotivo && motivo.trim().length < 5) {
       encontrados.motivo = "Explica por qué cambia la hora (mínimo 5 caracteres). Les enviaremos tu mensaje.";
     }
     setErrores(encontrados);
-    const primero = (["salida", "asientos", "motivo"] as CampoEditar[]).find((c) => encontrados[c]);
+    const primero = (["salida", "bus", "asientos", "motivo"] as CampoEditar[]).find((c) => encontrados[c]);
     if (primero) {
       enfocar(primero);
       return;
@@ -475,7 +571,9 @@ function FormularioEditar({
 
     const cambios = {
       salida: cambiaHora ? salida : undefined,
-      numeroUnidad: unidad.trim() !== (viaje.numero_unidad ?? "") ? unidad : undefined,
+      busId: cambiaBus ? busId : undefined,
+      // Con bus, la unidad es la del bus (la base la copia); a mano solo en viajes sin bus.
+      numeroUnidad: !busId && unidad.trim() !== (viaje.numero_unidad ?? "") ? unidad : undefined,
       nombreChofer: chofer.trim() !== (viaje.nombre_chofer ?? "") ? chofer : undefined,
       asientosTotales: nAsientos !== Number(viaje.asientos_totales) ? nAsientos : undefined,
     };
@@ -494,7 +592,7 @@ function FormularioEditar({
       if (!res.success) {
         const campo = res.campo as CampoEditar | undefined;
         if (res.minimo) setMinimoAsientos(res.minimo);
-        if (campo === "salida" || campo === "asientos" || campo === "motivo") {
+        if (campo === "salida" || campo === "bus" || campo === "asientos" || campo === "motivo") {
           setErrores({ [campo]: res.error });
           enfocar(campo);
         } else {
@@ -590,11 +688,71 @@ function FormularioEditar({
           </div>
         )}
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div className="grid content-start gap-2">
-            <Label htmlFor={`${uid}-unidad`}>Unidad</Label>
-            <Input id={`${uid}-unidad`} value={unidad} maxLength={40} disabled={enviando} onChange={(e) => setUnidad(e.target.value)} />
-          </div>
+        <div className="grid content-start gap-2">
+          <Label htmlFor={`${uid}-bus`}>Bus</Label>
+          <Select
+            value={busId}
+            onValueChange={(val) => {
+              const id = val ?? "";
+              setBusId(id);
+              limpiar("bus");
+              limpiar("asientos");
+              // Otro bus: se copian su unidad, su chofer y sus asientos (se pueden ajustar).
+              const nuevo = busesActivos.find((b) => b.id === id);
+              if (nuevo && id !== busInicial) {
+                setUnidad(nuevo.numero_unidad);
+                setChofer(nuevo.chofer_nombre ?? "");
+                setAsientos(String(nuevo.asientos));
+              } else if (id === busInicial) {
+                setUnidad(viaje.numero_unidad ?? "");
+                setChofer(viaje.nombre_chofer ?? "");
+                setAsientos(String(viaje.asientos_totales ?? ""));
+              }
+            }}
+            items={opcionesBus}
+            disabled={enviando}
+          >
+            <SelectTrigger
+              id={`${uid}-bus`}
+              className="w-full"
+              aria-invalid={errores.bus ? true : undefined}
+              aria-describedby={ayuda("bus") ?? `${uid}-bus-ayuda`}
+            >
+              <SelectValue placeholder={viaje.numero_unidad ? `${viaje.numero_unidad} (sin bus registrado)` : "Elige un bus"} />
+            </SelectTrigger>
+            <SelectContent>
+              {opcionesBus.map((o) => (
+                <SelectItem key={o.value} value={o.value}>
+                  {o.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {errores.bus ? (
+            <p id={`${uid}-bus-error`} className="text-sm text-destructive-text">{errores.bus}</p>
+          ) : busesActivos.length === 0 ? (
+            <div id={`${uid}-bus-ayuda`}>
+              <AvisoSinBuses errorBuses={errorBuses} />
+            </div>
+          ) : (
+            <p id={`${uid}-bus-ayuda`} className="text-sm text-muted-foreground">
+              {cambiaBus
+                ? "Se copian la unidad, el chofer y los asientos del bus elegido."
+                : busId
+                  ? "Si cambias de bus, se copian su unidad, su chofer y sus asientos."
+                  : "Este viaje no tiene un bus registrado: elige uno o escribe la unidad."}
+            </p>
+          )}
+        </div>
+
+        <div className={cn("grid grid-cols-1 gap-4", !busId && "sm:grid-cols-2")}>
+          {/* Viajes anteriores sin bus: la unidad sigue siendo a mano. */}
+          {!busId && (
+            <div className="grid content-start gap-2">
+              <Label htmlFor={`${uid}-unidad`}>Unidad</Label>
+              <Input id={`${uid}-unidad`} value={unidad} maxLength={40} disabled={enviando} onChange={(e) => setUnidad(e.target.value)} />
+            </div>
+          )}
           <div className="grid content-start gap-2">
             <Label htmlFor={`${uid}-chofer`}>Chofer</Label>
             <Input id={`${uid}-chofer`} value={chofer} maxLength={80} disabled={enviando} onChange={(e) => setChofer(e.target.value)} />
@@ -608,7 +766,7 @@ function FormularioEditar({
             type="number"
             inputMode="numeric"
             min={minimoAsientos ?? 1}
-            max={80}
+            max={capacidad}
             value={asientos}
             disabled={enviando}
             aria-invalid={errores.asientos ? true : undefined}
@@ -625,6 +783,7 @@ function FormularioEditar({
               {minimoAsientos
                 ? `Mínimo ${minimoAsientos}: ya hay pasajeros hasta ese asiento.`
                 : "No puede ser menor que el asiento más alto ya vendido."}
+              {bus ? ` Máximo ${bus.asientos}: los del bus.` : ""}
             </p>
           )}
         </div>
@@ -657,6 +816,8 @@ const PARAMS_PROPIOS = ["vista", "fecha", "viaje", "pagina"];
 export function ViajesClient({
   viajes,
   rutasActivas,
+  busesActivos = [],
+  errorBuses = null,
   userRole,
   vista = "hoy",
   fecha = null,
@@ -666,6 +827,10 @@ export function ViajesClient({
 }: {
   viajes: any[];
   rutasActivas: any[];
+  /** Buses activos de la cooperativa (solo se cargan para el administrador). */
+  busesActivos?: BusParaViaje[];
+  /** Error al cargar los buses (ya traducido): lo muestra el formulario de programar. */
+  errorBuses?: string | null;
   userRole: string;
   vista?: VistaViajes;
   /** Día elegido en el filtro ('YYYY-MM-DD'): reemplaza a la pestaña. */
@@ -814,6 +979,8 @@ export function ViajesClient({
   }
 
   const sinRutas = rutasActivas.length === 0;
+  // Si los buses no cargaron, no se afirma que no hay: el formulario muestra el error.
+  const sinBuses = busesActivos.length === 0 && !errorBuses;
   const COLUMNAS = 7;
 
   function filaVacia() {
@@ -833,6 +1000,22 @@ export function ViajesClient({
                 Crear ruta
               </Link>
             ) : undefined
+          }
+        />
+      );
+    }
+    // Sin buses activos no se puede programar: se indica antes de ofrecer "Programar viaje".
+    if (isAdmin && sinBuses && vista !== "historial") {
+      return (
+        <FilaVacia
+          colSpan={COLUMNAS}
+          icon={ICONO_SECCION.buses}
+          titulo="Registra un bus para programar viajes"
+          accion={
+            <Link href="/cooperativas/buses" className={buttonVariants()}>
+              <Plus aria-hidden />
+              Registrar bus
+            </Link>
           }
         />
       );
@@ -1004,10 +1187,18 @@ export function ViajesClient({
         <p className="text-sm text-muted-foreground">Últimos 100 viajes. Para uno más antiguo, elige su día de salida.</p>
       )}
 
-      <ProgramarViajeDialog open={isModalOpen} onOpenChange={setIsModalOpen} rutasActivas={rutasActivas} />
+      <ProgramarViajeDialog
+        open={isModalOpen}
+        onOpenChange={setIsModalOpen}
+        rutasActivas={rutasActivas}
+        busesActivos={busesActivos}
+        errorBuses={errorBuses}
+      />
 
       <EditarViajeDialog
         viaje={viajeEditar}
+        busesActivos={busesActivos}
+        errorBuses={errorBuses}
         open={editarOpen}
         onOpenChange={(abierto) => {
           setEditarOpen(abierto);

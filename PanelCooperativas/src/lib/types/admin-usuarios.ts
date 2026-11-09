@@ -99,7 +99,7 @@ export interface PagoUsuario {
   tasa_bcv: number | null;
   tasa_bcv_fecha: string | null;
   tipo_pago: string;
-  /** Tipo del método de la cooperativa (PAGO_MOVIL, TRANSFERENCIA_BANCARIA, ZELLE, EFECTIVO); null en efectivo de taquilla. */
+  /** Tipo del método (PAGO_MOVIL, TRANSFERENCIA_BANCARIA, ZELLE, EFECTIVO, PUNTO_DE_VENTA); null en pagos digitales viejos sin cuenta. */
   metodo_tipo: string | null;
   verificado: boolean;
   estado_verificacion: "PENDIENTE" | "APROBADO" | "RECHAZADO";

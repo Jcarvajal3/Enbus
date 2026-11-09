@@ -12,6 +12,7 @@ import { createClient } from "@/lib/supabase/client";
 import { AuthLayout } from "@/components/auth-layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Spinner } from "@/components/ui/spinner";
 import { FieldGroup, Field, FieldLabel } from "@/components/ui/field";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -122,6 +123,7 @@ export default function AdminLoginClient({ aviso }: { aviso: AvisoLoginAdmin | n
     <AuthLayout
       zona="admin"
       titulo="Iniciar sesión"
+      descripcion="Acceso para el equipo de administración de EnBus."
       pie={
         <Link href="/cooperativas/recuperar" className={ENLACE}>
           ¿Olvidaste tu contraseña?
@@ -138,15 +140,18 @@ export default function AdminLoginClient({ aviso }: { aviso: AvisoLoginAdmin | n
         )}
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-6">
-          <FieldGroup className="gap-4">
+          <FieldGroup className="gap-5">
             <Field>
               <FieldLabel htmlFor="email">Correo</FieldLabel>
               <Input
                 id="email"
                 type="email"
+                inputMode="email"
                 placeholder="tu@correo.com"
                 required
-                autoComplete="email"
+                autoComplete="username"
+                autoCapitalize="none"
+                spellCheck={false}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 disabled={ocupado}
@@ -154,9 +159,8 @@ export default function AdminLoginClient({ aviso }: { aviso: AvisoLoginAdmin | n
             </Field>
             <Field>
               <FieldLabel htmlFor="password">Contraseña</FieldLabel>
-              <Input
+              <PasswordInput
                 id="password"
-                type="password"
                 required
                 autoComplete="current-password"
                 value={password}

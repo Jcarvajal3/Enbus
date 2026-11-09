@@ -17,16 +17,18 @@ import { TabsUrl } from "@/components/barra-filtros";
 import { TablaSkeleton } from "@/components/tabla-skeleton";
 import { PaginacionTabla, usePaginacion } from "@/components/paginacion-tabla";
 import { VerificarPagoDialog } from "@/components/pagos/verificar-pago-dialog";
+import { CerrarAvisosPagos } from "@/components/push/cerrar-avisos-pagos";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useParamUrl } from "@/hooks/use-param-url";
-import { formatBs, formatUsd, type TasaRef } from "@/lib/dinero";
+import { type TasaRef } from "@/lib/dinero";
 import { formatFechaHoraCortaVE, formatHaceTiempo } from "@/lib/fechas";
 import { humanizeError } from "@/lib/errores";
 import { formatCedula } from "@/lib/ve";
 import { ICONO_SECCION } from "@/lib/navigation";
-import { conceptoDePago, type PagadorRol, type PagoPorVerificar } from "@/lib/types/pagos";
+import { conceptoDePago, type PagoPorVerificar } from "@/lib/types/pagos";
+import { formatEnMoneda, nombreMetodo, ROL_PAGADOR } from "@/components/pagos/formato-pago";
 import { cn } from "@/lib/utils";
 import { listarPagosPorVerificar } from "./actions";
 
@@ -40,28 +42,10 @@ const PESTANAS: { id: Pestana; titulo: string }[] = [
 
 const COLUMNAS = 7;
 
-const METODO: Record<string, string> = {
-  PAGO_MOVIL: "Pago Móvil",
-  TRANSFERENCIA_BANCARIA: "Transferencia",
-  ZELLE: "Zelle",
-  EFECTIVO: "Efectivo",
-};
-
-const ROL: Record<PagadorRol, string> = {
-  PASAJERO: "Pasajero",
-  REMITENTE: "Remitente",
-  DESTINATARIO: "Destinatario",
-  OTRO: "Cliente",
-};
-
 const REFRESCO_MS = 60 * 1000;
 
 function leerPestana(valor: string | null): Pestana {
   return valor === "boleto" || valor === "encomienda" ? valor : "todos";
-}
-
-function formatEnMoneda(monto: number, moneda: "VES" | "USD") {
-  return moneda === "USD" ? formatUsd(monto) : formatBs(monto);
 }
 
 function Diferencia({ pago }: { pago: PagoPorVerificar }) {
@@ -210,7 +194,7 @@ function BandejaPagos() {
                     <CeldaEnlace onAbrir={() => setPagoAbierto(p.pago_id)} etiqueta={`Verificar el pago de ${cliente}`}>
                       <span className="block">{cliente}</span>
                       <span className="block text-xs font-normal text-muted-foreground">
-                        {[p.cliente_cedula ? formatCedula(p.cliente_cedula) : null, ROL[p.pagador_rol] ?? null]
+                        {[p.cliente_cedula ? formatCedula(p.cliente_cedula) : null, ROL_PAGADOR[p.pagador_rol] ?? null]
                           .filter(Boolean)
                           .join(" · ")}
                       </span>
@@ -235,7 +219,7 @@ function BandejaPagos() {
                       )}
                     </TableCell>
                     <TableCell className="hidden xl:table-cell">
-                      <span className="block text-sm">{(p.metodo_tipo && METODO[p.metodo_tipo]) || "Pago digital"}</span>
+                      <span className="block text-sm">{nombreMetodo(p.metodo_tipo)}</span>
                       {p.metodo_tipo !== "ZELLE" && p.banco_emisor && (
                         <span className="block text-xs text-muted-foreground">Desde {p.banco_emisor}</span>
                       )}
@@ -303,6 +287,8 @@ export default function PagosPorVerificarPage() {
         </div>
       }
     >
+      {/* Cierra las notificaciones push de pagos de este equipo al ver la bandeja. */}
+      <CerrarAvisosPagos />
       <BandejaPagos />
     </Suspense>
   );

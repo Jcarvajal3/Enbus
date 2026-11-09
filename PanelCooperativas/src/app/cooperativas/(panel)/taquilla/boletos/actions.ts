@@ -1,6 +1,6 @@
 "use server";
 
-// ─── Taquilla de boletos: venta, cobro de reservas y embarque ───────────────
+// ─── Taquilla de boletos: venta y cobro de reservas ─────────────────────────
 // Todo pasa por RPC SECURITY DEFINER (fase 2). El servidor decide el precio,
 // la tasa BCV, el código del boleto (BOL-XXXXXXXX) y el QR (PASS-<código>);
 // la venta y el pago se guardan en una sola transacción e idempotente
@@ -9,12 +9,10 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { codigoEB, humanizeError, parseDetalleEB, type DetalleEB } from "@/lib/errores";
-import { normalizarCodigoBoleto } from "@/lib/artefactos.generated";
 import type {
   BoletoImpresion,
   CobroTaquilla,
   MonedaPago,
-  ResultadoEmbarque,
   ResumenCompra,
   TipoMetodoPago,
   VentaTaquilla,
@@ -37,7 +35,7 @@ export type ResultadoTaquilla<T> =
 /** Datos del cobro en taquilla (venta nueva o reserva de la app). */
 export type DatosPagoTaquilla = {
   metodoTipo: TipoMetodoPago;
-  /** Cuenta de la cooperativa que recibió el pago (Pago Móvil, transferencia, Zelle). */
+  /** Cuenta de la cooperativa que recibió el pago (Pago Móvil, transferencia, Zelle; no en punto de venta). */
   metodoPagoId?: string | null;
   /** Solo efectivo: moneda en que pagó el pasajero. */
   moneda?: MonedaPago | null;
@@ -81,16 +79,18 @@ function texto(v: string | null | undefined): string | null {
 /** Parámetros de pago comunes a `fn_vender_boletos_taquilla` y `fn_cobrar_reserva_taquilla`. */
 function parametrosPago(p: DatosPagoTaquilla) {
   const efectivo = p.metodoTipo === "EFECTIVO";
+  // Punto de venta: solo referencia del comprobante y fecha (sin cuenta ni banco).
+  const puntoVenta = p.metodoTipo === "PUNTO_DE_VENTA";
   const fecha = texto(p.fecha);
   return {
     p_metodo_tipo: p.metodoTipo,
-    p_metodo_pago_id: !efectivo && p.metodoPagoId && UUID_RE.test(p.metodoPagoId) ? p.metodoPagoId : null,
+    p_metodo_pago_id: !efectivo && !puntoVenta && p.metodoPagoId && UUID_RE.test(p.metodoPagoId) ? p.metodoPagoId : null,
     p_moneda: efectivo ? (p.moneda === "USD" ? "USD" : "VES") : null,
     p_monto_recibido:
       efectivo && typeof p.montoRecibido === "number" && Number.isFinite(p.montoRecibido) ? p.montoRecibido : null,
     p_numero_referencia: efectivo ? null : texto(p.referencia),
     p_fecha_transaccion: efectivo ? null : fecha && FECHA_RE.test(fecha) ? fecha : null,
-    p_banco_emisor: efectivo || p.metodoTipo === "ZELLE" ? null : texto(p.banco),
+    p_banco_emisor: efectivo || puntoVenta || p.metodoTipo === "ZELLE" ? null : texto(p.banco),
   };
 }
 
@@ -227,64 +227,5 @@ export async function cobrarReserva(
   } catch (err) {
     console.error(err);
     return fallo(err, "cobrar la reserva");
-  }
-}
-
-/** Resultado del escaneo: VALIDO, OTRO_DIA, PAGO_EN_VERIFICACION, etc. (no modifica nada). */
-export async function validarEmbarque(
-  codigo: string,
-  viajeId?: string | null
-): Promise<ResultadoTaquilla<ResultadoEmbarque>> {
-  // "bol 7cab-e4ad", "BOL-7CAB-E4AD" o "PASS-BOL-7CABE4AD" → "BOL-7CABE4AD" (#58).
-  const limpio = normalizarCodigoBoleto(codigo ?? "");
-  if (!limpio) return { success: false, error: "Escanea el código del boleto o escríbelo completo." };
-  try {
-    const supabase = await createClient();
-    const { data, error } = await supabase.rpc("fn_validar_embarque", {
-      p_codigo: limpio,
-      p_viaje_id: viajeId && UUID_RE.test(viajeId) ? viajeId : null,
-    });
-    if (error) {
-      console.error("Error validando embarque:", error);
-      return fallo(error, "revisar el boleto");
-    }
-    return { success: true, data: data as ResultadoEmbarque };
-  } catch (err) {
-    console.error(err);
-    return fallo(err, "revisar el boleto");
-  }
-}
-
-/**
- * Embarca al pasajero (PAGADO → USADO). El servidor vuelve a validar: si el boleto
- * dejó de ser válido devuelve `EB_EMBARQUE_NO_VALIDO` con el resultado actualizado
- * en `resultado`, para mostrar la causa.
- */
-export async function confirmarEmbarque(
-  boletoId: string,
-  viajeId?: string | null
-): Promise<ResultadoTaquilla<ResultadoEmbarque> & { resultado?: ResultadoEmbarque }> {
-  if (!UUID_RE.test(boletoId ?? "")) {
-    return { success: false, error: "No encontramos ese boleto. Escanéalo de nuevo." };
-  }
-  try {
-    const supabase = await createClient();
-    const { data, error } = await supabase.rpc("fn_confirmar_embarque", {
-      p_boleto_id: boletoId,
-      p_viaje_id: viajeId && UUID_RE.test(viajeId) ? viajeId : null,
-    });
-    if (error) {
-      console.error("Error confirmando embarque:", error);
-      const res = fallo(error, "confirmar el embarque");
-      if (res.codigo === "EB_EMBARQUE_NO_VALIDO" && res.detalle && typeof res.detalle.resultado === "string") {
-        return { ...res, resultado: res.detalle as unknown as ResultadoEmbarque };
-      }
-      return res;
-    }
-    revalidatePath("/cooperativas/taquilla/boletos");
-    return { success: true, data: data as ResultadoEmbarque };
-  } catch (err) {
-    console.error(err);
-    return fallo(err, "confirmar el embarque");
   }
 }

@@ -2,6 +2,12 @@
 // Cooperativa config — domain types
 // ─────────────────────────────────────────────────────────────────────────────
 
+import type { HorarioSemana } from "@/lib/horario";
+
+/**
+ * Tipos de cuenta que la cooperativa configura en Métodos de pago. No incluye el punto de venta:
+ * es un cobro presencial sin cuenta (la base de datos lo impide en `metodos_pago_cooperativa`).
+ */
 export type TipoMetodoPago =
   | "TRANSFERENCIA_BANCARIA"
   | "PAGO_MOVIL"
@@ -33,7 +39,10 @@ export interface Sucursal {
   ciudad: string;
   direccion: string | null;
   telefono: string | null;
+  /** Texto que ve la app. Si hay `horario_semana`, se genera a partir de ella (lib/horario.ts). */
   horario?: string | null;
+  /** Horario por día para el editor del panel. NULL en sucursales con horario en texto libre. */
+  horario_semana?: HorarioSemana | null;
   activa: boolean;
   created_at: string;
 }

@@ -2,6 +2,9 @@
 
 // ─── Venta de boletos en taquilla ───────────────────────────────────────────
 // Viaje → asientos (uno o varios) → datos de cada pasajero → cobro → boletos.
+// Los viajes se consultan por día de salida (hora de Venezuela) y ruta; al abrir
+// se muestra hoy o, si ya no quedan salidas hoy, el próximo día que tenga. Cada
+// paso termina en una `BarraAccion` fija al fondo del diálogo con el resumen.
 // El cobro se hace en bolívares a la tasa BCV del día (o en dólares en efectivo
 // o Zelle). La venta y el pago se registran juntos con `fn_vender_boletos_taquilla`
 // y una clave de idempotencia creada al abrir el flujo: reintentar no duplica.
@@ -19,14 +22,16 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { createClient } from "@/lib/supabase/client";
 import { useUser } from "@/hooks/use-user";
-import { CalendarBlank, CheckCircle, Printer, Money, CurrencyDollar, DeviceMobile, Bank } from "@phosphor-icons/react";
+import { ArrowRight, CalendarBlank, CheckCircle, Printer, Money, CurrencyDollar, DeviceMobile, Bank, CreditCard } from "@phosphor-icons/react";
 import { SeatSelector, listaAsientos } from "./seat-selector";
+import { BarraAccion, TotalCorto } from "./barra-accion";
+import { SelectorDia, diaEnFrase, nombreDia } from "./selector-dia";
+import { ViajeOpcion } from "./viaje-opcion";
 import { Monto } from "@/components/monto";
 import { AvisoError } from "@/components/aviso-error";
 import { EmptyState } from "@/components/empty-state";
 import { ErrorState } from "@/components/error-state";
 import { GrupoOpciones, OpcionTile } from "@/components/opcion-tile";
-import { TonoBadge } from "@/components/status-badge";
 import { avisarError, avisarExito } from "@/lib/avisos";
 import { useTasaBCV } from "@/components/tasa-bcv-provider";
 import {
@@ -44,7 +49,7 @@ import { printer } from "@/lib/printing/bluetooth";
 import { requireOnline } from "@/components/connectivity-banner";
 import { humanizeError } from "@/lib/errores";
 import { fechaTasaCorta, formatBs, formatNumeroVE, formatUsd, usdABs } from "@/lib/dinero";
-import { formatFechaHoraCortaVE, hoyVE, sumarDiasVE } from "@/lib/fechas";
+import { fechaVE, formatFechaHoraCortaVE, formatHoraVE, hoyVE, rangoDiaVE, sumarDiasVE } from "@/lib/fechas";
 import type { TipoMetodoPago } from "@/lib/types/pagos";
 import type { Boleto } from "@/lib/types/boletos";
 import { cn } from "@/lib/utils";
@@ -65,12 +70,14 @@ const PASOS: { id: VentaStep; titulo: string }[] = [
 
 export interface ViajeParaVenta {
   id: string;
+  ruta_id: string;
   fecha_hora_salida: string;
   fecha_hora_llegada_est: string;
   asientos_totales: number;
   asientos_disponibles: number;
   estado: string;
   numero_unidad: string;
+  nombre_chofer: string | null;
   ruta: {
     ciudad_origen: string;
     estado_origen: string;
@@ -120,18 +127,23 @@ function formatearCedula(cedula: string) {
 
 // ─── Formulario de cobro en taquilla ────────────────────────────────────────
 
-type MetodoCobro = "EFECTIVO_VES" | "EFECTIVO_USD" | "PAGO_MOVIL" | "TRANSFERENCIA_BANCARIA" | "ZELLE";
+type MetodoCobro = "EFECTIVO_VES" | "EFECTIVO_USD" | "PUNTO_DE_VENTA" | "PAGO_MOVIL" | "TRANSFERENCIA_BANCARIA" | "ZELLE";
 
-// Iconos de §2.3: Money efectivo, DeviceMobile Pago Móvil, Bank Transferencia, CurrencyDollar Zelle.
+// Iconos de §2.3: Money efectivo, CreditCard punto de venta, DeviceMobile Pago Móvil, Bank Transferencia,
+// CurrencyDollar Zelle. Primero los presenciales (efectivo y punto de venta): siempre disponibles.
 const METODOS: { id: MetodoCobro; titulo: string; Icono: typeof Money }[] = [
   { id: "EFECTIVO_VES", titulo: "Efectivo Bs", Icono: Money },
   { id: "EFECTIVO_USD", titulo: "Efectivo USD", Icono: Money },
+  { id: "PUNTO_DE_VENTA", titulo: "Punto de venta", Icono: CreditCard },
   { id: "PAGO_MOVIL", titulo: "Pago Móvil", Icono: DeviceMobile },
   { id: "TRANSFERENCIA_BANCARIA", titulo: "Transferencia", Icono: Bank },
   { id: "ZELLE", titulo: "Zelle", Icono: CurrencyDollar },
 ];
 
-const NOMBRE_TIPO: Record<Exclude<TipoMetodoPago, "EFECTIVO">, string> = {
+/** Métodos con cuenta de la cooperativa (efectivo y punto de venta no la tienen). */
+type TipoConCuenta = Exclude<TipoMetodoPago, "EFECTIVO" | "PUNTO_DE_VENTA">;
+
+const NOMBRE_TIPO: Record<TipoConCuenta, string> = {
   PAGO_MOVIL: "Pago Móvil",
   TRANSFERENCIA_BANCARIA: "transferencia",
   ZELLE: "Zelle",
@@ -163,9 +175,19 @@ type CobroFormProps = {
   onCobrar: (datos: DatosPagoTaquilla) => void;
   onVolver?: () => void;
   textoVolver?: string;
+  /** Resumen corto en la barra de acción (p. ej. "2 boletos · asientos 3 y 4"). */
+  resumen?: React.ReactNode;
 };
 
-export function CobroTaquillaForm({ totalUsd, enviando, errorCampo, onCobrar, onVolver, textoVolver = "Atrás" }: CobroFormProps) {
+export function CobroTaquillaForm({
+  totalUsd,
+  enviando,
+  errorCampo,
+  onCobrar,
+  onVolver,
+  textoVolver = "Atrás",
+  resumen,
+}: CobroFormProps) {
   const { user } = useUser();
   const cooperativaId = user?.cooperativa_id;
   const supabase = useMemo(() => createClient(), []);
@@ -208,6 +230,8 @@ export function CobroTaquillaForm({ totalUsd, enviando, errorCampo, onCobrar, on
   }, [supabase, cooperativaId]);
 
   const efectivo = metodo === "EFECTIVO_VES" || metodo === "EFECTIVO_USD";
+  // Punto de venta: solo referencia del comprobante y fecha (sin cuenta, banco ni vuelto).
+  const puntoVenta = metodo === "PUNTO_DE_VENTA";
   const enUsd = metodo === "EFECTIVO_USD" || metodo === "ZELLE";
   const tipo: TipoMetodoPago = efectivo ? "EFECTIVO" : (metodo as TipoMetodoPago);
   const cuentasTipo = useMemo(() => cuentas.filter((c) => c.tipo === tipo), [cuentas, tipo]);
@@ -230,13 +254,15 @@ export function CobroTaquillaForm({ totalUsd, enviando, errorCampo, onCobrar, on
         ? "Escribe cuánto te entregó el pasajero."
         : `Faltan ${fmt(Math.abs(diferencia ?? 0))}. El total es ${fmt(esperado ?? 0)}.`
       : null,
-    cuenta: !efectivo && cuentasTipo.length > 1 && !cuentaElegida ? "Elige la cuenta que recibió el pago." : null,
+    cuenta: !efectivo && !puntoVenta && cuentasTipo.length > 1 && !cuentaElegida ? "Elige la cuenta que recibió el pago." : null,
     referencia: !efectivo && !refValida
       ? metodo === "ZELLE"
         ? "Escribe el código de confirmación de Zelle (mínimo 4 caracteres)."
-        : "Escribe la referencia completa: solo números, mínimo 4."
+        : puntoVenta
+          ? "Escribe la referencia del comprobante del punto: solo números, mínimo 4."
+          : "Escribe la referencia completa: solo números, mínimo 4."
       : null,
-    banco: !efectivo && metodo !== "ZELLE" && !banco ? "Elige el banco desde el que pagó el pasajero." : null,
+    banco: !efectivo && !puntoVenta && metodo !== "ZELLE" && !banco ? "Elige el banco desde el que pagó el pasajero." : null,
     fecha: !efectivo && !fechaValida ? "La fecha del pago debe estar entre hoy y los últimos 30 días." : null,
   };
   const hayErrores = Object.values(errores).some(Boolean);
@@ -276,12 +302,12 @@ export function CobroTaquillaForm({ totalUsd, enviando, errorCampo, onCobrar, on
     if (!tasa || hayErrores || enviando) return;
     onCobrar({
       metodoTipo: tipo,
-      metodoPagoId: efectivo ? null : cuentaElegida?.id ?? null,
+      metodoPagoId: efectivo || puntoVenta ? null : cuentaElegida?.id ?? null,
       moneda: efectivo ? (metodo === "EFECTIVO_USD" ? "USD" : "VES") : null,
       montoRecibido: efectivo ? recibido : null,
       referencia: efectivo ? null : refLimpia,
       fecha: efectivo ? null : fecha,
-      banco: efectivo || metodo === "ZELLE" ? null : banco,
+      banco: efectivo || puntoVenta || metodo === "ZELLE" ? null : banco,
     });
   };
 
@@ -300,7 +326,7 @@ export function CobroTaquillaForm({ totalUsd, enviando, errorCampo, onCobrar, on
         <p id={`${ids}-metodo`} className="text-sm font-medium text-foreground">
           ¿Cómo pagó?
         </p>
-        <GrupoOpciones etiqueta="¿Cómo pagó?" className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+        <GrupoOpciones etiqueta="¿Cómo pagó?" className="grid grid-cols-2 gap-2 sm:grid-cols-3">
           {METODOS.map(({ id, titulo, Icono }) => (
             <OpcionTile
               key={id}
@@ -361,41 +387,45 @@ export function CobroTaquillaForm({ totalUsd, enviando, errorCampo, onCobrar, on
         <div className="grid gap-4">
           {tasa && (
             <p className="text-sm text-muted-foreground">
-              Confirma que llegaron{" "}
+              {puntoVenta ? "Confirma que el punto de venta aprobó " : "Confirma que llegaron "}
               <strong className="font-semibold text-foreground">{metodo === "ZELLE" ? formatUsd(totalUsd) : formatBs(totalBs ?? 0)}</strong>.
             </p>
           )}
 
-          <div className="flex flex-col gap-2">
-            <Label htmlFor={`${ids}-cuenta`}>Cuenta que recibió el pago</Label>
-            {cuentasTipo.length === 0 ? (
-              <p id={`${ids}-cuenta`} className="text-sm text-muted-foreground">
-                {errorCuentas
-                  ? "No pudimos cargar las cuentas: el pago se registra sin cuenta."
-                  : `Sin cuentas de ${NOMBRE_TIPO[tipo as Exclude<TipoMetodoPago, "EFECTIVO">]} activas: se registra sin cuenta.`}
-              </p>
-            ) : (
-              <Select
-                value={cuentaElegida?.id ?? ""}
-                onValueChange={(v) => editar(setCuentaId)(v ?? "")}
-                items={Object.fromEntries(cuentasTipo.map((c) => [c.id, etiquetaCuenta(c)]))}
-              >
-                <SelectTrigger id={`${ids}-cuenta`} className="w-full" aria-invalid={mostrar("cuenta") ? true : undefined}>
-                  <SelectValue placeholder="Elige la cuenta" />
-                </SelectTrigger>
-                <SelectContent>
-                  {cuentasTipo.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>{etiquetaCuenta(c)}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-            {mostrar("cuenta") && <p className="text-sm text-destructive-text">{mostrar("cuenta")}</p>}
-          </div>
+          {!puntoVenta && (
+            <div className="flex flex-col gap-2">
+              <Label htmlFor={`${ids}-cuenta`}>Cuenta que recibió el pago</Label>
+              {cuentasTipo.length === 0 ? (
+                <p id={`${ids}-cuenta`} className="text-sm text-muted-foreground">
+                  {errorCuentas
+                    ? "No pudimos cargar las cuentas: el pago se registra sin cuenta."
+                    : `Sin cuentas de ${NOMBRE_TIPO[tipo as TipoConCuenta]} activas: se registra sin cuenta.`}
+                </p>
+              ) : (
+                <Select
+                  value={cuentaElegida?.id ?? ""}
+                  onValueChange={(v) => editar(setCuentaId)(v ?? "")}
+                  items={Object.fromEntries(cuentasTipo.map((c) => [c.id, etiquetaCuenta(c)]))}
+                >
+                  <SelectTrigger id={`${ids}-cuenta`} className="w-full" aria-invalid={mostrar("cuenta") ? true : undefined}>
+                    <SelectValue placeholder="Elige la cuenta" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {cuentasTipo.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>{etiquetaCuenta(c)}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+              {mostrar("cuenta") && <p className="text-sm text-destructive-text">{mostrar("cuenta")}</p>}
+            </div>
+          )}
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="flex flex-col gap-2">
-              <Label htmlFor={`${ids}-ref`}>{metodo === "ZELLE" ? "Código de confirmación" : "Número de referencia"}</Label>
+              <Label htmlFor={`${ids}-ref`}>
+                {metodo === "ZELLE" ? "Código de confirmación" : puntoVenta ? "Referencia del comprobante" : "Número de referencia"}
+              </Label>
               <Input
                 id={`${ids}-ref`}
                 ref={referenciaRef}
@@ -426,7 +456,7 @@ export function CobroTaquillaForm({ totalUsd, enviando, errorCampo, onCobrar, on
             </div>
           </div>
 
-          {metodo !== "ZELLE" && (
+          {metodo !== "ZELLE" && !puntoVenta && (
             <div className="flex flex-col gap-2">
               <Label htmlFor={`${ids}-banco`}>Banco del pasajero</Label>
               <Select value={banco} onValueChange={(v) => editar(setBanco)(v ?? "")}>
@@ -447,7 +477,8 @@ export function CobroTaquillaForm({ totalUsd, enviando, errorCampo, onCobrar, on
 
       {errorActivo && errorActivo.campo === null && <AvisoError>{errorActivo.mensaje}</AvisoError>}
 
-      <div className="flex flex-col-reverse gap-2 border-t border-border pt-4 sm:flex-row sm:justify-between">
+      {/* Barra fija: "Cobrar" siempre a la vista, con el total en el botón. */}
+      <BarraAccion resumen={resumen}>
         {onVolver ? (
           <Button type="button" variant="outline" onClick={onVolver} disabled={enviando}>
             {textoVolver}
@@ -457,7 +488,7 @@ export function CobroTaquillaForm({ totalUsd, enviando, errorCampo, onCobrar, on
           {enviando && <Spinner size="sm" />}
           {enviando ? "Cobrando…" : textoCobrar}
         </Button>
-      </div>
+      </BarraAccion>
     </form>
   );
 }
@@ -647,13 +678,13 @@ function TicketsEmitidos({
         ))}
       </div>
 
-      <div className="flex flex-col-reverse gap-2 border-t border-border pt-4 sm:flex-row sm:justify-end">
+      <BarraAccion>
         {acciones}
         <Button onClick={() => void imprimir()} disabled={printing} aria-busy={printing || undefined} autoFocus>
           {printing ? <Spinner size="sm" /> : <Printer aria-hidden />}
           {operacion.impresion.length === 1 ? "Imprimir boleto" : `Imprimir ${operacion.impresion.length} boletos`}
         </Button>
-      </div>
+      </BarraAccion>
     </div>
   );
 }
@@ -668,15 +699,42 @@ interface VentaFlowProps {
 }
 
 /** "Caracas → Valencia" */
-function rutaDeViaje(v: ViajeParaVenta) {
-  return `${formatCiudad(v.ruta.ciudad_origen)} → ${formatCiudad(v.ruta.ciudad_destino)}`;
+function etiquetaRuta(r: { ciudad_origen: string; ciudad_destino: string }) {
+  return `${formatCiudad(r.ciudad_origen)} → ${formatCiudad(r.ciudad_destino)}`;
 }
 
-/** Pie de un paso: salida `outline` a la izquierda, acción a la derecha (§2.3). */
-function PiePaso({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="flex flex-col-reverse gap-2 border-t border-border pt-4 sm:flex-row sm:justify-between">{children}</div>
-  );
+function rutaDeViaje(v: ViajeParaVenta) {
+  return etiquetaRuta(v.ruta);
+}
+
+/** Columnas de un viaje a la venta (con su ruta y el chofer para la tarjeta). */
+const COLUMNAS_VIAJE = `
+  id, ruta_id, fecha_hora_salida, fecha_hora_llegada_est, asientos_totales,
+  asientos_disponibles, estado, numero_unidad, nombre_chofer,
+  ruta:rutas(ciudad_origen, estado_origen, ciudad_destino, estado_destino, precio_pasaje)
+`;
+
+/** El servidor acepta ventas hasta 30 minutos después de la hora de salida. */
+const MARGEN_VENTA_MS = 30 * 60 * 1000;
+
+/** Tope de salidas de un día (con salidas recurrentes puede haber muchas; PostgREST corta en 1000 sin avisar). */
+const LIMITE_VIAJES_DIA = 200;
+
+/** Primer instante (ISO) en el que todavía se puede vender una salida. */
+function inicioVenta() {
+  return new Date(Date.now() - MARGEN_VENTA_MS).toISOString();
+}
+
+/** Opción del filtro de ruta: rutas con las mismas ciudades se agrupan bajo una etiqueta. */
+type OpcionRuta = { etiqueta: string; ids: string[] };
+
+const TODAS_LAS_RUTAS = "todas";
+
+/** "2 boletos · asientos 3 y 4" */
+function textoAsientos(asientos: string[]) {
+  return `${asientos.length === 1 ? "1 boleto" : `${asientos.length} boletos`} · ${
+    asientos.length === 1 ? "asiento" : "asientos"
+  } ${listaAsientos(asientos)}`;
 }
 
 export function VentaFlow({ isOpen, onClose, viajeIdInicial }: VentaFlowProps) {
@@ -698,7 +756,19 @@ export function VentaFlow({ isOpen, onClose, viajeIdInicial }: VentaFlowProps) {
   const [viajes, setViajes] = useState<ViajeParaVenta[]>([]);
   const [loadingViajes, setLoadingViajes] = useState(true);
   const [errorViajes, setErrorViajes] = useState<string | null>(null);
-  const [filtroRuta, setFiltroRuta] = useState<string>("todas");
+  /** Hay más salidas ese día que las listadas (tope `LIMITE_VIAJES_DIA`). */
+  const [hayMasViajes, setHayMasViajes] = useState(false);
+  /** Día de salida ('YYYY-MM-DD' en Venezuela); null hasta decidir el inicial al abrir. */
+  const [dia, setDia] = useState<string | null>(null);
+  /** Si el día elegido no tiene salidas: el próximo día que sí tiene (para ofrecer el salto). */
+  const [proximoDia, setProximoDia] = useState<string | null>(null);
+  const [rutas, setRutas] = useState<OpcionRuta[]>([]);
+  const [filtroRuta, setFiltroRuta] = useState<string>(TODAS_LAS_RUTAS);
+  // Última carga de viajes: una respuesta vieja (otro día u otra ruta) no pisa la nueva.
+  const cargaViajesRef = useRef(0);
+  // Resolución vigente del día inicial: al cerrar se invalida, así una respuesta tardía
+  // no deja un día puesto para la próxima apertura (que debe volver a resolverlo).
+  const resolucionDiaRef = useRef(0);
 
   const [idemKey, setIdemKey] = useState(nuevaClave);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -727,58 +797,154 @@ export function VentaFlow({ isOpen, onClose, viajeIdInicial }: VentaFlowProps) {
     setStep(paso);
   };
 
-  const fetchViajes = useCallback(async () => {
-    if (!cooperativaId) return;
-    setLoadingViajes(true);
-    setErrorViajes(null);
-    try {
-      const { data, error } = await supabase
-        .from("viajes")
-        .select(`
-          id, fecha_hora_salida, fecha_hora_llegada_est, asientos_totales,
-          asientos_disponibles, estado, numero_unidad,
-          ruta:rutas(ciudad_origen, estado_origen, ciudad_destino, estado_destino, precio_pasaje)
-        `)
-        .eq("cooperativa_id", cooperativaId)
-        .eq("estado", "PROGRAMADO")
-        // El servidor acepta ventas hasta 30 minutos después de la hora de salida.
-        .gt("fecha_hora_salida", new Date(Date.now() - 30 * 60 * 1000).toISOString())
-        .order("fecha_hora_salida", { ascending: true })
-        // Con salidas recurrentes puede haber miles programadas: se listan las 300 más
-        // próximas (sin tope, PostgREST corta en 1000 sin avisar).
-        .limit(300);
+  /** Viajes a la venta de la cooperativa (PROGRAMADO), opcionalmente de unas rutas. */
+  const consultaViajes = useCallback(
+    (columnas: string, idsRuta: string[] | null) => {
+      let q = supabase.from("viajes").select(columnas).eq("cooperativa_id", cooperativaId ?? "").eq("estado", "PROGRAMADO");
+      if (idsRuta) q = q.in("ruta_id", idsRuta);
+      return q;
+    },
+    [supabase, cooperativaId]
+  );
 
-      if (error) throw error;
-      const lista = (data as unknown) as ViajeParaVenta[];
-      setViajes(lista);
+  const idsRuta = useMemo(
+    () => (filtroRuta === TODAS_LAS_RUTAS ? null : (rutas.find((r) => r.etiqueta === filtroRuta)?.ids ?? null)),
+    [filtroRuta, rutas]
+  );
+
+  /**
+   * Día inicial al abrir: el del viaje pedido (desde el embarque) o, si no, el de la
+   * próxima salida a la venta (hoy si aún quedan salidas; si no, el próximo día que tenga).
+   */
+  const resolverDiaInicial = useCallback(async () => {
+    if (!cooperativaId) return;
+    const resolucion = ++resolucionDiaRef.current;
+    const vigente = () => resolucion === resolucionDiaRef.current;
+    try {
       if (viajeIdInicial && viajeInicialUsado.current !== viajeIdInicial) {
         viajeInicialUsado.current = viajeIdInicial;
-        const inicial = lista.find((v) => v.id === viajeIdInicial);
+        const { data, error } = await consultaViajes(COLUMNAS_VIAJE, null)
+          .eq("id", viajeIdInicial)
+          .gt("fecha_hora_salida", inicioVenta())
+          .maybeSingle();
+        if (!vigente()) return;
+        if (error) throw error;
+        const inicial = data as unknown as ViajeParaVenta | null;
         if (inicial) {
           setSelectedViaje(inicial);
           setViajeMarcado(inicial.id);
           setStep("asiento");
+          setDia(fechaVE(inicial.fecha_hora_salida));
+          return;
         }
       }
-    } catch (error) {
-      setErrorViajes(humanizeError(error, "cargar los viajes disponibles"));
-    } finally {
-      setLoadingViajes(false);
+      const { data, error } = await consultaViajes("fecha_hora_salida", null)
+        .gt("fecha_hora_salida", inicioVenta())
+        .order("fecha_hora_salida", { ascending: true })
+        .limit(1);
+      if (!vigente()) return;
+      if (error) throw error;
+      const primera = (data as unknown as { fecha_hora_salida: string }[] | null)?.[0];
+      setDia(primera ? fechaVE(primera.fecha_hora_salida) : hoyVE());
+    } catch {
+      // Sin la próxima salida se muestra hoy; si la red falla, la carga del día lo dirá.
+      if (vigente()) setDia(hoyVE());
     }
-  }, [supabase, cooperativaId, viajeIdInicial]);
+  }, [cooperativaId, consultaViajes, viajeIdInicial]);
+
+  /** Rutas para el filtro (todas las de la cooperativa, agrupadas por ciudades). */
+  const fetchRutas = useCallback(async () => {
+    if (!cooperativaId) return;
+    const { data, error } = await supabase
+      .from("rutas")
+      .select("id, ciudad_origen, ciudad_destino")
+      .eq("cooperativa_id", cooperativaId);
+    // Sin rutas el filtro queda en "Todas las rutas": la venta sigue funcionando.
+    if (error || !data) return;
+    const grupos = new Map<string, string[]>();
+    for (const r of data as { id: string; ciudad_origen: string; ciudad_destino: string }[]) {
+      const etiqueta = etiquetaRuta(r);
+      grupos.set(etiqueta, [...(grupos.get(etiqueta) ?? []), r.id]);
+    }
+    setRutas(
+      Array.from(grupos, ([etiqueta, ids]) => ({ etiqueta, ids })).sort((a, b) => a.etiqueta.localeCompare(b.etiqueta, "es"))
+    );
+  }, [supabase, cooperativaId]);
+
+  /** Salidas a la venta del día elegido (y de la ruta), consultadas al servidor. */
+  const fetchViajes = useCallback(async () => {
+    if (!cooperativaId || !dia) return;
+    const carga = ++cargaViajesRef.current;
+    setLoadingViajes(true);
+    setErrorViajes(null);
+    try {
+      const { desde, hasta } = rangoDiaVE(dia);
+      const minimo = inicioVenta();
+      // Hoy: solo las salidas que todavía se pueden vender.
+      const inicio = desde > minimo ? desde : minimo;
+      let lista: ViajeParaVenta[] = [];
+      if (inicio <= hasta) {
+        const { data, error } = await consultaViajes(COLUMNAS_VIAJE, idsRuta)
+          .gte("fecha_hora_salida", inicio)
+          .lte("fecha_hora_salida", hasta)
+          .order("fecha_hora_salida", { ascending: true })
+          .limit(LIMITE_VIAJES_DIA + 1);
+        if (error) throw error;
+        lista = (data ?? []) as unknown as ViajeParaVenta[];
+      }
+      // Día sin salidas: se busca el próximo que tenga, para ofrecer ir a él.
+      let siguiente: string | null = null;
+      if (lista.length === 0) {
+        const { data, error } = await consultaViajes("fecha_hora_salida", idsRuta)
+          .gt("fecha_hora_salida", hasta > minimo ? hasta : minimo)
+          .order("fecha_hora_salida", { ascending: true })
+          .limit(1);
+        if (error) throw error;
+        const primera = (data as unknown as { fecha_hora_salida: string }[] | null)?.[0];
+        siguiente = primera ? fechaVE(primera.fecha_hora_salida) : null;
+      }
+      if (carga !== cargaViajesRef.current) return;
+      setHayMasViajes(lista.length > LIMITE_VIAJES_DIA);
+      setViajes(lista.slice(0, LIMITE_VIAJES_DIA));
+      setProximoDia(siguiente);
+    } catch (error) {
+      if (carga === cargaViajesRef.current) setErrorViajes(humanizeError(error, "cargar los viajes disponibles"));
+    } finally {
+      if (carga === cargaViajesRef.current) setLoadingViajes(false);
+    }
+  }, [cooperativaId, dia, idsRuta, consultaViajes]);
+
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    if (isOpen && dia === null) void resolverDiaInicial();
+  }, [isOpen, dia, resolverDiaInicial]);
 
   useEffect(() => {
-    if (isOpen && step === "viaje") {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      void fetchViajes();
-    }
-  }, [isOpen, step, fetchViajes]);
+    if (isOpen && rutas.length === 0) void fetchRutas();
+  }, [isOpen, rutas.length, fetchRutas]);
+
+  // Al volver al paso 1 se recarga: los asientos libres cambian con cada venta.
+  useEffect(() => {
+    if (isOpen && step === "viaje" && dia) void fetchViajes();
+  }, [isOpen, step, dia, fetchViajes]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const handleOpenChange = (open: boolean) => {
     if (open || enviandoRef.current) return;
     onClose();
-    // Reinicia después de la animación de cierre.
-    setTimeout(reiniciar, 300);
+    // Reinicia después de la animación de cierre. El día y la ruta solo se olvidan al
+    // cerrar: "Vender otro" los conserva (la cola suele viajar el mismo día).
+    setTimeout(() => {
+      // Las cargas en curso (día inicial, viajes) ya no aplican: se descartan al llegar.
+      resolucionDiaRef.current++;
+      cargaViajesRef.current++;
+      reiniciar();
+      setDia(null);
+      setProximoDia(null);
+      setFiltroRuta(TODAS_LAS_RUTAS);
+      setViajes([]);
+      setLoadingViajes(true);
+    }, 300);
   };
 
   const continuarConViaje = () => {
@@ -883,21 +1049,23 @@ export function VentaFlow({ isOpen, onClose, viajeIdInicial }: VentaFlowProps) {
     }
   };
 
-  // Rutas únicas para el filtro
-  const rutasUnicas = useMemo(() => Array.from(new Set(viajes.map(rutaDeViaje))), [viajes]);
-
-  const viajesFiltrados = useMemo(() => {
-    if (filtroRuta === "todas") return viajes;
-    return viajes.filter((v) => rutaDeViaje(v) === filtroRuta);
-  }, [viajes, filtroRuta]);
+  const cambiarDia = (nuevo: string) => {
+    if (nuevo === dia) return;
+    setAviso(null);
+    setDia(nuevo);
+  };
 
   const rutaTexto = selectedViaje ? rutaDeViaje(selectedViaje) : "";
   const pasoActual = PASOS.findIndex((p) => p.id === step);
   const totalUsd = selectedViaje ? Number(selectedViaje.ruta.precio_pasaje) * asientos.length : 0;
+  const viajeEnLista = viajes.find((v) => v.id === viajeMarcado) ?? null;
+  const cargandoDia = loadingViajes || dia === null;
+  const hayFiltroRuta = filtroRuta !== TODAS_LAS_RUTAS;
 
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
-      <DialogContent tamano="flujo">
+      {/* El diálogo desplaza; `scroll-pb` evita que el foco quede bajo la barra fija. */}
+      <DialogContent tamano="flujo" className="scroll-pb-32">
         <DialogHeader>
           <DialogTitle>Vender boletos</DialogTitle>
           <DialogDescription>
@@ -922,78 +1090,109 @@ export function VentaFlow({ isOpen, onClose, viajeIdInicial }: VentaFlowProps) {
 
         {step === "viaje" && (
           <div className="flex flex-col gap-4">
-            <div className="flex w-full flex-col gap-2 sm:w-72">
-              <Label htmlFor={`${ids}-ruta`}>Ruta</Label>
-              <Select
-                value={filtroRuta}
-                onValueChange={(val) => setFiltroRuta(val ?? "todas")}
-                items={{ todas: "Todas las rutas", ...Object.fromEntries(rutasUnicas.map((r) => [r, r])) }}
-              >
-                <SelectTrigger id={`${ids}-ruta`} className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="todas">Todas las rutas</SelectItem>
-                  {rutasUnicas.map((ruta) => (
-                    <SelectItem key={ruta} value={ruta}>{ruta}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            {/* Filtros: día de salida (en el servidor) y ruta; se combinan. */}
+            <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-end">
+              <SelectorDia dia={dia} onCambio={cambiarDia} disabled={dia === null} />
+              <div className="flex w-full flex-col gap-2 sm:w-64">
+                <Label htmlFor={`${ids}-ruta`}>Ruta</Label>
+                <Select
+                  value={filtroRuta}
+                  onValueChange={(val) => setFiltroRuta(val ?? TODAS_LAS_RUTAS)}
+                  items={{
+                    [TODAS_LAS_RUTAS]: "Todas las rutas",
+                    ...Object.fromEntries(rutas.map((r) => [r.etiqueta, r.etiqueta])),
+                  }}
+                >
+                  <SelectTrigger id={`${ids}-ruta`} className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={TODAS_LAS_RUTAS}>Todas las rutas</SelectItem>
+                    {rutas.map((r) => (
+                      <SelectItem key={r.etiqueta} value={r.etiqueta}>{r.etiqueta}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
-            {loadingViajes ? (
+            {cargandoDia ? (
               <div className="grid gap-2" role="status" aria-label="Cargando los viajes">
                 {[0, 1, 2].map((i) => (
-                  <Skeleton key={i} className="h-24 w-full rounded-md" />
+                  <Skeleton key={i} className="h-28 w-full rounded-md" />
                 ))}
               </div>
             ) : errorViajes ? (
               <ErrorState compacto titulo="No pudimos cargar los viajes" descripcion={errorViajes} onReintentar={fetchViajes} />
-            ) : viajesFiltrados.length === 0 ? (
-              <EmptyState compacto icon={CalendarBlank} title="No hay viajes a la venta" description="Programa las salidas en Viajes." />
+            ) : viajes.length === 0 ? (
+              <EmptyState
+                compacto
+                icon={CalendarBlank}
+                title={
+                  dia === hoyVE()
+                    ? `No quedan salidas a la venta hoy${hayFiltroRuta ? " en esta ruta" : ""}`
+                    : `No hay salidas ${diaEnFrase(dia ?? hoyVE())}${hayFiltroRuta ? " en esta ruta" : ""}`
+                }
+                description={
+                  proximoDia
+                    ? `La próxima salida es ${diaEnFrase(proximoDia)}.`
+                    : hayFiltroRuta
+                      ? "No hay más salidas programadas en esta ruta. Prueba con otra."
+                      : "Programa las salidas en Viajes."
+                }
+                action={
+                  proximoDia && (
+                    <Button variant="outline" onClick={() => cambiarDia(proximoDia)}>
+                      Ver {diaEnFrase(proximoDia)}
+                      <ArrowRight aria-hidden />
+                    </Button>
+                  )
+                }
+              />
             ) : (
-              <GrupoOpciones etiqueta="Viaje" className="grid gap-2">
-                {viajesFiltrados.map((viaje) => {
-                  const sinAsientos = viaje.asientos_disponibles <= 0;
-                  const pocosAsientos = viaje.asientos_disponibles <= 5 && !sinAsientos;
-                  const sinPrecio = !(Number(viaje.ruta.precio_pasaje) > 0);
-                  return (
-                    <OpcionTile
+              <div className="flex flex-col gap-2">
+                <p className="text-sm text-muted-foreground" aria-live="polite">
+                  <span className="font-medium text-foreground">{nombreDia(dia ?? hoyVE())}</span>
+                  {" · "}
+                  {viajes.length === 1 ? "1 salida" : `${viajes.length} salidas`}
+                  {hayMasViajes && ` (las primeras ${LIMITE_VIAJES_DIA}: filtra por ruta para ver otras)`}
+                </p>
+                <GrupoOpciones etiqueta="Viaje" className="grid gap-2">
+                  {viajes.map((viaje) => (
+                    <ViajeOpcion
                       key={viaje.id}
+                      viaje={viaje}
                       seleccionado={viajeMarcado === viaje.id}
                       onSelect={() => setViajeMarcado(viaje.id)}
-                      disabled={sinAsientos || sinPrecio}
-                      titulo={<span className="text-base">{rutaDeViaje(viaje)}</span>}
-                      detalle={
-                        <span className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-                          <span className="tabular-nums">{formatSalidaVenta(viaje.fecha_hora_salida)}</span>
-                          {viaje.numero_unidad && <span>Unidad {viaje.numero_unidad}</span>}
-                          <span className="tabular-nums">
-                            {viaje.asientos_disponibles} libres de {viaje.asientos_totales}
-                          </span>
-                          {sinAsientos && <TonoBadge tono="peligro">Agotado</TonoBadge>}
-                          {pocosAsientos && <TonoBadge tono="pendiente">Quedan {viaje.asientos_disponibles}</TonoBadge>}
-                          {sinPrecio ? (
-                            <TonoBadge tono="peligro">Sin precio</TonoBadge>
-                          ) : (
-                            <Monto usd={Number(viaje.ruta.precio_pasaje)} size="sm" className="text-foreground" />
-                          )}
-                        </span>
-                      }
                     />
-                  );
-                })}
-              </GrupoOpciones>
+                  ))}
+                </GrupoOpciones>
+              </div>
             )}
 
-            <PiePaso>
+            <BarraAccion
+              resumen={
+                viajeEnLista ? (
+                  <span className="flex flex-wrap items-center gap-x-2">
+                    <span className="font-medium text-foreground tabular-nums">
+                      {formatHoraVE(viajeEnLista.fecha_hora_salida)} · {rutaDeViaje(viajeEnLista)}
+                    </span>
+                    <span aria-hidden>·</span>
+                    <TotalCorto usd={Number(viajeEnLista.ruta.precio_pasaje)} />
+                    <span>por pasaje</span>
+                  </span>
+                ) : (
+                  "Elige la salida del pasajero."
+                )
+              }
+            >
               <Button variant="outline" onClick={() => handleOpenChange(false)}>
                 Cancelar
               </Button>
-              <Button onClick={continuarConViaje} disabled={!viajes.some((v) => v.id === viajeMarcado)}>
+              <Button onClick={continuarConViaje} disabled={!viajeEnLista}>
                 Continuar
               </Button>
-            </PiePaso>
+            </BarraAccion>
           </div>
         )}
 
@@ -1003,6 +1202,7 @@ export function VentaFlow({ isOpen, onClose, viajeIdInicial }: VentaFlowProps) {
             viajeId={selectedViaje.id}
             totalAsientos={selectedViaje.asientos_totales}
             seleccionInicial={asientos}
+            precioUsd={Number(selectedViaje.ruta.precio_pasaje)}
             onConfirm={handleConfirmAsientos}
             onCancel={() => irA("viaje")}
           />
@@ -1059,29 +1259,32 @@ export function VentaFlow({ isOpen, onClose, viajeIdInicial }: VentaFlowProps) {
                 </fieldset>
               );
             })}
-            <PiePaso>
+            <BarraAccion
+              resumen={
+                <span className="flex flex-wrap items-center gap-x-2">
+                  <span className="font-medium text-foreground">{textoAsientos(asientos)}</span>
+                  <span aria-hidden>·</span>
+                  <TotalCorto usd={totalUsd} />
+                </span>
+              }
+            >
               <Button type="button" variant="outline" onClick={() => irA("asiento")}>
                 Atrás
               </Button>
               <Button type="submit">Continuar</Button>
-            </PiePaso>
+            </BarraAccion>
           </form>
         )}
 
         {step === "pago" && selectedViaje && (
-          <div className="flex flex-col gap-4">
-            <p className="text-sm text-muted-foreground">
-              {asientos.length === 1 ? "1 boleto" : `${asientos.length} boletos`} · {asientos.length === 1 ? "asiento" : "asientos"}{" "}
-              {listaAsientos(asientos)}
-            </p>
-            <CobroTaquillaForm
-              totalUsd={totalUsd}
-              enviando={isSubmitting}
-              errorCampo={errorCobro}
-              onCobrar={(d) => void handleCobrar(d)}
-              onVolver={() => irA("pasajero")}
-            />
-          </div>
+          <CobroTaquillaForm
+            totalUsd={totalUsd}
+            enviando={isSubmitting}
+            errorCampo={errorCobro}
+            onCobrar={(d) => void handleCobrar(d)}
+            onVolver={() => irA("pasajero")}
+            resumen={<span className="font-medium text-foreground">{textoAsientos(asientos)}</span>}
+          />
         )}
 
         {step === "confirmacion" && operacion && (

@@ -25,6 +25,7 @@ import * as Sharing from 'expo-sharing';
 import * as Haptics from 'expo-haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { QRCodeViewer } from '@/src/components/QRCodeViewer';
+import { LogoCooperativa } from '@/src/components/LogoCooperativa';
 import { StarRating } from '@/src/components/StarRating';
 import {
   BotonesTasaCambiada,
@@ -114,7 +115,7 @@ const SELECT_BOLETO = `id, codigo_boleto, asiento, precio, estado, reserva_expir
   qr_embarque_data, pasajero_nombre, pasajero_cedula, pasajero_telefono, created_at,
   viajes ( fecha_hora_salida, numero_unidad, nombre_chofer,
            rutas ( ciudad_origen, ciudad_destino, duracion_estimada_min ) ),
-  cooperativas ( nombre ),
+  cooperativas ( nombre, logo_url ),
   profiles!comprador_id ( nombre_completo, cedula_rif ),
   pago:pagos!boletos_pago_id_fkey ( id, estado_verificacion, tipo_pago, motivo_rechazo,
     numero_referencia, banco_emisor, monto, monto_bs, moneda, monto_declarado,
@@ -780,12 +781,22 @@ export default function DetalleBoletoScreen() {
     <View style={s.pase}>
       <View style={s.paseCabecera}>
         <Atmosfera variante="sol" style={StyleSheet.absoluteFill} />
-        <Text variant="caption" weight="medium" color="muted">
-          Cooperativa
-        </Text>
-        <Text variant="subheading" numberOfLines={2}>
-          {boleto.cooperativas?.nombre ?? 'Cooperativa'}
-        </Text>
+        <View style={s.paseCooperativa}>
+          <LogoCooperativa
+            nombre={boleto.cooperativas?.nombre}
+            logoUrl={boleto.cooperativas?.logo_url}
+            size="md"
+            decorativo
+          />
+          <View style={s.paseCooperativaNombre}>
+            <Text variant="caption" weight="medium" color="muted">
+              Cooperativa
+            </Text>
+            <Text variant="subheading" numberOfLines={2}>
+              {boleto.cooperativas?.nombre ?? 'Cooperativa'}
+            </Text>
+          </View>
+        </View>
         <View style={s.paseRuta}>
           <RouteSummary
             origen={ruta?.ciudad_origen}
@@ -1424,6 +1435,15 @@ const s = StyleSheet.create({
   paseCabecera: {
     paddingHorizontal: Spacing.xl,
     paddingVertical: Spacing.xl,
+    gap: Spacing.xs / 2,
+  },
+  paseCooperativa: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+  },
+  paseCooperativaNombre: {
+    flex: 1,
     gap: Spacing.xs / 2,
   },
   paseRuta: {

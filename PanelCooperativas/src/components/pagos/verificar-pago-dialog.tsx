@@ -6,6 +6,8 @@
 // aparecer en la cuenta de la cooperativa frente a lo que el cliente declaró,
 // y permite aprobar o rechazar (con motivo que se le envía al cliente). Al
 // rechazar un pago de boletos, sus asientos quedan libres.
+// Aprobar y rechazar pasan por una confirmación (ConfirmarPagoDialog) que
+// resume el pago y dice qué va a pasar; el motivo del rechazo se pide ahí.
 //
 // `embebido`: se dibuja dentro de otro diálogo (sin Dialog propio).
 
@@ -21,8 +23,6 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Spinner } from "@/components/ui/spinner";
-import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AvisoError } from "@/components/aviso-error";
 import { ErrorState } from "@/components/error-state";
@@ -32,16 +32,17 @@ import { formatCedula, formatTelefono } from "@/lib/ve";
 import { Monto } from "@/components/monto";
 import { StatusBadge } from "@/components/status-badge";
 import { requireOnline } from "@/components/connectivity-banner";
-import { fechaTasaCorta, formatBs, formatNumeroVE, formatUsd, type TasaRef } from "@/lib/dinero";
+import { fechaTasaCorta, formatNumeroVE, formatUsd, type TasaRef } from "@/lib/dinero";
 import { humanizeError, MSG } from "@/lib/errores";
 import { cn } from "@/lib/utils";
-import {
-  conceptoDePago,
-  formatSalidaCorta,
-  type PagadorRol,
-  type PagoPorVerificar,
-} from "@/lib/types/pagos";
+import { conceptoDePago, formatSalidaCorta, type PagoPorVerificar } from "@/lib/types/pagos";
 import { aprobarPago, obtenerPago, rechazarPago } from "@/app/cooperativas/(panel)/pagos/actions";
+import {
+  ConfirmarPagoDialog,
+  type AccionPago,
+  type ResultadoAccionPago,
+} from "@/components/pagos/confirmar-pago-dialog";
+import { cuentaDestino, formatEnMoneda, ROL_PAGADOR } from "@/components/pagos/formato-pago";
 
 // `conceptoDePago` vive en lib/types/pagos (se puede usar en Server Components);
 // se re-exporta aquí por comodidad para componentes de cliente.
@@ -60,42 +61,6 @@ export type VerificarPagoDialogProps = {
   onResuelto: (r: { aprobado: boolean }) => void;
   embebido?: boolean;
 };
-
-const MOTIVOS_SUGERIDOS = [
-  "La referencia no aparece en nuestra cuenta",
-  "El monto recibido no coincide",
-  "El pago llegó a otra cuenta",
-  "El capture no corresponde al pago",
-];
-
-const ROLES: Record<PagadorRol, string> = {
-  PASAJERO: "Pasajero",
-  REMITENTE: "Remitente",
-  DESTINATARIO: "Destinatario",
-  OTRO: "Cliente",
-};
-
-function formatEnMoneda(monto: number, moneda: "VES" | "USD") {
-  return moneda === "USD" ? formatUsd(monto) : formatBs(monto);
-}
-
-/** "Pago Móvil a Banesco ••••4567 (Transportes C.A.)" / "Zelle a pagos@coop.com" */
-function cuentaDestino(p: PagoPorVerificar): string {
-  const titular = p.cuenta_titular ? ` (${p.cuenta_titular})` : "";
-  const final = p.cuenta_final ? ` ••••${p.cuenta_final}` : "";
-  switch (p.metodo_tipo) {
-    case "ZELLE":
-      return `Zelle a ${p.cuenta_email_zelle ?? "la cuenta de la cooperativa"}${titular}`;
-    case "PAGO_MOVIL":
-      return `Pago Móvil a ${p.cuenta_banco ?? "la cooperativa"}${final}${titular}`;
-    case "TRANSFERENCIA_BANCARIA":
-      return `Transferencia a ${p.cuenta_banco ?? "la cooperativa"}${final}${titular}`;
-    case "EFECTIVO":
-      return "Efectivo en taquilla";
-    default:
-      return "Forma de pago no indicada";
-  }
-}
 
 /** Comparación entre lo esperado y lo declarado por el cliente. */
 function Comparacion({ pago }: { pago: PagoPorVerificar }) {
@@ -170,17 +135,16 @@ export function VerificarPagoDialog({
   // Momento de la última carga (para "el viaje ya salió" sin leer el reloj durante el render).
   const [cargadoAt, setCargadoAt] = useState(0);
   const [errorCarga, setErrorCarga] = useState<string | null>(null);
-  const [rechazando, setRechazando] = useState(false);
-  const [motivo, setMotivo] = useState("");
-  const [errorMotivo, setErrorMotivo] = useState<string | null>(null);
-  const [enviando, setEnviando] = useState<"aprobar" | "rechazar" | null>(null);
-  // Error de aprobar/rechazar/copiar: se lee dentro del diálogo (§2.3), nunca como toast.
+  // Confirmación abierta (aprobar o rechazar); null = ninguna.
+  const [confirmando, setConfirmando] = useState<AccionPago | null>(null);
+  const [enviando, setEnviando] = useState<AccionPago | null>(null);
+  // Error que deja el pago en otro estado (ya resuelto, boletos vencidos) o al copiar:
+  // se lee dentro del diálogo (§2.3), nunca como toast. Los demás errores se leen en la confirmación.
   const [errorAccion, setErrorAccion] = useState<string | null>(null);
   const enviandoRef = useRef(false);
   const aprobarRef = useRef<HTMLButtonElement>(null);
-  const motivoRef = useRef<HTMLTextAreaElement>(null);
-  const idMotivo = useId();
-  const idErrorMotivo = useId();
+  const rechazarRef = useRef<HTMLButtonElement>(null);
+  const idTitulo = useId();
 
   // Solo la última petición actualiza el estado (evita respuestas cruzadas al cambiar de pago).
   const peticionRef = useRef(0);
@@ -210,9 +174,7 @@ export function VerificarPagoDialog({
     if (!open || !pagoId) return;
     const reiniciarYCargar = async () => {
       setPago(null);
-      setRechazando(false);
-      setMotivo("");
-      setErrorMotivo(null);
+      setConfirmando(null);
       setErrorAccion(null);
       await cargar();
     };
@@ -225,65 +187,65 @@ export function VerificarPagoDialog({
 
   const pendiente = pago?.estado_verificacion === "PENDIENTE";
   const puedeAprobar = pendiente && !pago?.recurso_vencido;
+  const viajeSalio =
+    pago?.tipo_recurso === "boleto" && !!pago.viaje_salida && new Date(pago.viaje_salida).getTime() < cargadoAt;
 
-  // Foco en "Aprobar pago" cuando el pago termina de cargar.
+  // Foco al terminar de cargar: "Aprobar pago…" (Enter abre la confirmación y otro Enter aprueba).
+  // Si ya no se puede aprobar (boletos vencidos, envío cerrado), en "Rechazar…": su confirmación
+  // abre con el foco en "Cancelar", así que Enter nunca rechaza por accidente.
+  // Al cerrar una confirmación el foco vuelve al botón que la abrió (o a "Rechazar…", ver `focoAlCerrar`).
   useEffect(() => {
-    if (open && puedeAprobar && !rechazando) aprobarRef.current?.focus();
-  }, [open, puedeAprobar, rechazando]);
+    if (!open || !pendiente) return;
+    (puedeAprobar ? aprobarRef : rechazarRef).current?.focus();
+  }, [open, pendiente, puedeAprobar]);
 
   const cerrar = useCallback(() => {
     if (enviandoRef.current) return;
     onOpenChange(false);
   }, [onOpenChange]);
 
-  const aprobar = async () => {
+  const pedirConfirmacion = (accion: AccionPago) => {
     if (!pago || enviandoRef.current) return;
-    enviandoRef.current = true;
+    if (accion === "aprobar" && !puedeAprobar) return;
     setErrorAccion(null);
-    setEnviando("aprobar");
-    try {
-      const res = await requireOnline(() => aprobarPago(pago.pago_id))();
-      if (res.success) {
-        if (res.data.ya_procesado) {
-          avisarInfo("Este pago ya estaba aprobado.");
-        } else {
-          avisarExito(
-            pago.tipo_recurso === "encomienda"
-              ? "Pago aprobado. El envío del cliente continúa."
-              : "Pago aprobado. El cliente ya puede usar su boleto."
-          );
-        }
-        enviandoRef.current = false;
-        onResuelto({ aprobado: true });
-        onOpenChange(false);
-        return;
-      }
-      setErrorAccion(res.error);
-      if (res.codigo === "EB_PAGO_YA_RESUELTO" || res.codigo === "EB_BOLETOS_NO_ACTIVABLES") {
-        await cargar();
-        if (res.codigo === "EB_BOLETOS_NO_ACTIVABLES") setRechazando(true);
-      }
-    } catch (err) {
-      setErrorAccion(mensajeExcepcion(err, "aprobar el pago"));
-    } finally {
-      enviandoRef.current = false;
-      setEnviando(null);
-    }
+    setConfirmando(accion);
   };
 
-  const rechazar = async () => {
-    if (!pago || enviandoRef.current) return;
-    const texto = motivo.trim();
-    if (texto.length < 5) {
-      setErrorMotivo("Escribe el motivo del rechazo (mínimo 5 caracteres). El cliente lo verá.");
-      motivoRef.current?.focus();
-      return;
-    }
+  /** Se llama desde la confirmación; sus errores se leen dentro de ella. */
+  const ejecutar = async (accion: AccionPago, motivo?: string): Promise<ResultadoAccionPago> => {
+    if (!pago) return { ok: false, error: "No encontramos este pago. Ciérralo y vuelve a abrirlo." };
+    if (enviandoRef.current) return { ok: false, error: "Ya estamos procesando este pago. Espera un momento." };
     enviandoRef.current = true;
-    setErrorAccion(null);
-    setEnviando("rechazar");
+    setEnviando(accion);
     try {
-      const res = await requireOnline(() => rechazarPago(pago.pago_id, texto))();
+      if (accion === "aprobar") {
+        const res = await requireOnline(() => aprobarPago(pago.pago_id))();
+        if (res.success) {
+          if (res.data.ya_procesado) {
+            avisarInfo("Este pago ya estaba aprobado.");
+          } else {
+            avisarExito(
+              pago.tipo_recurso === "encomienda"
+                ? "Pago aprobado. El envío del cliente continúa."
+                : "Pago aprobado. El cliente ya puede usar su boleto."
+            );
+          }
+          enviandoRef.current = false;
+          onResuelto({ aprobado: true });
+          onOpenChange(false);
+          return { ok: true };
+        }
+        if (res.codigo === "EB_PAGO_YA_RESUELTO" || res.codigo === "EB_BOLETOS_NO_ACTIVABLES") {
+          // El pago cambió: se cierra la confirmación y el aviso se lee en el diálogo, ya recargado
+          // (con boletos vencidos, el foco pasa a "Rechazar…").
+          setErrorAccion(res.error);
+          await cargar();
+          return { ok: true };
+        }
+        return { ok: false, error: res.error };
+      }
+
+      const res = await requireOnline(() => rechazarPago(pago.pago_id, motivo ?? ""))();
       if (res.success) {
         avisarExito(
           res.data.ya_procesado
@@ -295,17 +257,17 @@ export function VerificarPagoDialog({
         enviandoRef.current = false;
         onResuelto({ aprobado: false });
         onOpenChange(false);
-        return;
+        return { ok: true };
       }
-      if (res.codigo === "EB_MOTIVO_REQUERIDO") {
-        setErrorMotivo(res.error);
-        motivoRef.current?.focus();
-      } else {
+      if (res.codigo === "EB_MOTIVO_REQUERIDO") return { ok: false, error: res.error, campo: "motivo" };
+      if (res.codigo === "EB_PAGO_YA_RESUELTO") {
         setErrorAccion(res.error);
+        await cargar();
+        return { ok: true };
       }
-      if (res.codigo === "EB_PAGO_YA_RESUELTO") await cargar();
+      return { ok: false, error: res.error };
     } catch (err) {
-      setErrorAccion(mensajeExcepcion(err, "rechazar el pago"));
+      return { ok: false, error: mensajeExcepcion(err, accion === "aprobar" ? "aprobar el pago" : "rechazar el pago") };
     } finally {
       enviandoRef.current = false;
       setEnviando(null);
@@ -352,8 +314,6 @@ export function VerificarPagoDialog({
     const tasaPago: TasaRef | null =
       pago.tasa_bcv && pago.tasa_bcv_fecha ? { tasa: pago.tasa_bcv, fecha: pago.tasa_bcv_fecha } : null;
     const legado = pago.monto_bs == null && pago.moneda !== "USD";
-    const viajeSalio =
-      pago.tipo_recurso === "boleto" && pago.viaje_salida && new Date(pago.viaje_salida).getTime() < cargadoAt;
 
     cuerpo = (
       <div className="flex flex-col gap-4">
@@ -405,7 +365,7 @@ export function VerificarPagoDialog({
         {/* Datos del pago */}
         <dl className="divide-y divide-border">
           <Dato etiqueta="Pagó a">{cuentaDestino(pago)}</Dato>
-          {pago.metodo_tipo !== "ZELLE" && (
+          {pago.metodo_tipo !== "ZELLE" && pago.metodo_tipo !== "PUNTO_DE_VENTA" && pago.metodo_tipo !== "EFECTIVO" && (
             <Dato etiqueta="Banco del cliente">{pago.banco_emisor || "No indicado"}</Dato>
           )}
           <Dato etiqueta="Referencia">
@@ -436,7 +396,7 @@ export function VerificarPagoDialog({
             {[
               pago.cliente_nombre || "Sin nombre",
               pago.cliente_cedula ? formatCedula(pago.cliente_cedula) : null,
-              ROLES[pago.pagador_rol] ?? null,
+              ROL_PAGADOR[pago.pagador_rol] ?? null,
             ]
               .filter(Boolean)
               .join(" · ")}
@@ -483,117 +443,65 @@ export function VerificarPagoDialog({
           )
         )}
 
-        {/* Rechazo */}
-        {pendiente && rechazando && (
-          <div className="flex flex-col gap-2">
-            <label htmlFor={idMotivo} className="text-sm font-medium text-foreground">
-              Motivo del rechazo (lo verá el cliente)
-            </label>
-            {pago.tipo_recurso === "boleto" && !pago.recurso_vencido && (
-              <p className="text-sm text-muted-foreground">
-                Se cancelará la reserva y {pago.asientos?.includes(",") ? `los asientos ${pago.asientos} quedarán libres` : `el asiento ${pago.asientos ?? ""} quedará libre`} para la venta.
-              </p>
-            )}
-            <div className="flex flex-wrap gap-2">
-              {MOTIVOS_SUGERIDOS.map((m) => (
-                <Button
-                  key={m}
-                  type="button"
-                  variant="outline"
-                  size="xs"
-                  className={cn(
-                    motivo === m &&
-                      "border-accent-strong bg-accent-strong text-accent-strong-foreground hover:bg-accent-strong hover:text-accent-strong-foreground"
-                  )}
-                  aria-pressed={motivo === m}
-                  onClick={() => {
-                    setMotivo(m);
-                    setErrorMotivo(null);
-                  }}
-                >
-                  {m}
-                </Button>
-              ))}
-            </div>
-            <Textarea
-              id={idMotivo}
-              ref={motivoRef}
-              value={motivo}
-              maxLength={300}
-              autoFocus
-              placeholder="Ej.: La referencia no aparece en nuestra cuenta de Banesco."
-              aria-invalid={errorMotivo ? true : undefined}
-              aria-describedby={errorMotivo ? idErrorMotivo : undefined}
-              onChange={(e) => {
-                setMotivo(e.target.value);
-                if (errorMotivo) setErrorMotivo(null);
-              }}
-            />
-            {errorMotivo && (
-              <p id={idErrorMotivo} className="text-sm text-destructive-text">
-                {errorMotivo}
-              </p>
-            )}
-          </div>
-        )}
-
         {errorAccion && <AvisoError>{errorAccion}</AvisoError>}
       </div>
     );
   }
 
-  const ocupado = enviando !== null;
+  // Mientras una confirmación está abierta o corre, los botones de aquí no responden (sin doble clic).
+  const ocupado = enviando !== null || confirmando !== null;
   const acciones = pago && pendiente ? (
-    rechazando ? (
-      <>
-        <Button variant="outline" onClick={() => setRechazando(false)} disabled={ocupado}>
-          Atrás
-        </Button>
-        <Button
-          variant="destructive"
-          onClick={() => void rechazar()}
-          disabled={ocupado}
-          aria-busy={enviando === "rechazar" || undefined}
-        >
-          {enviando === "rechazar" && <Spinner size="sm" aria-hidden />}
-          {enviando === "rechazar" ? "Rechazando…" : "Rechazar pago"}
-        </Button>
-      </>
-    ) : (
-      <>
-        <Button variant="outline" onClick={() => setRechazando(true)} disabled={ocupado}>
-          Rechazar…
-        </Button>
-        <Button
-          ref={aprobarRef}
-          autoFocus={puedeAprobar}
-          onClick={() => void aprobar()}
-          disabled={ocupado || !puedeAprobar}
-          aria-busy={enviando === "aprobar" || undefined}
-        >
-          {enviando === "aprobar" && <Spinner size="sm" aria-hidden />}
-          {enviando === "aprobar" ? "Aprobando…" : "Aprobar pago"}
-        </Button>
-      </>
-    )
+    <>
+      <Button
+        ref={rechazarRef}
+        // Si ya no se puede aprobar, rechazar es la única salida: tono destructivo.
+        variant={puedeAprobar ? "outline" : "destructive"}
+        onClick={() => pedirConfirmacion("rechazar")}
+        disabled={ocupado}
+      >
+        Rechazar…
+      </Button>
+      <Button
+        ref={aprobarRef}
+        autoFocus={puedeAprobar}
+        onClick={() => pedirConfirmacion("aprobar")}
+        disabled={ocupado || !puedeAprobar}
+      >
+        Aprobar pago…
+      </Button>
+    </>
   ) : (
     <Button variant="outline" onClick={cerrar}>
       Cerrar
     </Button>
   );
 
+  // Dentro del diálogo (o de la sección embebida) para que cuente como diálogo anidado.
+  const confirmacion = pago && pendiente && (
+    <ConfirmarPagoDialog
+      accion={confirmando}
+      pago={pago}
+      viajeSalio={viajeSalio}
+      // Si el pago dejó de poder aprobarse ("Aprobar" queda deshabilitado), el foco va a "Rechazar…".
+      focoAlCerrar={puedeAprobar ? undefined : rechazarRef}
+      onCerrar={() => setConfirmando(null)}
+      onConfirmar={ejecutar}
+    />
+  );
+
   if (embebido) {
     if (!open) return null;
     return (
-      <section aria-labelledby={`${idMotivo}-titulo`} className="flex flex-col gap-4 rounded-md border border-border p-4">
+      <section aria-labelledby={idTitulo} className="flex flex-col gap-4 rounded-md border border-border p-4">
         <header className="flex flex-col gap-1">
-          <h3 id={`${idMotivo}-titulo`} className="text-base font-semibold text-foreground">
+          <h3 id={idTitulo} className="text-base font-semibold text-foreground">
             {titulo}
           </h3>
           <p className="text-sm text-muted-foreground">{descripcion}</p>
         </header>
         {cuerpo}
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">{acciones}</div>
+        {confirmacion}
       </section>
     );
   }
@@ -607,6 +515,7 @@ export function VerificarPagoDialog({
         </DialogHeader>
         {cuerpo}
         <DialogFooter>{acciones}</DialogFooter>
+        {confirmacion}
       </DialogContent>
     </Dialog>
   );

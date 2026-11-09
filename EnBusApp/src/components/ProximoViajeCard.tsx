@@ -14,6 +14,7 @@ import React, { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { ArrowRight, QrCode } from 'phosphor-react-native';
 import { Atmosfera, Button, Text } from '@/src/components/ui';
+import { LogoCooperativa } from '@/src/components/LogoCooperativa';
 import { capitalizarInicio, fechaVE, formatDiaVE, formatDuracion, formatHoraVE, sumarDiasVE } from '@/src/utils/formatters';
 import type { ProximoViaje } from '@/src/types';
 import { alpha, Colors, Radius, Shadows, Sizes, Spacing } from '@/src/theme';
@@ -121,9 +122,19 @@ export function ProximoViajeCard({
         ) : null}
 
         {meta ? (
-          <Text variant="secondary" color="inverseMuted" numberOfLines={2} style={s.meta}>
-            {meta}
-          </Text>
+          <View style={[s.meta, s.metaFila]}>
+            {proximo.cooperativa ? (
+              <LogoCooperativa
+                nombre={proximo.cooperativa}
+                logoUrl={proximo.cooperativaLogo}
+                size="sm"
+                decorativo
+              />
+            ) : null}
+            <Text variant="secondary" color="inverseMuted" numberOfLines={2} style={s.metaTexto}>
+              {meta}
+            </Text>
+          </View>
         ) : null}
       </View>
 
@@ -183,6 +194,14 @@ const s = StyleSheet.create({
   },
   meta: {
     marginTop: Spacing.xs / 2,
+  },
+  metaFila: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  metaTexto: {
+    flexShrink: 1,
   },
   boton: {
     borderWidth: 0,

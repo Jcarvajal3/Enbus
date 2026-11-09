@@ -29,6 +29,7 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { olvidarPushDeEsteEquipo } from "@/components/push/push-navegador";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -134,6 +135,9 @@ export function MenuUsuario({ nombre, rol, login }: { nombre: string; rol: strin
     // Sin red, signOut falla y la sesión sigue abierta: decirlo en vez de ir al login.
     // scope "local": cierra solo este equipo. El global también tumbaba la sesión de la
     // misma cuenta en las otras taquillas (a mitad de una venta) y en la app móvil.
+    // Antes de salir, este equipo deja de recibir avisos push de la cooperativa
+    // (no lanza y tarda como mucho 3 s).
+    await olvidarPushDeEsteEquipo();
     const { error } = await createClient().auth.signOut({ scope: "local" });
     if (error) {
       avisarError(humanizeError(error, "cerrar la sesión"));

@@ -116,6 +116,8 @@ export interface Encomienda {
   updated_at?: string;
   /** Joined when the query asks for `profiles:sender_id(*)` */
   profiles?: PerfilUsuario;
+  /** Embed `cooperativas ( nombre, logo_url )` (lista de "Mis encomiendas") */
+  cooperativas?: { nombre: string; logo_url?: string | null } | null;
 }
 
 export interface HistorialEncomienda {
@@ -166,6 +168,8 @@ export interface Cooperativa {
   id?: string;
   nombre: string;
   calificacion_promedio?: number;
+  /** URL pública del logo (bucket `logos-cooperativas`); `null` sin logo */
+  logo_url?: string | null;
 }
 
 /**
@@ -227,7 +231,7 @@ export interface Boleto {
     nombre_chofer?: string;
     rutas?: Ruta;
   };
-  cooperativas?: { nombre: string };
+  cooperativas?: { nombre: string; logo_url?: string | null };
   profiles?: { nombre_completo?: string; cedula_rif?: string };
 }
 
@@ -286,6 +290,8 @@ export type ProximoViaje = {
   ciudadDestino: string;
   /** Nombre de la cooperativa ('' si no viene) */
   cooperativa: string;
+  /** `cooperativas.logo_url` (null sin logo) */
+  cooperativaLogo?: string | null;
 };
 
 /** `fn_eliminar_mi_cuenta(p_motivo)` */
@@ -296,8 +302,11 @@ export type { CodigoEB } from '@/src/utils/errores';
 
 // ─── Pagos ────────────────────────────────────────────────────────────────────
 
-/** Enum `tipo_metodo_pago` (cuentas de la cooperativa). */
-export type TipoMetodoPago = 'PAGO_MOVIL' | 'TRANSFERENCIA_BANCARIA' | 'ZELLE' | 'EFECTIVO';
+/**
+ * Enum `tipo_metodo_pago`. EFECTIVO y PUNTO_DE_VENTA son presenciales (solo los registra la taquilla;
+ * PUNTO_DE_VENTA nunca es una cuenta de la cooperativa ni un medio de devolución).
+ */
+export type TipoMetodoPago = 'PAGO_MOVIL' | 'TRANSFERENCIA_BANCARIA' | 'ZELLE' | 'EFECTIVO' | 'PUNTO_DE_VENTA';
 
 /** Cómo devolvió la cooperativa el dinero de un boleto (`boletos.reembolso_metodo`). */
 export type MetodoReembolso = TipoMetodoPago;
@@ -340,6 +349,8 @@ export interface Pago {
   /** Lo que el cliente dice que pagó, en `moneda` */
   monto_declarado?: number | null;
   tipo_pago: 'DIGITAL' | 'EFECTIVO';
+  /** Tipo de método del pago (p. ej. PUNTO_DE_VENTA si se cobró en taquilla con tarjeta). */
+  metodo_tipo?: TipoMetodoPago | null;
   numero_referencia?: string | null;
   /** 'YYYY-MM-DD' */
   fecha_transaccion?: string | null;
@@ -662,4 +673,43 @@ export interface ReporteCreado {
   /** "INC-XXXXXX": el código que se le muestra al usuario */
   codigo: string;
   creada_at: string;
+}
+
+// ─── Cooperativas aliadas (buscador y detalle) ───────────────────────────────
+
+/** Ruta activa de una cooperativa, tal como la lee la app (`rutas`). */
+export interface RutaCooperativa {
+  id: string;
+  ciudad_origen: string;
+  ciudad_destino: string;
+  duracion_estimada_min: number | null;
+  /** USD de referencia por asiento; `null` o 0 si aún no vende boletos */
+  precio_pasaje: number | null;
+}
+
+/** Sucursal activa de una cooperativa (`sucursales`). */
+export interface SucursalCooperativa {
+  id: string;
+  nombre: string;
+  ciudad: string;
+  estado_geografico: string | null;
+  direccion: string | null;
+  telefono: string | null;
+  /** Texto libre, p. ej. "Lun a sáb 7:00 a. m. – 6:00 p. m." */
+  horario: string | null;
+}
+
+/** Cooperativa ACTIVA del listado "Cooperativas aliadas". */
+export interface CooperativaAliada {
+  id: string;
+  nombre: string;
+  logo_url: string | null;
+  calificacion_promedio: number;
+  total_calificaciones: number;
+  rutas: RutaCooperativa[];
+}
+
+/** Detalle de una cooperativa: además, sus sucursales. */
+export interface CooperativaDetalle extends CooperativaAliada {
+  sucursales: SucursalCooperativa[];
 }

@@ -10,7 +10,11 @@ import type { EstadoBoleto } from "@/lib/types/boletos";
 export type TipoPago = "DIGITAL" | "EFECTIVO";
 export type MonedaPago = "VES" | "USD";
 export type EstadoVerificacion = "PENDIENTE" | "APROBADO" | "RECHAZADO";
-export type TipoMetodoPago = "EFECTIVO" | "PAGO_MOVIL" | "TRANSFERENCIA_BANCARIA" | "ZELLE";
+/**
+ * Tipo de método de un pago (`pagos.metodo_tipo`). EFECTIVO y PUNTO_DE_VENTA son presenciales: solo
+ * los registra la taquilla. Las cuentas que se configuran usan el tipo de `lib/types/configuracion`.
+ */
+export type TipoMetodoPago = "EFECTIVO" | "PUNTO_DE_VENTA" | "PAGO_MOVIL" | "TRANSFERENCIA_BANCARIA" | "ZELLE";
 
 // ── Tasa BCV ──
 
@@ -65,6 +69,8 @@ export interface Pago {
   pagador_id?: string | null;
   cooperativa_id?: string | null;
   metodo_pago_id?: string | null;
+  /** Tipo de método (null en cobros digitales antiguos sin cuenta). */
+  metodo_tipo?: TipoMetodoPago | null;
   /** USD de referencia esperado. */
   monto: number;
   /** Bs esperados (null en pagos anteriores a la fase 2). */

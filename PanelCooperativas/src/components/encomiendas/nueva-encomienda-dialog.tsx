@@ -398,7 +398,8 @@ function Contenido({
         id: r.encomienda_id,
         tracking_id: r.tracking_id,
         sender_id: user.id,
-        receiver_nombre: destinatario.nombre.trim(),
+        // Igual que lo guarda el servidor (personaParaGuardar): sin espacios repetidos.
+        receiver_nombre: destinatario.nombre.trim().replace(/\s+/g, " "),
         receiver_telefono: telefonoParaGuardar(destinatario.telefono) ?? destinatario.telefono,
         receiver_cedula_rif: cedulaParaGuardar(destinatario.cedula) ?? destinatario.cedula,
         cooperativa_id: user.cooperativa_id,
@@ -419,7 +420,7 @@ function Contenido({
         valor_declarado: valor.trim() ? parseNumero(valor) : null,
         pin_retiro: r.pin_retiro,
         origen_registro: "TAQUILLA",
-        remitente_nombre: remitente.nombre.trim(),
+        remitente_nombre: remitente.nombre.trim().replace(/\s+/g, " "),
         remitente_cedula: cedulaParaGuardar(remitente.cedula) ?? remitente.cedula,
         remitente_telefono: telefonoParaGuardar(remitente.telefono) ?? remitente.telefono,
       };
