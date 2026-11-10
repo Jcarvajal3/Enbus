@@ -47,11 +47,10 @@ export type ViajeDetalle = {
   asientos_disponibles: number;
   numero_unidad: string | null;
   nombre_chofer: string | null;
-  /** Terminal o parada de salida (null si no se indicó; columna de 20261110000001). */
-  terminal_origen?: string | null;
   /** Bus registrado (null en viajes anteriores a 20261109000001): lo usa "Editar viaje". */
   bus_id?: string | null;
-  ruta: { ciudad_origen: string; ciudad_destino: string } | null;
+  /** `terminal_origen`: terminal o parada de salida de la ruta (null si no se indicó; 20261110000002). */
+  ruta: { ciudad_origen: string; ciudad_destino: string; terminal_origen?: string | null } | null;
 };
 
 type BoletoViaje = {
@@ -78,7 +77,7 @@ type EncomiendaViaje = {
 };
 
 const SELECT_VIAJE =
-  "id, estado, fecha_hora_salida, fecha_hora_llegada_est, asientos_totales, asientos_disponibles, numero_unidad, nombre_chofer, terminal_origen, bus_id, ruta:rutas!ruta_id(ciudad_origen, ciudad_destino)";
+  "id, estado, fecha_hora_salida, fecha_hora_llegada_est, asientos_totales, asientos_disponibles, numero_unidad, nombre_chofer, bus_id, ruta:rutas!ruta_id(ciudad_origen, ciudad_destino, terminal_origen)";
 const SELECT_BOLETOS =
   "id, codigo_boleto, asiento, estado, embarcado_at, pasajero_nombre, pasajero_cedula, comprador:profiles!comprador_id(nombre_completo, cedula_rif), pago:pagos!boletos_pago_id_fkey(estado_verificacion)";
 const SELECT_ENCOMIENDAS =
@@ -287,7 +286,7 @@ export function ViajeSheet({
                 </div>
                 <div className="col-span-2 flex flex-col gap-0.5">
                   <dt className="text-xs text-muted-foreground">Terminal de salida</dt>
-                  <dd className="font-medium">{viaje.terminal_origen || "Sin indicar"}</dd>
+                  <dd className="font-medium">{viaje.ruta?.terminal_origen || "Sin indicar"}</dd>
                 </div>
               </dl>
 

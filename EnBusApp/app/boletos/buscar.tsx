@@ -132,7 +132,7 @@ interface ViajeResumen {
   asientosTotales: number;
   ciudadOrigen?: string;
   ciudadDestino?: string;
-  /** `viajes.terminal_origen` ("Terminal La Bandera"); null si la cooperativa no lo indicó */
+  /** `rutas.terminal_origen` ("Terminal La Bandera"); null si la cooperativa no lo indicó */
   terminalOrigen: string | null;
 }
 
@@ -429,8 +429,8 @@ export default function BuscarBoletoScreen() {
         const { data, error } = await supabase
           .from('viajes')
           .select(
-            `id, fecha_hora_salida, fecha_hora_llegada_est, asientos_disponibles, asientos_totales, terminal_origen,
-             rutas!inner ( id, ciudad_origen, ciudad_destino, duracion_estimada_min, precio_pasaje ),
+            `id, fecha_hora_salida, fecha_hora_llegada_est, asientos_disponibles, asientos_totales,
+             rutas!inner ( id, ciudad_origen, ciudad_destino, duracion_estimada_min, precio_pasaje, terminal_origen ),
              cooperativas!inner ( id, nombre, calificacion_promedio, logo_url )`
           )
           .eq('estado', 'PROGRAMADO')
@@ -492,8 +492,8 @@ export default function BuscarBoletoScreen() {
             ciudadOrigen: ruta?.ciudad_origen,
             ciudadDestino: ruta?.ciudad_destino,
             terminalOrigen:
-              typeof viaje.terminal_origen === 'string' && viaje.terminal_origen.trim()
-                ? viaje.terminal_origen.trim()
+              typeof ruta?.terminal_origen === 'string' && ruta.terminal_origen.trim()
+                ? ruta.terminal_origen.trim()
                 : null,
           };
         });

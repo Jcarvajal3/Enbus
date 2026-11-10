@@ -12,15 +12,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -50,13 +42,10 @@ import { fechaVE, formatDiaVE, formatFechaHoraCortaVE, formatFechaVE } from "@/l
 import { ICONO_SECCION } from "@/lib/navigation";
 import type { ImpactoCancelarViaje } from "@/lib/types/reembolsos";
 import type { BusParaViaje } from "@/lib/types/operacion";
-import { formatCiudad, terminalesParaSalir } from "@/lib/ciudades";
+import { formatCiudad } from "@/lib/ciudades";
 import { cn } from "@/lib/utils";
 
 export type VistaViajes = "hoy" | "proximos" | "historial";
-
-/** Valor del selector de terminal para "Sin indicar" (las claves del catálogo nunca llevan guiones). */
-const SIN_TERMINAL = "-";
 
 function plural(n: number, uno: string, varios: string) {
   return n === 1 ? uno : varios.replace("{n}", String(n));
@@ -212,25 +201,11 @@ function FormularioProgramar({
   }));
   const opcionesBus = busesActivos.map((b) => ({ value: b.id, label: etiquetaBus(b) }));
 
-  // Terminal de salida (opcional): los de la ciudad de origen de la ruta y luego los demás de su
-  // estado. Se guarda su nombre en el viaje y el pasajero lo ve al buscar.
+  // El terminal de salida es de la ruta (se elige en Rutas): aquí solo se muestra.
   const ruta = rutasActivas.find((r) => r.id === rutaSeleccionada) ?? null;
-  const terminales = useMemo(
-    () => (ruta ? terminalesParaSalir(ruta.ciudad_origen, ruta.estado_origen) : { ciudad: [], estado: [] }),
-    [ruta]
-  );
-  const [terminal, setTerminal] = useState<string>(SIN_TERMINAL);
-  const opcionesTerminal = [
-    { value: SIN_TERMINAL, label: "Sin indicar" },
-    ...[...terminales.ciudad, ...terminales.estado].map((t) => ({ value: t.clave, label: t.nombre })),
-  ];
 
   function elegirRuta(id: string) {
     setRutaSeleccionada(id);
-    // Si la ciudad tiene un solo terminal, ya viene elegido; si no, se elige a mano.
-    const r = rutasActivas.find((x) => x.id === id);
-    const propios = r ? terminalesParaSalir(r.ciudad_origen, r.estado_origen).ciudad : [];
-    setTerminal(propios.length === 1 ? propios[0].clave : SIN_TERMINAL);
     if (formError) setFormError(null);
   }
 
@@ -269,8 +244,6 @@ function FormularioProgramar({
       bus_id: bus.id,
       // Vacío = el chofer del bus.
       nombre_chofer: chofer.trim(),
-      // Vacío = sin terminal indicado.
-      terminal: terminal === SIN_TERMINAL ? "" : terminal,
       hora_fija: hora,
       fecha_hora_salida: salida,
     };
@@ -310,7 +283,9 @@ function FormularioProgramar({
           <div className="grid content-start gap-2">
             <Label htmlFor={`${uid}-ruta`}>Ruta</Label>
             <Select value={rutaSeleccionada} onValueChange={(val) => elegirRuta(val ?? "")} items={opcionesRuta}>
-              <SelectTrigger id={`${uid}-ruta`}><SelectValue placeholder="Elige una ruta activa" /></SelectTrigger>
+              <SelectTrigger id={`${uid}-ruta`} aria-describedby={ruta ? `${uid}-ruta-terminal` : undefined}>
+                <SelectValue placeholder="Elige una ruta activa" />
+              </SelectTrigger>
               <SelectContent>
                 {rutasActivas.map((r) => (
                   <SelectItem key={r.id} value={r.id}>
@@ -327,48 +302,15 @@ function FormularioProgramar({
                 </Link>
               </p>
             )}
-          </div>
-
-          {ruta && (
-            <div className="grid content-start gap-2">
-              <Label htmlFor={`${uid}-terminal`}>Terminal de salida</Label>
-              <Select value={terminal} onValueChange={(val) => setTerminal(val ?? SIN_TERMINAL)} items={opcionesTerminal}>
-                <SelectTrigger id={`${uid}-terminal`} className="w-full" aria-describedby={`${uid}-terminal-ayuda`}>
-                  <SelectValue placeholder="Elige el terminal" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={SIN_TERMINAL}>Sin indicar</SelectItem>
-                  {terminales.ciudad.length > 0 && (
-                    <SelectGroup>
-                      <SelectLabel>En {formatCiudad(ruta.ciudad_origen)}</SelectLabel>
-                      {terminales.ciudad.map((t) => (
-                        <SelectItem key={t.clave} value={t.clave}>
-                          {t.nombre}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  )}
-                  {terminales.estado.length > 0 && (
-                    <SelectGroup>
-                      <SelectLabel>
-                        {terminales.ciudad.length > 0 ? "Otros cerca" : `Cerca de ${formatCiudad(ruta.ciudad_origen)}`}
-                      </SelectLabel>
-                      {terminales.estado.map((t) => (
-                        <SelectItem key={t.clave} value={t.clave}>
-                          {t.nombre} · {formatCiudad(t.ciudad)}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  )}
-                </SelectContent>
-              </Select>
-              <p id={`${uid}-terminal-ayuda`} className="text-sm text-muted-foreground">
-                {terminales.ciudad.length + terminales.estado.length === 0
-                  ? `Aún no tenemos terminales de ${formatCiudad(ruta.ciudad_origen)}: el viaje se publica sin terminal.`
-                  : "Los pasajeros lo verán al buscar el viaje."}
+            {ruta && (
+              <p id={`${uid}-ruta-terminal`} className="text-sm text-muted-foreground">
+                {ruta.terminal_origen ? `Sale de ${ruta.terminal_origen}. ` : "Sin terminal de salida. "}
+                <Link href="/cooperativas/rutas" className="font-medium text-info-text underline underline-offset-4">
+                  {ruta.terminal_origen ? "Cambiarlo en Rutas" : "Indícalo en Rutas"}
+                </Link>
               </p>
-            </div>
-          )}
+            )}
+          </div>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="grid content-start gap-2">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState, useTransition } from "react";
+import { useId, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { DotsThree, PencilSimple, Plus, Prohibit, ArrowCounterClockwise } from "@phosphor-icons/react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -9,7 +9,15 @@ import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
@@ -29,7 +37,7 @@ import { formatBs, formatUsd, usdABs } from "@/lib/dinero";
 import { avisarError, avisarExito } from "@/lib/avisos";
 import { humanizeError } from "@/lib/errores";
 import { formatDuracion } from "@/lib/fechas";
-import { formatCiudad, mismaCiudad } from "@/lib/ciudades";
+import { formatCiudad, mismaCiudad, terminalVE, terminalesParaSalir } from "@/lib/ciudades";
 import { ICONO_SECCION } from "@/lib/navigation";
 import { cn } from "@/lib/utils";
 import { CeldaEnlace } from "@/components/celda-enlace";
@@ -41,12 +49,23 @@ export type Ruta = {
   ciudad_origen: string;
   estado_destino: string;
   ciudad_destino: string;
+  /** Terminal o parada de salida (nombre del catálogo); null si no se indicó (20261110000002). */
+  terminal_origen?: string | null;
   precio_pasaje: number | string | null;
   duracion_estimada_min: number | null;
   activa: boolean;
 };
 
 const MSG_MISMA_CIUDAD = "El origen y el destino deben ser ciudades distintas.";
+
+/** Valor del selector de terminal para "Sin indicar" (las claves del catálogo nunca llevan guiones). */
+const SIN_TERMINAL = "-";
+
+/** El terminal que viene elegido para una ciudad: el único que tenga, o ninguno si tiene varios. */
+function terminalPorDefecto(ciudad: string, estado: string): string {
+  const propios = ciudad ? terminalesParaSalir(ciudad, estado).ciudad : [];
+  return propios.length === 1 ? propios[0].clave : SIN_TERMINAL;
+}
 
 /** "8" → 8; vacío → 0; NaN si no es un entero. */
 function entero(texto: string): number {
@@ -87,6 +106,9 @@ function NombreRuta({ ruta }: { ruta: Ruta }) {
       <span className="text-xs font-normal text-muted-foreground">
         {formatCiudad(ruta.estado_origen)} → {formatCiudad(ruta.estado_destino)}
       </span>
+      {ruta.terminal_origen && (
+        <span className="text-xs font-normal text-muted-foreground">Sale de {ruta.terminal_origen}</span>
+      )}
       {/* En teléfono, la duración y el estado van aquí (sus columnas se ocultan). */}
       <span className="text-xs font-normal text-muted-foreground sm:hidden">
         {formatDuracion(Number(ruta.duracion_estimada_min) || 0)}
@@ -115,11 +137,13 @@ export function RutasClient({ rutas, errorCarga }: { rutas: Ruta[]; errorCarga: 
   const [ciudadOrigen, setCiudadOrigen] = useState<string>("");
   const [estadoDestino, setEstadoDestino] = useState<string>("");
   const [ciudadDestino, setCiudadDestino] = useState<string>("");
+  // Terminal de salida (opcional): los de la ciudad de origen y luego los demás de su estado.
+  const [terminal, setTerminal] = useState<string>(SIN_TERMINAL);
   // Duración en dos campos (se guarda en minutos)
   const [horas, setHoras] = useState<string>("");
   const [minutos, setMinutos] = useState<string>("");
   const [formError, setFormError] = useState<string | null>(null);
-  const [errorCampo, setErrorCampo] = useState<"duracion" | "destino" | null>(null);
+  const [errorCampo, setErrorCampo] = useState<"duracion" | "destino" | "terminal" | null>(null);
   // Precio en USD (texto controlado para mostrar el equivalente en Bs mientras se escribe)
   const [precioTexto, setPrecioTexto] = useState<string>("");
   // Formulario en espera de confirmar un precio muy alto (¿escrito en Bs?)
@@ -130,10 +154,30 @@ export function RutasClient({ rutas, errorCarga }: { rutas: Ruta[]; errorCarga: 
   const precioValido = Number.isFinite(precioUsd) && precioUsd > 0;
   const precioAltoUsd = precioAltoPendiente ? leerPrecio(String(precioAltoPendiente.get("precio_pasaje") ?? "")) : NaN;
 
+  const terminales = useMemo(
+    () => (ciudadOrigen ? terminalesParaSalir(ciudadOrigen, estadoOrigen) : { ciudad: [], estado: [] }),
+    [ciudadOrigen, estadoOrigen]
+  );
+  const opcionesTerminal = [
+    { value: SIN_TERMINAL, label: "Sin indicar" },
+    ...[...terminales.ciudad, ...terminales.estado].map((t) => ({ value: t.clave, label: t.nombre })),
+  ];
+
+  function elegirCiudadOrigen(ciudad: string) {
+    setCiudadOrigen(ciudad);
+    // Si la ciudad tiene un solo terminal, ya viene elegido; si no, se elige a mano.
+    setTerminal(terminalPorDefecto(ciudad, estadoOrigen));
+    if (errorCampo === "destino" || errorCampo === "terminal") {
+      setFormError(null);
+      setErrorCampo(null);
+    }
+  }
+
   function openCreateModal() {
     setEditingRuta(null);
     setEstadoOrigen("");
     setCiudadOrigen("");
+    setTerminal(SIN_TERMINAL);
     setEstadoDestino("");
     setCiudadDestino("");
     setPrecioTexto("");
@@ -149,6 +193,7 @@ export function RutasClient({ rutas, errorCarga }: { rutas: Ruta[]; errorCarga: 
     setEditingRuta(ruta);
     setEstadoOrigen(ruta.estado_origen);
     setCiudadOrigen(ruta.ciudad_origen);
+    setTerminal(terminalVE(ruta.terminal_origen)?.clave ?? SIN_TERMINAL);
     setEstadoDestino(ruta.estado_destino);
     setCiudadDestino(ruta.ciudad_destino);
     setPrecioTexto(ruta.precio_pasaje != null ? String(ruta.precio_pasaje) : "");
@@ -219,6 +264,8 @@ export function RutasClient({ rutas, errorCarga }: { rutas: Ruta[]; errorCarga: 
       try {
         // Inject activa from controlled state since shadcn Switch with checked= won't add to FormData
         formData.set("activa", activaSwitch ? "on" : "off");
+        // Vacío = sin terminal indicado.
+        formData.set("terminal", terminal === SIN_TERMINAL ? "" : terminal);
         const res = await requireOnline(() => guardarRuta(formData, editingRuta?.id))();
         if (res.error) {
           setFormError(res.error);
@@ -380,7 +427,7 @@ export function RutasClient({ rutas, errorCarga }: { rutas: Ruta[]; errorCarga: 
               <div className="grid grid-cols-2 gap-4">
                 <div className="grid content-start gap-2">
                   <Label htmlFor={`${uid}-estado-origen`}>Estado de origen</Label>
-                  <Select name="estado_origen" value={estadoOrigen} onValueChange={(val) => { setEstadoOrigen(val ?? ""); setCiudadOrigen(""); }} required>
+                  <Select name="estado_origen" value={estadoOrigen} onValueChange={(val) => { setEstadoOrigen(val ?? ""); setCiudadOrigen(""); setTerminal(SIN_TERMINAL); }} required>
                     <SelectTrigger id={`${uid}-estado-origen`} className="w-full"><SelectValue placeholder="Elige el estado" /></SelectTrigger>
                     <SelectContent>
                       {ESTADOS_VENEZUELA.map(e => <SelectItem key={e.value} value={e.value}>{e.label}</SelectItem>)}
@@ -389,7 +436,7 @@ export function RutasClient({ rutas, errorCarga }: { rutas: Ruta[]; errorCarga: 
                 </div>
                 <div className="grid content-start gap-2">
                   <Label htmlFor={`${uid}-ciudad-origen`}>Ciudad de origen</Label>
-                  <Select name="ciudad_origen" value={ciudadOrigen} onValueChange={(val) => { setCiudadOrigen(val ?? ""); if (errorCampo === "destino") { setFormError(null); setErrorCampo(null); } }} disabled={!estadoOrigen} required>
+                  <Select name="ciudad_origen" value={ciudadOrigen} onValueChange={(val) => elegirCiudadOrigen(val ?? "")} disabled={!estadoOrigen} required>
                     <SelectTrigger id={`${uid}-ciudad-origen`} className="w-full"><SelectValue placeholder="Elige la ciudad" /></SelectTrigger>
                     <SelectContent>
                       {estadoOrigen && CIUDADES_POR_ESTADO[estadoOrigen]?.map(c => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}
@@ -397,6 +444,62 @@ export function RutasClient({ rutas, errorCarga }: { rutas: Ruta[]; errorCarga: 
                   </Select>
                 </div>
               </div>
+
+              {ciudadOrigen && (
+                <div className="grid content-start gap-2">
+                  <Label htmlFor={`${uid}-terminal`}>Terminal de salida</Label>
+                  <Select
+                    value={terminal}
+                    onValueChange={(val) => {
+                      setTerminal(val ?? SIN_TERMINAL);
+                      if (errorCampo === "terminal") {
+                        setFormError(null);
+                        setErrorCampo(null);
+                      }
+                    }}
+                    items={opcionesTerminal}
+                  >
+                    <SelectTrigger
+                      id={`${uid}-terminal`}
+                      className="w-full"
+                      aria-invalid={errorCampo === "terminal" ? true : undefined}
+                      aria-describedby={`${uid}-terminal-ayuda`}
+                    >
+                      <SelectValue placeholder="Elige el terminal" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={SIN_TERMINAL}>Sin indicar</SelectItem>
+                      {terminales.ciudad.length > 0 && (
+                        <SelectGroup>
+                          <SelectLabel>En {formatCiudad(ciudadOrigen)}</SelectLabel>
+                          {terminales.ciudad.map((t) => (
+                            <SelectItem key={t.clave} value={t.clave}>
+                              {t.nombre}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      )}
+                      {terminales.estado.length > 0 && (
+                        <SelectGroup>
+                          <SelectLabel>
+                            {terminales.ciudad.length > 0 ? "Otros cerca" : `Cerca de ${formatCiudad(ciudadOrigen)}`}
+                          </SelectLabel>
+                          {terminales.estado.map((t) => (
+                            <SelectItem key={t.clave} value={t.clave}>
+                              {t.nombre} · {formatCiudad(t.ciudad)}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      )}
+                    </SelectContent>
+                  </Select>
+                  <p id={`${uid}-terminal-ayuda`} className="text-sm text-muted-foreground">
+                    {terminales.ciudad.length + terminales.estado.length === 0
+                      ? `Aún no tenemos terminales de ${formatCiudad(ciudadOrigen)}: la ruta queda sin terminal.`
+                      : "Los pasajeros lo verán al buscar los viajes de esta ruta."}
+                  </p>
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="grid content-start gap-2">

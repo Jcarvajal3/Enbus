@@ -3,7 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { humanizeError } from "@/lib/errores";
-import { mismaCiudad } from "@/lib/ciudades";
+import { formatCiudad, mismaCiudad, terminalVE, terminalesParaSalir } from "@/lib/ciudades";
 
 const MSG_MISMA_CIUDAD = "El origen y el destino deben ser ciudades distintas.";
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -73,12 +73,31 @@ export async function guardarRuta(formData: FormData, rutaId?: string) {
     return { error: MSG_MISMA_CIUDAD, campo: "destino" as const };
   }
 
+  // Terminal de salida (opcional): del catálogo, en la ciudad de origen o en su estado.
+  // Se guarda el nombre legible: es lo que ve el pasajero en la app al buscar el viaje.
+  let terminal_origen: string | null = null;
+  const claveTerminal = clave("terminal");
+  if (claveTerminal) {
+    const terminal = terminalVE(claveTerminal);
+    const opciones = terminalesParaSalir(ciudad_origen, estado_origen);
+    const valido =
+      terminal !== null && [...opciones.ciudad, ...opciones.estado].some((t) => t.clave === terminal.clave);
+    if (!terminal || !valido) {
+      return {
+        error: `Ese terminal no queda en ${formatCiudad(ciudad_origen)} ni en su estado. Elige otro o déjalo sin indicar.`,
+        campo: "terminal" as const,
+      };
+    }
+    terminal_origen = terminal.nombre;
+  }
+
   const payload = {
     cooperativa_id: profile.cooperativa_id,
     estado_origen,
     ciudad_origen,
     estado_destino,
     ciudad_destino,
+    terminal_origen,
     duracion_estimada_min,
     precio_pasaje,
     activa,

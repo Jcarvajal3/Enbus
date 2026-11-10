@@ -8,7 +8,6 @@ import type { ImpactoCancelarViaje, ResultadoCancelarViaje } from "@/lib/types/r
 import type { ResultadoCompletarViaje, ResultadoEditarViaje } from "@/lib/types/operacion";
 import { fechaHoraVEaISO } from "@/lib/fechas";
 import { planificarSalidas } from "./salidas";
-import { formatCiudad, terminalVE, terminalesParaSalir } from "@/lib/ciudades";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -45,7 +44,7 @@ export async function guardarViaje(
   const [{ data: ruta }, { data: bus }] = await Promise.all([
     supabase
       .from("rutas")
-      .select("duracion_estimada_min, activa, estado_origen, ciudad_origen")
+      .select("duracion_estimada_min, activa")
       .eq("id", rutaId)
       .eq("cooperativa_id", profile.cooperativa_id)
       .maybeSingle(),
@@ -61,23 +60,6 @@ export async function guardarViaje(
   if (!ruta.activa) return { error: "Esa ruta está desactivada. Reactívala en Rutas o elige otra." };
   if (!bus) return { error: "No encontramos ese bus. Actualiza la página y vuelve a elegirlo." };
   if (!bus.activo) return { error: "Ese bus está desactivado. Reactívalo en Buses o elige otro." };
-
-  // Terminal de salida (opcional): del catálogo, en la ciudad de origen de la ruta o en su estado.
-  // Se guarda el nombre legible: es lo que ve el pasajero en la app.
-  let terminalOrigen: string | null = null;
-  const claveTerminal = String(payload.terminal ?? "").trim();
-  if (claveTerminal) {
-    const terminal = terminalVE(claveTerminal);
-    const opciones = terminalesParaSalir(ruta.ciudad_origen as string, ruta.estado_origen as string);
-    const valido =
-      terminal !== null && [...opciones.ciudad, ...opciones.estado].some((t) => t.clave === terminal.clave);
-    if (!terminal || !valido) {
-      return {
-        error: `Ese terminal no queda en ${formatCiudad(ruta.ciudad_origen as string)} ni en su estado. Elige otro o déjalo sin indicar.`,
-      };
-    }
-    terminalOrigen = terminal.nombre;
-  }
 
   // Copia del bus al programar (la base la vuelve a copiar en proteger_viajes_cliente_fn).
   // El chofer se puede cambiar solo para estas salidas; vacío = el del bus.
@@ -108,7 +90,6 @@ export async function guardarViaje(
       bus_id: busId,
       numero_unidad: numeroUnidad,
       nombre_chofer: nombreChofer,
-      terminal_origen: terminalOrigen,
       estado: "PROGRAMADO",
     }));
 
@@ -142,7 +123,6 @@ export async function guardarViaje(
       bus_id: busId,
       numero_unidad: numeroUnidad,
       nombre_chofer: nombreChofer,
-      terminal_origen: terminalOrigen,
       estado: "PROGRAMADO",
     });
 
