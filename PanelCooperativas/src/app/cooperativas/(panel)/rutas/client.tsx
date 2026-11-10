@@ -51,6 +51,8 @@ export type Ruta = {
   ciudad_destino: string;
   /** Terminal o parada de salida (nombre del catálogo); null si no se indicó (20261110000002). */
   terminal_origen?: string | null;
+  /** Terminal o parada de llegada (nombre del catálogo); null si no se indicó (20261110000003). */
+  terminal_destino?: string | null;
   precio_pasaje: number | string | null;
   duracion_estimada_min: number | null;
   activa: boolean;
@@ -97,6 +99,89 @@ function leerPrecio(texto: string): number {
   return /^\d+(\.\d+)?$/.test(normalizado) ? Number(normalizado) : NaN;
 }
 
+/**
+ * Selector de terminal de una ciudad: "Sin indicar", los de la ciudad y luego los demás de su
+ * estado (para ciudades sin terminal propio, como Lechería o Cabudare).
+ */
+function SelectorTerminal({
+  id,
+  etiqueta,
+  ciudad,
+  estado,
+  valor,
+  onCambio,
+  invalido,
+}: {
+  id: string;
+  etiqueta: string;
+  ciudad: string;
+  estado: string;
+  valor: string;
+  onCambio(clave: string): void;
+  invalido: boolean;
+}) {
+  const terminales = useMemo(() => terminalesParaSalir(ciudad, estado), [ciudad, estado]);
+  const opciones = [
+    { value: SIN_TERMINAL, label: "Sin indicar" },
+    ...[...terminales.ciudad, ...terminales.estado].map((t) => ({ value: t.clave, label: t.nombre })),
+  ];
+  const nombreCiudad = formatCiudad(ciudad);
+
+  return (
+    <div className="grid content-start gap-2">
+      <Label htmlFor={id}>{etiqueta}</Label>
+      <Select value={valor} onValueChange={(val) => onCambio(val ?? SIN_TERMINAL)} items={opciones}>
+        <SelectTrigger
+          id={id}
+          className="w-full"
+          aria-invalid={invalido ? true : undefined}
+          aria-describedby={`${id}-ayuda`}
+        >
+          <SelectValue placeholder="Elige el terminal" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={SIN_TERMINAL}>Sin indicar</SelectItem>
+          {terminales.ciudad.length > 0 && (
+            <SelectGroup>
+              <SelectLabel>En {nombreCiudad}</SelectLabel>
+              {terminales.ciudad.map((t) => (
+                <SelectItem key={t.clave} value={t.clave}>
+                  {t.nombre}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          )}
+          {terminales.estado.length > 0 && (
+            <SelectGroup>
+              <SelectLabel>{terminales.ciudad.length > 0 ? "Otros cerca" : `Cerca de ${nombreCiudad}`}</SelectLabel>
+              {terminales.estado.map((t) => (
+                <SelectItem key={t.clave} value={t.clave}>
+                  {t.nombre} · {formatCiudad(t.ciudad)}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          )}
+        </SelectContent>
+      </Select>
+      <p id={`${id}-ayuda`} className="text-sm text-muted-foreground">
+        {terminales.ciudad.length + terminales.estado.length === 0
+          ? `Aún no tenemos terminales de ${nombreCiudad}: queda sin indicar.`
+          : "Los pasajeros lo verán al buscar los viajes de esta ruta."}
+      </p>
+    </div>
+  );
+}
+
+/** "Sale de Terminal La Bandera · Llega a Terminal de Maracaibo" (o la mitad que haya). */
+function textoTerminales(ruta: Pick<Ruta, "terminal_origen" | "terminal_destino">): string {
+  return [
+    ruta.terminal_origen ? `Sale de ${ruta.terminal_origen}` : null,
+    ruta.terminal_destino ? `Llega a ${ruta.terminal_destino}` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
 function NombreRuta({ ruta }: { ruta: Ruta }) {
   return (
     <span className="flex flex-col">
@@ -106,8 +191,8 @@ function NombreRuta({ ruta }: { ruta: Ruta }) {
       <span className="text-xs font-normal text-muted-foreground">
         {formatCiudad(ruta.estado_origen)} → {formatCiudad(ruta.estado_destino)}
       </span>
-      {ruta.terminal_origen && (
-        <span className="text-xs font-normal text-muted-foreground">Sale de {ruta.terminal_origen}</span>
+      {textoTerminales(ruta) && (
+        <span className="text-xs font-normal text-muted-foreground">{textoTerminales(ruta)}</span>
       )}
       {/* En teléfono, la duración y el estado van aquí (sus columnas se ocultan). */}
       <span className="text-xs font-normal text-muted-foreground sm:hidden">
@@ -137,13 +222,14 @@ export function RutasClient({ rutas, errorCarga }: { rutas: Ruta[]; errorCarga: 
   const [ciudadOrigen, setCiudadOrigen] = useState<string>("");
   const [estadoDestino, setEstadoDestino] = useState<string>("");
   const [ciudadDestino, setCiudadDestino] = useState<string>("");
-  // Terminal de salida (opcional): los de la ciudad de origen y luego los demás de su estado.
+  // Terminales de salida y de llegada (opcionales): del catálogo, en la ciudad o en su estado.
   const [terminal, setTerminal] = useState<string>(SIN_TERMINAL);
+  const [terminalDestino, setTerminalDestino] = useState<string>(SIN_TERMINAL);
   // Duración en dos campos (se guarda en minutos)
   const [horas, setHoras] = useState<string>("");
   const [minutos, setMinutos] = useState<string>("");
   const [formError, setFormError] = useState<string | null>(null);
-  const [errorCampo, setErrorCampo] = useState<"duracion" | "destino" | "terminal" | null>(null);
+  const [errorCampo, setErrorCampo] = useState<"duracion" | "destino" | "terminal" | "terminal_destino" | null>(null);
   // Precio en USD (texto controlado para mostrar el equivalente en Bs mientras se escribe)
   const [precioTexto, setPrecioTexto] = useState<string>("");
   // Formulario en espera de confirmar un precio muy alto (¿escrito en Bs?)
@@ -154,23 +240,25 @@ export function RutasClient({ rutas, errorCarga }: { rutas: Ruta[]; errorCarga: 
   const precioValido = Number.isFinite(precioUsd) && precioUsd > 0;
   const precioAltoUsd = precioAltoPendiente ? leerPrecio(String(precioAltoPendiente.get("precio_pasaje") ?? "")) : NaN;
 
-  const terminales = useMemo(
-    () => (ciudadOrigen ? terminalesParaSalir(ciudadOrigen, estadoOrigen) : { ciudad: [], estado: [] }),
-    [ciudadOrigen, estadoOrigen]
-  );
-  const opcionesTerminal = [
-    { value: SIN_TERMINAL, label: "Sin indicar" },
-    ...[...terminales.ciudad, ...terminales.estado].map((t) => ({ value: t.clave, label: t.nombre })),
-  ];
-
-  function elegirCiudadOrigen(ciudad: string) {
-    setCiudadOrigen(ciudad);
-    // Si la ciudad tiene un solo terminal, ya viene elegido; si no, se elige a mano.
-    setTerminal(terminalPorDefecto(ciudad, estadoOrigen));
-    if (errorCampo === "destino" || errorCampo === "terminal") {
+  /** Quita el aviso de error si era de alguno de estos campos. */
+  function limpiarError(...campos: NonNullable<typeof errorCampo>[]) {
+    if (errorCampo && campos.includes(errorCampo)) {
       setFormError(null);
       setErrorCampo(null);
     }
+  }
+
+  // Si la ciudad tiene un solo terminal, ya viene elegido; si no, se elige a mano.
+  function elegirCiudadOrigen(ciudad: string) {
+    setCiudadOrigen(ciudad);
+    setTerminal(terminalPorDefecto(ciudad, estadoOrigen));
+    limpiarError("destino", "terminal");
+  }
+
+  function elegirCiudadDestino(ciudad: string) {
+    setCiudadDestino(ciudad);
+    setTerminalDestino(terminalPorDefecto(ciudad, estadoDestino));
+    limpiarError("destino", "terminal_destino");
   }
 
   function openCreateModal() {
@@ -180,6 +268,7 @@ export function RutasClient({ rutas, errorCarga }: { rutas: Ruta[]; errorCarga: 
     setTerminal(SIN_TERMINAL);
     setEstadoDestino("");
     setCiudadDestino("");
+    setTerminalDestino(SIN_TERMINAL);
     setPrecioTexto("");
     setHoras("");
     setMinutos("");
@@ -196,6 +285,7 @@ export function RutasClient({ rutas, errorCarga }: { rutas: Ruta[]; errorCarga: 
     setTerminal(terminalVE(ruta.terminal_origen)?.clave ?? SIN_TERMINAL);
     setEstadoDestino(ruta.estado_destino);
     setCiudadDestino(ruta.ciudad_destino);
+    setTerminalDestino(terminalVE(ruta.terminal_destino)?.clave ?? SIN_TERMINAL);
     setPrecioTexto(ruta.precio_pasaje != null ? String(ruta.precio_pasaje) : "");
     const total = Number(ruta.duracion_estimada_min) || 0;
     setHoras(total > 0 ? String(Math.floor(total / 60)) : "");
@@ -266,6 +356,7 @@ export function RutasClient({ rutas, errorCarga }: { rutas: Ruta[]; errorCarga: 
         formData.set("activa", activaSwitch ? "on" : "off");
         // Vacío = sin terminal indicado.
         formData.set("terminal", terminal === SIN_TERMINAL ? "" : terminal);
+        formData.set("terminal_destino", terminalDestino === SIN_TERMINAL ? "" : terminalDestino);
         const res = await requireOnline(() => guardarRuta(formData, editingRuta?.id))();
         if (res.error) {
           setFormError(res.error);
@@ -446,65 +537,24 @@ export function RutasClient({ rutas, errorCarga }: { rutas: Ruta[]; errorCarga: 
               </div>
 
               {ciudadOrigen && (
-                <div className="grid content-start gap-2">
-                  <Label htmlFor={`${uid}-terminal`}>Terminal de salida</Label>
-                  <Select
-                    value={terminal}
-                    onValueChange={(val) => {
-                      setTerminal(val ?? SIN_TERMINAL);
-                      if (errorCampo === "terminal") {
-                        setFormError(null);
-                        setErrorCampo(null);
-                      }
-                    }}
-                    items={opcionesTerminal}
-                  >
-                    <SelectTrigger
-                      id={`${uid}-terminal`}
-                      className="w-full"
-                      aria-invalid={errorCampo === "terminal" ? true : undefined}
-                      aria-describedby={`${uid}-terminal-ayuda`}
-                    >
-                      <SelectValue placeholder="Elige el terminal" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value={SIN_TERMINAL}>Sin indicar</SelectItem>
-                      {terminales.ciudad.length > 0 && (
-                        <SelectGroup>
-                          <SelectLabel>En {formatCiudad(ciudadOrigen)}</SelectLabel>
-                          {terminales.ciudad.map((t) => (
-                            <SelectItem key={t.clave} value={t.clave}>
-                              {t.nombre}
-                            </SelectItem>
-                          ))}
-                        </SelectGroup>
-                      )}
-                      {terminales.estado.length > 0 && (
-                        <SelectGroup>
-                          <SelectLabel>
-                            {terminales.ciudad.length > 0 ? "Otros cerca" : `Cerca de ${formatCiudad(ciudadOrigen)}`}
-                          </SelectLabel>
-                          {terminales.estado.map((t) => (
-                            <SelectItem key={t.clave} value={t.clave}>
-                              {t.nombre} · {formatCiudad(t.ciudad)}
-                            </SelectItem>
-                          ))}
-                        </SelectGroup>
-                      )}
-                    </SelectContent>
-                  </Select>
-                  <p id={`${uid}-terminal-ayuda`} className="text-sm text-muted-foreground">
-                    {terminales.ciudad.length + terminales.estado.length === 0
-                      ? `Aún no tenemos terminales de ${formatCiudad(ciudadOrigen)}: la ruta queda sin terminal.`
-                      : "Los pasajeros lo verán al buscar los viajes de esta ruta."}
-                  </p>
-                </div>
+                <SelectorTerminal
+                  id={`${uid}-terminal`}
+                  etiqueta="Terminal de salida"
+                  ciudad={ciudadOrigen}
+                  estado={estadoOrigen}
+                  valor={terminal}
+                  onCambio={(clave) => {
+                    setTerminal(clave);
+                    limpiarError("terminal");
+                  }}
+                  invalido={errorCampo === "terminal"}
+                />
               )}
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="grid content-start gap-2">
                   <Label htmlFor={`${uid}-estado-destino`}>Estado de destino</Label>
-                  <Select name="estado_destino" value={estadoDestino} onValueChange={(val) => { setEstadoDestino(val ?? ""); setCiudadDestino(""); }} required>
+                  <Select name="estado_destino" value={estadoDestino} onValueChange={(val) => { setEstadoDestino(val ?? ""); setCiudadDestino(""); setTerminalDestino(SIN_TERMINAL); }} required>
                     <SelectTrigger id={`${uid}-estado-destino`} className="w-full"><SelectValue placeholder="Elige el estado" /></SelectTrigger>
                     <SelectContent>
                       {ESTADOS_VENEZUELA.map(e => <SelectItem key={e.value} value={e.value}>{e.label}</SelectItem>)}
@@ -513,7 +563,7 @@ export function RutasClient({ rutas, errorCarga }: { rutas: Ruta[]; errorCarga: 
                 </div>
                 <div className="grid content-start gap-2">
                   <Label htmlFor={`${uid}-ciudad-destino`}>Ciudad de destino</Label>
-                  <Select name="ciudad_destino" value={ciudadDestino} onValueChange={(val) => { setCiudadDestino(val ?? ""); if (errorCampo === "destino") { setFormError(null); setErrorCampo(null); } }} disabled={!estadoDestino} required>
+                  <Select name="ciudad_destino" value={ciudadDestino} onValueChange={(val) => elegirCiudadDestino(val ?? "")} disabled={!estadoDestino} required>
                     <SelectTrigger
                       id={`${uid}-ciudad-destino`}
                       className="w-full"
@@ -533,6 +583,21 @@ export function RutasClient({ rutas, errorCarga }: { rutas: Ruta[]; errorCarga: 
                   </p>
                 )}
               </div>
+
+              {ciudadDestino && !mismaSeleccion && (
+                <SelectorTerminal
+                  id={`${uid}-terminal-destino`}
+                  etiqueta="Terminal de llegada"
+                  ciudad={ciudadDestino}
+                  estado={estadoDestino}
+                  valor={terminalDestino}
+                  onCambio={(clave) => {
+                    setTerminalDestino(clave);
+                    limpiarError("terminal_destino");
+                  }}
+                  invalido={errorCampo === "terminal_destino"}
+                />
+              )}
 
               <fieldset className="grid gap-2">
                 <legend className="mb-2 text-sm font-medium text-foreground">Duración del viaje</legend>

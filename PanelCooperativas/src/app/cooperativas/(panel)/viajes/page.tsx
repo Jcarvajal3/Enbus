@@ -78,7 +78,7 @@ export default async function ViajesPage({
   const [rutasResult, viajesResult, hoyResult, busesResult] = await Promise.all([
     supabase
       .from("rutas")
-      .select("id, ciudad_origen, ciudad_destino, terminal_origen")
+      .select("id, ciudad_origen, ciudad_destino, terminal_origen, terminal_destino")
       .eq("cooperativa_id", user.cooperativa_id)
       .eq("activa", true),
     consultaLista(),

@@ -134,6 +134,8 @@ interface ViajeResumen {
   ciudadDestino?: string;
   /** `rutas.terminal_origen` ("Terminal La Bandera"); null si la cooperativa no lo indicó */
   terminalOrigen: string | null;
+  /** `rutas.terminal_destino` ("Terminal de Maracaibo"); null si la cooperativa no lo indicó */
+  terminalDestino: string | null;
 }
 
 type SortType = 'hora_asc' | 'precio_asc' | 'duracion_asc';
@@ -164,7 +166,8 @@ function etiquetaSalida(viaje: ViajeResumen, monto: string): string {
       ? `quedan ${viaje.asientosDisponibles} ${viaje.asientosDisponibles === 1 ? 'asiento' : 'asientos'}`
       : `${viaje.asientosDisponibles} asientos libres`;
   const terminal = viaje.terminalOrigen ? ` desde ${viaje.terminalOrigen}` : '';
-  return `${viaje.cooperativa}, sale ${viaje.horaSalida}${terminal}${llegada}, ${monto}, ${asientos}`;
+  const terminalLlegada = viaje.terminalDestino ? `, llega a ${viaje.terminalDestino}` : '';
+  return `${viaje.cooperativa}, sale ${viaje.horaSalida}${terminal}${llegada}${terminalLlegada}, ${monto}, ${asientos}`;
 }
 
 /** Asistente de 4 pasos (#25): Salida · Asientos · Pasajeros · Pago. */
@@ -430,7 +433,7 @@ export default function BuscarBoletoScreen() {
           .from('viajes')
           .select(
             `id, fecha_hora_salida, fecha_hora_llegada_est, asientos_disponibles, asientos_totales,
-             rutas!inner ( id, ciudad_origen, ciudad_destino, duracion_estimada_min, precio_pasaje, terminal_origen ),
+             rutas!inner ( id, ciudad_origen, ciudad_destino, duracion_estimada_min, precio_pasaje, terminal_origen, terminal_destino ),
              cooperativas!inner ( id, nombre, calificacion_promedio, logo_url )`
           )
           .eq('estado', 'PROGRAMADO')
@@ -491,10 +494,8 @@ export default function BuscarBoletoScreen() {
             asientosTotales: viaje.asientos_totales,
             ciudadOrigen: ruta?.ciudad_origen,
             ciudadDestino: ruta?.ciudad_destino,
-            terminalOrigen:
-              typeof ruta?.terminal_origen === 'string' && ruta.terminal_origen.trim()
-                ? ruta.terminal_origen.trim()
-                : null,
+            terminalOrigen: textoTerminal(ruta?.terminal_origen),
+            terminalDestino: textoTerminal(ruta?.terminal_destino),
           };
         });
         setViajes(lista);
@@ -1384,7 +1385,7 @@ function TarjetaSalida({
         ) : null}
       </View>
 
-      {viaje.terminalOrigen ? <TerminalSalida nombre={viaje.terminalOrigen} /> : null}
+      <TerminalesViaje salida={viaje.terminalOrigen} llegada={viaje.terminalDestino} />
 
       <View style={s.salidaPie}>
         {pocos ? (
@@ -1402,13 +1403,28 @@ function TarjetaSalida({
   );
 }
 
-/** "Sale de Terminal La Bandera" bajo las horas de la salida. */
-function TerminalSalida({ nombre }: { nombre: string }) {
+/** Nombre del terminal de la ruta, o null si no se indicó. */
+function textoTerminal(valor: unknown): string | null {
+  return typeof valor === 'string' && valor.trim() ? valor.trim() : null;
+}
+
+/** "Sale de Terminal La Bandera" y "Llega a Terminal de Maracaibo" bajo las horas (los que haya). */
+function TerminalesViaje({ salida, llegada }: { salida: string | null; llegada: string | null }) {
+  if (!salida && !llegada) return null;
+  return (
+    <View style={s.terminales}>
+      {salida ? <FilaTerminal texto={`Sale de ${salida}`} /> : null}
+      {llegada ? <FilaTerminal texto={`Llega a ${llegada}`} /> : null}
+    </View>
+  );
+}
+
+function FilaTerminal({ texto }: { texto: string }) {
   return (
     <View style={s.terminal}>
       <MapPin size={Sizes.icon.xs} color={Colors.mutedForeground} weight="fill" />
       <Text variant="secondary" color="muted" compact numberOfLines={2} style={s.terminalTexto}>
-        {`Sale de ${nombre}`}
+        {texto}
       </Text>
     </View>
   );
@@ -1435,7 +1451,7 @@ function TripCard({ viaje }: { viaje: ViajeResumen }) {
           horaSalida={viaje.horaSalida}
           horaLlegada={viaje.horaLlegada || undefined}
         />
-        {viaje.terminalOrigen ? <TerminalSalida nombre={viaje.terminalOrigen} /> : null}
+        <TerminalesViaje salida={viaje.terminalOrigen} llegada={viaje.terminalDestino} />
       </View>
 
       <View style={s.tripFooter}>
@@ -1572,11 +1588,14 @@ const s = StyleSheet.create({
     alignItems: 'flex-start',
     gap: Spacing.xs / 2,
   },
+  terminales: {
+    gap: Spacing.xs,
+    marginTop: Spacing.md,
+  },
   terminal: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.xs,
-    marginTop: Spacing.md,
   },
   terminalTexto: {
     flexShrink: 1,

@@ -35,6 +35,19 @@ function parsePrecio(valor: FormDataEntryValue | null): number {
   return /^\d+(\.\d+)?$/.test(normalizado) ? Number(normalizado) : NaN;
 }
 
+/**
+ * Terminal elegido para una ciudad: su nombre legible, `null` si no se indicó, o `undefined`
+ * si no es del catálogo o no queda en esa ciudad ni en su estado.
+ */
+function leerTerminal(claveTerminal: string, ciudad: string, estado: string): string | null | undefined {
+  if (!claveTerminal) return null;
+  const terminal = terminalVE(claveTerminal);
+  if (!terminal) return undefined;
+  const opciones = terminalesParaSalir(ciudad, estado);
+  const valido = [...opciones.ciudad, ...opciones.estado].some((t) => t.clave === terminal.clave);
+  return valido ? terminal.nombre : undefined;
+}
+
 export async function guardarRuta(formData: FormData, rutaId?: string) {
   if (rutaId !== undefined && !UUID_RE.test(rutaId ?? "")) return { error: MSG_RUTA_NO_ENCONTRADA };
   const supabase = await createClient();
@@ -73,22 +86,21 @@ export async function guardarRuta(formData: FormData, rutaId?: string) {
     return { error: MSG_MISMA_CIUDAD, campo: "destino" as const };
   }
 
-  // Terminal de salida (opcional): del catálogo, en la ciudad de origen o en su estado.
+  // Terminales de salida y de llegada (opcionales): del catálogo, en la ciudad o en su estado.
   // Se guarda el nombre legible: es lo que ve el pasajero en la app al buscar el viaje.
-  let terminal_origen: string | null = null;
-  const claveTerminal = clave("terminal");
-  if (claveTerminal) {
-    const terminal = terminalVE(claveTerminal);
-    const opciones = terminalesParaSalir(ciudad_origen, estado_origen);
-    const valido =
-      terminal !== null && [...opciones.ciudad, ...opciones.estado].some((t) => t.clave === terminal.clave);
-    if (!terminal || !valido) {
-      return {
-        error: `Ese terminal no queda en ${formatCiudad(ciudad_origen)} ni en su estado. Elige otro o déjalo sin indicar.`,
-        campo: "terminal" as const,
-      };
-    }
-    terminal_origen = terminal.nombre;
+  const terminal_origen = leerTerminal(clave("terminal"), ciudad_origen, estado_origen);
+  if (terminal_origen === undefined) {
+    return {
+      error: `Ese terminal de salida no queda en ${formatCiudad(ciudad_origen)} ni en su estado. Elige otro o déjalo sin indicar.`,
+      campo: "terminal" as const,
+    };
+  }
+  const terminal_destino = leerTerminal(clave("terminal_destino"), ciudad_destino, estado_destino);
+  if (terminal_destino === undefined) {
+    return {
+      error: `Ese terminal de llegada no queda en ${formatCiudad(ciudad_destino)} ni en su estado. Elige otro o déjalo sin indicar.`,
+      campo: "terminal_destino" as const,
+    };
   }
 
   const payload = {
@@ -98,6 +110,7 @@ export async function guardarRuta(formData: FormData, rutaId?: string) {
     estado_destino,
     ciudad_destino,
     terminal_origen,
+    terminal_destino,
     duracion_estimada_min,
     precio_pasaje,
     activa,

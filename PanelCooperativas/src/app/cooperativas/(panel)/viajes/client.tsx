@@ -305,8 +305,9 @@ function FormularioProgramar({
             {ruta && (
               <p id={`${uid}-ruta-terminal`} className="text-sm text-muted-foreground">
                 {ruta.terminal_origen ? `Sale de ${ruta.terminal_origen}. ` : "Sin terminal de salida. "}
+                {ruta.terminal_destino ? `Llega a ${ruta.terminal_destino}. ` : "Sin terminal de llegada. "}
                 <Link href="/cooperativas/rutas" className="font-medium text-info-text underline underline-offset-4">
-                  {ruta.terminal_origen ? "Cambiarlo en Rutas" : "Indícalo en Rutas"}
+                  {ruta.terminal_origen && ruta.terminal_destino ? "Cambiarlos en Rutas" : "Indícalos en Rutas"}
                 </Link>
               </p>
             )}
