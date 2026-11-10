@@ -6,7 +6,18 @@ import { readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { ESTADOS_VE, ciudadVE, estadoVE, formatCiudad, normalizarCiudad } from "../ve.ts";
+import {
+  ESTADOS_VE,
+  TERMINALES_VE,
+  TERMINAL_MAX,
+  ciudadVE,
+  claveTerminal,
+  estadoVE,
+  formatCiudad,
+  normalizarCiudad,
+  terminalVE,
+  terminalesParaSalir,
+} from "../ve.ts";
 
 const RAIZ = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const leer = (rel: string) => readFileSync(join(RAIZ, rel), "utf8").replace(/\r\n/g, "\n");
@@ -187,4 +198,46 @@ test("panel y app usan normalizarCiudad y el catálogo compartido", () => {
   assert.match(panel, /from "@\/lib\/ve\.generated"/);
   assert.match(panel, /ESTADOS_VE/);
   assert.match(leer("PanelCooperativas/src/lib/ciudades.ts"), /normalizarCiudad[^\n]*from "\.\/ve\.generated"/);
+});
+
+// ─── Terminales ──────────────────────────────────────────────────────────────
+
+test("terminales: cada uno en una ciudad del catálogo, con clave única y nombre válido", () => {
+  assert.ok(TERMINALES_VE.length > 150);
+  const claves = new Set<string>();
+  for (const t of TERMINALES_VE) {
+    const c = ciudadVE(t.ciudad);
+    assert.ok(c, `${t.nombre}: la ciudad ${t.ciudad} no está en el catálogo`);
+    assert.equal(t.estado, c!.estado.clave, t.nombre);
+    assert.match(t.clave, /^[a-z0-9]+(_[a-z0-9]+)*$/, t.nombre);
+    assert.equal(t.clave, claveTerminal(t.nombre));
+    assert.ok(!claves.has(t.clave), `terminal repetido: ${t.clave}`);
+    claves.add(t.clave);
+    assert.ok(t.nombre.length <= TERMINAL_MAX, t.nombre);
+    assert.equal(t.tipo, t.nombre.startsWith("Terminal") ? "terminal" : "parada");
+    assert.equal(terminalVE(t.nombre), t);
+    assert.equal(terminalVE(t.clave), t);
+  }
+});
+
+test("terminales: las ciudades del PDF tienen los suyos y los de su estado", () => {
+  const caracas = terminalesParaSalir("caracas");
+  assert.ok(caracas.ciudad.some((t) => t.nombre === "Terminal La Bandera"));
+  assert.ok(caracas.ciudad.some((t) => t.nombre === "Terminal de Oriente"));
+  assert.equal(caracas.estado.length, 0);
+  assert.equal(terminalesParaSalir("Socopó").ciudad[0]?.nombre, "Terminal de Socopó");
+  assert.equal(terminalesParaSalir("san_juan").ciudad[0]?.nombre, "Terminal de San Juan de los Morros");
+  // Lechería no tiene terminal propio: se ofrecen los de Anzoátegui.
+  const lecheria = terminalesParaSalir("lecheria");
+  assert.equal(lecheria.ciudad.length, 0);
+  assert.ok(lecheria.estado.some((t) => t.nombre === "Terminal de Puerto La Cruz"));
+  assert.ok(lecheria.estado.every((t) => t.estado === "anzoategui"));
+  // Ciudad fuera del catálogo: se usa el estado que se indique.
+  assert.ok(terminalesParaSalir("El Tigrito", "Anzoátegui").estado.length > 0);
+  assert.deepEqual(terminalesParaSalir(""), { ciudad: [], estado: [] });
+  assert.equal(terminalVE("No existe"), null);
+  assert.equal(terminalVE(""), null);
+  // Píritu (Portuguesa) y Puerto Píritu (Anzoátegui) son ciudades distintas.
+  assert.equal(ciudadVE("Píritu")?.estado.nombre, "Portuguesa");
+  assert.equal(ciudadVE("Puerto Píritu")?.estado.nombre, "Anzoátegui");
 });

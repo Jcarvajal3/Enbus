@@ -25,6 +25,17 @@ const NOMBRES_CIUDAD: Record<string, string> = {
   'san felix': 'San Félix', 'el vigia': 'El Vigía', 'la asuncion': 'La Asunción', 'la guaira': 'La Guaira',
   'puerto la cruz': 'Puerto La Cruz', 'valle de la pascua': 'Valle de la Pascua', 'punta de mata': 'Punta de Mata',
   'san fernando': 'San Fernando de Apure', 'san juan': 'San Juan de los Morros',
+  // Ciudades con terminal (matriz nacional, 20261110000001).
+  maiquetia: 'Maiquetía', naiguata: 'Naiguatá', 'las tejerias': 'Las Tejerías', choroni: 'Choroní',
+  moron: 'Morón', 'el baul': 'El Baúl', camaguan: 'Camaguán', adicora: 'Adícora', quibor: 'Quíbor',
+  mucuchies: 'Mucuchíes', 'rio chico': 'Río Chico', cupira: 'Cúpira', 'san jose de guanipa': 'San José de Guanipa',
+  'san jose de guaribe': 'San José de Guaribe', 'puerto piritu': 'Puerto Píritu', piritu: 'Píritu', turen: 'Turén',
+  boconoito: 'Boconoíto', 'rio caribe': 'Río Caribe', guiria: 'Güiria', 'caicara de maturin': 'Caicara de Maturín',
+  'san antonio de maturin': 'San Antonio de Maturín', 'santa elena de uairen': 'Santa Elena de Uairén',
+  'santa barbara de barinas': 'Santa Bárbara de Barinas', 'san carlos de rio negro': 'San Carlos de Río Negro',
+  'san cristobal': 'San Cristóbal', 'san antonio del tachira': 'San Antonio del Táchira', 'la fria': 'La Fría',
+  colon: 'Colón', 'el pinal': 'El Piñal', urena: 'Ureña', bramon: 'Bramón', isnotu: 'Isnotú', pampan: 'Pampán',
+  paraguachon: 'Paraguachón',
 };
 
 /** "puerto_la_cruz" -> "Puerto La Cruz", "merida" -> "Mérida". */

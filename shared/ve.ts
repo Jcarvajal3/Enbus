@@ -251,33 +251,102 @@ export type EstadoVE = { readonly clave: string; readonly nombre: string; readon
 
 /** Nombre del estado → nombres de sus ciudades, la capital primero. */
 const CATALOGO_FUENTE: readonly (readonly [string, readonly string[]])[] = [
-  ["Amazonas", ["Puerto Ayacucho"]],
-  ["Anzoátegui", ["Barcelona", "Puerto La Cruz", "Lechería", "El Tigre", "Anaco"]],
+  ["Amazonas", ["Puerto Ayacucho", "San Fernando de Atabapo", "Maroa", "San Carlos de Río Negro"]],
+  [
+    "Anzoátegui",
+    [
+      "Barcelona", "Puerto La Cruz", "Lechería", "El Tigre", "Anaco", "San José de Guanipa", "Cantaura",
+      "Clarines", "Puerto Píritu", "Aragua de Barcelona", "Boca de Uchire",
+    ],
+  ],
   ["Apure", ["San Fernando de Apure", "Guasdualito"]],
-  ["Aragua", ["Maracay", "Turmero", "Cagua", "La Victoria"]],
-  ["Barinas", ["Barinas", "Socopó"]],
-  ["Bolívar", ["Ciudad Bolívar", "Ciudad Guayana", "Puerto Ordaz", "San Félix", "Upata"]],
-  ["Carabobo", ["Valencia", "Puerto Cabello", "Guacara", "San Diego"]],
-  ["Cojedes", ["San Carlos", "Tinaquillo"]],
-  ["Delta Amacuro", ["Tucupita"]],
+  [
+    "Aragua",
+    [
+      "Maracay", "Turmero", "Cagua", "La Victoria", "Las Tejerías", "Villa de Cura", "Palo Negro", "San Mateo",
+      "Choroní", "Ocumare de la Costa",
+    ],
+  ],
+  [
+    "Barinas",
+    ["Barinas", "Socopó", "Ciudad Bolivia", "Santa Bárbara de Barinas", "Barinitas", "Sabaneta", "Barrancas"],
+  ],
+  [
+    "Bolívar",
+    [
+      "Ciudad Bolívar", "Ciudad Guayana", "Puerto Ordaz", "San Félix", "Upata", "Santa Elena de Uairén",
+      "Caicara del Orinoco", "El Callao", "Tumeremo", "Guasipati", "El Manteco",
+    ],
+  ],
+  [
+    "Carabobo",
+    ["Valencia", "Puerto Cabello", "Guacara", "San Diego", "Los Guayos", "Naguanagua", "Morón", "Bejuma"],
+  ],
+  ["Cojedes", ["San Carlos", "Tinaquillo", "Tinaco", "El Baúl", "Las Vegas", "El Pao"]],
+  ["Delta Amacuro", ["Tucupita", "Curiapo", "Pedernales", "Casacoima"]],
   ["Distrito Capital", ["Caracas"]],
-  ["Falcón", ["Coro", "Punto Fijo"]],
-  ["Guárico", ["San Juan de los Morros", "Valle de la Pascua", "Calabozo"]],
-  ["La Guaira", ["La Guaira", "Maiquetía", "Catia La Mar"]],
-  ["Lara", ["Barquisimeto", "Cabudare", "Carora"]],
-  ["Mérida", ["Mérida", "El Vigía", "Tovar"]],
+  [
+    "Falcón",
+    [
+      "Coro", "Punto Fijo", "Tucacas", "Chichiriviche", "Dabajuro", "Churuguara", "Puerto Cumarebo", "Adícora",
+      "Yaracal", "San Juan de los Cayos",
+    ],
+  ],
+  [
+    "Guárico",
+    [
+      "San Juan de los Morros", "Valle de la Pascua", "Calabozo", "Zaraza", "Altagracia de Orituco", "El Sombrero",
+      "Camaguán", "San José de Guaribe", "Ortiz",
+    ],
+  ],
+  ["La Guaira", ["La Guaira", "Maiquetía", "Catia La Mar", "Macuto", "Caraballeda", "Naiguatá", "Chuspa"]],
+  [
+    "Lara",
+    ["Barquisimeto", "Cabudare", "Carora", "Quíbor", "El Tocuyo", "Sarare", "Duaca", "Cubiro", "Siquisique"],
+  ],
+  [
+    "Mérida",
+    [
+      "Mérida", "El Vigía", "Tovar", "Ejido", "Santa Cruz de Mora", "Timotes", "Bailadores", "Apartaderos",
+      "Mucuchíes", "La Azulita", "Zea",
+    ],
+  ],
   [
     "Miranda",
-    ["Los Teques", "Guarenas", "Guatire", "Charallave", "Cúa", "Ocumare del Tuy", "Santa Teresa del Tuy"],
+    [
+      "Los Teques", "Guarenas", "Guatire", "Charallave", "Cúa", "Ocumare del Tuy", "Santa Teresa del Tuy",
+      "Río Chico", "Cúpira", "Caucagua", "San Antonio de los Altos",
+    ],
   ],
-  ["Monagas", ["Maturín", "Punta de Mata"]],
-  ["Nueva Esparta", ["Porlamar", "La Asunción", "Pampatar"]],
-  ["Portuguesa", ["Guanare", "Acarigua", "Araure"]],
-  ["Sucre", ["Cumaná", "Carúpano"]],
-  ["Táchira", ["San Cristóbal", "Táriba", "Rubio", "San Antonio del Táchira"]],
-  ["Trujillo", ["Valera", "Trujillo", "Boconó"]],
-  ["Yaracuy", ["San Felipe", "Yaritagua", "Chivacoa"]],
-  ["Zulia", ["Maracaibo", "Cabimas", "Ciudad Ojeda", "Machiques"]],
+  [
+    "Monagas",
+    [
+      "Maturín", "Punta de Mata", "Quiriquire", "Caripito", "Temblador", "Caicara de Maturín",
+      "San Antonio de Maturín",
+    ],
+  ],
+  ["Nueva Esparta", ["Porlamar", "La Asunción", "Pampatar", "Juan Griego", "San Juan Bautista", "Boca de Pozo"]],
+  ["Portuguesa", ["Guanare", "Acarigua", "Araure", "Biscucuy", "Turén", "Ospino", "Píritu", "Boconoíto"]],
+  ["Sucre", ["Cumaná", "Carúpano", "Río Caribe", "Güiria", "Cariaco", "San Antonio del Golfo", "Irapa"]],
+  [
+    "Táchira",
+    [
+      "San Cristóbal", "Táriba", "Rubio", "San Antonio del Táchira", "La Fría", "Colón", "La Grita", "El Piñal",
+      "Ureña", "Capacho", "Bramón", "Seboruco",
+    ],
+  ],
+  [
+    "Trujillo",
+    ["Valera", "Trujillo", "Boconó", "Sabana de Mendoza", "Isnotú", "Carache", "Pampán", "Escuque", "La Ceiba"],
+  ],
+  ["Yaracuy", ["San Felipe", "Yaritagua", "Chivacoa", "Nirgua", "Urachiche", "Aroa", "Guama"]],
+  [
+    "Zulia",
+    [
+      "Maracaibo", "Cabimas", "Ciudad Ojeda", "Machiques", "San Francisco", "Santa Rita", "Villa del Rosario",
+      "San Timoteo", "Los Puertos de Altagracia", "Bachaquero", "Sinamaica", "Paraguachón",
+    ],
+  ],
 ];
 
 /**
@@ -363,6 +432,314 @@ export function formatRuta(ruta: string | null | undefined): string {
 export function mismaCiudad(a: string | null | undefined, b: string | null | undefined): boolean {
   const na = normalizarCiudad(a);
   return na !== "" && na === normalizarCiudad(b);
+}
+
+// ─── Terminales de pasajeros ─────────────────────────────────────────────────
+// Terminales y paradas desde donde salen los buses, por ciudad del catálogo (fuente: la
+// matriz nacional de terminales y paradas de noviembre de 2026). Al programar un viaje el
+// panel ofrece los de la ciudad de origen de la ruta y luego los demás de su estado; el
+// viaje guarda el `nombre` en `viajes.terminal_origen` y la app lo muestra tal cual.
+// Para añadir uno basta con escribirlo aquí y ejecutar `node shared/generar.mjs`.
+
+/** "terminal": con edificio (formal o parcial); "parada": punto de embarque sin terminal. */
+export type TipoTerminalVE = "terminal" | "parada";
+
+export type TerminalVE = {
+  /** "terminal_la_bandera": única en todo el país. */
+  readonly clave: string;
+  /** "Terminal La Bandera": lo que guarda el viaje y ve el pasajero. */
+  readonly nombre: string;
+  readonly tipo: TipoTerminalVE;
+  /** Clave de la ciudad del catálogo ("caracas"). */
+  readonly ciudad: string;
+  /** Clave del estado ("distrito_capital"). */
+  readonly estado: string;
+};
+
+/** Largo máximo del nombre de un terminal (= CHECK de `viajes.terminal_origen`). */
+export const TERMINAL_MAX = 120;
+
+/**
+ * Nombre de la ciudad del catálogo → sus terminales, los de más infraestructura primero.
+ * "T" = "Terminal de <ciudad>", "P" = "Parada de <ciudad>"; otro texto es el nombre completo
+ * (empieza por "Terminal" si es un terminal; si no, es una parada).
+ */
+const TERMINALES_FUENTE: readonly (readonly [string, readonly string[]])[] = [
+  // Distrito Capital (Petare y el Distribuidor Metropolitano son de Miranda, pero se viaja "desde Caracas")
+  [
+    "Caracas",
+    [
+      "Terminal La Bandera", "Terminal de Oriente", "Terminal Nuevo Circo", "Terminal Ruperto Lugo (Catia)",
+      "Parada de Gato Negro", "Parada de Plaza Venezuela (Zona Rental)", "Parada de La Hoyada",
+      "Parada de San Martín (frente a la Maternidad)", "Parada de Antímano (plaza Bolívar)",
+      "Parada de El Paraíso (redoma de La India)", "Parada del Distribuidor Metropolitano",
+      "Parada de Petare (bajo el elevado)",
+    ],
+  ],
+  // Miranda
+  ["Guatire", ["T"]],
+  ["Guarenas", ["T"]],
+  ["Ocumare del Tuy", ["Terminal de Ocumare del Tuy (Pasaje Los Indios)"]],
+  ["Charallave", ["Terminal de Charallave (Don Simón Rodríguez)"]],
+  ["Cúa", ["Terminal de Cúa (estación del ferrocarril)"]],
+  ["Santa Teresa del Tuy", ["T"]],
+  ["Río Chico", ["T"]],
+  ["Cúpira", ["T"]],
+  ["Caucagua", ["P"]],
+  ["San Antonio de los Altos", ["Parada de San Antonio de los Altos (redoma La Rosaleda)"]],
+  ["Los Teques", ["Parada de Los Teques (La Hoyada)"]],
+  // La Guaira
+  ["Maiquetía", ["Terminal de La Guaira (Maiquetía)"]],
+  ["Catia La Mar", ["T"]],
+  ["Macuto", ["Parada de Caribe (Macuto)"]],
+  ["Caraballeda", ["Parada de Caraballeda (Los Corales)"]],
+  ["Naiguatá", ["P"]],
+  ["Chuspa", ["P"]],
+  // Aragua
+  ["Maracay", ["Terminal Central de Maracay"]],
+  ["La Victoria", ["T"]],
+  ["Turmero", ["T"]],
+  ["Cagua", ["T"]],
+  ["Las Tejerías", ["T"]],
+  ["Villa de Cura", ["T"]],
+  ["Palo Negro", ["Parada de Palo Negro (redoma)"]],
+  ["Choroní", ["Parada de Choroní (malecón)"]],
+  ["Ocumare de la Costa", ["Parada de Ocumare de la Costa (El Playón)"]],
+  ["San Mateo", ["P"]],
+  // Carabobo
+  [
+    "Valencia",
+    ["Terminal Big Low Center", "Parada de Las Chimeneas", "Parada de Flor Amarillo", "Parada de Santa Rosa"],
+  ],
+  ["Puerto Cabello", ["T", "Parada de Patanemo"]],
+  ["Guacara", ["T"]],
+  ["Los Guayos", ["T"]],
+  ["Morón", ["T"]],
+  ["Naguanagua", ["Parada de Naguanagua (redoma de Guaparo)"]],
+  ["Bejuma", ["P"]],
+  // Cojedes
+  ["San Carlos", ["T"]],
+  ["Tinaquillo", ["T"]],
+  ["Tinaco", ["P"]],
+  ["El Baúl", ["P"]],
+  ["Las Vegas", ["P"]],
+  ["El Pao", ["P"]],
+  // Guárico
+  ["San Juan de los Morros", ["T"]],
+  ["Calabozo", ["T"]],
+  ["Valle de la Pascua", ["T"]],
+  ["Zaraza", ["T"]],
+  ["Altagracia de Orituco", ["T"]],
+  ["El Sombrero", ["P"]],
+  ["Camaguán", ["P"]],
+  ["San José de Guaribe", ["P"]],
+  ["Ortiz", ["P"]],
+  // Zulia
+  ["Maracaibo", ["Terminal de Maracaibo", "Parada de La Curva de Molina", "Parada de Los Haticos"]],
+  ["Ciudad Ojeda", ["T"]],
+  ["Cabimas", ["T"]],
+  ["Santa Rita", ["T"]],
+  ["Machiques", ["T"]],
+  ["Villa del Rosario", ["T"]],
+  ["San Timoteo", ["T"]],
+  ["Los Puertos de Altagracia", ["T"]],
+  ["San Francisco", ["Parada de San Francisco (sector Plazuela)"]],
+  ["Bachaquero", ["P"]],
+  ["Sinamaica", ["P"]],
+  ["Paraguachón", ["P"]],
+  // Falcón
+  ["Coro", ["T"]],
+  ["Punto Fijo", ["Terminal de Punto Fijo (Alí Primera)"]],
+  ["Tucacas", ["T"]],
+  ["Chichiriviche", ["T"]],
+  ["Dabajuro", ["T"]],
+  ["Churuguara", ["T"]],
+  ["Puerto Cumarebo", ["P"]],
+  ["Adícora", ["P"]],
+  ["Yaracal", ["P"]],
+  ["San Juan de los Cayos", ["P"]],
+  // Lara
+  ["Barquisimeto", ["T", "Parada del centro de Barquisimeto (Mercabar)"]],
+  ["Quíbor", ["T"]],
+  ["El Tocuyo", ["T"]],
+  ["Carora", ["T"]],
+  ["Sarare", ["T"]],
+  ["Duaca", ["P"]],
+  ["Cubiro", ["P"]],
+  ["Siquisique", ["P"]],
+  // Yaracuy
+  ["San Felipe", ["T"]],
+  ["Yaritagua", ["T", "Parada de Yaritagua (distribuidor)"]],
+  ["Chivacoa", ["T"]],
+  ["Nirgua", ["T"]],
+  ["Urachiche", ["P"]],
+  ["Aroa", ["P"]],
+  ["Guama", ["P"]],
+  // Táchira
+  ["San Cristóbal", ["T"]],
+  ["San Antonio del Táchira", ["T"]],
+  ["La Fría", ["T"]],
+  ["Colón", ["T"]],
+  ["Táriba", ["T"]],
+  ["Rubio", ["T"]],
+  ["La Grita", ["T"]],
+  ["El Piñal", ["Parada de El Piñal (Troncal 5)"]],
+  ["Ureña", ["P"]],
+  ["Capacho", ["P"]],
+  ["Bramón", ["P"]],
+  ["Seboruco", ["P"]],
+  // Mérida
+  ["Mérida", ["T"]],
+  ["El Vigía", ["T"]],
+  ["Tovar", ["T"]],
+  ["Santa Cruz de Mora", ["T"]],
+  ["Timotes", ["T"]],
+  ["Ejido", ["Parada de Ejido (El Llano)"]],
+  ["Bailadores", ["P"]],
+  ["Apartaderos", ["Parada de Apartaderos (Pico El Águila)"]],
+  ["Mucuchíes", ["P"]],
+  ["La Azulita", ["P"]],
+  ["Zea", ["P"]],
+  // Trujillo
+  ["Valera", ["T"]],
+  ["Trujillo", ["T"]],
+  ["Boconó", ["T"]],
+  ["Sabana de Mendoza", ["T"]],
+  ["Isnotú", ["P"]],
+  ["Carache", ["P"]],
+  ["Pampán", ["P"]],
+  ["Escuque", ["P"]],
+  ["La Ceiba", ["P"]],
+  // Barinas
+  ["Barinas", ["T", "Parada de Torunos"]],
+  ["Ciudad Bolivia", ["T"]],
+  ["Santa Bárbara de Barinas", ["T"]],
+  ["Socopó", ["T"]],
+  ["Barinitas", ["P"]],
+  ["Sabaneta", ["P"]],
+  ["Barrancas", ["P"]],
+  // Portuguesa
+  ["Acarigua", ["Terminal de Acarigua-Araure"]],
+  ["Guanare", ["T"]],
+  ["Biscucuy", ["T"]],
+  ["Turén", ["Parada de Turén (Villa Bruzual)"]],
+  ["Ospino", ["P"]],
+  ["Píritu", ["P"]],
+  ["Boconoíto", ["Parada de San Genaro de Boconoíto"]],
+  // Anzoátegui
+  ["Puerto La Cruz", ["T"]],
+  ["Barcelona", ["T"]],
+  ["El Tigre", ["T"]],
+  ["Anaco", ["T"]],
+  ["San José de Guanipa", ["T"]],
+  ["Clarines", ["T"]],
+  ["Cantaura", ["P"]],
+  ["Puerto Píritu", ["Parada de Puerto Píritu (Troncal 9)"]],
+  ["Aragua de Barcelona", ["P"]],
+  ["Boca de Uchire", ["P"]],
+  // Sucre
+  ["Cumaná", ["T"]],
+  ["Carúpano", ["T"]],
+  ["Río Caribe", ["T"]],
+  ["Güiria", ["P"]],
+  ["Cariaco", ["P"]],
+  ["San Antonio del Golfo", ["P"]],
+  ["Irapa", ["P"]],
+  // Monagas
+  ["Maturín", ["Terminal de Maturín"]],
+  ["Punta de Mata", ["T"]],
+  ["Quiriquire", ["T"]],
+  ["Caripito", ["P"]],
+  ["Temblador", ["P"]],
+  ["Caicara de Maturín", ["P"]],
+  ["San Antonio de Maturín", ["P"]],
+  // Delta Amacuro
+  ["Tucupita", ["T"]],
+  ["Curiapo", ["P"]],
+  ["Pedernales", ["P"]],
+  ["Casacoima", ["P"]],
+  // Bolívar
+  ["Ciudad Bolívar", ["T"]],
+  ["Puerto Ordaz", ["Terminal de Puerto Ordaz (Manuel Piar)"]],
+  ["San Félix", ["T"]],
+  ["Upata", ["T"]],
+  ["Santa Elena de Uairén", ["T"]],
+  ["Caicara del Orinoco", ["T"]],
+  ["El Callao", ["P"]],
+  ["Tumeremo", ["P"]],
+  ["Guasipati", ["P"]],
+  ["El Manteco", ["P"]],
+  // Amazonas
+  ["Puerto Ayacucho", ["T"]],
+  ["San Fernando de Atabapo", ["P"]],
+  ["Maroa", ["P"]],
+  ["San Carlos de Río Negro", ["P"]],
+  // Nueva Esparta
+  ["Porlamar", ["T"]],
+  ["Juan Griego", ["T"]],
+  ["La Asunción", ["P"]],
+  ["Pampatar", ["P"]],
+  ["San Juan Bautista", ["P"]],
+  ["Boca de Pozo", ["P"]],
+];
+
+/** Clave de un terminal: "Terminal Ruperto Lugo (Catia)" → "terminal_ruperto_lugo_catia"; '' si está vacío. */
+export function claveTerminal(v: string | null | undefined): string {
+  return normalizarCiudad(v)
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+/**
+ * Todos los terminales y paradas del catálogo, agrupados por ciudad:
+ * `{ clave: "terminal_la_bandera", nombre: "Terminal La Bandera", tipo: "terminal", ciudad: "caracas", estado: "distrito_capital" }`.
+ * Una ciudad que no esté en el catálogo deja `estado` vacío (lo vigilan las pruebas de shared/).
+ */
+export const TERMINALES_VE: readonly TerminalVE[] = TERMINALES_FUENTE.reduce<TerminalVE[]>(
+  (lista, [nombreCiudad, terminales]) => {
+    const enCatalogo = ciudadVE(nombreCiudad);
+    for (const t of terminales) {
+      const nombre = t === "T" ? `Terminal de ${nombreCiudad}` : t === "P" ? `Parada de ${nombreCiudad}` : t;
+      lista.push({
+        clave: claveTerminal(nombre),
+        nombre,
+        tipo: nombre.indexOf("Terminal") === 0 ? "terminal" : "parada",
+        ciudad: normalizarCiudad(nombreCiudad),
+        estado: enCatalogo ? enCatalogo.estado.clave : "",
+      });
+    }
+    return lista;
+  },
+  []
+);
+
+/** El terminal del catálogo por su clave o su nombre ("terminal_la_bandera", "Terminal La Bandera"), o null. */
+export function terminalVE(v: string | null | undefined): TerminalVE | null {
+  const clave = claveTerminal(v);
+  if (!clave) return null;
+  for (const t of TERMINALES_VE) if (t.clave === clave) return t;
+  return null;
+}
+
+/**
+ * Terminales para salir de una ciudad: `ciudad`, los suyos; `estado`, los demás de su estado
+ * (para ciudades sin terminal propio, como Lechería o Cabudare). `estado` solo hace falta si
+ * la ciudad no está en el catálogo.
+ */
+export function terminalesParaSalir(
+  ciudad: string | null | undefined,
+  estado?: string | null
+): { ciudad: TerminalVE[]; estado: TerminalVE[] } {
+  const claveCiudad = normalizarCiudad(ciudad);
+  const enCatalogo = claveCiudad ? ciudadVE(claveCiudad, estado) ?? ciudadVE(claveCiudad) : null;
+  const claveEstado = enCatalogo ? enCatalogo.estado.clave : normalizarCiudad(estado);
+  const propios: TerminalVE[] = [];
+  const otros: TerminalVE[] = [];
+  for (const t of TERMINALES_VE) {
+    if (claveCiudad && t.ciudad === claveCiudad) propios.push(t);
+    else if (claveEstado && t.estado === claveEstado) otros.push(t);
+  }
+  return { ciudad: propios, estado: otros };
 }
 
 // ─── Fechas en hora de Venezuela ─────────────────────────────────────────────

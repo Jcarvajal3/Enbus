@@ -15,3 +15,7 @@ export { formatCiudad, formatRuta, normalizarCiudad, mismaCiudad } from "./ve.ge
 // Catálogo de estados y ciudades (el de los selectores: ver ./data/venezuela.ts).
 export { ESTADOS_VE, estadoVE, ciudadVE } from "./ve.generated";
 export type { EstadoVE, CiudadVE } from "./ve.generated";
+
+// Terminales y paradas de salida (los de la ciudad de origen y los demás de su estado).
+export { TERMINALES_VE, TERMINAL_MAX, terminalVE, terminalesParaSalir } from "./ve.generated";
+export type { TerminalVE } from "./ve.generated";

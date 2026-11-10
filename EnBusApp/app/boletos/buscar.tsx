@@ -132,6 +132,8 @@ interface ViajeResumen {
   asientosTotales: number;
   ciudadOrigen?: string;
   ciudadDestino?: string;
+  /** `viajes.terminal_origen` ("Terminal La Bandera"); null si la cooperativa no lo indicó */
+  terminalOrigen: string | null;
 }
 
 type SortType = 'hora_asc' | 'precio_asc' | 'duracion_asc';
@@ -161,7 +163,8 @@ function etiquetaSalida(viaje: ViajeResumen, monto: string): string {
     viaje.asientosDisponibles <= POCOS_ASIENTOS
       ? `quedan ${viaje.asientosDisponibles} ${viaje.asientosDisponibles === 1 ? 'asiento' : 'asientos'}`
       : `${viaje.asientosDisponibles} asientos libres`;
-  return `${viaje.cooperativa}, sale ${viaje.horaSalida}${llegada}, ${monto}, ${asientos}`;
+  const terminal = viaje.terminalOrigen ? ` desde ${viaje.terminalOrigen}` : '';
+  return `${viaje.cooperativa}, sale ${viaje.horaSalida}${terminal}${llegada}, ${monto}, ${asientos}`;
 }
 
 /** Asistente de 4 pasos (#25): Salida · Asientos · Pasajeros · Pago. */
@@ -426,7 +429,7 @@ export default function BuscarBoletoScreen() {
         const { data, error } = await supabase
           .from('viajes')
           .select(
-            `id, fecha_hora_salida, fecha_hora_llegada_est, asientos_disponibles, asientos_totales,
+            `id, fecha_hora_salida, fecha_hora_llegada_est, asientos_disponibles, asientos_totales, terminal_origen,
              rutas!inner ( id, ciudad_origen, ciudad_destino, duracion_estimada_min, precio_pasaje ),
              cooperativas!inner ( id, nombre, calificacion_promedio, logo_url )`
           )
@@ -488,6 +491,10 @@ export default function BuscarBoletoScreen() {
             asientosTotales: viaje.asientos_totales,
             ciudadOrigen: ruta?.ciudad_origen,
             ciudadDestino: ruta?.ciudad_destino,
+            terminalOrigen:
+              typeof viaje.terminal_origen === 'string' && viaje.terminal_origen.trim()
+                ? viaje.terminal_origen.trim()
+                : null,
           };
         });
         setViajes(lista);
@@ -1377,6 +1384,8 @@ function TarjetaSalida({
         ) : null}
       </View>
 
+      {viaje.terminalOrigen ? <TerminalSalida nombre={viaje.terminalOrigen} /> : null}
+
       <View style={s.salidaPie}>
         {pocos ? (
           <Badge tone="pending">{`Quedan ${viaje.asientosDisponibles}`}</Badge>
@@ -1390,6 +1399,18 @@ function TarjetaSalida({
         </Text>
       </View>
     </PressableScale>
+  );
+}
+
+/** "Sale de Terminal La Bandera" bajo las horas de la salida. */
+function TerminalSalida({ nombre }: { nombre: string }) {
+  return (
+    <View style={s.terminal}>
+      <MapPin size={Sizes.icon.xs} color={Colors.mutedForeground} weight="fill" />
+      <Text variant="secondary" color="muted" compact numberOfLines={2} style={s.terminalTexto}>
+        {`Sale de ${nombre}`}
+      </Text>
+    </View>
   );
 }
 
@@ -1414,6 +1435,7 @@ function TripCard({ viaje }: { viaje: ViajeResumen }) {
           horaSalida={viaje.horaSalida}
           horaLlegada={viaje.horaLlegada || undefined}
         />
+        {viaje.terminalOrigen ? <TerminalSalida nombre={viaje.terminalOrigen} /> : null}
       </View>
 
       <View style={s.tripFooter}>
@@ -1549,6 +1571,15 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: Spacing.xs / 2,
+  },
+  terminal: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    marginTop: Spacing.md,
+  },
+  terminalTexto: {
+    flexShrink: 1,
   },
   salidaPie: {
     flexDirection: 'row',
