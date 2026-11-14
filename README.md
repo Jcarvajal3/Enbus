@@ -6,8 +6,8 @@ Monorepo con la app de pasajeros, el panel de las cooperativas, la landing públ
 | Carpeta | Qué es | Tecnología |
 |---|---|---|
 | `EnBusApp/` | App móvil para pasajeros: compra de boletos, envío y rastreo de encomiendas | Expo / React Native (expo-router) |
-| `PanelCooperativas/` | Panel de las cooperativas (`/cooperativas`) y del super admin (`/admin`) | Next.js 16 |
-| `LandingEnBus/` | Sitio público: portada, calculadora de envíos, rastreo, registro de cooperativas y páginas legales | Next.js 16 |
+| `PanelCooperativas/` | Todo lo web en un solo proyecto y dominio: sitio público (portada con rastreo, `/terminos`, `/privacidad`, `/eliminar-cuenta`), panel de las cooperativas (`/cooperativas`) y super admin (`/admin`) | Next.js 16 |
+| `LandingEnBus/` | Landing anterior (calculadora, rastreo, registro). Reemplazada por el sitio de `PanelCooperativas/src/app/(sitio)` | Next.js 16 |
 | `supabase/` | Migraciones SQL (en orden), edge functions (Deno) y `config.toml` | Supabase (Postgres 17) |
 | `shared/` | Fuente única de tokens de diseño y formatos venezolanos; genera `*.generated.*` en los tres proyectos | TypeScript sin dependencias |
 | `Specs/`, `Audits/` | Especificaciones funcionales, auditorías y estado de la implementación | Markdown |
