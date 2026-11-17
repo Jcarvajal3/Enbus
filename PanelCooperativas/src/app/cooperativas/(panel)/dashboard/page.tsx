@@ -5,7 +5,6 @@ import { formatFechaVE, hoyVE, rangoDiaVE, sumarDiasVE } from "@/lib/fechas";
 import { resumirIngresos } from "@/lib/types/admin-dashboard";
 import { formatMoney } from "@/lib/dinero";
 import type { ChecklistCooperativa } from "@/components/checklist-puesta-en-marcha";
-import { telefonoWhatsApp } from "@/lib/ve";
 import { cargarBandeja } from "./actions";
 import { ResumenVista, type EncomiendaReciente } from "./resumen-vista";
 
@@ -14,12 +13,6 @@ const SELECT_RECIENTES =
 // Respaldo mientras la base no tenga las columnas de la fase 3 (migración 20260720000002).
 const SELECT_RECIENTES_BASICO =
   "id, tracking_id, receiver_nombre, estado, created_at, estado_origen, ciudad_origen, estado_destino, ciudad_destino, sender:profiles!sender_id(nombre_completo)";
-
-/** WhatsApp de soporte de EnBus solo con dígitos (para wa.me), o null si no está configurado. */
-function whatsappSoporte(): string | null {
-  const crudo = process.env.NEXT_PUBLIC_SOPORTE_WHATSAPP ?? "";
-  return telefonoWhatsApp(crudo) ?? (crudo.replace(/\D/g, "") || null);
-}
 
 export default async function DashboardPage() {
   // getUserProfile() y obtenerTasaBCV() usan React cache(): el layout ya los
@@ -117,15 +110,12 @@ export default async function DashboardPage() {
     // Encomiendas recientes
     cargarRecientes(),
 
-    // Solo administrador: gráfico + comisiones (en paralelo entre sí)
+    // Solo administrador: gráfico de actividad (comisiones ocultas temporalmente en el resumen)
     esAdmin
-      ? (async () => {
-        // Últimos 7 días de Venezuela, de más antiguo a hoy
-        const last7Days = Array.from({ length: 7 }).map((_, i) => sumarDiasVE(hoy, -(6 - i)));
-
-        const [chartResults, comisionesResult] = await Promise.all([
-          Promise.all(
-            last7Days.map(async (dia) => {
+      ? Promise.all(
+          Array.from({ length: 7 })
+            .map((_, i) => sumarDiasVE(hoy, -(6 - i)))
+            .map(async (dia) => {
               const { desde: start, hasta: end } = rangoDiaVE(dia);
               const [encRes, bolRes] = await Promise.all([
                 supabase
@@ -148,18 +138,7 @@ export default async function DashboardPage() {
                 boletos: bolRes.count || 0,
               };
             })
-          ),
-          // Comisiones pendientes: todos los ciclos sin pagar (el admin de EnBus ve la misma suma)
-          supabase
-            .from("comisiones_ciclo")
-            .select("monto_comision, periodo_inicio, periodo_fin, pagado")
-            .eq("cooperativa_id", cooperativaId)
-            .eq("pagado", false)
-            .order("periodo_inicio", { ascending: true }),
-        ]);
-
-        return { chartData: chartResults, comisiones: comisionesResult.data, comisionesError: comisionesResult.error };
-      })()
+        )
       : Promise.resolve(null),
 
     // Puesta en marcha (solo administrador)
@@ -171,17 +150,11 @@ export default async function DashboardPage() {
 
   if (kpiPagos.error) console.error("[DashboardPage] pagos:", kpiPagos.error);
   if (recentData.error) console.error("[DashboardPage] encomiendas recientes:", recentData.error);
-  if (adminData?.comisionesError) console.error("[DashboardPage] comisiones:", adminData.comisionesError);
   // Sin la migración de la fase 3 la RPC no existe: la tarjeta simplemente no se muestra.
   if (checklistRes?.error) console.error("[DashboardPage] checklist:", checklistRes.error);
   const checklist = (checklistRes && !checklistRes.error ? checklistRes.data : null) as ChecklistCooperativa | null;
 
   const kpi = (r: { count: number | null; error: unknown }) => (r.error ? "—" : String(r.count ?? 0));
-  const ciclosPendientes = (adminData?.comisiones ?? []) as {
-    monto_comision: number | string;
-    periodo_inicio: string;
-    periodo_fin: string;
-  }[];
   // Σ coalesce(monto_bs, monto × tasa de hoy) en Bs; cada pago a su propia tasa (sin la de hoy como referencia).
   const ingresos = resumirIngresos(kpiPagos.data, tasa?.tasa ?? null);
 
@@ -194,19 +167,7 @@ export default async function DashboardPage() {
       ingresos={kpiPagos.error ? null : formatMoney({ usd: ingresos.usd, bs: ingresos.bs, tasa: null })}
       // Un KPI que falla muestra "—" y un solo aviso encima de la fila (PU-14), nunca un 0 engañoso.
       kpisConError={[kpiRecibidas, kpiDespachadas, kpiBoletos, kpiPagos].some((r) => r.error)}
-      chartData={adminData?.chartData ?? []}
-      comisionPendiente={
-        ciclosPendientes.length > 0
-          ? {
-              total: ciclosPendientes.reduce((suma, c) => suma + Number(c.monto_comision ?? 0), 0),
-              ciclos: ciclosPendientes.length,
-              desde: ciclosPendientes[0].periodo_inicio,
-              hasta: ciclosPendientes[ciclosPendientes.length - 1].periodo_fin,
-            }
-          : null
-      }
-      comisionesError={Boolean(adminData?.comisionesError)}
-      soporte={whatsappSoporte()}
+      chartData={adminData ?? []}
       encomiendasRecientes={(recentData.data ?? []) as unknown as EncomiendaReciente[]}
       recientesError={Boolean(recentData.error)}
     />

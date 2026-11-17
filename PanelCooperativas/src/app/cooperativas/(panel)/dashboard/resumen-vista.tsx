@@ -2,19 +2,18 @@
 // La página reúne los datos en el servidor y esta vista los dibuja.
 
 import dynamic from "next/dynamic";
-import { CheckCircle, Coins, WarningCircle, WhatsappLogo } from "@phosphor-icons/react/dist/ssr";
+import { Coins } from "@phosphor-icons/react/dist/ssr";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
-import { StatusBadge, TonoBadge } from "@/components/status-badge";
-import { Monto } from "@/components/monto";
+import { StatusBadge } from "@/components/status-badge";
 import { KpiCard } from "@/components/kpi-card";
 import { FilaVacia } from "@/components/fila-vacia";
 import { CeldaEnlace } from "@/components/celda-enlace";
 import { ChecklistPuestaEnMarcha, type ChecklistCooperativa } from "@/components/checklist-puesta-en-marcha";
 import type { MontoFormateado } from "@/lib/dinero";
-import { formatFechaHoraCortaVE, formatFechaVE } from "@/lib/fechas";
+import { formatFechaHoraCortaVE } from "@/lib/fechas";
 import { formatCiudad } from "@/lib/ciudades";
 import { ICONO_SECCION } from "@/lib/navigation";
 import { BandejaAtencion } from "./bandeja-atencion";
@@ -69,9 +68,6 @@ export type DatosResumen = {
   ingresos: MontoFormateado | null;
   kpisConError: boolean;
   chartData: { date: string; encomiendas: number; boletos: number }[];
-  comisionPendiente: { total: number; ciclos: number; desde: string; hasta: string } | null;
-  comisionesError: boolean;
-  soporte: string | null;
   encomiendasRecientes: EncomiendaReciente[];
   recientesError: boolean;
 };
@@ -84,9 +80,6 @@ export function ResumenVista({
   ingresos,
   kpisConError,
   chartData,
-  comisionPendiente,
-  comisionesError,
-  soporte,
   encomiendasRecientes,
   recientesError,
 }: DatosResumen) {
@@ -116,57 +109,8 @@ export function ResumenVista({
         </div>
       </section>
 
-      {esAdmin && (
-        <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-3">
-          <ActivityChart data={chartData} />
-
-          <Card>
-            <CardHeader>
-              <CardTitle
-                className={comisionPendiente && !comisionesError ? "flex items-center gap-2 text-warning-text" : undefined}
-              >
-                {comisionPendiente && !comisionesError && (
-                  <WarningCircle className="size-5 shrink-0" weight="fill" aria-hidden />
-                )}
-                {comisionPendiente && !comisionesError ? "Comisión pendiente con EnBus" : "Comisión con EnBus"}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-4">
-              {comisionesError ? (
-                <ErrorRecargable titulo="No pudimos cargar tus comisiones" />
-              ) : comisionPendiente ? (
-                <>
-                  <Monto usd={comisionPendiente.total} size="lg" />
-                  <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground tabular-nums">
-                    {comisionPendiente.ciclos > 1 && (
-                      <TonoBadge tono="pendiente">{`${comisionPendiente.ciclos} ciclos sin pagar`}</TonoBadge>
-                    )}
-                    <span>
-                      {formatFechaVE(comisionPendiente.desde)} – {formatFechaVE(comisionPendiente.hasta)}
-                    </span>
-                  </div>
-                  {soporte && (
-                    <a
-                      href={`https://wa.me/${soporte}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-2 text-sm font-medium text-info-text underline-offset-4 hover:underline focus-visible:underline"
-                    >
-                      <WhatsappLogo className="size-4" aria-hidden />
-                      ¿Dudas para pagarla? Escríbenos
-                    </a>
-                  )}
-                </>
-              ) : (
-                <p className="flex items-center gap-2 text-sm font-medium text-success-text">
-                  <CheckCircle className="size-5 shrink-0" weight="fill" aria-hidden />
-                  Sin comisiones pendientes
-                </p>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-      )}
+      {/* La tarjeta «Comisión con EnBus» queda oculta temporalmente mientras se valida el modelo de negocio. */}
+      {esAdmin && <ActivityChart data={chartData} />}
 
       <section aria-labelledby="recientes-titulo" className="flex flex-col gap-3">
         <h2 id="recientes-titulo" className="text-lg font-semibold">
