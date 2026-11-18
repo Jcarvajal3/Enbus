@@ -13,6 +13,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/status-badge";
 import { CeldaEnlace } from "@/components/celda-enlace";
+import { EntityCard } from "@/components/entity-card";
+import { ListaResponsive } from "@/components/lista-responsive";
+import { IconTile } from "@/components/icon-tile";
 import { FilaVacia } from "@/components/fila-vacia";
 import { KpiCard } from "@/components/kpi-card";
 import { BarraFiltros } from "@/components/barra-filtros";
@@ -99,14 +102,14 @@ export function CiclosTable({ data, truncado = false, cooperativas, tasa: tasaSe
   return (
     <div className="flex flex-col gap-4">
       {truncado && (
-        <p role="status" className="rounded-xl border border-warning/40 bg-warning-light p-3 text-sm text-warning-deep">
+        <p role="status" className="rounded-xl bg-warning-light p-4 text-[15px] text-warning-deep">
           Se muestran los {formatNumeroVE(data.length, 0)} ciclos más recientes: los totales no incluyen los más antiguos.
         </p>
       )}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         <KpiCard title="Ventas de boletos" value={monto(totales.boletos)} icon={Ticket} />
-        <KpiCard title="Ventas de encomiendas" value={monto(totales.encomiendas)} icon={Package} />
-        <KpiCard title="Comisiones" value={monto(totales.comisiones)} icon={Coins} />
+        <KpiCard title="Ventas de encomiendas" value={monto(totales.encomiendas)} icon={Package} tono="coral" />
+        <KpiCard title="Comisiones" value={monto(totales.comisiones)} icon={Coins} tono="brand" />
         <KpiCard
           title="Pendiente por cobrar"
           value={monto(totales.pendiente)}
@@ -115,7 +118,7 @@ export function CiclosTable({ data, truncado = false, cooperativas, tasa: tasaSe
         />
       </div>
 
-      <div className="flex flex-wrap items-end justify-between gap-3">
+      <div className="flex flex-col gap-3 md:flex-row md:flex-wrap md:items-end md:justify-between">
         <BarraFiltros
           selects={[
             {
@@ -141,76 +144,112 @@ export function CiclosTable({ data, truncado = false, cooperativas, tasa: tasaSe
         <ExportCSVButton data={filtradas} />
       </div>
 
-      <Card className="gap-0 overflow-hidden p-0">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Cooperativa</TableHead>
-              <TableHead className="hidden md:table-cell">Período</TableHead>
-              <TableHead className="hidden text-right 2xl:table-cell">Boletos</TableHead>
-              <TableHead className="hidden text-right 2xl:table-cell">Encomiendas</TableHead>
-              <TableHead className="hidden text-right 2xl:table-cell">Comisión %</TableHead>
-              <TableHead className="text-right">Comisión</TableHead>
-              <TableHead>Estado</TableHead>
-              <TableHead className="text-right">Acciones</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filtradas.length === 0 ? (
-              <FilaVacia
+      <Card className="gap-0 overflow-hidden p-0 max-md:overflow-visible max-md:bg-transparent max-md:shadow-none">
+        <ListaResponsive
+          items={visibles}
+          clave={(c) => c.id}
+          etiqueta="Ciclos de comisión"
+          vacio={
+            <div className="max-md:rounded-xl max-md:bg-card max-md:shadow-card">
+              <Table>
+                <TableBody>
+                  <FilaVacia
                 colSpan={8}
                 icon={hayFiltros ? MagnifyingGlass : Receipt}
                 titulo={hayFiltros ? "Ningún ciclo coincide con los filtros" : "Todavía no hay ciclos de comisiones"}
               />
-            ) : (
-              visibles.map((item) => (
-                <TableRow key={item.id} className="relative">
-                  <CeldaEnlace
-                    href={`/admin/cooperativas/${item.cooperativa_id}?tab=balance`}
-                    etiqueta={`Ver el balance de ${item.cooperativa_nombre || "la cooperativa"}`}
-                  >
-                    {item.cooperativa_nombre || "Cooperativa sin nombre"}
-                  </CeldaEnlace>
-                  <TableCell className="hidden text-muted-foreground tabular-nums md:table-cell">
-                    {formatFechaVE(item.periodo_inicio)} – {formatFechaVE(item.periodo_fin)}
-                  </TableCell>
-                  <TableCell className="hidden text-right 2xl:table-cell">
-                    <Monto usd={item.total_boletos} tasa={tasa} moneda="USD" size="sm" align="right" />
-                  </TableCell>
-                  <TableCell className="hidden text-right 2xl:table-cell">
-                    <Monto usd={item.total_encomiendas} tasa={tasa} moneda="USD" size="sm" align="right" />
-                  </TableCell>
-                  <TableCell className="hidden text-right tabular-nums 2xl:table-cell">
-                    {formatPorcentaje(item.comision_porcentaje)}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Monto usd={item.monto_comision} tasa={tasa} moneda="USD" size="sm" align="right" />
-                  </TableCell>
-                  <TableCell>
-                    <StatusBadge status={String(item.pagado)} dominio="ciclo" />
-                    {item.pagado && detallePago(item) && (
-                      <span className="mt-1 block text-xs text-muted-foreground tabular-nums">{detallePago(item)}</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {!item.pagado && (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="relative z-10"
-                        aria-label={`Registrar pago de ${item.cooperativa_nombre || "la cooperativa"}`}
-                        onClick={() => setAPagar(item)}
-                      >
-                        Registrar pago
-                      </Button>
-                    )}
-                  </TableCell>
+                </TableBody>
+              </Table>
+            </div>
+          }
+          tarjeta={(item) => (
+            <EntityCard
+                href={`/admin/cooperativas/${item.cooperativa_id}?tab=balance`}
+                etiqueta={`Ver el balance de ${item.cooperativa_nombre || "la cooperativa"}`}
+                leading={<IconTile icon={Coins} tone={item.pagado ? "success" : "warning"} />}
+                title={item.cooperativa_nombre || "Cooperativa sin nombre"}
+                subtitle={`${formatFechaVE(item.periodo_inicio)} – ${formatFechaVE(item.periodo_fin)}`}
+                adorno={<Monto usd={item.monto_comision} tasa={tasa} moneda="USD" size="sm" align="right" />}
+                badge={<StatusBadge status={String(item.pagado)} dominio="ciclo" />}
+                meta={item.pagado ? detallePago(item) || undefined : formatPorcentaje(item.comision_porcentaje)}
+                acciones={
+                  !item.pagado ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      aria-label={`Registrar pago de ${item.cooperativa_nombre || "la cooperativa"}`}
+                      onClick={() => setAPagar(item)}
+                    >
+                      Registrar pago
+                    </Button>
+                  ) : undefined
+                }
+              />
+          )}
+          tabla={(items) => (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Cooperativa</TableHead>
+                  <TableHead className="hidden md:table-cell">Período</TableHead>
+                  <TableHead className="hidden text-right 2xl:table-cell">Boletos</TableHead>
+                  <TableHead className="hidden text-right 2xl:table-cell">Encomiendas</TableHead>
+                  <TableHead className="hidden text-right 2xl:table-cell">Comisión %</TableHead>
+                  <TableHead className="text-right">Comisión</TableHead>
+                  <TableHead>Estado</TableHead>
+                  <TableHead className="text-right">Acciones</TableHead>
                 </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
+              </TableHeader>
+              <TableBody>
+                {items.map((item) => (
+                    <TableRow key={item.id} className="relative">
+                      <CeldaEnlace
+                        href={`/admin/cooperativas/${item.cooperativa_id}?tab=balance`}
+                        etiqueta={`Ver el balance de ${item.cooperativa_nombre || "la cooperativa"}`}
+                      >
+                        {item.cooperativa_nombre || "Cooperativa sin nombre"}
+                      </CeldaEnlace>
+                      <TableCell className="hidden text-muted-foreground tabular-nums md:table-cell">
+                        {formatFechaVE(item.periodo_inicio)} – {formatFechaVE(item.periodo_fin)}
+                      </TableCell>
+                      <TableCell className="hidden text-right 2xl:table-cell">
+                        <Monto usd={item.total_boletos} tasa={tasa} moneda="USD" size="sm" align="right" />
+                      </TableCell>
+                      <TableCell className="hidden text-right 2xl:table-cell">
+                        <Monto usd={item.total_encomiendas} tasa={tasa} moneda="USD" size="sm" align="right" />
+                      </TableCell>
+                      <TableCell className="hidden text-right tabular-nums 2xl:table-cell">
+                        {formatPorcentaje(item.comision_porcentaje)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Monto usd={item.monto_comision} tasa={tasa} moneda="USD" size="sm" align="right" />
+                      </TableCell>
+                      <TableCell>
+                        <StatusBadge status={String(item.pagado)} dominio="ciclo" />
+                        {item.pagado && detallePago(item) && (
+                          <span className="mt-1 block text-[13px] text-muted-foreground tabular-nums">{detallePago(item)}</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {!item.pagado && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="relative z-10"
+                            aria-label={`Registrar pago de ${item.cooperativa_nombre || "la cooperativa"}`}
+                            onClick={() => setAPagar(item)}
+                          >
+                            Registrar pago
+                          </Button>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        />
         <PaginacionTabla pagina={pagina} paginas={paginas} onCambio={ir} />
       </Card>
 

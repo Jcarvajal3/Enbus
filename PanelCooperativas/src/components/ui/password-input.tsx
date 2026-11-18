@@ -38,7 +38,7 @@ function PasswordInput({ className, disabled, id, ...props }: PasswordInputProps
         spellCheck={false}
         disabled={disabled}
         // pr-10: espacio para el botón. -ms-reveal: Edge trae su propio ojo; aquí sobra.
-        className={cn("pr-10 [&::-ms-reveal]:hidden [&::-ms-clear]:hidden", className)}
+        className={cn("pr-12 [&::-ms-reveal]:hidden [&::-ms-clear]:hidden", className)}
         {...props}
       />
       <button
@@ -50,9 +50,9 @@ function PasswordInput({ className, disabled, id, ...props }: PasswordInputProps
         disabled={disabled}
         onMouseDown={(e) => e.preventDefault()}
         onClick={() => setVisible((v) => !v)}
-        className="absolute top-1/2 right-1 inline-flex size-7 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground transition-colors outline-none after:absolute after:-inset-1 hover:bg-muted hover:text-foreground focus-visible:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50"
+        className="absolute top-1/2 right-2 inline-flex size-9 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground transition-colors outline-none after:absolute after:-inset-1 hover:bg-surface-dark hover:text-foreground focus-visible:text-foreground focus-visible:ring-[3px] focus-visible:ring-accent-strong/30 disabled:pointer-events-none disabled:opacity-50"
       >
-        {visible ? <EyeSlash className="size-4" aria-hidden /> : <Eye className="size-4" aria-hidden />}
+        {visible ? <EyeSlash className="size-5" aria-hidden /> : <Eye className="size-5" aria-hidden />}
       </button>
     </div>
   );

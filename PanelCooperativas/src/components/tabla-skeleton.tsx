@@ -26,15 +26,34 @@ export function TablaSkeleton({
         <div className="flex flex-wrap items-end gap-3" aria-hidden>
           <div className="flex w-full flex-col gap-2 sm:w-72">
             <Skeleton className="h-3.5 w-14" />
-            <Skeleton className="h-9 w-full rounded-full" />
+            <Skeleton className="h-12 w-full rounded-md" />
           </div>
           <div className="flex w-full flex-col gap-2 sm:w-44">
             <Skeleton className="h-3.5 w-12" />
-            <Skeleton className="h-9 w-full rounded-full" />
+            <Skeleton className="h-12 w-full rounded-md" />
           </div>
         </div>
       )}
-      <Card className="gap-0 overflow-hidden p-0" aria-hidden>
+      {/* Móvil: lista de tarjetas con la forma de `EntityCard`. */}
+      <div className="flex flex-col gap-3 md:hidden" aria-hidden>
+        {Array.from({ length: Math.min(filas, 5) }, (_, f) => (
+          <div key={f} className="flex flex-col gap-3 rounded-xl bg-card p-4 shadow-card">
+            <div className="flex items-center gap-3">
+              <Skeleton className="size-11 shrink-0 rounded-xl" />
+              <div className="flex min-w-0 flex-1 flex-col gap-2">
+                <Skeleton className={cn("h-4.5", f % 2 === 0 ? "w-3/5" : "w-2/5")} />
+                <Skeleton className="h-3.5 w-1/2" />
+              </div>
+              <Skeleton className="h-4 w-14 shrink-0" />
+            </div>
+            <div className="flex items-center justify-between gap-3 border-t border-border pt-3">
+              <Skeleton className="h-6 w-20 rounded-full" />
+              <Skeleton className="h-3.5 w-16" />
+            </div>
+          </div>
+        ))}
+      </div>
+      <Card className="gap-0 p-0 max-md:hidden" aria-hidden>
         <Table>
           <TableHeader>
             <TableRow>

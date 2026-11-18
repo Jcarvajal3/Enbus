@@ -121,15 +121,15 @@ export function CameraQRScanner({ onScan, open, onOpenChange }: CameraQRScannerP
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent tamano="confirmar" showCloseButton={false} className="gap-0 overflow-hidden p-0">
-        <DialogHeader className="p-4 pr-4">
+      <DialogContent tamano="confirmar" showCloseButton={false} className="gap-0 overflow-hidden p-0 max-md:h-[92dvh] max-md:grid-rows-[auto_minmax(0,1fr)_auto]">
+        <DialogHeader className="p-4 pt-6 pr-4 md:pt-4">
           <DialogTitle className="flex items-center gap-2">
             <ICONO_SECCION.escanear className="size-5 text-muted-foreground" aria-hidden />
             Escanear con la cámara
           </DialogTitle>
         </DialogHeader>
 
-        <div className="relative aspect-video overflow-hidden bg-black">
+        <div className="relative aspect-video overflow-hidden bg-black max-md:aspect-auto max-md:min-h-0">
           {/* Video stream */}
           <video
             ref={videoRef}
@@ -144,7 +144,7 @@ export function CameraQRScanner({ onScan, open, onOpenChange }: CameraQRScannerP
           {/* Scanning overlay */}
           {scanning && (
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <div className="relative size-52">
+              <div className="relative size-52 max-md:size-64">
                 {/* Corner brackets */}
                 <span className="absolute top-0 left-0 size-8 rounded-tl-sm border-t-4 border-l-4 border-primary" />
                 <span className="absolute top-0 right-0 size-8 rounded-tr-sm border-t-4 border-r-4 border-primary" />
@@ -153,7 +153,7 @@ export function CameraQRScanner({ onScan, open, onOpenChange }: CameraQRScannerP
                 {/* Scan line animation */}
                 <span className="absolute left-2 right-2 h-0.5 bg-primary/80 top-1/2 motion-safe:animate-scan-line" />
               </div>
-              <p className="absolute bottom-4 text-white text-sm font-medium drop-shadow">
+              <p className="absolute bottom-4 text-white text-[15px] font-medium drop-shadow">
                 Apunta la cámara al código QR
               </p>
             </div>
@@ -175,8 +175,8 @@ export function CameraQRScanner({ onScan, open, onOpenChange }: CameraQRScannerP
           )}
         </div>
 
-        <div className="flex justify-end p-4">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+        <div className="flex justify-end p-4 max-md:pb-[calc(1rem+env(safe-area-inset-bottom))]">
+          <Button variant="outline" size="lg" className="max-md:w-full" onClick={() => onOpenChange(false)}>
             Cancelar
           </Button>
         </div>
@@ -212,9 +212,9 @@ export function CameraQRTrigger({ onScan, disabled = false }: CameraQRTriggerPro
         onClick={() => setOpen(true)}
         aria-label="Escanear con cámara"
         title="Escanear con cámara"
-        className="size-12 shrink-0"
+        className="size-14 shrink-0"
       >
-        <Camera className="size-5" aria-hidden />
+        <Camera className="size-6" aria-hidden />
       </Button>
       <CameraQRScanner onScan={handleScan} open={open} onOpenChange={setOpen} />
     </>

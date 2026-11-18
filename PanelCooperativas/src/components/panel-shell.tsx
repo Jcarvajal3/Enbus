@@ -3,7 +3,11 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { AppSidebar } from "@/components/app-sidebar";
+import { AppSidebar, useMenuPanel } from "@/components/app-sidebar";
+import { BarraPestanas } from "@/components/movil/barra-pestanas";
+import { CabeceraMovil } from "@/components/movil/cabecera-movil";
+import { etiquetaRol } from "@/lib/estados";
+import { useUser } from "@/hooks/use-user";
 import { Separator } from "@/components/ui/separator";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import {
@@ -15,8 +19,9 @@ import {
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
 import { UserProvider, type UserProfile } from "@/hooks/use-user";
-import { MENU_ABIERTO_DESDE, useAnchoMinimo } from "@/hooks/use-mobile";
+import { MENU_ABIERTO_DESDE, useAnchoMinimo, useIsMobile } from "@/hooks/use-mobile";
 import { seccionDe } from "@/lib/navigation";
+import { cn } from "@/lib/utils";
 import { MigaObjetoProvider, useMigaObjeto } from "@/components/miga-objeto";
 import { ServiceWorkerRegistrar } from "@/components/service-worker-registrar";
 import { ConnectivityBanner } from "@/components/connectivity-banner";
@@ -90,19 +95,42 @@ export function BarraSuperior({
   }
 
   return (
-    <header className="flex h-14 shrink-0 items-center gap-2 border-b border-border px-4 sm:h-16">
+    <header className="flex h-16 shrink-0 items-center gap-2 bg-card px-4 shadow-card sm:px-5 lg:px-8">
       <SidebarTrigger className="-ml-1" />
       {miga && (
         <>
           <Separator orientation="vertical" className="mr-1 data-vertical:h-4 data-vertical:self-center" />
           <Breadcrumb aria-label="Ubicación" className="min-w-0 flex-1">
-            <BreadcrumbList className="flex-nowrap">{miga}</BreadcrumbList>
+            <BreadcrumbList className="flex-nowrap text-[15px]">{miga}</BreadcrumbList>
           </Breadcrumb>
         </>
       )}
       {extra && <div className="ml-auto flex shrink-0 items-center gap-2">{extra}</div>}
     </header>
   );
+}
+
+// ─── Shell móvil (< md): cabecera compacta + barra de pestañas inferior ───────
+
+/** Clases del <main> en móvil: deja libre la barra de pestañas flotante (`--alto-pestanas`, globals.css). */
+export const CLASE_MAIN_MOVIL = "max-md:pb-[calc(var(--alto-pestanas)+1rem)]";
+
+function CabeceraMovilPanel({ headerExtra }: { headerExtra?: React.ReactNode }) {
+  const { user } = useUser();
+  return (
+    <CabeceraMovil
+      seccion={seccionDe(usePathname())}
+      extra={headerExtra}
+      nombre={user.nombre_completo}
+      rol={etiquetaRol(user.role)}
+      login="/cooperativas/login"
+    />
+  );
+}
+
+function BarraPestanasPanel() {
+  const { grupos, conteo } = useMenuPanel();
+  return <BarraPestanas grupos={grupos} conteo={conteo} />;
 }
 
 // ─── Shell del panel de cooperativas ─────────────────────────────────────────
@@ -122,6 +150,7 @@ export function PanelShell({
 }) {
   const pathname = usePathname();
   const menu = useMenuLateral(menuAbierto);
+  const movil = useIsMobile();
 
   return (
     <UserProvider initialUser={user}>
@@ -129,18 +158,19 @@ export function PanelShell({
       <SaltarAlContenido />
       <MigaObjetoProvider>
         <SidebarProvider open={menu.open} onOpenChange={menu.onOpenChange}>
-          <AppSidebar />
-          <SidebarInset className="min-w-0">
+          {!movil && <AppSidebar />}
+          <SidebarInset className={cn("min-w-0 bg-canvas", CLASE_MAIN_MOVIL)}>
             {/* Conectividad: siempre arriba, sobre la barra */}
             <ConnectivityBanner />
             {/* Estado de la cooperativa (en revisión, rechazada, suspendida o desactivada): no se puede cerrar */}
             <EstadoCooperativaBanner />
-            <BarraSuperior seccion={seccionDe(pathname)} extra={headerExtra} />
+            {movil ? <CabeceraMovilPanel headerExtra={headerExtra} /> : <BarraSuperior seccion={seccionDe(pathname)} extra={headerExtra} />}
             {/* SidebarInset ya es el <main>: el destino de "Saltar al contenido" es este bloque. */}
-            <div id="contenido" tabIndex={-1} className="flex min-w-0 flex-1 flex-col p-4 outline-none sm:p-6">
+            <div id="contenido" tabIndex={-1} className="flex min-w-0 flex-1 flex-col p-5 outline-none lg:p-8">
               {children}
             </div>
           </SidebarInset>
+          {movil && <BarraPestanasPanel />}
         </SidebarProvider>
       </MigaObjetoProvider>
     </UserProvider>

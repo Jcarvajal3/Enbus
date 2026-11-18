@@ -97,7 +97,7 @@ export function ExportCSVButton({ data, filename = "ciclos_comisiones.csv" }: Ex
   };
 
   return (
-    <Button type="button" onClick={handleExport} variant="outline">
+    <Button type="button" size="lg" onClick={handleExport} variant="outline">
       <DownloadSimple aria-hidden /> Exportar CSV
     </Button>
   );

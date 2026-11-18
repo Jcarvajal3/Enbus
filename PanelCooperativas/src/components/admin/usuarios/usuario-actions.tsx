@@ -53,11 +53,11 @@ export function UsuarioActions({
   return (
     <>
       {bajaPendiente ? (
-        <Button variant="outline" onClick={() => setBajaOpen(true)}>
+        <Button size="lg" variant="outline" onClick={() => setBajaOpen(true)}>
           <UserMinus aria-hidden /> Completar baja
         </Button>
       ) : isBanned ? (
-        <Button onClick={() => setEstadoOpen(true)}>
+        <Button size="lg" onClick={() => setEstadoOpen(true)}>
           <UserPlus aria-hidden /> Reactivar cuenta
         </Button>
       ) : (
@@ -141,7 +141,14 @@ export function tieneAccionPin(e: EncomiendaUsuario): boolean {
 }
 
 /** "Desbloquear PIN" (con intentos fallidos) o "Reenviar PIN" (con PIN activo) en la fila de una encomienda. */
-export function AccionesPinEncomienda({ encomienda: e }: { encomienda: EncomiendaUsuario }) {
+export function AccionesPinEncomienda({
+  encomienda: e,
+  enTarjeta = false,
+}: {
+  encomienda: EncomiendaUsuario;
+  /** En el slot `acciones` de una `EntityCard` (móvil): botón de 44 px que ocupa el ancho. */
+  enTarjeta?: boolean;
+}) {
   const router = useRouter();
   const [desbloquearOpen, setDesbloquearOpen] = useState(false);
   const [reenviando, setReenviando] = useState(false);
@@ -173,12 +180,13 @@ export function AccionesPinEncomienda({ encomienda: e }: { encomienda: Encomiend
   };
 
   return (
-    <div className="relative z-10 flex items-center justify-end gap-2">
+    <div className={enTarjeta ? "flex items-center gap-2" : "relative z-10 flex items-center justify-end gap-2"}>
       {conIntentos ? (
         <Button
           type="button"
-          size="sm"
+          size={enTarjeta ? "default" : "sm"}
           variant="outline"
+          className={enTarjeta ? "flex-1" : undefined}
           onClick={() => setDesbloquearOpen(true)}
           aria-label={`Desbloquear PIN de ${e.tracking_id}`}
         >
@@ -187,8 +195,9 @@ export function AccionesPinEncomienda({ encomienda: e }: { encomienda: Encomiend
       ) : (
         <Button
           type="button"
-          size="sm"
+          size={enTarjeta ? "default" : "sm"}
           variant="outline"
+          className={enTarjeta ? "flex-1" : undefined}
           onClick={reenviar}
           disabled={reenviando}
           aria-busy={reenviando || undefined}

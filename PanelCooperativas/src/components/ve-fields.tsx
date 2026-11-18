@@ -11,7 +11,7 @@
 // ("V-12345678", "0414-1234567") para formularios con server actions.
 // Reglas de lib/ve.ts (las mismas de la base y la app).
 
-import { useLayoutEffect, useRef, type ChangeEvent } from "react";
+import { useLayoutEffect, useRef, type ChangeEvent, type HTMLAttributes } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -147,6 +147,8 @@ export function CedulaField({
   letras = ["V", "E"],
   required,
   disabled,
+  autoComplete = "off",
+  enterKeyHint,
 }: {
   id: string;
   name?: string;
@@ -157,6 +159,10 @@ export function CedulaField({
   letras?: Array<LetraCedula>;
   required?: boolean;
   disabled?: boolean;
+  /** Sugerencia del navegador ("off" por defecto; p. ej. "tel" o "name" si el campo es del propio usuario). */
+  autoComplete?: string;
+  /** Tecla de acción del teclado móvil ("next" entre campos, "done" en el último). */
+  enterKeyHint?: HTMLAttributes<HTMLInputElement>["enterKeyHint"];
 }) {
   const porDefecto = letras[0] ?? "V";
   const { letra, numero } = separarCedula(value, porDefecto);
@@ -209,7 +215,8 @@ export function CedulaField({
           ref={inputRef}
           type="text"
           inputMode="numeric"
-          autoComplete="off"
+          enterKeyHint={enterKeyHint}
+          autoComplete={autoComplete}
           spellCheck={false}
           placeholder={agruparMiles(CEDULA_PLACEHOLDER.replace(/\D/g, ""))}
           value={mostrado}
@@ -245,6 +252,8 @@ export function TelefonoField({
   error,
   required,
   disabled,
+  autoComplete = "off",
+  enterKeyHint,
 }: {
   id: string;
   name?: string;
@@ -254,6 +263,10 @@ export function TelefonoField({
   error?: string | null;
   required?: boolean;
   disabled?: boolean;
+  /** Sugerencia del navegador ("off" por defecto; p. ej. "tel" o "name" si el campo es del propio usuario). */
+  autoComplete?: string;
+  /** Tecla de acción del teclado móvil ("next" entre campos, "done" en el último). */
+  enterKeyHint?: HTMLAttributes<HTMLInputElement>["enterKeyHint"];
 }) {
   const mostrado = telefonoMostrado(value);
   const { inputRef, recordar } = useCursorEnDigito(mostrado);
@@ -278,7 +291,8 @@ export function TelefonoField({
         ref={inputRef}
         type="tel"
         inputMode="tel"
-        autoComplete="off"
+        enterKeyHint={enterKeyHint}
+        autoComplete={autoComplete}
         placeholder={TELEFONO_PLACEHOLDER}
         value={mostrado}
         onChange={alEscribir}

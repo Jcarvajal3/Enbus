@@ -26,9 +26,9 @@ export function MenuMas({
       <DropdownMenuTrigger
         render={
           enFila ? (
-            <Button type="button" variant="ghost" size="icon-sm" aria-label={etiqueta} className="relative z-10" />
+            <Button type="button" variant="ghost" size="icon" aria-label={etiqueta} className="relative z-10 md:size-9" />
           ) : (
-            <Button type="button" variant="outline" />
+            <Button type="button" variant="outline" size="lg" />
           )
         }
       >

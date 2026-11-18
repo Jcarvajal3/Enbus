@@ -448,18 +448,18 @@ function Contenido({
   }
 
   const indicador = (
-    <ol className="flex items-center gap-2 text-xs" aria-label="Pasos">
+    <ol className="flex flex-wrap items-center gap-2 text-[13px]" aria-label="Pasos">
       {PASOS.map((p) => (
         <li
           key={p.n}
           aria-current={p.n === paso ? "step" : undefined}
           className={cn(
-            "flex items-center gap-1.5 rounded-full border px-2.5 py-1 font-medium",
+            "flex items-center gap-1.5 rounded-full px-3 py-1.5 font-semibold",
             p.n === paso
-              ? "border-accent-strong bg-accent-strong text-accent-strong-foreground"
+              ? "bg-accent-strong text-accent-strong-foreground"
               : p.n < paso
-                ? "border-border text-foreground"
-                : "border-border text-muted-foreground"
+                ? "bg-success-light text-success-text"
+                : "bg-surface text-muted-foreground"
           )}
         >
           <span className="font-semibold tabular-nums">{p.n}</span> {p.titulo}
@@ -482,12 +482,14 @@ function Contenido({
       if (errores[campo]) setErrores({ ...errores, [campo]: undefined });
     };
     return (
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Campo id={id(`${prefijo}-nombre`)} etiqueta="Nombre y apellido" error={errores.nombre} className="sm:col-span-2">
+      <div className="grid gap-4 md:grid-cols-2">
+        <Campo id={id(`${prefijo}-nombre`)} etiqueta="Nombre y apellido" error={errores.nombre} className="md:col-span-2">
           <Input
             ref={primerCampo}
             id={id(`${prefijo}-nombre`)}
             autoComplete="off"
+            autoCapitalize="words"
+            enterKeyHint="next"
             value={persona.nombre}
             maxLength={120}
             aria-invalid={errores.nombre ? true : undefined}
@@ -521,49 +523,49 @@ function Contenido({
       {indicador}
 
       {paso === 1 && (
-        <form onSubmit={siguientePersona} noValidate className="grid gap-4">
-          <p className="text-sm font-medium">Datos de quien envía</p>
+        <form onSubmit={siguientePersona} noValidate className="grid gap-5">
+          <p className="text-[17px] font-semibold">Datos de quien envía</p>
           {campoPersona(remitente, setRemitente, errRemitente, setErrRemitente, "rem")}
           {errorBanner}
-          <DialogFooter className="sm:justify-between">
-            <Button type="button" variant="outline" onClick={onCerrar}>
+          <DialogFooter className="md:justify-between">
+            <Button type="button" variant="outline" size="lg" onClick={onCerrar}>
               Cancelar
             </Button>
-            <Button type="submit">Continuar</Button>
+            <Button type="submit" size="lg">Continuar</Button>
           </DialogFooter>
         </form>
       )}
 
       {paso === 2 && (
-        <form onSubmit={siguientePersona} noValidate className="grid gap-4">
+        <form onSubmit={siguientePersona} noValidate className="grid gap-5">
           <div className="flex flex-col gap-1">
-            <p className="text-sm font-medium">Datos de quien recibe</p>
-            <p className="text-sm text-muted-foreground">Retira con esta cédula y el PIN.</p>
+            <p className="text-[17px] font-semibold">Datos de quien recibe</p>
+            <p className="text-[13px] text-muted-foreground">Retira con esta cédula y el PIN.</p>
           </div>
           {campoPersona(destinatario, setDestinatario, errDestinatario, setErrDestinatario, "des")}
           {errorBanner}
-          <DialogFooter className="sm:justify-between">
-            <Button type="button" variant="outline" onClick={() => setPaso(1)}>
+          <DialogFooter className="md:justify-between">
+            <Button type="button" variant="outline" size="lg" onClick={() => setPaso(1)}>
               Atrás
             </Button>
-            <Button type="submit">Continuar</Button>
+            <Button type="submit" size="lg">Continuar</Button>
           </DialogFooter>
         </form>
       )}
 
       {paso === 3 && (
-        <form onSubmit={registrar} noValidate className="grid gap-4">
+        <form onSubmit={registrar} noValidate className="grid gap-5">
           {errorDatos && !datos ? (
             <ErrorState compacto titulo="No pudimos cargar las rutas" descripcion={errorDatos} onReintentar={cargarDatos} />
           ) : !datos ? (
-            <div className="grid gap-4 sm:grid-cols-2" role="status" aria-label="Cargando sucursales y rutas">
-              <Skeleton className="h-14 w-full rounded-md sm:col-span-2" />
-              <Skeleton className="h-14 w-full rounded-md sm:col-span-2" />
+            <div className="grid gap-4 md:grid-cols-2" role="status" aria-label="Cargando sucursales y rutas">
+              <Skeleton className="h-14 w-full rounded-md md:col-span-2" />
+              <Skeleton className="h-14 w-full rounded-md md:col-span-2" />
               <Skeleton className="h-14 w-full rounded-md" />
               <Skeleton className="h-14 w-full rounded-md" />
             </div>
           ) : datos.sucursales.length === 0 ? (
-            <p className="rounded-md border border-dashed border-border p-3 text-sm text-muted-foreground">
+            <p className="rounded-md bg-surface p-4 text-[15px] text-muted-foreground">
               Tu cooperativa no tiene sucursales activas.{" "}
               {esAdmin ? (
                 <Link href="/cooperativas/configuracion?tab=sucursales" className="font-medium text-info-text underline underline-offset-4">
@@ -574,9 +576,9 @@ function Contenido({
               )}
             </p>
           ) : (
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-5 md:grid-cols-2">
               {elegirSucursal && (
-                <Campo id={id("sucursal")} etiqueta="Sucursal donde recibes" error={errPaquete.sucursal} className="sm:col-span-2">
+                <Campo id={id("sucursal")} etiqueta="Sucursal donde recibes" error={errPaquete.sucursal} className="md:col-span-2">
                   <Select
                     value={sucursalId}
                     items={itemsSucursal}
@@ -600,9 +602,9 @@ function Contenido({
                 </Campo>
               )}
 
-              <Campo id={id("destino")} etiqueta="Destino" error={errPaquete.destino} className="sm:col-span-2">
+              <Campo id={id("destino")} etiqueta="Destino" error={errPaquete.destino} className="md:col-span-2">
                 {sucursal && destinos.length === 0 ? (
-                  <p className="rounded-md border border-dashed border-border p-3 text-sm text-muted-foreground">
+                  <p className="rounded-md bg-surface p-4 text-[15px] text-muted-foreground">
                     No hay rutas activas que salgan de {formatCiudad(sucursal.ciudad)}.{" "}
                     {esAdmin ? (
                       <Link href="/cooperativas/rutas" className="font-medium text-info-text underline underline-offset-4">
@@ -636,10 +638,12 @@ function Contenido({
                 )}
               </Campo>
 
-              <Campo id={id("contenido")} etiqueta="Contenido" error={errPaquete.contenido} className="sm:col-span-2">
+              <Campo id={id("contenido")} etiqueta="Contenido" error={errPaquete.contenido} className="md:col-span-2">
                 <Input
                   id={id("contenido")}
                   autoComplete="off"
+                  autoCapitalize="sentences"
+                  enterKeyHint="next"
                   placeholder="Ej.: Ropa y zapatos"
                   maxLength={500}
                   value={contenido}
@@ -662,6 +666,7 @@ function Contenido({
                   id={id("peso")}
                   inputMode="decimal"
                   autoComplete="off"
+                  enterKeyHint="next"
                   placeholder="0,00"
                   value={peso}
                   aria-invalid={errPaquete.peso ? true : undefined}
@@ -677,6 +682,7 @@ function Contenido({
                   id={id("valor")}
                   inputMode="decimal"
                   autoComplete="off"
+                  enterKeyHint="done"
                   placeholder="0"
                   value={valor}
                   aria-invalid={errPaquete.valor ? true : undefined}
@@ -687,9 +693,9 @@ function Contenido({
                 />
               </Campo>
 
-              <div className="grid gap-2 sm:col-span-2">
-                <p className="text-sm font-medium">¿Quién paga?</p>
-                <GrupoOpciones etiqueta="¿Quién paga?" className="grid gap-2 sm:grid-cols-2">
+              <div className="grid gap-2 md:col-span-2">
+                <p className="text-[13px] font-medium">¿Quién paga?</p>
+                <GrupoOpciones etiqueta="¿Quién paga?" className="grid gap-2 md:grid-cols-2">
                   {(
                     [
                       ["ORIGEN", "Paga al enviar", "Cobras el envío al recibirlo."],
@@ -708,11 +714,11 @@ function Contenido({
                     />
                   ))}
                 </GrupoOpciones>
-                {errPaquete.modalidad && <p className="text-sm text-destructive-text">{errPaquete.modalidad}</p>}
+                {errPaquete.modalidad && <p className="text-[13px] text-destructive-text">{errPaquete.modalidad}</p>}
               </div>
 
-              <div aria-live="polite" className="flex min-h-[72px] flex-col justify-center gap-1 rounded-md bg-muted/50 p-4 text-sm sm:col-span-2">
-                <p className="text-xs font-medium text-muted-foreground">Costo estimado del envío</p>
+              <div aria-live="polite" className="flex min-h-20 flex-col justify-center gap-1 rounded-xl bg-surface p-5 text-[15px] md:col-span-2">
+                <p className="text-[13px] font-medium text-muted-foreground">Costo estimado del envío</p>
                 {!claveEstimado ? (
                   <p className="text-muted-foreground">Elige el destino y escribe el peso.</p>
                 ) : !estimadoVigente ? (
@@ -727,11 +733,11 @@ function Contenido({
           )}
 
           {errorBanner}
-          <DialogFooter className="sm:justify-between">
-            <Button type="button" variant="outline" onClick={() => setPaso(2)} disabled={enviando}>
+          <DialogFooter className="md:justify-between">
+            <Button type="button" variant="outline" size="lg" onClick={() => setPaso(2)} disabled={enviando}>
               Atrás
             </Button>
-            <Button type="submit" disabled={enviando || !datos || datos.sucursales.length === 0} aria-busy={enviando || undefined}>
+            <Button type="submit" size="xl" disabled={enviando || !datos || datos.sucursales.length === 0} aria-busy={enviando || undefined}>
               {enviando && <Spinner size="sm" />}
               {enviando ? "Registrando…" : "Registrar y recibir"}
             </Button>
@@ -762,11 +768,11 @@ function Campo({
       <Label htmlFor={id}>{etiqueta}</Label>
       {children}
       {error ? (
-        <p id={`${id}-error`} className="text-sm text-destructive-text">
+        <p id={`${id}-error`} className="text-[13px] text-destructive-text">
           {error}
         </p>
       ) : ayuda ? (
-        <p className="text-sm text-muted-foreground">{ayuda}</p>
+        <p className="text-[13px] text-muted-foreground">{ayuda}</p>
       ) : null}
     </div>
   );
@@ -833,13 +839,13 @@ function Resultado({
       </DialogHeader>
 
       <div className="grid gap-4">
-        <div className="flex flex-col gap-1 rounded-md bg-primary-light p-4">
-          <p className="text-sm font-medium text-foreground">PIN de retiro</p>
-          <p className="font-mono text-4xl font-semibold tracking-widest text-foreground tabular-nums">{pin ?? "—"}</p>
-          <p className="text-sm text-foreground">Dáselo a quien envía. Sin el PIN y la cédula no se entrega.</p>
+        <div className="flex flex-col gap-1 rounded-xl bg-primary-light p-6">
+          <p className="text-[13px] font-medium text-foreground">PIN de retiro</p>
+          <p className="font-mono text-5xl font-semibold tracking-widest text-foreground tabular-nums max-md:text-center max-md:text-[clamp(2.5rem,16vw,3.5rem)]">{pin ?? "—"}</p>
+          <p className="text-[15px] text-foreground">Dáselo a quien envía. Sin el PIN y la cédula no se entrega.</p>
         </div>
 
-        <div className="flex items-center justify-between gap-3 rounded-md bg-muted/50 p-4 text-sm">
+        <div className="flex items-center justify-between gap-3 rounded-xl bg-surface p-5 text-[15px]">
           <span className="text-muted-foreground">Costo del envío</span>
           <Monto
             usd={registro.costo_usd != null ? Number(registro.costo_usd) : null}
@@ -849,25 +855,25 @@ function Resultado({
           />
         </div>
 
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-col gap-3 md:flex-row md:flex-wrap max-md:*:w-full">
           {enlaceWa ? (
-            <a href={enlaceWa} target="_blank" rel="noreferrer" className={buttonVariants({ variant: "outline" })}>
+            <a href={enlaceWa} target="_blank" rel="noreferrer" className={buttonVariants({ variant: "outline", size: "lg" })}>
               <WhatsappLogo aria-hidden />
               Enviar PIN por WhatsApp
             </a>
           ) : (
-            <p className="text-sm text-muted-foreground">El teléfono no sirve para WhatsApp: dicta el PIN a quien envía.</p>
+            <p className="text-[13px] text-muted-foreground">El teléfono no sirve para WhatsApp: dicta el PIN a quien envía.</p>
           )}
-          <Button variant="outline" onClick={() => void imprimir()} disabled={imprimiendo} aria-busy={imprimiendo || undefined}>
+          <Button variant="outline" size="lg" onClick={() => void imprimir()} disabled={imprimiendo} aria-busy={imprimiendo || undefined}>
             {imprimiendo ? <Spinner size="sm" /> : <Printer aria-hidden />}
             Imprimir guía
           </Button>
         </div>
       </div>
 
-      <DialogFooter className="sm:items-center sm:justify-between">
-        <p className="text-sm text-muted-foreground">Sigue: foto del paquete{pagaAhora ? " y cobro del envío" : ""}.</p>
-        <Button onClick={onContinuar} autoFocus>
+      <DialogFooter className="md:items-center md:justify-between">
+        <p className="text-[13px] text-muted-foreground">Sigue: foto del paquete{pagaAhora ? " y cobro del envío" : ""}.</p>
+        <Button size="xl" onClick={onContinuar} autoFocus>
           Continuar
         </Button>
       </DialogFooter>

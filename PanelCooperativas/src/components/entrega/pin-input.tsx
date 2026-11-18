@@ -89,7 +89,7 @@ export function PinInput({ encomiendaId, initialIntentos, initialBloqueado, onVa
 
   return (
     <div className="flex flex-col items-center justify-center gap-4 py-2">
-      <label htmlFor={`${uid}-pin`} className="text-sm font-medium">
+      <label htmlFor={`${uid}-pin`} className="text-[15px] font-medium">
         Pídele a quien retira su PIN de 4 dígitos
       </label>
       <InputOTP
@@ -117,13 +117,14 @@ export function PinInput({ encomiendaId, initialIntentos, initialBloqueado, onVa
             <InputOTPSlot
               key={i}
               index={i}
+              size="lg"
               className={cn(isSuccess && "border-success", conError && "border-destructive-text")}
             />
           ))}
         </InputOTPGroup>
       </InputOTP>
 
-      <div id={`${uid}-estado`} className="min-h-6 flex items-center justify-center text-center text-sm" aria-live="polite">
+      <div id={`${uid}-estado`} className="flex min-h-6 items-center justify-center text-center text-[15px]" aria-live="polite">
         {isValidating ? (
           <span className="text-muted-foreground">Revisando el PIN…</span>
         ) : isSuccess ? (

@@ -5,16 +5,18 @@
 // la fila de cada encomienda.
 
 import Link from "next/link";
-import { Bell, CreditCard, Ticket } from "@phosphor-icons/react";
+import { Bell, CreditCard, Package, Ticket } from "@phosphor-icons/react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
 import type { EncomiendaUsuario, PagoUsuario, UsuarioDetalle } from "@/lib/types/admin-usuarios";
 import { MAX_FILAS_DETALLE_USUARIO, bajaPorCompletar } from "@/lib/types/admin-usuarios";
 import { Monto } from "@/components/monto";
 import { StatusBadge, TonoBadge } from "@/components/status-badge";
 import { CeldaEnlace } from "@/components/celda-enlace";
+import { EntityCard } from "@/components/entity-card";
+import { IconTile } from "@/components/icon-tile";
+import { ListaResponsive } from "@/components/lista-responsive";
 import { FilaVacia } from "@/components/fila-vacia";
 import { useParamUrl } from "@/hooks/use-param-url";
 import { useTasaBCVAdmin } from "@/components/admin/dashboard/use-tasa-bcv-admin";
@@ -55,10 +57,25 @@ function metodoDePago(p: PagoUsuario) {
   return etiquetaMetodoPago(p.tipo_pago === "EFECTIVO" ? "EFECTIVO" : "DIGITAL");
 }
 
+function MontoPago({ p }: { p: PagoUsuario }) {
+  return p.monto_bs != null ? (
+    <Monto
+      usd={p.monto}
+      bs={p.monto_bs}
+      tasa={p.tasa_bcv && p.tasa_bcv_fecha ? { tasa: p.tasa_bcv, fecha: p.tasa_bcv_fecha } : null}
+      moneda={p.moneda}
+      size="sm"
+      align="right"
+    />
+  ) : (
+    <Monto usd={p.monto} tasa={null} moneda="USD" size="sm" align="right" />
+  );
+}
+
 function Preferencia({ titulo, activa }: { titulo: string; activa: boolean }) {
   return (
     <div className="flex items-center justify-between gap-3 py-3">
-      <span className="text-sm">{titulo}</span>
+      <span className="text-[15px]">{titulo}</span>
       <TonoBadge tono={activa ? "exito" : "neutro"}>{activa ? "Activadas" : "Desactivadas"}</TonoBadge>
     </div>
   );
@@ -76,28 +93,59 @@ function TablaEncomiendas({
   const conAcciones = lista.some(tieneAccionPin);
   const columnas = 6 + (conAcciones ? 1 : 0);
   return (
-    <Table>
+    <ListaResponsive
+      items={lista}
+      clave={(e) => e.id}
+      etiqueta={tipo === "enviadas" ? "Encomiendas enviadas" : "Encomiendas recibidas"}
+      vacio={
+        <div className="max-md:rounded-xl max-md:bg-card max-md:shadow-card">
+              <Table>
+                <TableBody>
+                  <FilaVacia colSpan={columnas} titulo={tipo === "enviadas" ? "No ha enviado encomiendas" : "No ha recibido encomiendas"} />
+                </TableBody>
+              </Table>
+            </div>
+      }
+      tarjeta={(e) => (
+          <EntityCard
+            href={`/admin/encomiendas?codigo=${encodeURIComponent(e.tracking_id)}`}
+            etiqueta={`Ver encomienda ${e.tracking_id}`}
+            leading={<IconTile icon={Package} tone="coral" />}
+            title={e.tracking_id}
+            subtitle={(tipo === "enviadas" ? e.receiver_nombre : e.sender_nombre) || e.cooperativa_nombre}
+            adorno={
+              e.costo_calculado > 0 ? <Monto usd={e.costo_calculado} tasa={tasa} moneda="USD" size="sm" align="right" /> : undefined
+            }
+            badge={
+              <span className="flex flex-wrap items-center gap-1.5">
+                <StatusBadge status={e.estado} dominio="encomienda" />
+                {e.pin_bloqueado && <TonoBadge tono="peligro">PIN bloqueado</TonoBadge>}
+              </span>
+            }
+            meta={formatFechaVE(e.created_at)}
+            acciones={tieneAccionPin(e) ? <AccionesPinEncomienda encomienda={e} enTarjeta /> : undefined}
+          />
+      )}
+      tabla={(items) => (
+        <Table>
       <TableHeader>
         <TableRow>
           <TableHead>Código de seguimiento</TableHead>
           <TableHead className="hidden md:table-cell">{tipo === "enviadas" ? "Destinatario" : "Remitente"}</TableHead>
           <TableHead className="hidden 2xl:table-cell">Cooperativa</TableHead>
           <TableHead>Estado</TableHead>
-          <TableHead className="hidden text-right sm:table-cell">Costo</TableHead>
+          <TableHead className="hidden text-right md:table-cell">Costo</TableHead>
           <TableHead className="hidden 2xl:table-cell">Fecha</TableHead>
           {conAcciones && <TableHead className="text-right">Acciones</TableHead>}
         </TableRow>
       </TableHeader>
       <TableBody>
-        {lista.length === 0 ? (
-          <FilaVacia colSpan={columnas} titulo={tipo === "enviadas" ? "No ha enviado encomiendas" : "No ha recibido encomiendas"} />
-        ) : (
-          lista.map((e) => (
+        {items.map((e) => (
             <TableRow key={e.id} className="relative">
               <CeldaEnlace
                 href={`/admin/encomiendas?codigo=${encodeURIComponent(e.tracking_id)}`}
                 etiqueta={`Ver encomienda ${e.tracking_id}`}
-                className="font-mono text-sm"
+                className="font-mono text-[15px]"
               >
                 {e.tracking_id}
               </CeldaEnlace>
@@ -105,14 +153,14 @@ function TablaEncomiendas({
                 {tipo === "enviadas" ? (
                   <>
                     <span className="block">{e.receiver_nombre}</span>
-                    <span className="block text-xs text-muted-foreground tabular-nums">
+                    <span className="block text-[13px] text-muted-foreground tabular-nums">
                       {documentoLegible(e.receiver_cedula_rif)} · {telefonoOVacio(e.receiver_telefono)}
                     </span>
                   </>
                 ) : (
                   <>
                     <span className="block">{e.sender_nombre || <Vacio />}</span>
-                    <span className="block text-xs text-muted-foreground">{telefonoOVacio(e.sender_telefono)}</span>
+                    <span className="block text-[13px] text-muted-foreground">{telefonoOVacio(e.sender_telefono)}</span>
                   </>
                 )}
               </TableCell>
@@ -123,7 +171,7 @@ function TablaEncomiendas({
                   {e.pin_bloqueado && <TonoBadge tono="peligro">PIN bloqueado</TonoBadge>}
                 </span>
               </TableCell>
-              <TableCell className="hidden text-right sm:table-cell">
+              <TableCell className="hidden text-right md:table-cell">
                 {e.costo_calculado > 0 ? (
                   <Monto usd={e.costo_calculado} tasa={tasa} moneda="USD" size="sm" align="right" />
                 ) : (
@@ -137,10 +185,11 @@ function TablaEncomiendas({
                 </TableCell>
               )}
             </TableRow>
-          ))
-        )}
+          ))}
       </TableBody>
     </Table>
+      )}
+    />
   );
 }
 
@@ -178,7 +227,7 @@ export function UsuarioDetailTabs({ usuario }: UsuarioDetailTabsProps) {
         </TabsTrigger>
       </TabsList>
       {recortada && (
-        <p className="text-sm text-muted-foreground">
+        <p className="text-[15px] text-muted-foreground">
           Cada lista muestra los {formatNumeroVE(MAX_FILAS_DETALLE_USUARIO, 0)} movimientos más recientes.
         </p>
       )}
@@ -191,7 +240,7 @@ export function UsuarioDetailTabs({ usuario }: UsuarioDetailTabsProps) {
               <CardTitle>Datos de la cuenta</CardTitle>
             </CardHeader>
             <CardContent>
-              <dl className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
+              <dl className="grid gap-x-6 gap-y-4 md:grid-cols-2">
                 <Dato etiqueta="Nombre y apellido">{usuario.nombre_completo}</Dato>
                 <Dato etiqueta="Correo">{usuario.email || <Vacio texto="Sin correo" />}</Dato>
                 <Dato etiqueta="Cédula">
@@ -199,7 +248,7 @@ export function UsuarioDetailTabs({ usuario }: UsuarioDetailTabsProps) {
                 </Dato>
                 <Dato etiqueta="Teléfono">{telefonoOVacio(usuario.telefono)}</Dato>
                 <Dato etiqueta="Rol">
-                  <Badge variant="secondary">{etiquetaRol(usuario.role)}</Badge>
+                  <TonoBadge tono="neutro">{etiquetaRol(usuario.role)}</TonoBadge>
                 </Dato>
                 <Dato etiqueta="Cooperativa">
                   {usuario.cooperativa_id && usuario.cooperativa_nombre ? (
@@ -231,7 +280,7 @@ export function UsuarioDetailTabs({ usuario }: UsuarioDetailTabsProps) {
                       )}
                     </Dato>
                     {usuario.baja?.motivo && (
-                      <Dato etiqueta="Motivo de la baja" className="sm:col-span-2">
+                      <Dato etiqueta="Motivo de la baja" className="md:col-span-2">
                         {usuario.baja.motivo}
                       </Dato>
                     )}
@@ -266,8 +315,33 @@ export function UsuarioDetailTabs({ usuario }: UsuarioDetailTabsProps) {
 
       {/* Boletos */}
       <TabsContent value="boletos">
-        <Card className="gap-0 overflow-hidden p-0">
-          <Table>
+        <Card className="gap-0 overflow-hidden p-0 max-md:overflow-visible max-md:bg-transparent max-md:shadow-none">
+          <ListaResponsive
+            items={usuario.boletos}
+            clave={(b) => b.id}
+            etiqueta="Boletos"
+            vacio={
+              <div className="max-md:rounded-xl max-md:bg-card max-md:shadow-card">
+              <Table>
+                <TableBody>
+                  <FilaVacia colSpan={7} icon={Ticket} titulo="No ha comprado boletos" />
+                </TableBody>
+              </Table>
+            </div>
+            }
+            tarjeta={(b) => (
+              <EntityCard
+                leading={<IconTile icon={Ticket} tone="sky" />}
+                title={formatCodigoBoleto(b.codigo_boleto)}
+                subtitle={b.viaje_info}
+                lineasSubtitulo={2}
+                adorno={<Monto usd={b.precio} tasa={tasa} moneda="USD" size="sm" align="right" />}
+                badge={<StatusBadge status={b.estado} dominio="boleto" />}
+                meta={`Asiento ${b.asiento}`}
+              />
+            )}
+            tabla={(items) => (
+              <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Código</TableHead>
@@ -275,41 +349,64 @@ export function UsuarioDetailTabs({ usuario }: UsuarioDetailTabsProps) {
                 <TableHead>Asiento</TableHead>
                 <TableHead className="hidden lg:table-cell">Cooperativa</TableHead>
                 <TableHead>Estado</TableHead>
-                <TableHead className="hidden text-right sm:table-cell">Precio</TableHead>
+                <TableHead className="hidden text-right md:table-cell">Precio</TableHead>
                 <TableHead className="hidden md:table-cell">Compra</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {usuario.boletos.length === 0 ? (
-                <FilaVacia colSpan={7} icon={Ticket} titulo="No ha comprado boletos" />
-              ) : (
-                usuario.boletos.map((b) => (
+              {items.map((b) => (
                   <TableRow key={b.id}>
-                    <TableCell className="font-mono text-sm text-foreground">{formatCodigoBoleto(b.codigo_boleto)}</TableCell>
+                    <TableCell className="font-mono text-[15px] text-foreground">{formatCodigoBoleto(b.codigo_boleto)}</TableCell>
                     <TableCell className="hidden max-w-64 truncate md:table-cell">{b.viaje_info}</TableCell>
                     <TableCell>
-                      <Badge variant="outline" className="font-mono">{b.asiento}</Badge>
+                      <TonoBadge tono="neutro" className="font-mono">{b.asiento}</TonoBadge>
                     </TableCell>
                     <TableCell className="hidden lg:table-cell">{b.cooperativa_nombre}</TableCell>
                     <TableCell>
                       <StatusBadge status={b.estado} dominio="boleto" />
                     </TableCell>
-                    <TableCell className="hidden text-right sm:table-cell">
+                    <TableCell className="hidden text-right md:table-cell">
                       <Monto usd={b.precio} tasa={tasa} moneda="USD" size="sm" align="right" />
                     </TableCell>
                     <TableCell className="hidden text-muted-foreground tabular-nums md:table-cell">{formatFechaVE(b.created_at)}</TableCell>
                   </TableRow>
-                ))
-              )}
+                ))}
             </TableBody>
           </Table>
+            )}
+          />
         </Card>
       </TabsContent>
 
       {/* Pagos */}
       <TabsContent value="pagos">
-        <Card className="gap-0 overflow-hidden p-0">
-          <Table>
+        <Card className="gap-0 overflow-hidden p-0 max-md:overflow-visible max-md:bg-transparent max-md:shadow-none">
+          <ListaResponsive
+            items={usuario.pagos}
+            clave={(p) => p.id}
+            etiqueta="Pagos"
+            vacio={
+              <div className="max-md:rounded-xl max-md:bg-card max-md:shadow-card">
+              <Table>
+                <TableBody>
+                  <FilaVacia colSpan={6} icon={CreditCard} titulo="No ha registrado pagos" />
+                </TableBody>
+              </Table>
+            </div>
+            }
+            tarjeta={(p) => (
+              <EntityCard
+                leading={<IconTile icon={CreditCard} tone="mint" />}
+                title={p.numero_referencia || "Sin referencia"}
+                subtitle={`${p.encomienda_tracking_id ? `Encomienda ${p.encomienda_tracking_id}` : p.boleto_codigo ? `Boleto ${formatCodigoBoleto(p.boleto_codigo)}` : "Pago"} · ${metodoDePago(p)}`}
+                lineasSubtitulo={2}
+                adorno={<MontoPago p={p} />}
+                badge={<StatusBadge status={p.estado_verificacion} dominio="pago" />}
+                meta={formatFechaVE(p.created_at)}
+              />
+            )}
+            tabla={(items) => (
+              <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Referencia</TableHead>
@@ -321,25 +418,22 @@ export function UsuarioDetailTabs({ usuario }: UsuarioDetailTabsProps) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {usuario.pagos.length === 0 ? (
-                <FilaVacia colSpan={6} icon={CreditCard} titulo="No ha registrado pagos" />
-              ) : (
-                usuario.pagos.map((p) => (
+              {items.map((p) => (
                   <TableRow key={p.id}>
-                    <TableCell className="font-mono text-sm">
+                    <TableCell className="font-mono text-[15px]">
                       {p.numero_referencia || <span className="font-sans text-muted-foreground">Sin referencia</span>}
                     </TableCell>
                     <TableCell>
                       {p.encomienda_tracking_id && (
                         <>
-                          <span className="block font-mono text-sm">{p.encomienda_tracking_id}</span>
-                          <span className="block text-xs text-muted-foreground">Encomienda</span>
+                          <span className="block font-mono text-[15px]">{p.encomienda_tracking_id}</span>
+                          <span className="block text-[13px] text-muted-foreground">Encomienda</span>
                         </>
                       )}
                       {p.boleto_codigo && (
                         <>
-                          <span className="block font-mono text-sm">{formatCodigoBoleto(p.boleto_codigo)}</span>
-                          <span className="block text-xs text-muted-foreground">Boleto</span>
+                          <span className="block font-mono text-[15px]">{formatCodigoBoleto(p.boleto_codigo)}</span>
+                          <span className="block text-[13px] text-muted-foreground">Boleto</span>
                         </>
                       )}
                     </TableCell>
@@ -347,7 +441,7 @@ export function UsuarioDetailTabs({ usuario }: UsuarioDetailTabsProps) {
                     <TableCell className="whitespace-normal">
                       <StatusBadge status={p.estado_verificacion} dominio="pago" />
                       {p.estado_verificacion === "RECHAZADO" && p.motivo_rechazo && (
-                        <p className="mt-1 max-w-56 text-xs text-muted-foreground">{p.motivo_rechazo}</p>
+                        <p className="mt-1 max-w-56 text-[13px] text-muted-foreground">{p.motivo_rechazo}</p>
                       )}
                     </TableCell>
                     <TableCell className="text-right">
@@ -368,17 +462,46 @@ export function UsuarioDetailTabs({ usuario }: UsuarioDetailTabsProps) {
                     </TableCell>
                     <TableCell className="hidden text-muted-foreground tabular-nums md:table-cell">{formatFechaVE(p.created_at)}</TableCell>
                   </TableRow>
-                ))
-              )}
+                ))}
             </TableBody>
           </Table>
+            )}
+          />
         </Card>
       </TabsContent>
 
       {/* Notificaciones */}
       <TabsContent value="notificaciones">
-        <Card className="gap-0 overflow-hidden p-0">
-          <Table>
+        <Card className="gap-0 overflow-hidden p-0 max-md:overflow-visible max-md:bg-transparent max-md:shadow-none">
+          <ListaResponsive
+            items={usuario.notificaciones}
+            clave={(n) => n.id}
+            etiqueta="Notificaciones"
+            vacio={
+              <div className="max-md:rounded-xl max-md:bg-card max-md:shadow-card">
+              <Table>
+                <TableBody>
+                  <FilaVacia colSpan={4} icon={Bell} titulo="No le hemos enviado avisos" />
+                </TableBody>
+              </Table>
+            </div>
+            }
+            tarjeta={(n) => (
+              <EntityCard
+                leading={<IconTile icon={Bell} tone="neutral" />}
+                title={n.titulo}
+                subtitle={n.contenido}
+                lineasSubtitulo={2}
+                badge={
+                  <TonoBadge tono={(ENVIO[n.estado_envio] ?? { tono: "pendiente" as Tono }).tono}>
+                    {(ENVIO[n.estado_envio] ?? { etiqueta: "En cola" }).etiqueta}
+                  </TonoBadge>
+                }
+                meta={`${CANAL[n.canal] ?? n.canal} · ${formatFechaVE(n.created_at)}`}
+              />
+            )}
+            tabla={(items) => (
+              <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Aviso</TableHead>
@@ -388,16 +511,13 @@ export function UsuarioDetailTabs({ usuario }: UsuarioDetailTabsProps) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {usuario.notificaciones.length === 0 ? (
-                <FilaVacia colSpan={4} icon={Bell} titulo="No le hemos enviado avisos" />
-              ) : (
-                usuario.notificaciones.map((n) => {
+              {items.map((n) => {
                   const envio = ENVIO[n.estado_envio] ?? { etiqueta: "En cola", tono: "pendiente" as Tono };
                   return (
                     <TableRow key={n.id}>
                       <TableCell className="max-w-md">
                         <span className="block truncate font-medium">{n.titulo}</span>
-                        <span className="block truncate text-xs text-muted-foreground" title={n.contenido}>
+                        <span className="block truncate text-[13px] text-muted-foreground" title={n.contenido}>
                           {n.contenido}
                         </span>
                       </TableCell>
@@ -410,10 +530,11 @@ export function UsuarioDetailTabs({ usuario }: UsuarioDetailTabsProps) {
                       </TableCell>
                     </TableRow>
                   );
-                })
-              )}
+                })}
             </TableBody>
           </Table>
+            )}
+          />
         </Card>
       </TabsContent>
     </Tabs>

@@ -147,9 +147,10 @@ export default function AdminLoginClient({ aviso }: { aviso: AvisoLoginAdmin | n
                 id="email"
                 type="email"
                 inputMode="email"
-                placeholder="tu@correo.com"
+                placeholder="Ej. nombre@correo.com"
                 required
                 autoComplete="username"
+                enterKeyHint="next"
                 autoCapitalize="none"
                 spellCheck={false}
                 value={email}
@@ -163,6 +164,7 @@ export default function AdminLoginClient({ aviso }: { aviso: AvisoLoginAdmin | n
                 id="password"
                 required
                 autoComplete="current-password"
+                enterKeyHint="done"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 disabled={ocupado}
@@ -170,7 +172,7 @@ export default function AdminLoginClient({ aviso }: { aviso: AvisoLoginAdmin | n
             </Field>
           </FieldGroup>
 
-          <Button type="submit" className="w-full" disabled={ocupado} aria-busy={loading || undefined}>
+          <Button type="submit" size="lg" className="w-full" disabled={ocupado} aria-busy={loading || undefined}>
             {loading && <Spinner size="sm" aria-hidden />}
             {loading ? "Entrando…" : "Entrar"}
           </Button>
@@ -188,6 +190,7 @@ export default function AdminLoginClient({ aviso }: { aviso: AvisoLoginAdmin | n
           onClick={handleGoogleSignIn}
           disabled={ocupado}
           aria-busy={googleLoading || undefined}
+          size="lg"
           className="w-full"
         >
           {googleLoading ? <Spinner size="sm" aria-hidden /> : <GoogleLogo aria-hidden />}

@@ -2,16 +2,17 @@ import {
   ChartBar, Package, Ticket, TruckTrailer,
   MapTrifold, Users, Gear, CalendarBlank,
   DownloadSimple, Handshake, Receipt, ArrowCounterClockwise, Printer,
-  Bus, QrCode, UserCheck,
+  Bus, QrCode, UserCheck, Buildings,
 } from "@phosphor-icons/react/dist/ssr";
 // Iconos de la entrada SSR: este módulo lo importan el proxy y los Server Components,
 // donde la entrada normal (con React context) no se puede evaluar.
 import type { Icon } from "@phosphor-icons/react";
 
-// ─── Mapa del panel de cooperativas (fase 5, §2.1) ───────────────────────────
+// ─── Mapa del panel de cooperativas (Amanecer, §2) ───────────────────────────
 // Una sola fuente para el menú, la miga de la barra superior, la pestaña del
 // navegador y los iconos de cada sección. El nombre de una sección es el mismo
-// en el menú, la miga, el H1 y el <title> ("<Sección> · EnBus").
+// en el menú, la miga, el H1 y el <title> ("<Sección> · EnBus"), con una excepción
+// declarada con `tituloPagina`.
 
 export type RolPanel = "admin_cooperativa" | "taquillero";
 
@@ -26,8 +27,10 @@ export type ClaveContador =
   | "encomiendas_por_vencer";
 
 export type NavItem = {
-  /** Mismo texto en el menú, la miga, el H1 y la pestaña del navegador. */
+  /** Texto del menú y de la miga; también el H1 y la pestaña salvo que haya `tituloPagina`. */
   title: string;
+  /** Solo si el H1 y la pestaña del navegador deben decir otra cosa que el menú. */
+  tituloPagina?: string;
   href: string;
   icon: Icon;
   roles: RolPanel[];
@@ -35,7 +38,11 @@ export type NavItem = {
   tonoContador?: "neutro" | "aviso";
 };
 
-export type NavGrupo = { titulo?: string; items: NavItem[] };
+/**
+ * Bloque del menú. `directo`: enlace suelto (un solo ítem, sin plegar y sin grupo en la miga).
+ * Si no, grupo plegable con su icono; la miga muestra "Grupo › Sección".
+ */
+export type NavGrupo = { id: string; titulo: string; icon: Icon; directo?: boolean; items: NavItem[] };
 
 /** Un icono por sección, repetido en todo lo que lleve a ella y no usado para otra cosa. */
 export const ICONO_SECCION = {
@@ -51,6 +58,7 @@ export const ICONO_SECCION = {
   rutas: MapTrifold,
   empleados: Users,
   configuracion: Gear,
+  cooperativa: Buildings,
   impresora: Printer,
   unidad: Bus,
   escanear: QrCode,
@@ -61,49 +69,55 @@ export const ICONO_SECCION = {
 const AMBOS: RolPanel[] = ["admin_cooperativa", "taquillero"];
 const ADMIN: RolPanel[] = ["admin_cooperativa"];
 
-/** Menú en el orden del mostrador. El taquillero ve el mismo orden con menos ítems. */
+/**
+ * Menú en cuatro bloques: Resumen y tres grupos plegables. El taquillero ve los mismos
+ * bloques con menos ítems; un grupo sin ítems para el rol no se muestra.
+ */
 export const NAV_GRUPOS: NavGrupo[] = [
   {
+    id: "resumen",
+    titulo: "Resumen",
+    icon: ChartBar,
+    directo: true,
     items: [{ title: "Resumen", href: "/cooperativas/dashboard", icon: ICONO_SECCION.resumen, roles: AMBOS }],
   },
   {
-    titulo: "Ventas y cobros",
+    id: "boletos",
+    titulo: "Boletos",
+    icon: Ticket,
     items: [
       { title: "Taquilla de boletos", href: "/cooperativas/taquilla/boletos", icon: ICONO_SECCION.taquillaBoletos, roles: AMBOS },
-      { title: "Taquilla de encomiendas", href: "/cooperativas/taquilla/encomiendas", icon: ICONO_SECCION.taquillaEncomiendas, roles: AMBOS },
       { title: "Pagos por verificar", href: "/cooperativas/pagos", icon: ICONO_SECCION.pagos, roles: AMBOS, contador: "pagos_por_verificar" },
       { title: "Reembolsos", href: "/cooperativas/reembolsos", icon: ICONO_SECCION.reembolsos, roles: AMBOS, contador: "reembolsos_por_devolver" },
+      { title: "Embarque", href: "/cooperativas/embarque", icon: ICONO_SECCION.embarque, roles: AMBOS },
+      { title: "Viajes", href: "/cooperativas/viajes", icon: ICONO_SECCION.viajes, roles: AMBOS },
     ],
   },
   {
-    titulo: "Encomiendas en ruta",
+    id: "encomiendas",
+    titulo: "Encomiendas",
+    icon: Package,
     items: [
+      { title: "Taquilla de encomiendas", href: "/cooperativas/taquilla/encomiendas", icon: ICONO_SECCION.taquillaEncomiendas, roles: AMBOS },
       { title: "Despacho", href: "/cooperativas/despacho", icon: ICONO_SECCION.despacho, roles: AMBOS },
       { title: "Recepción en destino", href: "/cooperativas/recepcion-destino", icon: ICONO_SECCION.recepcion, roles: AMBOS, contador: "encomiendas_en_camino" },
       { title: "Entrega", href: "/cooperativas/entrega", icon: ICONO_SECCION.entrega, roles: AMBOS, contador: "encomiendas_por_vencer", tonoContador: "aviso" },
     ],
   },
   {
-    titulo: "Operación",
+    id: "configuracion",
+    titulo: "Configuración",
+    icon: Gear,
     items: [
-      { title: "Embarque", href: "/cooperativas/embarque", icon: ICONO_SECCION.embarque, roles: AMBOS },
-      { title: "Viajes", href: "/cooperativas/viajes", icon: ICONO_SECCION.viajes, roles: AMBOS },
       { title: "Buses", href: "/cooperativas/buses", icon: ICONO_SECCION.buses, roles: ADMIN },
       { title: "Rutas", href: "/cooperativas/rutas", icon: ICONO_SECCION.rutas, roles: ADMIN },
-    ],
-  },
-  {
-    titulo: "Cooperativa",
-    items: [
       { title: "Empleados", href: "/cooperativas/empleados", icon: ICONO_SECCION.empleados, roles: ADMIN },
-      { title: "Configuración", href: "/cooperativas/configuracion", icon: ICONO_SECCION.configuracion, roles: ADMIN },
+      // En el menú es "Cooperativa" (el grupo ya dice "Configuración"); la página sigue
+      // titulándose "Configuración" en su H1 y en la pestaña del navegador.
+      { title: "Cooperativa", tituloPagina: "Configuración", href: "/cooperativas/configuracion", icon: ICONO_SECCION.cooperativa, roles: ADMIN },
+      { title: "Impresora y lector", href: "/cooperativas/hardware", icon: ICONO_SECCION.impresora, roles: AMBOS },
     ],
   },
-];
-
-/** Pie del menú, encima del usuario: es del equipo, no una sección de trabajo. */
-export const NAV_PIE: NavItem[] = [
-  { title: "Impresora y lector", href: "/cooperativas/hardware", icon: ICONO_SECCION.impresora, roles: AMBOS },
 ];
 
 /** Grupos del menú visibles para el rol; un grupo sin ítems no se devuelve. */
@@ -119,19 +133,18 @@ export function esRutaActiva(pathname: string, href: string): boolean {
   return pathname === base || pathname.startsWith(`${base}/`);
 }
 
-/** Sección (y su grupo) a la que pertenece `pathname`, o null fuera del menú. */
+/** Sección (y su grupo) a la que pertenece `pathname`, o null fuera del menú. Un enlace directo no tiene grupo. */
 export function seccionDe(pathname: string): { grupo?: string; item: NavItem } | null {
   for (const g of NAV_GRUPOS) {
     const item = g.items.find((i) => esRutaActiva(pathname, i.href));
-    if (item) return { grupo: g.titulo, item };
+    if (item) return { grupo: g.directo ? undefined : g.titulo, item };
   }
-  const pie = NAV_PIE.find((i) => esRutaActiva(pathname, i.href));
-  return pie ? { item: pie } : null;
+  return null;
 }
 
 /** Nombre de la sección con ese `href` (para `metadata.title` de su layout: "<Sección> · EnBus"). */
 export function tituloSeccion(href: string): string {
-  const item = [...NAV_GRUPOS.flatMap((g) => g.items), ...NAV_PIE].find((i) => i.href === href);
+  const item = NAV_GRUPOS.flatMap((g) => g.items).find((i) => i.href === href);
   if (!item) throw new Error(`Sección desconocida: ${href}`);
-  return item.title;
+  return item.tituloPagina ?? item.title;
 }

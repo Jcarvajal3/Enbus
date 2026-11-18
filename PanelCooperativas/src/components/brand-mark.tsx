@@ -15,12 +15,15 @@ export function BrandMark({
   conNombre = false,
   zona,
   sobrePrimario = false,
+  sobreNoche = false,
   className,
 }: {
   tamano?: "sm" | "md" | "lg";
   conNombre?: boolean;
   zona?: "Cooperativas" | "Administración";
   sobrePrimario?: boolean;
+  /** Sobre el fondo `night`: nombre en blanco. */
+  sobreNoche?: boolean;
   className?: string;
 }) {
   const lado = LADO[tamano];
@@ -48,14 +51,14 @@ export function BrandMark({
         <span
           className={cn(
             "truncate font-semibold tracking-tight",
-            sobrePrimario ? "text-primary-foreground" : "text-foreground",
+            sobrePrimario ? "text-primary-foreground" : sobreNoche ? "text-white" : "text-foreground",
             NOMBRE[tamano]
           )}
         >
           EnBus
         </span>
         {zona && (
-          <span className={cn("truncate text-xs", sobrePrimario ? "text-primary-foreground/80" : "text-muted-foreground")}>
+          <span className={cn("truncate text-xs", sobrePrimario ? "text-primary-foreground/80" : sobreNoche ? "text-night-muted" : "text-muted-foreground")}>
             {zona}
           </span>
         )}

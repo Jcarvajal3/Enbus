@@ -9,7 +9,7 @@
 
 import { useState, useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogFooterFila, DialogDescription } from "@/components/ui/dialog";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -263,7 +263,7 @@ export function RecepcionModal({ encomienda, isOpen, onClose, onSuccess, onRecha
           <DialogDescription>Revisa el paquete (máx. 50 × 50 × 50 cm) y escribe el peso.</DialogDescription>
         </DialogHeader>
 
-        <div className="grid gap-6">
+        <div className="grid gap-5">
           {aMedias && (
             <Alert>
               <WarningCircle aria-hidden />
@@ -281,11 +281,11 @@ export function RecepcionModal({ encomienda, isOpen, onClose, onSuccess, onRecha
                 </p>
                 <div className="flex flex-wrap gap-2">
                   {esAdmin && (
-                    <Link href="/cooperativas/rutas" className={buttonVariants({ variant: "outline", size: "sm" })}>
+                    <Link href="/cooperativas/rutas" className={buttonVariants({ variant: "outline" })}>
                       Crear ruta
                     </Link>
                   )}
-                  <Button size="sm" variant="outline" onClick={() => setRechazarOpen(true)}>
+                  <Button variant="outline" onClick={() => setRechazarOpen(true)}>
                     No recibir la encomienda
                   </Button>
                 </div>
@@ -294,35 +294,35 @@ export function RecepcionModal({ encomienda, isOpen, onClose, onSuccess, onRecha
           )}
 
           {/* Datos del envío */}
-          <dl className="grid grid-cols-2 gap-x-4 gap-y-3 rounded-md bg-muted/50 p-4 text-sm">
+          <dl className="grid grid-cols-1 gap-x-4 gap-y-4 rounded-md bg-surface p-4 md:grid-cols-2 text-[15px]">
             <div className="flex flex-col gap-0.5">
-              <dt className="text-xs text-muted-foreground">Ruta</dt>
+              <dt className="text-[13px] text-muted-foreground">Ruta</dt>
               <dd className="font-medium">
                 {formatCiudad(encomienda.ciudad_origen)} → {formatCiudad(encomienda.ciudad_destino)}
               </dd>
             </div>
             <div className="flex flex-col gap-0.5">
-              <dt className="text-xs text-muted-foreground">Quién paga</dt>
+              <dt className="text-[13px] text-muted-foreground">Quién paga</dt>
               <dd className="font-medium">{MODALIDAD_PAGO[encomienda.modalidad_pago]?.largo ?? "Sin definir"}</dd>
             </div>
             <div className="flex min-w-0 flex-col gap-0.5">
-              <dt className="text-xs text-muted-foreground">Remitente</dt>
+              <dt className="text-[13px] text-muted-foreground">Remitente</dt>
               <dd className="truncate font-medium">{remitente.nombre}</dd>
             </div>
             <div className="flex min-w-0 flex-col gap-0.5">
-              <dt className="text-xs text-muted-foreground">Destinatario</dt>
+              <dt className="text-[13px] text-muted-foreground">Destinatario</dt>
               <dd className="truncate font-medium">{encomienda.receiver_nombre}</dd>
               {encomienda.receiver_telefono && (
-                <dd className="text-xs text-muted-foreground tabular-nums">{formatTelefono(encomienda.receiver_telefono)}</dd>
+                <dd className="text-[13px] text-muted-foreground tabular-nums">{formatTelefono(encomienda.receiver_telefono)}</dd>
               )}
             </div>
-            <div className="col-span-2 flex flex-col gap-0.5">
-              <dt className="text-xs text-muted-foreground">Contenido declarado</dt>
+            <div className="flex flex-col gap-0.5 md:col-span-2">
+              <dt className="text-[13px] text-muted-foreground">Contenido declarado</dt>
               <dd>{encomienda.descripcion_contenido || "Sin descripción"}</dd>
             </div>
           </dl>
 
-          <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-2">
             {/* Peso */}
             <div className="flex flex-col gap-2">
               <Label htmlFor="peso">Peso (kg)</Label>
@@ -331,6 +331,7 @@ export function RecepcionModal({ encomienda, isOpen, onClose, onSuccess, onRecha
                 inputMode="decimal"
                 autoComplete="off"
                 placeholder="Ej.: 2,5"
+                enterKeyHint="done"
                 value={peso}
                 autoFocus
                 onChange={(e) => setPeso(e.target.value)}
@@ -341,19 +342,19 @@ export function RecepcionModal({ encomienda, isOpen, onClose, onSuccess, onRecha
                 aria-describedby={pesoError ? "peso-error" : "peso-ayuda"}
               />
               {pesoError ? (
-                <p id="peso-error" className="text-sm text-destructive-text">
+                <p id="peso-error" className="text-[13px] text-destructive-text">
                   {pesoError}
                 </p>
               ) : (
-                <p id="peso-ayuda" className="text-sm text-muted-foreground">
+                <p id="peso-ayuda" className="text-[13px] text-muted-foreground">
                   {pesoMax != null ? `Máximo ${pesoMax} kg.` : "En kilos."}
                 </p>
               )}
             </div>
 
             {/* Costo */}
-            <div aria-live="polite" className="flex min-h-24 flex-col justify-center gap-1 rounded-md bg-muted/50 p-4">
-              <p className="text-xs font-medium text-muted-foreground">Costo del envío</p>
+            <div aria-live="polite" className="flex min-h-24 flex-col justify-center gap-1 rounded-xl bg-surface p-5">
+              <p className="text-[13px] font-medium text-muted-foreground">Costo del envío</p>
               {calculating || esperandoCotizacion ? (
                 <Skeleton className="h-7 w-36" aria-label="Calculando el costo" />
               ) : cotizacionVigente ? (
@@ -364,9 +365,9 @@ export function RecepcionModal({ encomienda, isOpen, onClose, onSuccess, onRecha
                   size="lg"
                 />
               ) : errorCotizacion ? (
-                <p className="text-sm text-destructive-text">{errorCotizacion}</p>
+                <p className="text-[13px] text-destructive-text">{errorCotizacion}</p>
               ) : (
-                <p className="text-sm text-muted-foreground">Escribe el peso para calcularlo.</p>
+                <p className="text-[13px] text-muted-foreground">Escribe el peso para calcularlo.</p>
               )}
             </div>
           </div>
@@ -374,25 +375,26 @@ export function RecepcionModal({ encomienda, isOpen, onClose, onSuccess, onRecha
           {errorEnvio && <AvisoError>{errorEnvio}</AvisoError>}
         </div>
 
-        <DialogFooter className="sm:justify-between">
-          <Button
-            variant="outline"
-            className="text-destructive-text"
-            onClick={() => setRechazarOpen(true)}
-            disabled={submitting}
-          >
-            <Prohibit aria-hidden />
-            No recibir
-          </Button>
-          <div className="flex flex-col-reverse gap-2 sm:flex-row">
-            <Button variant="outline" onClick={onClose} disabled={submitting}>
+        <DialogFooter>
+          <DialogFooterFila>
+            <Button
+              variant="outline"
+              size="lg"
+              className="text-destructive-text"
+              onClick={() => setRechazarOpen(true)}
+              disabled={submitting}
+            >
+              <Prohibit aria-hidden />
+              No recibir
+            </Button>
+            <Button variant="outline" size="lg" className="md:ml-auto" onClick={onClose} disabled={submitting}>
               Cancelar
             </Button>
-            <Button onClick={() => void handleSubmit()} disabled={!listoParaConfirmar} aria-busy={submitting || undefined}>
-              {submitting && <Spinner size="sm" />}
-              {submitting ? "Recibiendo…" : "Recibir encomienda"}
-            </Button>
-          </div>
+          </DialogFooterFila>
+          <Button size="xl" onClick={() => void handleSubmit()} disabled={!listoParaConfirmar} aria-busy={submitting || undefined}>
+            {submitting && <Spinner size="sm" />}
+            {submitting ? "Recibiendo…" : "Recibir encomienda"}
+          </Button>
         </DialogFooter>
       </DialogContent>
 

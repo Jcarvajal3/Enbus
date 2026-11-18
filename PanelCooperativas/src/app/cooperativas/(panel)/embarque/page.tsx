@@ -15,6 +15,7 @@
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowClockwise, Camera } from "@phosphor-icons/react";
 import { PageHeader } from "@/components/page-header";
+import { SectionLabel } from "@/components/section-label";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -71,9 +72,9 @@ export default function EmbarquePage() {
   return (
     <Suspense
       fallback={
-        <div className="flex flex-col gap-6">
+        <div className="mx-auto flex w-full max-w-7xl flex-col gap-8">
           <Skeleton className="h-8 w-40" />
-          <Skeleton className="h-44 w-full rounded-md" />
+          <Skeleton className="h-44 w-full rounded-xl" />
           <Skeleton className="h-12 w-full rounded-md" />
         </div>
       }
@@ -299,16 +300,16 @@ function Embarque() {
   const porcentaje = confirmados > 0 ? Math.round((embarcados / confirmados) * 100) : 0;
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-8">
       <PageHeader title="Embarque" />
 
       {/* 1. Bus */}
-      <Card role="region" aria-labelledby="titulo-bus-embarque" className="gap-4 p-4">
+      <Card role="region" aria-labelledby="titulo-bus-embarque" className="gap-4 p-4 md:gap-5 md:p-5">
         <div className="flex flex-col gap-2">
-          <Label id="titulo-bus-embarque" htmlFor="bus-embarque" className="text-base font-semibold">
+          <Label id="titulo-bus-embarque" htmlFor="bus-embarque" className="text-[17px] font-semibold">
             ¿Qué bus estás embarcando?
           </Label>
-          <div className="flex gap-2">
+          <div className="flex gap-3">
             <Select
               value={viajeEmbarque}
               onValueChange={(v) => setViajeUrl(v ?? SIN_BUS)}
@@ -317,7 +318,7 @@ function Embarque() {
                 ...Object.fromEntries(viajesHoy.map((v) => [v.id, etiquetaViaje(v)])),
               }}
             >
-              <SelectTrigger id="bus-embarque" className="h-12 w-full min-w-0 flex-1 text-base" disabled={sinViajesAun}>
+              <SelectTrigger id="bus-embarque" className="w-full min-w-0 flex-1" disabled={sinViajesAun}>
                 <SelectValue placeholder="Elige el bus" />
               </SelectTrigger>
               <SelectContent>
@@ -331,8 +332,8 @@ function Embarque() {
             </Select>
             <Button
               variant="outline"
-              size="icon"
-              className="size-12 shrink-0"
+              size="icon-lg"
+              className="shrink-0"
               onClick={actualizar}
               disabled={cargandoViajesHoy}
               aria-label="Actualizar los viajes y los pasajeros"
@@ -345,10 +346,10 @@ function Embarque() {
             <ErrorState compacto titulo="No pudimos cargar los viajes de hoy" descripcion={errorViajes} onReintentar={fetchViajesHoy} />
           )}
           {viajesCargados && !errorViajes && viajesHoy.length === 0 && (
-            <p className="text-sm text-muted-foreground">No hay viajes por embarcar hoy.</p>
+            <p className="text-[13px] text-muted-foreground">No hay viajes por embarcar hoy.</p>
           )}
           {viajeUrlNoEsDeHoy && (
-            <p className="text-sm text-muted-foreground">Ese viaje no se embarca hoy. Elige uno de la lista.</p>
+            <p className="text-[13px] text-muted-foreground">Ese viaje no se embarca hoy. Elige uno de la lista.</p>
           )}
         </div>
 
@@ -356,15 +357,15 @@ function Embarque() {
           <div className="flex flex-col gap-3 border-t border-border pt-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="flex min-w-0 flex-col gap-0.5">
-                <p className="text-lg font-semibold leading-snug">{rutaDeViaje(viajeElegido)}</p>
-                <p className="text-sm text-muted-foreground tabular-nums">
+                <p className="text-[17px] font-semibold leading-snug">{rutaDeViaje(viajeElegido)}</p>
+                <p className="text-[13px] text-muted-foreground tabular-nums">
                   Sale {formatHoraVE(viajeElegido.fecha_hora_salida)}
                   {viajeElegido.numero_unidad ? ` · Unidad ${viajeElegido.numero_unidad}` : ""}
                 </p>
               </div>
               <div className="flex items-center gap-2">
                 <StatusBadge status={viajeElegido.estado} dominio="viaje" />
-                <Button variant="outline" size="sm" onClick={() => setViajeSheet(viajeElegido.id)}>
+                <Button variant="outline" size="sm" className="max-md:h-11 max-md:px-4" onClick={() => setViajeSheet(viajeElegido.id)}>
                   Ver viaje
                 </Button>
               </div>
@@ -374,12 +375,12 @@ function Embarque() {
               // Sin la lista no se sabe cuántos embarcaron: guion, nunca "0 de 0".
               <div className="flex flex-col gap-1">
                 <p className="flex flex-wrap items-baseline gap-x-2">
-                  <span className="text-4xl font-semibold leading-none text-muted-foreground" aria-hidden>
+                  <span className="text-[40px] font-semibold leading-none text-muted-foreground" aria-hidden>
                     —
                   </span>
-                  <span className="text-base font-medium">embarcados</span>
+                  <span className="text-[15px] font-medium">embarcados</span>
                 </p>
-                <p className="text-sm text-destructive-text" role="alert">
+                <p className="text-[13px] text-destructive-text" role="alert">
                   No pudimos contar los embarcados. Revisa la conexión y pulsa Actualizar.
                 </p>
               </div>
@@ -391,12 +392,12 @@ function Embarque() {
             ) : (
               <div className="flex flex-col gap-2">
                 <p className="flex flex-wrap items-baseline gap-x-2 tabular-nums" aria-live="polite" aria-atomic="true">
-                  <span className="text-4xl font-semibold leading-none">{embarcados}</span>
+                  <span className="text-[40px] font-semibold leading-none">{embarcados}</span>
                   <span className="text-xl text-muted-foreground">de {confirmados}</span>
-                  <span className="text-base font-medium">embarcados</span>
+                  <span className="text-[15px] font-medium">embarcados</span>
                 </p>
                 <div
-                  className="h-2 w-full overflow-hidden rounded-full bg-muted"
+                  className="h-2 w-full overflow-hidden rounded-full bg-surface-dark"
                   role="progressbar"
                   aria-label="Pasajeros embarcados"
                   aria-valuemin={0}
@@ -409,7 +410,7 @@ function Embarque() {
                   />
                 </div>
                 {(porVerificar > 0 || sinPagar > 0) && (
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-[13px] text-muted-foreground">
                     {[porVerificar > 0 && `${porVerificar} con pago por verificar`, sinPagar > 0 && `${sinPagar} sin pagar`]
                       .filter(Boolean)
                       .join(" · ")}
@@ -419,33 +420,31 @@ function Embarque() {
             )}
           </div>
         ) : viajeEmbarque === SIN_BUS && viajesHoy.length > 0 ? (
-          <p className="border-t border-border pt-4 text-sm text-muted-foreground">
+          <p className="border-t border-border pt-4 text-[13px] text-muted-foreground">
             Validas boletos de cualquier bus de hoy. Elige un bus para ver sus pasajeros y cuántos faltan por embarcar.
           </p>
         ) : null}
       </Card>
 
       {/* 2. Escáner */}
-      <section aria-labelledby="titulo-escaner" className="flex flex-col gap-3">
-        <h2 id="titulo-escaner" className="sr-only">
-          Escanear boletos
-        </h2>
-        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
-          <div className="flex flex-col gap-2">
+      <section aria-label="Escanear boletos" className="flex flex-col gap-4">
+        <SectionLabel>Escanear boletos</SectionLabel>
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
+          <Card className="gap-3 p-4 md:p-5">
             {/* En teléfono y tablet la cámara es la forma principal de escanear. */}
-            <Button size="lg" className="h-12 w-full text-base lg:hidden" onClick={() => setCamaraAbierta(true)} disabled={escanerBloqueado}>
-              <Camera className="size-5" aria-hidden />
+            <Button size="xl" className="w-full max-md:h-16 max-md:text-lg lg:hidden" onClick={() => setCamaraAbierta(true)} disabled={escanerBloqueado}>
+              <Camera className="size-6" aria-hidden />
               Escanear con la cámara
             </Button>
-            <ScanInput onCodigo={handleCodigo} cooperativaId={cooperativaId} mode="boletos" disabled={escanerBloqueado} />
-            <div className="min-h-5 text-sm text-muted-foreground" aria-live="polite">
+            <ScanInput onCodigo={handleCodigo} cooperativaId={cooperativaId} mode="boletos" camara="escritorio" disabled={escanerBloqueado} />
+            <div className="min-h-5 text-[13px] text-muted-foreground" aria-live="polite">
               {validando && (
                 <span className="inline-flex items-center gap-2">
                   <Spinner size="sm" /> Revisando el boleto…
                 </span>
               )}
             </div>
-          </div>
+          </Card>
           <UltimoEscaneo resultado={ultimo} />
         </div>
       </section>

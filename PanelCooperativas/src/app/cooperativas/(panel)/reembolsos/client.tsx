@@ -6,6 +6,7 @@
 // dinero por el mismo medio con que pagó el pasajero y lo registra aquí; el
 // servidor marca el reembolso como hecho y le avisa al pasajero.
 
+import Link from "next/link";
 import { useCallback, useId, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import {
   ArrowClockwise,
@@ -34,7 +35,10 @@ import { ErrorState } from "@/components/error-state";
 import { Monto } from "@/components/monto";
 import { requireOnline } from "@/components/connectivity-banner";
 import { useTasaBCV } from "@/components/tasa-bcv-provider";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { IconTile } from "@/components/icon-tile";
+import { EntityCard } from "@/components/entity-card";
+import { ListaResponsive } from "@/components/lista-responsive";
 import {
   Dialog,
   DialogContent,
@@ -55,7 +59,6 @@ import { etiquetaMetodoPago, METODO_PAGO } from "@/lib/estados";
 import { formatFechaHoraCortaVE, formatFechaVE } from "@/lib/fechas";
 import { formatCedula, formatTelefono, telefonoWhatsApp } from "@/lib/ve";
 import type { CanceladoPor, MetodoReembolso, Reembolso } from "@/lib/types/reembolsos";
-import { cn } from "@/lib/utils";
 import { listarReembolsos, registrarReembolso, type ResultadoAccion } from "./actions";
 import { formatCodigoBoleto } from "@/lib/artefactos.generated";
 import { formatRuta } from "@/lib/ciudades";
@@ -216,15 +219,18 @@ export function ReembolsosClient({ inicial }: { inicial: ResultadoAccion<Reembol
     [grupos]
   );
   const visibles = pestana === "pendientes" ? pendientes : devueltos;
+  const abrirRegistro = (g: Grupo) => {
+    setGrupoAbierto(g);
+    setDialogoAbierto(true);
+  };
 
   return (
-    <div className="flex flex-col gap-6">
-      <PageHeader title="Reembolsos" description="Devuelve por el mismo medio y regístralo.">
-        <Button variant="outline" onClick={() => void cargar()} disabled={cargando} aria-busy={cargando || undefined}>
-          <ArrowClockwise className={cn(cargando && "motion-safe:animate-spin")} aria-hidden />
-          Actualizar
-        </Button>
-      </PageHeader>
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-8">
+      <PageHeader
+        title="Reembolsos"
+        description="Devuelve por el mismo medio y regístralo."
+        secundarias={[{ etiqueta: "Actualizar", icono: ArrowClockwise, onClick: () => void cargar(), cargando }]}
+      />
 
       <TabsUrl
         param="estado"
@@ -237,9 +243,9 @@ export function ReembolsosClient({ inicial }: { inicial: ResultadoAccion<Reembol
       />
 
       {cargando && filas.length === 0 ? (
-        <div role="status" aria-label="Cargando" className="flex flex-col gap-3">
+        <div role="status" aria-label="Cargando" className="flex flex-col gap-4">
           {Array.from({ length: 3 }).map((_, i) => (
-            <Card key={i} className="grid gap-4 p-4 sm:grid-cols-2 xl:grid-cols-4" aria-hidden>
+            <Card key={i} className="grid gap-4 p-5 md:grid-cols-2 xl:grid-cols-4" aria-hidden>
               {Array.from({ length: 4 }).map((__, j) => (
                 <div key={j} className="flex flex-col gap-2">
                   <Skeleton className="h-3 w-20" />
@@ -258,14 +264,28 @@ export function ReembolsosClient({ inicial }: { inicial: ResultadoAccion<Reembol
           {pestana === "pendientes" ? (
             <EmptyState
               icon={ICONO_SECCION.reembolsos}
+              tono="mint"
               title="Todo al día"
               description="Aquí llegan los boletos pagados que se cancelan."
+              action={
+                <Link href="/cooperativas/dashboard" className={buttonVariants({ variant: "outline", size: "lg" })}>
+                  Ir al resumen
+                </Link>
+              }
             />
           ) : (
             <EmptyState
               icon={CheckCircle}
               title="Sin devoluciones registradas"
               description="Aquí verás cada devolución con su método y referencia."
+              action={
+                <Link
+                  href="/cooperativas/reembolsos?estado=pendientes"
+                  className={buttonVariants({ variant: "outline", size: "lg" })}
+                >
+                  Ver las por devolver
+                </Link>
+              }
             />
           )}
         </Card>
@@ -279,26 +299,28 @@ export function ReembolsosClient({ inicial }: { inicial: ResultadoAccion<Reembol
               onReintentar={cargar}
             />
           )}
-          <ul className="flex flex-col gap-3" aria-label={pestana === "pendientes" ? "Reembolsos por devolver" : "Reembolsos devueltos"}>
-            {visibles.map((g) => (
-              <li key={g.clave}>
-                <TarjetaReembolso
-                  grupo={g}
-                  cooperativa={user.cooperativa_nombre}
-                  onRegistrar={() => {
-                    setGrupoAbierto(g);
-                    setDialogoAbierto(true);
-                  }}
-                />
-              </li>
-            ))}
-          </ul>
+          <ListaResponsive
+            items={visibles}
+            clave={(g) => g.clave}
+            etiqueta={pestana === "pendientes" ? "Reembolsos por devolver" : "Reembolsos devueltos"}
+            tabla={(items) => (
+              <ul className="flex flex-col gap-4" aria-label={pestana === "pendientes" ? "Reembolsos por devolver" : "Reembolsos devueltos"}>
+                {items.map((g) => (
+                  <li key={g.clave}>
+                    <TarjetaReembolso grupo={g} cooperativa={user.cooperativa_nombre} onRegistrar={() => abrirRegistro(g)} />
+                  </li>
+                ))}
+              </ul>
+            )}
+            tarjeta={(g) => <ResumenReembolso grupo={g} onRegistrar={() => abrirRegistro(g)} />}
+          />
         </>
       )}
 
       {grupoAbierto && (
         <RegistrarDevolucionDialog
           grupo={grupoAbierto}
+          whatsapp={enlaceWhatsApp(grupoAbierto, user.cooperativa_nombre)}
           open={dialogoAbierto}
           onOpenChange={setDialogoAbierto}
           onRegistrado={() => {
@@ -315,11 +337,40 @@ export function ReembolsosClient({ inicial }: { inicial: ResultadoAccion<Reembol
   );
 }
 
+/** Móvil: el resumen de un reembolso como EntityCard. Pendiente: abre el registro; devuelto: solo lectura. */
+function ResumenReembolso({ grupo: g, onRegistrar }: { grupo: Grupo; onRegistrar(): void }) {
+  const detalleDevuelto = [
+    g.procesadoAt ? `Devuelto el ${fechaCorta(g.procesadoAt)}` : "Devuelto",
+    g.reembolsoMetodo ? etiquetaMetodoPago(g.reembolsoMetodo) : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  return (
+    <EntityCard
+      onClick={g.procesado ? undefined : onRegistrar}
+      etiqueta={g.procesado ? undefined : `Registrar la devolución a ${g.contactoNombre}`}
+      leading={<IconTile icon={ICONO_SECCION.reembolsos} tone={g.procesado ? "success" : "warning"} />}
+      title={g.contactoNombre}
+      subtitle={g.procesado ? `${detalleDevuelto}${g.reembolsoReferencia ? ` · ref. ${g.reembolsoReferencia}` : ""}` : `${g.ruta} · ${comoPago(g)}`}
+      lineasSubtitulo={2}
+      adorno={<Monto usd={g.totalUsd} moneda={g.pagoMoneda === "USD" ? "USD" : undefined} size="sm" align="right" />}
+      badge={
+        g.procesado ? (
+          <TonoBadge tono="exito">Devuelto</TonoBadge>
+        ) : (
+          <TonoBadge tono="pendiente">{g.canceladoPor === "COOPERATIVA" ? "Cancelado por la cooperativa" : "Por devolver"}</TonoBadge>
+        )
+      }
+      meta={asientosTexto(g)}
+    />
+  );
+}
+
 function Dato({ etiqueta, children }: { etiqueta: string; children: ReactNode }) {
   return (
     <div className="flex min-w-0 flex-col gap-0.5">
-      <dt className="text-xs text-muted-foreground">{etiqueta}</dt>
-      <dd className="text-sm text-foreground">{children}</dd>
+      <dt className="text-[13px] text-muted-foreground">{etiqueta}</dt>
+      <dd className="text-[15px] text-foreground">{children}</dd>
     </div>
   );
 }
@@ -338,30 +389,31 @@ function TarjetaReembolso({
   const moneda = g.pagoMoneda === "USD" ? "USD" : undefined;
 
   return (
-    <article className="rounded-md border border-border bg-card p-4">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <dl className="grid flex-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+    <article className="rounded-xl bg-card p-5 shadow-card">
+      <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+        <IconTile icon={ICONO_SECCION.reembolsos} tone={g.procesado ? "success" : "warning"} className="hidden lg:inline-flex" />
+        <dl className="grid flex-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
           <Dato etiqueta="Cancelado">
             <span className="block">{fechaCorta(g.canceladoAt)}</span>
-            <span className="block text-xs text-muted-foreground">
+            <span className="block text-[13px] text-muted-foreground">
               {g.canceladoPor === "COOPERATIVA" ? "por la cooperativa (100 %)" : "por el pasajero (95 %)"}
             </span>
           </Dato>
           <Dato etiqueta={g.filas.length === 1 ? "Boleto" : `${g.filas.length} boletos`}>
             <span className="block">{asientosTexto(g)}</span>
-            <span className="block font-mono text-xs text-foreground">
+            <span className="block font-mono text-[13px] text-foreground">
               {g.filas.map((f) => formatCodigoBoleto(f.codigo_boleto)).join(", ")}
             </span>
           </Dato>
           <Dato etiqueta="Pasajero y contacto">
             <span className="block font-medium">{g.contactoNombre}</span>
             {g.filas.some((f) => f.pasajero_nombre && f.pasajero_nombre !== g.contactoNombre) && (
-              <span className="block text-xs text-muted-foreground">
+              <span className="block text-[13px] text-muted-foreground">
                 Viaja: {g.filas.map((f) => f.pasajero_nombre || "Sin nombre").join(", ")}
               </span>
             )}
             {g.filas[0].pasajero_cedula && (
-              <span className="block text-xs text-muted-foreground">C.I. {formatCedula(g.filas[0].pasajero_cedula)}</span>
+              <span className="block text-[13px] text-muted-foreground">C.I. {formatCedula(g.filas[0].pasajero_cedula)}</span>
             )}
             {g.contactoTelefono ? (
               whatsapp ? (
@@ -369,22 +421,22 @@ function TarjetaReembolso({
                   href={whatsapp}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="mt-0.5 inline-flex items-center gap-1 text-xs font-medium text-info-text underline-offset-4 hover:underline focus-visible:underline"
+                  className="mt-0.5 inline-flex items-center gap-1 text-[13px] font-medium text-info-text underline-offset-4 hover:underline focus-visible:underline"
                   aria-label={`Escribir por WhatsApp a ${g.contactoNombre} (${formatTelefono(g.contactoTelefono)})`}
                 >
                   <WhatsappLogo className="size-3.5" aria-hidden />
                   {formatTelefono(g.contactoTelefono)}
                 </a>
               ) : (
-                <span className="block text-xs text-muted-foreground">{g.contactoTelefono}</span>
+                <span className="block text-[13px] text-muted-foreground">{g.contactoTelefono}</span>
               )
             ) : (
-              <span className="block text-xs text-muted-foreground">Sin teléfono</span>
+              <span className="block text-[13px] text-muted-foreground">Sin teléfono</span>
             )}
           </Dato>
           <Dato etiqueta="Viaje">
             <span className="block">{g.ruta}</span>
-            <span className="block text-xs text-muted-foreground tabular-nums">{formatFechaHoraCortaVE(g.salida)}</span>
+            <span className="block text-[13px] text-muted-foreground tabular-nums">{formatFechaHoraCortaVE(g.salida)}</span>
           </Dato>
           <Dato etiqueta={g.procesado ? "Devuelto" : "Monto a devolver"}>
             <Monto usd={g.totalUsd} moneda={moneda} size="sm" />
@@ -398,27 +450,27 @@ function TarjetaReembolso({
             )}
           </Dato>
           {g.motivo && (
-            <div className="sm:col-span-2">
+            <div className="md:col-span-2">
               <Dato etiqueta="Motivo">
                 <span className="block text-muted-foreground">{g.motivo}</span>
               </Dato>
             </div>
           )}
           {g.procesado && (
-            <div className="sm:col-span-2">
+            <div className="md:col-span-2">
               <Dato etiqueta="Devolución">
                 <span className="block">
                   {g.procesadoAt ? `El ${fechaCorta(g.procesadoAt)} por ` : "Por "}
                   {g.reembolsoMetodo ? etiquetaMetodoPago(g.reembolsoMetodo) : "método sin registrar"}
                   {g.reembolsoReferencia ? ` (ref. ${g.reembolsoReferencia})` : ""}
                 </span>
-                {g.reembolsoNota && <span className="block text-xs text-muted-foreground">{g.reembolsoNota}</span>}
+                {g.reembolsoNota && <span className="block text-[13px] text-muted-foreground">{g.reembolsoNota}</span>}
               </Dato>
             </div>
           )}
         </dl>
         {!g.procesado && (
-          <Button variant="outline" className="shrink-0 self-start" onClick={onRegistrar}>
+          <Button variant="outline" size="lg" className="shrink-0 self-start" onClick={onRegistrar}>
             Registrar devolución
           </Button>
         )}
@@ -429,11 +481,13 @@ function TarjetaReembolso({
 
 function RegistrarDevolucionDialog({
   grupo: g,
+  whatsapp,
   open,
   onOpenChange,
   onRegistrado,
 }: {
   grupo: Grupo;
+  whatsapp: string | null;
   open: boolean;
   onOpenChange(open: boolean): void;
   onRegistrado(): void;
@@ -446,6 +500,7 @@ function RegistrarDevolucionDialog({
           // Se monta al abrir: el formulario empieza limpio cada vez.
           key={g.clave}
           grupo={g}
+          whatsapp={whatsapp}
           enviando={enviando}
           setEnviando={setEnviando}
           onCancelar={() => onOpenChange(false)}
@@ -461,12 +516,14 @@ function RegistrarDevolucionDialog({
 
 function FormularioDevolucion({
   grupo: g,
+  whatsapp,
   enviando,
   setEnviando,
   onCancelar,
   onHecho,
 }: {
   grupo: Grupo;
+  whatsapp: string | null;
   enviando: boolean;
   setEnviando(v: boolean): void;
   onCancelar(): void;
@@ -542,7 +599,7 @@ function FormularioDevolucion({
 
   return (
     <DialogContent showCloseButton={!enviando}>
-      <form onSubmit={enviar} noValidate className="grid gap-4">
+      <form onSubmit={enviar} noValidate className="grid gap-5">
         <DialogHeader>
           <DialogTitle>Registrar devolución</DialogTitle>
           <DialogDescription>
@@ -550,7 +607,7 @@ function FormularioDevolucion({
           </DialogDescription>
         </DialogHeader>
 
-        <dl className="grid gap-1 rounded-md bg-muted/50 p-3 text-sm">
+        <dl className="grid gap-1 rounded-md bg-surface p-4 text-[15px]">
           <div className="flex gap-2">
             <dt className="text-muted-foreground">Pagó con</dt>
             <dd className="text-foreground">{comoPago(g)}</dd>
@@ -564,7 +621,22 @@ function FormularioDevolucion({
           {g.contactoTelefono && (
             <div className="flex gap-2">
               <dt className="text-muted-foreground">Teléfono</dt>
-              <dd className="text-foreground tabular-nums">{formatTelefono(g.contactoTelefono)}</dd>
+              <dd className="text-foreground tabular-nums">
+                {whatsapp ? (
+                  <a
+                    href={whatsapp}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex min-h-11 items-center gap-1 font-medium text-info-text underline-offset-4 hover:underline focus-visible:underline"
+                    aria-label={`Escribir por WhatsApp a ${g.contactoNombre} (${formatTelefono(g.contactoTelefono)})`}
+                  >
+                    <WhatsappLogo className="size-4" aria-hidden />
+                    {formatTelefono(g.contactoTelefono)}
+                  </a>
+                ) : (
+                  formatTelefono(g.contactoTelefono)
+                )}
+              </dd>
             </div>
           )}
         </dl>
@@ -577,10 +649,10 @@ function FormularioDevolucion({
         )}
 
         <div className="grid gap-2">
-          <p className="text-sm font-medium text-foreground" id={`${uid}-metodo`}>
+          <p className="text-[13px] font-medium text-foreground" id={`${uid}-metodo`}>
             ¿Cómo lo devolviste?
           </p>
-          <GrupoOpciones etiqueta="¿Cómo lo devolviste?" className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <GrupoOpciones etiqueta="¿Cómo lo devolviste?" className="grid grid-cols-2 gap-2 md:grid-cols-4">
             {METODOS_DEVOLUCION.map((m) => (
               <OpcionTile
                 key={m}
@@ -607,6 +679,7 @@ function FormularioDevolucion({
             ref={referenciaRef}
             value={referencia}
             autoComplete="off"
+            enterKeyHint="next"
             inputMode={metodo === "ZELLE" ? "text" : "numeric"}
             placeholder={metodo === "EFECTIVO" ? "Ej.: recibo 0012" : "Ej.: 98765432"}
             disabled={enviando}
@@ -619,7 +692,7 @@ function FormularioDevolucion({
             }}
           />
           {errorReferencia && (
-            <p id={`${uid}-referencia-error`} className="text-sm text-destructive-text">
+            <p id={`${uid}-referencia-error`} className="text-[13px] text-destructive-text">
               {errorReferencia}
             </p>
           )}
@@ -641,10 +714,10 @@ function FormularioDevolucion({
         {error && <AvisoError>{error}</AvisoError>}
 
         <DialogFooter>
-          <Button type="button" variant="outline" onClick={onCancelar} disabled={enviando}>
+          <Button type="button" variant="outline" size="lg" onClick={onCancelar} disabled={enviando}>
             Cancelar
           </Button>
-          <Button type="submit" disabled={enviando} aria-busy={enviando || undefined}>
+          <Button type="submit" size="lg" disabled={enviando} aria-busy={enviando || undefined}>
             {enviando && <Spinner size="sm" aria-hidden />}
             {enviando ? "Registrando…" : "Registrar devolución"}
           </Button>

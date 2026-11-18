@@ -6,6 +6,9 @@
 // su ::after cubre toda la fila, así se abre con clic en cualquier parte, con
 // Tab + Enter y desde el lector de pantalla, sin JS extra.
 //
+// Es la versión de ESCRITORIO (≥ md). En móvil la fila es una `EntityCard`
+// (href/onClick), vía `ListaResponsive`; no hace falta CeldaEnlace allí.
+//
 // Uso:
 //   <TableRow className="relative">            ← "relative" y SIN onClick
 //     <CeldaEnlace href={`/…/${id}`} etiqueta={`Ver encomienda ${codigo}`}>{codigo}</CeldaEnlace>

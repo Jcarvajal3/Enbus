@@ -62,10 +62,10 @@ export default function InvitePage() {
           {[0, 1, 2].map((i) => (
             <div key={i} className="flex flex-col gap-2">
               <Skeleton className="h-4 w-28" />
-              <Skeleton className="h-9 w-full rounded-full" />
+              <Skeleton className="h-12 w-full rounded-full" />
             </div>
           ))}
-          <Skeleton className="h-9 w-full rounded-full" />
+          <Skeleton className="h-12 w-full rounded-full" />
         </div>
       </AuthLayout>
     );
@@ -82,7 +82,7 @@ export default function InvitePage() {
   if (estado.tipo === "invalida") {
     return (
       <AuthLayout zona="cooperativas" titulo="Esta invitación ya no sirve" descripcion={estado.mensaje}>
-        <Link href="/cooperativas/login" className={buttonVariants({ className: "w-full" })}>
+        <Link href="/cooperativas/login" className={buttonVariants({ size: "lg", className: "w-full" })}>
           Ir a iniciar sesión
         </Link>
       </AuthLayout>
@@ -132,9 +132,11 @@ export default function InvitePage() {
               id="email"
               name="email"
               type="email"
+              inputMode="email"
+              autoComplete="email"
               value={estado.email}
               readOnly
-              className="bg-muted text-muted-foreground"
+              className="bg-surface text-muted-foreground"
             />
           </Field>
           <Field>
@@ -181,7 +183,7 @@ export default function InvitePage() {
           </Field>
         </FieldGroup>
 
-        <Button type="submit" className="w-full" disabled={isPending} aria-busy={isPending || undefined}>
+        <Button type="submit" size="lg" className="w-full" disabled={isPending} aria-busy={isPending || undefined}>
           {isPending && <Spinner size="sm" data-icon="inline-start" />}
           {isPending ? "Creando tu cuenta…" : "Crear cuenta"}
         </Button>

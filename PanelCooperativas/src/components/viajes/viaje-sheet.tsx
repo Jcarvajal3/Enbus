@@ -12,9 +12,12 @@ import Link from "next/link";
 import { DotsThree, PencilSimple, Printer, XCircle } from "@phosphor-icons/react";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { EntityCard } from "@/components/entity-card";
+import { ListaResponsive } from "@/components/lista-responsive";
+import { IconTile } from "@/components/icon-tile";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -107,6 +110,20 @@ export function paraSalida(v: ViajeDetalle): ViajeParaSalida {
     destino: v.ruta?.ciudad_destino ?? "",
     salida: v.fecha_hora_salida,
   };
+}
+
+function AsientoChip({ asiento, usado }: { asiento: string; usado: boolean }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex h-11 min-w-11 items-center justify-center rounded-2xl px-2 font-mono text-[15px] font-semibold tabular-nums md:h-9 md:min-w-9 md:rounded-xl",
+        usado ? "bg-success-light text-success-text" : "bg-accent-light text-accent-strong"
+      )}
+    >
+      <span className="sr-only">Asiento </span>
+      {asiento}
+    </span>
+  );
 }
 
 export function ViajeSheet({
@@ -257,64 +274,64 @@ export function ViajeSheet({
                 ))}
               </div>
               <div className="flex gap-2">
-                <Skeleton className="h-9 w-32 rounded-full" />
-                <Skeleton className="h-9 w-40 rounded-full" />
+                <Skeleton className="h-12 w-36 rounded-full" />
+                <Skeleton className="h-12 w-44 rounded-full" />
               </div>
               <Skeleton className="h-48 w-full rounded-md" />
             </div>
           ) : (
             <>
-              <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+              <dl className="grid grid-cols-2 gap-x-4 gap-y-4 rounded-md bg-surface p-5 text-[15px]">
                 <div className="flex flex-col gap-0.5">
-                  <dt className="text-xs text-muted-foreground">Salida</dt>
+                  <dt className="text-[13px] text-muted-foreground">Salida</dt>
                   <dd className="font-medium tabular-nums">{formatFechaHoraCortaVE(viaje.fecha_hora_salida)}</dd>
                 </div>
                 <div className="flex flex-col gap-0.5">
-                  <dt className="text-xs text-muted-foreground">Llegada estimada</dt>
+                  <dt className="text-[13px] text-muted-foreground">Llegada estimada</dt>
                   <dd className="font-medium tabular-nums">
                     {viaje.fecha_hora_llegada_est ? formatFechaHoraCortaVE(viaje.fecha_hora_llegada_est) : "—"}
                   </dd>
                 </div>
                 <div className="flex flex-col gap-0.5">
-                  <dt className="text-xs text-muted-foreground">Asientos</dt>
+                  <dt className="text-[13px] text-muted-foreground">Asientos</dt>
                   <dd className="font-medium tabular-nums">
                     {viaje.asientos_disponibles} libres de {viaje.asientos_totales}
                   </dd>
                 </div>
                 <div className="flex flex-col gap-0.5">
-                  <dt className="text-xs text-muted-foreground">Unidad</dt>
+                  <dt className="text-[13px] text-muted-foreground">Unidad</dt>
                   <dd className="font-medium">{viaje.numero_unidad || "Sin asignar"}</dd>
                 </div>
                 <div className="col-span-2 flex flex-col gap-0.5">
-                  <dt className="text-xs text-muted-foreground">Chofer</dt>
+                  <dt className="text-[13px] text-muted-foreground">Chofer</dt>
                   <dd className="font-medium">{viaje.nombre_chofer || "Sin asignar"}</dd>
                 </div>
                 <div className="col-span-2 flex flex-col gap-0.5">
-                  <dt className="text-xs text-muted-foreground">Terminal de salida</dt>
+                  <dt className="text-[13px] text-muted-foreground">Terminal de salida</dt>
                   <dd className="font-medium">{viaje.ruta?.terminal_origen || "Sin indicar"}</dd>
                 </div>
                 <div className="col-span-2 flex flex-col gap-0.5">
-                  <dt className="text-xs text-muted-foreground">Terminal de llegada</dt>
+                  <dt className="text-[13px] text-muted-foreground">Terminal de llegada</dt>
                   <dd className="font-medium">{viaje.ruta?.terminal_destino || "Sin indicar"}</dd>
                 </div>
               </dl>
 
-              <div className="flex flex-wrap items-center gap-2">
-                {programado && <Button onClick={() => setSalidaOpen(true)}>Marcar salida</Button>}
-                {enCurso && <Button onClick={() => setLlegadaOpen(true)}>Marcar llegada</Button>}
+              <div className="flex flex-col gap-2 max-md:*:w-full md:flex-row md:flex-wrap md:items-center">
+                {programado && <Button size="lg" onClick={() => setSalidaOpen(true)}>Marcar salida</Button>}
+                {enCurso && <Button size="lg" onClick={() => setLlegadaOpen(true)}>Marcar llegada</Button>}
                 {(programado || enCurso) && !desdeEmbarque && (
-                  <Link href={`/cooperativas/embarque?viaje=${viaje.id}`} className={buttonVariants({ variant: "outline" })}>
+                  <Link href={`/cooperativas/embarque?viaje=${viaje.id}`} className={buttonVariants({ variant: "outline", size: "lg" })}>
                     <ICONO_SECCION.embarque aria-hidden />
                     Ir a Embarque
                   </Link>
                 )}
                 {programado && (
-                  <Link href={`/cooperativas/despacho?viaje=${viaje.id}`} className={buttonVariants({ variant: "outline" })}>
+                  <Link href={`/cooperativas/despacho?viaje=${viaje.id}`} className={buttonVariants({ variant: "outline", size: "lg" })}>
                     <ICONO_SECCION.despacho aria-hidden />
                     Ir a Despacho
                   </Link>
                 )}
-                <Button variant="outline" onClick={imprimir}>
+                <Button variant="outline" size="lg" onClick={imprimir}>
                   <Printer aria-hidden />
                   Imprimir manifiesto
                 </Button>
@@ -322,7 +339,7 @@ export function ViajeSheet({
                   <DropdownMenu>
                     <DropdownMenuTrigger
                       disabled={cancelando}
-                      render={<Button variant="ghost" size="icon" aria-label="Más acciones del viaje" />}
+                      render={<Button variant="ghost" size="icon-lg" className="max-md:self-end" aria-label="Más acciones del viaje" />}
                     >
                       {cancelando ? <Spinner size="sm" /> : <DotsThree aria-hidden />}
                     </DropdownMenuTrigger>
@@ -344,19 +361,19 @@ export function ViajeSheet({
                 )}
               </div>
 
-              <section aria-labelledby="viaje-pasajeros" className="flex flex-col gap-3">
+              <section aria-labelledby="viaje-pasajeros" className="flex flex-col gap-4">
                 <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-                  <h3 id="viaje-pasajeros" className="text-sm font-semibold">
+                  <h3 id="viaje-pasajeros" className="text-[17px] font-semibold tracking-tight">
                     Pasajeros ({pasajeros.length})
                   </h3>
                   {confirmados.length > 0 && (
-                    <p className="text-sm text-muted-foreground tabular-nums">
+                    <p className="text-[13px] text-muted-foreground tabular-nums">
                       {embarcados} de {confirmados.length} embarcados
                     </p>
                   )}
                 </div>
                 {(porVerificar > 0 || sinPagar > 0) && (
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-[13px] text-muted-foreground">
                     {[porVerificar > 0 && `${porVerificar} con pago por verificar`, sinPagar > 0 && `${sinPagar} sin pagar`]
                       .filter(Boolean)
                       .join(" · ")}
@@ -367,89 +384,133 @@ export function ViajeSheet({
                     <EmptyState compacto icon={ICONO_SECCION.taquillaBoletos} title="Sin pasajeros todavía" />
                   </Card>
                 ) : (
-                  <Card className="gap-0 overflow-hidden p-0">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="w-20">Asiento</TableHead>
-                          <TableHead>Pasajero</TableHead>
-                          <TableHead>Estado</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {pasajeros.map((b) => {
-                          const nombre = b.pasajero_nombre || b.comprador?.nombre_completo || "Sin nombre";
-                          const cedula = b.pasajero_cedula || b.comprador?.cedula_rif;
-                          return (
-                            <TableRow key={b.id}>
-                              <TableCell>
-                                <Badge variant="outline" className="font-mono tabular-nums">
-                                  {b.asiento}
-                                </Badge>
-                              </TableCell>
-                              <TableCell className="max-w-52">
-                                <span className="block truncate font-medium">{nombre}</span>
-                                <span className="block truncate text-xs text-muted-foreground">
-                                  {cedula ? `${formatCedula(cedula)} · ` : ""}
-                                  <span className="font-mono">{formatCodigoBoleto(b.codigo_boleto)}</span>
-                                </span>
-                              </TableCell>
-                              <TableCell>
-                                <div className="flex flex-col items-start gap-1">
-                                  <StatusBadge status={estadoUi(b)} dominio="boleto" />
-                                  {b.estado === "USADO" && b.embarcado_at && (
-                                    <span className="text-xs text-muted-foreground tabular-nums">
-                                      {formatHoraVE(b.embarcado_at)}
-                                    </span>
-                                  )}
-                                </div>
-                              </TableCell>
+                  <Card className="gap-0 overflow-hidden p-0 max-md:overflow-visible max-md:bg-transparent max-md:shadow-none">
+                    <ListaResponsive
+                      items={pasajeros}
+                      clave={(b) => b.id}
+                      etiqueta="Pasajeros del viaje"
+                      tabla={(items) => (
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead className="w-20">Asiento</TableHead>
+                              <TableHead>Pasajero</TableHead>
+                              <TableHead>Estado</TableHead>
                             </TableRow>
-                          );
-                        })}
-                      </TableBody>
-                    </Table>
+                          </TableHeader>
+                          <TableBody>
+                            {items.map((b) => {
+                              const nombre = b.pasajero_nombre || b.comprador?.nombre_completo || "Sin nombre";
+                              const cedula = b.pasajero_cedula || b.comprador?.cedula_rif;
+                              return (
+                                <TableRow key={b.id}>
+                                  <TableCell>
+                                    <AsientoChip asiento={b.asiento} usado={b.estado === "USADO"} />
+                                  </TableCell>
+                                  <TableCell className="max-w-52">
+                                    <span className="block truncate font-medium">{nombre}</span>
+                                    <span className="block truncate text-[13px] text-muted-foreground">
+                                      {cedula ? `${formatCedula(cedula)} · ` : ""}
+                                      <span className="font-mono">{formatCodigoBoleto(b.codigo_boleto)}</span>
+                                    </span>
+                                  </TableCell>
+                                  <TableCell>
+                                    <div className="flex flex-col items-start gap-1">
+                                      <StatusBadge status={estadoUi(b)} dominio="boleto" />
+                                      {b.estado === "USADO" && b.embarcado_at && (
+                                        <span className="text-[13px] text-muted-foreground tabular-nums">
+                                          {formatHoraVE(b.embarcado_at)}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </TableCell>
+                                </TableRow>
+                              );
+                            })}
+                          </TableBody>
+                        </Table>
+                      )}
+                      tarjeta={(b) => {
+                        const nombre = b.pasajero_nombre || b.comprador?.nombre_completo || "Sin nombre";
+                        const cedula = b.pasajero_cedula || b.comprador?.cedula_rif;
+                        return (
+                          <EntityCard
+                            leading={<AsientoChip asiento={b.asiento} usado={b.estado === "USADO"} />}
+                            title={nombre}
+                            subtitle={cedula ? formatCedula(cedula) : undefined}
+                            badge={<StatusBadge status={estadoUi(b)} dominio="boleto" />}
+                            meta={
+                              b.estado === "USADO" && b.embarcado_at
+                                ? `Embarcó ${formatHoraVE(b.embarcado_at)}`
+                                : formatCodigoBoleto(b.codigo_boleto)
+                            }
+                            etiqueta={`Asiento ${b.asiento}, ${nombre}`}
+                          />
+                        );
+                      }}
+                    />
                   </Card>
                 )}
               </section>
 
-              <section aria-labelledby="viaje-encomiendas" className="flex flex-col gap-3">
-                <h3 id="viaje-encomiendas" className="text-sm font-semibold">
+              <section aria-labelledby="viaje-encomiendas" className="flex flex-col gap-4">
+                <h3 id="viaje-encomiendas" className="text-[17px] font-semibold tracking-tight">
                   Encomiendas ({encomiendas.length})
                 </h3>
-                <Card className="gap-0 overflow-hidden p-0">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Código</TableHead>
-                        <TableHead>Destinatario</TableHead>
-                        <TableHead className="text-right">Peso</TableHead>
-                        <TableHead>Estado</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {encomiendas.length === 0 ? (
-                        <FilaVacia colSpan={4} icon={ICONO_SECCION.taquillaEncomiendas} titulo="Sin encomiendas en este viaje" />
-                      ) : (
-                        encomiendas.map((e) => (
-                          <TableRow key={e.id} className="relative">
-                            <CeldaEnlace
-                              href={`/cooperativas/taquilla/encomiendas?encomienda=${e.id}`}
-                              etiqueta={`Ver encomienda ${e.tracking_id}`}
-                              className="font-mono text-sm"
-                            >
-                              {e.tracking_id}
-                            </CeldaEnlace>
-                            <TableCell className="max-w-40 truncate">{e.receiver_nombre || "—"}</TableCell>
-                            <TableCell className="text-right tabular-nums">{pesoTexto(e.peso_kg)}</TableCell>
-                            <TableCell>
-                              <StatusBadge status={e.estado} dominio="encomienda" />
-                            </TableCell>
+                <Card className="gap-0 overflow-hidden p-0 max-md:overflow-visible max-md:bg-transparent max-md:shadow-none">
+                  <ListaResponsive
+                    items={encomiendas}
+                    clave={(e) => e.id}
+                    etiqueta="Encomiendas del viaje"
+                    vacio={
+                      <Table>
+                        <TableBody>
+                          <FilaVacia colSpan={4} icon={ICONO_SECCION.taquillaEncomiendas} titulo="Sin encomiendas en este viaje" />
+                        </TableBody>
+                      </Table>
+                    }
+                    tabla={(items) => (
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Código</TableHead>
+                            <TableHead>Destinatario</TableHead>
+                            <TableHead className="text-right">Peso</TableHead>
+                            <TableHead>Estado</TableHead>
                           </TableRow>
-                        ))
-                      )}
-                    </TableBody>
-                  </Table>
+                        </TableHeader>
+                        <TableBody>
+                          {items.map((e) => (
+                            <TableRow key={e.id} className="relative">
+                              <CeldaEnlace
+                                href={`/cooperativas/taquilla/encomiendas?encomienda=${e.id}`}
+                                etiqueta={`Ver encomienda ${e.tracking_id}`}
+                                className="font-mono text-[13px]"
+                              >
+                                {e.tracking_id}
+                              </CeldaEnlace>
+                              <TableCell className="max-w-40 truncate">{e.receiver_nombre || "—"}</TableCell>
+                              <TableCell className="text-right tabular-nums">{pesoTexto(e.peso_kg)}</TableCell>
+                              <TableCell>
+                                <StatusBadge status={e.estado} dominio="encomienda" />
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    )}
+                    tarjeta={(e) => (
+                      <EntityCard
+                        href={`/cooperativas/taquilla/encomiendas?encomienda=${e.id}`}
+                        leading={<IconTile icon={ICONO_SECCION.taquillaEncomiendas} tone="coral" />}
+                        title={e.receiver_nombre || "Sin destinatario"}
+                        subtitle={pesoTexto(e.peso_kg)}
+                        badge={<StatusBadge status={e.estado} dominio="encomienda" />}
+                        meta={e.tracking_id}
+                        etiqueta={`Ver encomienda ${e.tracking_id}`}
+                      />
+                    )}
+                  />
                 </Card>
               </section>
             </>

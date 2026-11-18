@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Camera, Printer, Prohibit } from "@phosphor-icons/react";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -108,8 +109,8 @@ function describirCobro(e: Encomienda, cobro: EstadoCobroEncomienda | null): { t
 /** Dato con su etiqueta (dl). */
 function Dato({ etiqueta, children, ancho = false }: { etiqueta: string; children: React.ReactNode; ancho?: boolean }) {
   return (
-    <div className={cn("flex flex-col gap-0.5", ancho && "col-span-2")}>
-      <dt className="text-xs text-muted-foreground">{etiqueta}</dt>
+    <div className={cn("flex flex-col gap-0.5", ancho && "md:col-span-2")}>
+      <dt className="text-[13px] text-muted-foreground">{etiqueta}</dt>
       <dd className="font-medium">{children}</dd>
     </div>
   );
@@ -134,7 +135,7 @@ function FotoFirmada({ valor, alt }: { valor: string; alt: string }) {
   if (!resultado || resultado.valor !== valor) return <Skeleton className="aspect-[4/3] w-full rounded-md" />;
   if (!resultado.url) {
     return (
-      <p className="rounded-md border border-dashed border-border p-3 text-sm text-muted-foreground">
+      <p className="rounded-md bg-card p-4 text-[15px] text-muted-foreground">
         No pudimos mostrar esta foto. Cierra y abre el detalle para intentarlo de nuevo.
       </p>
     );
@@ -144,7 +145,7 @@ function FotoFirmada({ valor, alt }: { valor: string; alt: string }) {
       href={resultado.url}
       target="_blank"
       rel="noreferrer"
-      className="block aspect-[4/3] w-full overflow-hidden rounded-md border border-border bg-muted outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+      className="block aspect-[4/3] w-full overflow-hidden rounded-md bg-card outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
     >
       {/* Entera y sin deformar, sea vertical u horizontal (la foto se guarda con su proporción). */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -212,11 +213,12 @@ export function DetalleSheet({ encomienda, isOpen, onClose, onCobrar, onAgregarF
   const remitente = remitenteDe(encomienda);
   const sinFoto = faltaFoto(encomienda);
   const modalidad = MODALIDAD_PAGO[encomienda.modalidad_pago];
+  const movil = useIsMobile();
 
   return (
     <Sheet open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <SheetContent className="gap-0">
-        <SheetHeader className="border-b border-border">
+      <SheetContent side={movil ? "bottom" : "right"} className="gap-0">
+        <SheetHeader>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <SheetTitle className="font-mono">{encomienda.tracking_id}</SheetTitle>
             <StatusBadge status={encomienda.estado} dominio="encomienda" />
@@ -226,14 +228,14 @@ export function DetalleSheet({ encomienda, isOpen, onClose, onCobrar, onAgregarF
           </SheetDescription>
         </SheetHeader>
 
-        <div className="flex flex-col gap-6 p-6">
+        <div className="flex flex-col gap-4 p-6">
           {(encomienda.estado !== "PENDIENTE_DE_ESCANEO" || puedeCobrar) && (
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-col gap-3 md:flex-row md:flex-wrap max-md:*:w-full">
               {puedeCobrar && (
-                <Button onClick={onCobrar}>{encomienda.modalidad_pago === "DESTINO" ? "Cobrar ahora" : "Cobrar"}</Button>
+                <Button size="lg" onClick={onCobrar}>{encomienda.modalidad_pago === "DESTINO" ? "Cobrar ahora" : "Cobrar"}</Button>
               )}
               {encomienda.estado !== "PENDIENTE_DE_ESCANEO" && (
-                <Button variant="outline" onClick={handlePrint} disabled={loadingPdf} aria-busy={loadingPdf || undefined}>
+                <Button variant="outline" size="lg" onClick={handlePrint} disabled={loadingPdf} aria-busy={loadingPdf || undefined}>
                   {loadingPdf ? <Spinner size="sm" /> : <Printer aria-hidden />}
                   Imprimir guía
                 </Button>
@@ -241,11 +243,11 @@ export function DetalleSheet({ encomienda, isOpen, onClose, onCobrar, onAgregarF
             </div>
           )}
 
-          <section aria-labelledby="detalle-ruta" className="flex flex-col gap-3">
-            <h3 id="detalle-ruta" className="text-sm font-semibold">
+          <section aria-labelledby="detalle-ruta" className="flex flex-col gap-4 rounded-xl bg-surface p-5">
+            <h3 id="detalle-ruta" className="text-[17px] font-semibold">
               Ruta
             </h3>
-            <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+            <dl className="grid grid-cols-1 gap-x-4 gap-y-4 text-[15px] md:grid-cols-2">
               <Dato etiqueta="Origen">
                 {formatCiudad(encomienda.ciudad_origen)}, {encomienda.estado_origen}
               </Dato>
@@ -259,15 +261,15 @@ export function DetalleSheet({ encomienda, isOpen, onClose, onCobrar, onAgregarF
             </dl>
           </section>
 
-          <section aria-labelledby="detalle-personas" className="flex flex-col gap-3 border-t border-border pt-6">
-            <h3 id="detalle-personas" className="text-sm font-semibold">
+          <section aria-labelledby="detalle-personas" className="flex flex-col gap-4 rounded-xl bg-surface p-5">
+            <h3 id="detalle-personas" className="text-[17px] font-semibold">
               Quién envía y quién recibe
             </h3>
-            <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+            <dl className="grid grid-cols-1 gap-x-4 gap-y-4 text-[15px] md:grid-cols-2">
               <Dato etiqueta="Remitente" ancho>
                 {remitente.nombre}
                 {(remitente.cedula || remitente.telefono) && (
-                  <span className="block text-xs font-normal text-muted-foreground">
+                  <span className="block text-[13px] font-normal text-muted-foreground">
                     {[remitente.cedula ? formatCedula(remitente.cedula) : null, remitente.telefono ? formatTelefono(remitente.telefono) : null]
                       .filter(Boolean)
                       .join(" · ")}
@@ -277,18 +279,18 @@ export function DetalleSheet({ encomienda, isOpen, onClose, onCobrar, onAgregarF
               <Dato etiqueta="Destinatario">
                 {encomienda.receiver_nombre}
                 {encomienda.receiver_cedula_rif && (
-                  <span className="block text-xs font-normal text-muted-foreground">{formatCedula(encomienda.receiver_cedula_rif)}</span>
+                  <span className="block text-[13px] font-normal text-muted-foreground">{formatCedula(encomienda.receiver_cedula_rif)}</span>
                 )}
               </Dato>
               <Dato etiqueta="Teléfono">{formatTelefono(encomienda.receiver_telefono)}</Dato>
             </dl>
           </section>
 
-          <section aria-labelledby="detalle-paquete" className="flex flex-col gap-3 border-t border-border pt-6">
-            <h3 id="detalle-paquete" className="text-sm font-semibold">
+          <section aria-labelledby="detalle-paquete" className="flex flex-col gap-4 rounded-xl bg-surface p-5">
+            <h3 id="detalle-paquete" className="text-[17px] font-semibold">
               Paquete y cobro
             </h3>
-            <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+            <dl className="grid grid-cols-1 gap-x-4 gap-y-4 text-[15px] md:grid-cols-2">
               <Dato etiqueta="Peso">
                 <span className="tabular-nums">{encomienda.peso_kg ? `${String(encomienda.peso_kg).replace(".", ",")} kg` : "Por pesar"}</span>
               </Dato>
@@ -319,33 +321,33 @@ export function DetalleSheet({ encomienda, isOpen, onClose, onCobrar, onAgregarF
             {errorCobro && !cobro && !cargandoCobro && (
               <ErrorState compacto titulo="No pudimos revisar el pago" descripcion={errorCobro} onReintentar={cargarCobro} />
             )}
-            {estadoCobro.nota && <p className="text-sm text-destructive-text">{estadoCobro.nota}</p>}
+            {estadoCobro.nota && <p className="text-[13px] text-destructive-text">{estadoCobro.nota}</p>}
             {cobro?.pendiente && (
-              <Link href="/cooperativas/pagos?tipo=encomienda" className={cn(buttonVariants({ variant: "outline", size: "sm" }), "self-start")}>
+              <Link href="/cooperativas/pagos?tipo=encomienda" className={cn(buttonVariants({ variant: "outline" }), "max-md:w-full md:self-start")}>
                 Verificar pago
               </Link>
             )}
           </section>
 
-          <section aria-labelledby="detalle-fotos" className="flex flex-col gap-3 border-t border-border pt-6">
+          <section aria-labelledby="detalle-fotos" className="flex flex-col gap-4 rounded-xl bg-surface p-5">
             <div className="flex items-center justify-between gap-2">
-              <h3 id="detalle-fotos" className="text-sm font-semibold">
+              <h3 id="detalle-fotos" className="text-[17px] font-semibold">
                 Fotos del paquete
               </h3>
               {sinFoto && <TonoBadge tono="pendiente">Falta foto</TonoBadge>}
             </div>
             {encomienda.foto_evidencia_url ? (
               <div className="flex flex-col gap-1.5">
-                <p className="text-xs text-muted-foreground">Foto de la taquilla</p>
+                <p className="text-[13px] text-muted-foreground">Foto de la taquilla</p>
                 <FotoFirmada valor={encomienda.foto_evidencia_url} alt={`Foto del paquete ${encomienda.tracking_id} en la taquilla`} />
               </div>
             ) : sinFoto ? (
-              <div className="flex flex-col items-start gap-3 rounded-md border border-dashed border-border p-4 text-sm">
+              <div className="flex flex-col items-start gap-3 rounded-md bg-card p-4 text-[15px]">
                 <p className="text-muted-foreground">
                   {encomienda.foto_omitida_motivo ? `Se omitió: ${encomienda.foto_omitida_motivo}.` : "Tómala con la guía visible."}
                 </p>
                 {onAgregarFoto && (
-                  <Button size="sm" variant="outline" onClick={onAgregarFoto}>
+                  <Button variant="outline" onClick={onAgregarFoto}>
                     <Camera aria-hidden />
                     Agregar foto
                   </Button>
@@ -354,22 +356,22 @@ export function DetalleSheet({ encomienda, isOpen, onClose, onCobrar, onAgregarF
             ) : null}
             {encomienda.foto_cliente_path && (
               <div className="flex flex-col gap-1.5">
-                <p className="text-xs text-muted-foreground">Foto que subió el cliente</p>
+                <p className="text-[13px] text-muted-foreground">Foto que subió el cliente</p>
                 <FotoFirmada valor={encomienda.foto_cliente_path} alt={`Foto del paquete ${encomienda.tracking_id} tomada por el cliente`} />
               </div>
             )}
             {!encomienda.foto_evidencia_url && !sinFoto && !encomienda.foto_cliente_path && (
-              <p className="text-sm text-muted-foreground">Se toma al recibir el paquete.</p>
+              <p className="text-[13px] text-muted-foreground">Se toma al recibir el paquete.</p>
             )}
           </section>
 
           {puedeRechazar && (
-            <section className="flex flex-col gap-2 border-t border-border pt-6">
-              <Button variant="outline" className="self-start text-destructive-text" onClick={onRechazar}>
+            <section className="flex flex-col gap-2">
+              <Button variant="outline" size="lg" className="text-destructive-text md:self-start" onClick={onRechazar}>
                 <Prohibit aria-hidden />
                 No recibir la encomienda
               </Button>
-              <p className="text-sm text-muted-foreground">Sin ruta, contenido no permitido o mal embalado.</p>
+              <p className="text-[13px] text-muted-foreground">Sin ruta, contenido no permitido o mal embalado.</p>
             </section>
           )}
         </div>

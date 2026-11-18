@@ -5,6 +5,7 @@ import { AlertDialog as AlertDialogPrimitive } from "@base-ui/react/alert-dialog
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
+import { AsaHoja, HOJA_MOVIL_PIE, HOJA_MOVIL_POPUP } from "@/components/ui/dialog"
 
 function AlertDialog({ ...props }: AlertDialogPrimitive.Root.Props) {
   return <AlertDialogPrimitive.Root data-slot="alert-dialog" {...props} />
@@ -50,7 +51,7 @@ function AlertDialogOverlay({
     <AlertDialogPrimitive.Backdrop
       data-slot="alert-dialog-overlay"
       className={cn(
-        "fixed inset-0 isolate z-50 bg-black/50 duration-100 supports-backdrop-filter:backdrop-blur-xs data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0",
+        "fixed inset-0 isolate z-50 bg-night/50 duration-100 supports-backdrop-filter:backdrop-blur-xs data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0",
         className
       )}
       {...props}
@@ -61,6 +62,7 @@ function AlertDialogOverlay({
 function AlertDialogContent({
   className,
   size = "default",
+  children,
   ...props
 }: AlertDialogPrimitive.Popup.Props & {
   size?: "default" | "sm"
@@ -72,11 +74,16 @@ function AlertDialogContent({
         data-slot="alert-dialog-content"
         data-size={size}
         className={cn(
-          "group/alert-dialog-content fixed top-1/2 left-1/2 z-50 grid max-h-[calc(100dvh-2rem)] w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-6 overflow-y-auto overscroll-contain rounded-lg border border-border bg-popover p-6 text-sm text-popover-foreground shadow-xl duration-100 outline-none data-[size=sm]:max-w-xs data-[size=default]:sm:max-w-md data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+          "group/alert-dialog-content",
+          HOJA_MOVIL_POPUP,
+          "md:data-[size=sm]:max-w-xs md:data-[size=default]:max-w-md",
           className
         )}
         {...props}
-      />
+      >
+        <AsaHoja />
+        {children}
+      </AlertDialogPrimitive.Popup>
     </AlertDialogPortal>
   )
 }
@@ -89,7 +96,7 @@ function AlertDialogHeader({
     <div
       data-slot="alert-dialog-header"
       className={cn(
-        "grid gap-1.5 text-left has-data-[slot=alert-dialog-media]:grid-cols-[auto_1fr] has-data-[slot=alert-dialog-media]:gap-x-4",
+        "grid gap-2 text-left has-data-[slot=alert-dialog-media]:grid-cols-[auto_1fr] has-data-[slot=alert-dialog-media]:gap-x-4",
         className
       )}
       {...props}
@@ -105,7 +112,8 @@ function AlertDialogFooter({
     <div
       data-slot="alert-dialog-footer"
       className={cn(
-        "flex flex-col-reverse gap-2 group-data-[size=sm]/alert-dialog-content:grid group-data-[size=sm]/alert-dialog-content:grid-cols-2 sm:flex-row sm:justify-end",
+        "flex flex-col-reverse gap-2 md:flex-row md:justify-end md:group-data-[size=sm]/alert-dialog-content:grid md:group-data-[size=sm]/alert-dialog-content:grid-cols-2",
+        HOJA_MOVIL_PIE,
         className
       )}
       {...props}
@@ -121,7 +129,7 @@ function AlertDialogMedia({
     <div
       data-slot="alert-dialog-media"
       className={cn(
-        "row-span-2 inline-flex size-10 items-center justify-center rounded-full bg-muted *:[svg:not([class*='size-'])]:size-5",
+        "row-span-2 inline-flex size-12 items-center justify-center rounded-2xl bg-surface *:[svg:not([class*='size-'])]:size-5",
         className
       )}
       {...props}
@@ -137,7 +145,7 @@ function AlertDialogTitle({
     <AlertDialogPrimitive.Title
       data-slot="alert-dialog-title"
       className={cn(
-        "font-heading text-base leading-snug font-semibold group-has-data-[slot=alert-dialog-media]/alert-dialog-content:col-start-2",
+        "font-heading text-[22px] leading-snug font-semibold tracking-tight group-has-data-[slot=alert-dialog-media]/alert-dialog-content:col-start-2",
         className
       )}
       {...props}
@@ -153,7 +161,7 @@ function AlertDialogDescription({
     <AlertDialogPrimitive.Description
       data-slot="alert-dialog-description"
       className={cn(
-        "text-sm text-pretty text-muted-foreground *:[a]:text-info-text *:[a]:underline *:[a]:underline-offset-3",
+        "text-[15px] text-pretty text-muted-foreground *:[a]:text-info-text *:[a]:underline *:[a]:underline-offset-3",
         className
       )}
       {...props}
@@ -167,6 +175,7 @@ function AlertDialogAction({
 }: React.ComponentProps<typeof Button>) {
   return (
     <Button
+      size="lg"
       data-slot="alert-dialog-action"
       className={cn(className)}
       {...props}
@@ -177,7 +186,7 @@ function AlertDialogAction({
 function AlertDialogCancel({
   className,
   variant = "outline",
-  size = "default",
+  size = "lg",
   ...props
 }: AlertDialogPrimitive.Close.Props &
   Pick<React.ComponentProps<typeof Button>, "variant" | "size">) {

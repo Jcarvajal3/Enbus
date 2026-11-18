@@ -86,8 +86,8 @@ export function ConfirmarPagoDialog(props: ConfirmarPagoDialogProps) {
 
 function Dato({ etiqueta, children }: { etiqueta: string; children: ReactNode }) {
   return (
-    <div className="grid grid-cols-[6.5rem_1fr] gap-2 py-2">
-      <dt className="text-muted-foreground">{etiqueta}</dt>
+    <div className="grid grid-cols-[6.5rem_1fr] gap-2 py-3 text-[15px]">
+      <dt className="text-[13px] text-muted-foreground">{etiqueta}</dt>
       <dd className="min-w-0 break-words text-foreground">{children}</dd>
     </div>
   );
@@ -218,7 +218,7 @@ function Contenido({
       </AlertDialogHeader>
 
       {/* Resumen del pago */}
-      <dl aria-label="Resumen del pago" className="divide-y divide-border rounded-md border border-border px-3 text-sm">
+      <dl aria-label="Resumen del pago" className="divide-y divide-border rounded-md bg-surface px-4">
         <Dato etiqueta="Monto">
           {legado ? (
             <span className="font-medium tabular-nums">{formatUsd(pago.monto_usd)}</span>
@@ -226,7 +226,7 @@ function Contenido({
             <Monto usd={pago.monto_usd} bs={pago.monto_bs} tasa={tasa} moneda={pago.moneda} size="sm" />
           )}
           {pago.declarado != null && dif != null && Math.abs(dif) >= 0.01 && (
-            <span className={cn("block text-xs", faltaDinero ? "text-warning-text" : "text-muted-foreground")}>
+            <span className={cn("block text-[13px]", faltaDinero ? "text-warning-text" : "text-muted-foreground")}>
               El cliente dice que pagó {formatEnMoneda(pago.declarado, pago.moneda)}
             </span>
           )}
@@ -234,7 +234,7 @@ function Contenido({
         <Dato etiqueta="Método">
           {cuentaDestino(pago)}
           {pago.metodo_tipo !== "ZELLE" && pago.banco_emisor && (
-            <span className="block text-xs text-muted-foreground">Desde {pago.banco_emisor}</span>
+            <span className="block text-[13px] text-muted-foreground">Desde {pago.banco_emisor}</span>
           )}
         </Dato>
         <Dato etiqueta="Referencia">
@@ -269,7 +269,7 @@ function Contenido({
         </Alert>
       )}
 
-      <div className="rounded-md border border-border bg-muted/50 p-4 text-sm">
+      <div className="rounded-md bg-surface p-4 text-[15px]">
         <p className="mb-2 font-semibold">Qué va a pasar</p>
         <ul className="list-disc space-y-1.5 pl-5 text-foreground">
           {impacto.map((linea) => (
@@ -289,10 +289,11 @@ function Contenido({
                   key={m}
                   type="button"
                   variant="outline"
-                  size="xs"
+                  size="sm"
                   aria-pressed={activo}
                   disabled={enCurso}
                   className={cn(
+                    "max-md:h-11 max-md:px-4",
                     activo &&
                       "border-accent-strong bg-accent-strong text-accent-strong-foreground hover:bg-accent-strong hover:text-accent-strong-foreground"
                   )}
@@ -322,11 +323,11 @@ function Contenido({
             }}
           />
           {errorMotivo ? (
-            <p id={id("motivo-error")} className="text-sm text-destructive-text">
+            <p id={id("motivo-error")} className="text-[13px] text-destructive-text">
               {errorMotivo}
             </p>
           ) : (
-            <p id={id("motivo-ayuda")} className="text-sm text-muted-foreground">
+            <p id={id("motivo-ayuda")} className="text-[13px] text-muted-foreground">
               Obligatorio · mínimo {MIN_MOTIVO} caracteres.
             </p>
           )}
@@ -336,12 +337,13 @@ function Contenido({
       {error && <AvisoError>{error}</AvisoError>}
 
       <AlertDialogFooter>
-        <Button ref={cancelarRef} type="button" variant="outline" disabled={enCurso} onClick={onCerrar}>
+        <Button ref={cancelarRef} type="button" variant="outline" size="lg" disabled={enCurso} onClick={onCerrar}>
           Cancelar
         </Button>
         <Button
           ref={confirmarRef}
           type="button"
+          size="lg"
           variant={rechazar ? "destructive" : "default"}
           disabled={enCurso}
           aria-busy={enCurso || undefined}

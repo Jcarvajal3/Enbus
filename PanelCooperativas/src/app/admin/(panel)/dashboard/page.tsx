@@ -11,6 +11,7 @@ import {
 import { calcularDelta, formatIngresos, type IngresosResumen } from "@/lib/types/admin-dashboard";
 import { formatNumeroVE } from "@/lib/dinero";
 import { Monto } from "@/components/monto";
+import { SectionLabel } from "@/components/section-label";
 import { KpiCard } from "@/components/kpi-card";
 import { obtenerTasaBCV } from "@/lib/tasa-bcv";
 import { ErrorRefrescar } from "@/components/admin/error-refrescar";
@@ -21,7 +22,7 @@ import { CooperativasBalanceTable } from "@/components/admin/dashboard/cooperati
 export const dynamic = "force-dynamic";
 
 // El ErrorState de una tarjeta de KPI se apila (la columna es angosta) y ocupa su alto.
-const ERROR_KPI = "h-full sm:flex-col sm:items-start sm:justify-between";
+const ERROR_KPI = "h-full md:flex-col md:items-start md:justify-between";
 
 export default async function AdminDashboardPage() {
   // La tasa se lee primero: los KPIs la usan para convertir a Bs los pagos antiguos.
@@ -50,72 +51,13 @@ export default async function AdminDashboardPage() {
   const alertas = kpis.alertas_amarillas_abiertas;
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-8">
       <PageHeader title="Resumen" description="Actividad y finanzas de EnBus hoy (hora de Venezuela)." />
 
-      {/* Banda 1: Finanzas de hoy (montos en Bs con su referencia en USD). */}
-      <section aria-labelledby="finanzas-hoy" className="flex flex-col gap-3">
-        <h2 id="finanzas-hoy" className="text-lg font-semibold">
-          Finanzas de hoy
-        </h2>
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          <KpiCard
-            grande
-            title="Ingresos brutos"
-            value={<MontoKPI resumen={kpis.ingresos_hoy} texto={ingresos} />}
-            detail={kpis.ingresos_hoy.error ? ingresos.secundario : kpis.ingresos_hoy.pagos > 0 ? "A la tasa de cada pago" : null}
-            delta={deltaIngresos}
-            icon={CurrencyDollar}
-            description="Pagos aprobados hoy"
-          />
-          <KpiCard
-            grande
-            title="Comisiones estimadas"
-            value={<MontoKPI resumen={kpis.comisiones_hoy} texto={comisiones} />}
-            detail={kpis.comisiones_hoy.error ? comisiones.secundario : null}
-            delta={deltaComisiones}
-            icon={Receipt}
-            description="Parte de EnBus en los pagos de hoy"
-          />
-        </div>
-      </section>
-
-      {/* Banda 2: Operación de hoy. Boletos antes que Encomiendas (D2). */}
-      <section aria-labelledby="operacion-hoy" className="flex flex-col gap-3">
-        <h2 id="operacion-hoy" className="text-lg font-semibold">
-          Operación de hoy
-        </h2>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-          {kpis.error_boletos ? (
-            <ErrorRefrescar titulo="No pudimos contar los boletos" className={ERROR_KPI} />
-          ) : (
-            <KpiCard
-              title="Boletos"
-              value={formatNumeroVE(kpis.boletos_hoy, 0)}
-              delta={calcularDelta(kpis.boletos_hoy, kpis.ayer.boletos)}
-              icon={Ticket}
-              description="Pagados hoy"
-            />
-          )}
-          {kpis.error_encomiendas ? (
-            <ErrorRefrescar titulo="No pudimos contar las encomiendas" className={ERROR_KPI} />
-          ) : (
-            <KpiCard
-              title="Encomiendas"
-              value={formatNumeroVE(kpis.encomiendas_hoy, 0)}
-              delta={calcularDelta(kpis.encomiendas_hoy, kpis.ayer.encomiendas)}
-              icon={Package}
-              description="Registradas hoy"
-            />
-          )}
-          <KpiCard
-            title="Cooperativas activas"
-            value={kpis.error_cooperativas ? "—" : formatNumeroVE(kpis.cooperativas_activas, 0)}
-            icon={Buildings}
-            description="Pueden vender y recibir encomiendas"
-            href="/admin/cooperativas?estado=ACTIVA"
-            accion="Ver"
-          />
+      {/* Lo urgente primero: lo que espera una respuesta del equipo. */}
+      <section aria-labelledby="dash-revisar" className="flex flex-col gap-4">
+        <SectionLabel id="dash-revisar">Por revisar</SectionLabel>
+        <div className="grid grid-cols-2 gap-3 md:gap-4">
           <KpiCard
             title="Solicitudes por revisar"
             value={kpis.error_solicitudes ? "—" : formatNumeroVE(solicitudes, 0)}
@@ -137,10 +79,78 @@ export default async function AdminDashboardPage() {
         </div>
       </section>
 
-      <DashboardCharts activityData={activityData} topCooperativas={topCooperativas} rutasPopulares={rutasPopulares} />
+      {/* Finanzas de hoy (montos en Bs con su referencia en USD). */}
+      <section aria-labelledby="dash-finanzas" className="flex flex-col gap-4">
+        <SectionLabel id="dash-finanzas">Finanzas de hoy</SectionLabel>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <KpiCard
+            grande
+            title="Ingresos brutos"
+            value={<MontoKPI resumen={kpis.ingresos_hoy} texto={ingresos} />}
+            detail={kpis.ingresos_hoy.error ? ingresos.secundario : kpis.ingresos_hoy.pagos > 0 ? "A la tasa de cada pago" : null}
+            delta={deltaIngresos}
+            icon={CurrencyDollar}
+            tono="mint"
+            description="Pagos aprobados hoy"
+          />
+          <KpiCard
+            grande
+            title="Comisiones estimadas"
+            value={<MontoKPI resumen={kpis.comisiones_hoy} texto={comisiones} />}
+            detail={kpis.comisiones_hoy.error ? comisiones.secundario : null}
+            delta={deltaComisiones}
+            icon={Receipt}
+            tono="brand"
+            description="Parte de EnBus en los pagos de hoy"
+          />
+        </div>
+      </section>
+
+      {/* Operación de hoy. Boletos antes que Encomiendas (D2). */}
+      <section aria-labelledby="dash-operacion" className="flex flex-col gap-4">
+        <SectionLabel id="dash-operacion">Operación de hoy</SectionLabel>
+        <div className="grid grid-cols-2 gap-3 md:gap-4 xl:grid-cols-3">
+          {kpis.error_boletos ? (
+            <ErrorRefrescar titulo="No pudimos contar los boletos" className={ERROR_KPI} />
+          ) : (
+            <KpiCard
+              title="Boletos"
+              value={formatNumeroVE(kpis.boletos_hoy, 0)}
+              delta={calcularDelta(kpis.boletos_hoy, kpis.ayer.boletos)}
+              icon={Ticket}
+              description="Pagados hoy"
+            />
+          )}
+          {kpis.error_encomiendas ? (
+            <ErrorRefrescar titulo="No pudimos contar las encomiendas" className={ERROR_KPI} />
+          ) : (
+            <KpiCard
+              title="Encomiendas"
+              value={formatNumeroVE(kpis.encomiendas_hoy, 0)}
+              delta={calcularDelta(kpis.encomiendas_hoy, kpis.ayer.encomiendas)}
+              icon={Package}
+              tono="coral"
+              description="Registradas hoy"
+            />
+          )}
+          <KpiCard
+            title="Cooperativas activas"
+            value={kpis.error_cooperativas ? "—" : formatNumeroVE(kpis.cooperativas_activas, 0)}
+            icon={Buildings}
+            description="Pueden vender y recibir encomiendas"
+            href="/admin/cooperativas?estado=ACTIVA"
+            accion="Ver"
+          />
+        </div>
+      </section>
+
+      {/* En móvil las gráficas van al final: primero lo que pide acción. */}
+      <div className="max-md:order-last">
+        <DashboardCharts activityData={activityData} topCooperativas={topCooperativas} rutasPopulares={rutasPopulares} />
+      </div>
 
       {/* Dos tablas lado a lado solo con ancho de sobra: a 1024–1440 se cortaban columnas. */}
-      <div className="grid grid-cols-1 gap-6 2xl:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 2xl:grid-cols-2">
         <IncidenciasRecientesTable data={incidencias} />
         <CooperativasBalanceTable data={cooperativasBalance} tasa={tasa} />
       </div>

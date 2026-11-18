@@ -32,10 +32,10 @@ export function ActivityChart({ data }: { data: { date: string; encomiendas: num
         <CardDescription>Últimos 7 días</CardDescription>
       </CardHeader>
       <CardContent>
-        <ChartContainer config={chartConfig} className="min-h-[250px] w-full">
+        <ChartContainer config={chartConfig} className="aspect-auto h-[240px] w-full md:h-auto md:min-h-[250px]">
           <BarChart accessibilityLayer data={data}>
             <CartesianGrid vertical={false} />
-            <XAxis dataKey="date" tickLine={false} tickMargin={10} axisLine={false} />
+            <XAxis dataKey="date" tickLine={false} tickMargin={10} axisLine={false} minTickGap={4} />
             <ChartTooltip content={<ChartTooltipContent />} />
             <ChartLegend content={<ChartLegendContent />} />
             <Bar dataKey="boletos" stackId="a" fill="var(--color-boletos)" radius={[0, 0, 4, 4]} />

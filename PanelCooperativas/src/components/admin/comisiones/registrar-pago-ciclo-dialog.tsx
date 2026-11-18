@@ -133,12 +133,12 @@ function Formulario({
         </DialogDescription>
       </DialogHeader>
 
-      <div className="flex items-start justify-between gap-4 rounded-md bg-muted p-4">
-        <span className="text-sm text-muted-foreground">Comisión del ciclo</span>
+      <div className="flex items-start justify-between gap-4 rounded-md bg-surface p-4">
+        <span className="text-[15px] text-muted-foreground">Comisión del ciclo</span>
         <Monto usd={ciclo.monto_comision} tasa={tasa} moneda="USD" size="md" align="right" />
       </div>
 
-      <FieldGroup className="gap-4">
+      <FieldGroup className="gap-5">
         <Field data-invalid={errorDe("metodo") ? true : undefined}>
           <FieldLabel htmlFor={`${uid}-metodo`}>Método</FieldLabel>
           <Select
@@ -218,10 +218,10 @@ function Formulario({
       {error && <AvisoError>{error}</AvisoError>}
 
       <DialogFooter>
-        <Button type="button" variant="outline" onClick={onClose} disabled={guardando}>
+        <Button size="lg" type="button" variant="outline" onClick={onClose} disabled={guardando}>
           Cancelar
         </Button>
-        <Button type="submit" disabled={guardando} aria-busy={guardando || undefined}>
+        <Button size="lg" type="submit" disabled={guardando} aria-busy={guardando || undefined}>
           {guardando && <Spinner size="sm" aria-hidden />}
           {guardando ? "Registrando…" : "Registrar pago"}
         </Button>

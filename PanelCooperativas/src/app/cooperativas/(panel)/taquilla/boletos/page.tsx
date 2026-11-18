@@ -6,14 +6,13 @@
 // abierto en su hoja (`?viaje=`) viven en la URL.
 
 import { Suspense, useEffect, useState, useCallback, useMemo, useRef } from "react";
-import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { useUser } from "@/hooks/use-user";
 import { useCambiarParams, useParamUrl } from "@/hooks/use-param-url";
 import { createClient } from "@/lib/supabase/client";
@@ -26,7 +25,10 @@ import { VerificarPagoDialog } from "@/components/pagos/verificar-pago-dialog";
 import { Monto } from "@/components/monto";
 import { CeldaEnlace } from "@/components/celda-enlace";
 import { ErrorState } from "@/components/error-state";
-import { FilaVacia } from "@/components/fila-vacia";
+import { EmptyState } from "@/components/empty-state";
+import { EntityCard } from "@/components/entity-card";
+import { ListaResponsive } from "@/components/lista-responsive";
+import { IconTile, type IconTileTone } from "@/components/icon-tile";
 import { TablaSkeleton } from "@/components/tabla-skeleton";
 import { BarraFiltros, TabsUrl } from "@/components/barra-filtros";
 import { PaginacionTabla, usePaginacion } from "@/components/paginacion-tabla";
@@ -74,6 +76,28 @@ function estadoUiDe(b: BoletoRow): EstadoUiBoleto {
   return getEstadoUiBoleto(b.estado as EstadoBoleto, pagoDe(b)?.estado_verificacion ?? null);
 }
 
+const TONO_ESTADO_UI: Partial<Record<EstadoUiBoleto, IconTileTone>> = {
+  PAGADO: "success",
+  USADO: "neutral",
+  RESERVA_SIN_PAGAR: "warning",
+  PAGO_EN_VERIFICACION: "info",
+  PAGO_RECHAZADO: "danger",
+};
+
+function datosFila(boleto: BoletoRow) {
+  const origen = formatCiudad(boleto.viaje?.ruta?.ciudad_origen);
+  const destino = formatCiudad(boleto.viaje?.ruta?.ciudad_destino);
+  return {
+    rutaString: origen && destino ? `${origen} → ${destino}` : "Ruta desconocida",
+    salida: boleto.viaje?.fecha_hora_salida ?? null,
+    nombrePasajero: boleto.pasajero_nombre || boleto.comprador?.nombre_completo || "Sin nombre",
+    ui: estadoUiDe(boleto),
+    pago: pagoDe(boleto),
+    codigo: formatCodigoBoleto(boleto.codigo_boleto),
+    viajeId: boleto.viaje?.id ?? null,
+  };
+}
+
 // ─── Página ─────────────────────────────────────────────────────────────────
 
 export default function TaquillaBoletosPage() {
@@ -81,7 +105,7 @@ export default function TaquillaBoletosPage() {
   return (
     <Suspense
       fallback={
-        <div className="flex flex-col gap-6">
+        <div className="mx-auto flex w-full max-w-7xl flex-col gap-8">
           <Skeleton className="h-8 w-56" />
           <TablaSkeleton columnas={COLUMNAS} conFiltros />
         </div>
@@ -197,21 +221,21 @@ function TaquillaBoletos() {
   const hayFiltros = filtroEstado !== "todos" || Boolean(filtroFecha);
 
   return (
-    <div className="flex flex-col gap-6">
-      <PageHeader title="Taquilla de boletos">
-        {/* El embarque se mudó a su propia sección: enlace discreto para quien lo buscaba aquí. */}
-        <Link href="/cooperativas/embarque" className={buttonVariants({ variant: "ghost" })}>
-          <ICONO_SECCION.embarque aria-hidden />
-          Ir a Embarque
-        </Link>
-        <Button onClick={() => abrirVenta()}>
-          <ICONO_SECCION.taquillaBoletos aria-hidden />
-          Vender boletos
-        </Button>
-      </PageHeader>
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-8">
+      <PageHeader
+        title="Taquilla de boletos"
+        principal={
+          <Button size="lg" onClick={() => abrirVenta()}>
+            <ICONO_SECCION.taquillaBoletos aria-hidden />
+            Vender boletos
+          </Button>
+        }
+        // El embarque se mudó a su propia sección: enlace discreto para quien lo buscaba aquí.
+        secundarias={[{ etiqueta: "Ir a Embarque", icono: ICONO_SECCION.embarque, href: "/cooperativas/embarque" }]}
+      />
 
       <div className="flex flex-col gap-4">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <TabsUrl param="estado" defecto="todos" opciones={PESTANAS_ESTADO} />
           <BarraFiltros fechas={[{ param: "fecha", etiqueta: "Fecha del viaje" }]} />
         </div>
@@ -219,122 +243,152 @@ function TaquillaBoletos() {
         {loading && boletos.length === 0 ? (
           <TablaSkeleton columnas={COLUMNAS} />
         ) : (
-          <Card className="gap-0 overflow-hidden p-0">
+          <Card className="gap-0 overflow-hidden p-0 max-md:overflow-visible max-md:bg-transparent max-md:shadow-none">
             {errorCarga ? (
               <ErrorState titulo="No pudimos cargar los boletos" descripcion={errorCarga} onReintentar={fetchBoletos} />
             ) : (
               <>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Código</TableHead>
-                      <TableHead>Viaje</TableHead>
-                      <TableHead>Pasajero</TableHead>
-                      <TableHead>Asiento</TableHead>
-                      <TableHead>Estado</TableHead>
-                      <TableHead className="hidden text-right xl:table-cell">Precio</TableHead>
-                      <TableHead className="text-right">Acciones</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {boletos.length === 0 ? (
-                      <FilaVacia
-                        colSpan={COLUMNAS}
-                        icon={ICONO_SECCION.taquillaBoletos}
-                        titulo={hayFiltros ? "No hay boletos con estos filtros" : "Todavía no hay boletos"}
-                        accion={
-                          hayFiltros ? undefined : (
-                            <Button onClick={() => abrirVenta()}>
-                              <Plus aria-hidden />
-                              Vender boletos
-                            </Button>
-                          )
-                        }
-                      />
-                    ) : (
-                      visibles.map((boleto) => {
-                        const origen = formatCiudad(boleto.viaje?.ruta?.ciudad_origen);
-                        const destino = formatCiudad(boleto.viaje?.ruta?.ciudad_destino);
-                        const rutaString = origen && destino ? `${origen} → ${destino}` : "Ruta desconocida";
-                        const salida = boleto.viaje?.fecha_hora_salida ?? null;
-                        const nombrePasajero = boleto.pasajero_nombre || boleto.comprador?.nombre_completo || "Sin nombre";
-                        const ui = estadoUiDe(boleto);
-                        const pago = pagoDe(boleto);
-                        const codigo = formatCodigoBoleto(boleto.codigo_boleto);
-                        const viajeId = boleto.viaje?.id ?? null;
-
-                        return (
-                          <TableRow key={boleto.id} className={cn(viajeId && "relative")}>
-                            {viajeId ? (
-                              <CeldaEnlace
-                                onAbrir={() => abrirViaje(viajeId)}
-                                etiqueta={`Ver el viaje del boleto ${codigo}`}
-                                className="font-mono text-sm"
-                              >
-                                {codigo}
-                              </CeldaEnlace>
-                            ) : (
-                              <TableCell className="font-mono text-sm text-foreground">{codigo}</TableCell>
-                            )}
-                            <TableCell>
-                              <div className="flex flex-col">
-                                <span className="font-medium">{rutaString}</span>
-                                {salida && (
-                                  <span className="text-xs text-muted-foreground tabular-nums">{formatFechaHoraCortaVE(salida)}</span>
-                                )}
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex flex-col">
-                                <span>{nombrePasajero}</span>
-                                {boleto.pasajero_cedula && (
-                                  <span className="text-xs text-muted-foreground">{formatCedula(boleto.pasajero_cedula)}</span>
-                                )}
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <Badge variant="outline" className="font-mono tabular-nums">
-                                {boleto.asiento}
-                              </Badge>
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex flex-col items-start gap-1">
-                                <StatusBadge status={ui} dominio="boleto" />
-                                {ui === "RESERVA_SIN_PAGAR" && boleto.reserva_expira_at && (
-                                  <span className="text-xs text-muted-foreground tabular-nums">
-                                    Vence {formatHoraVE(boleto.reserva_expira_at)}
-                                  </span>
-                                )}
-                              </div>
-                            </TableCell>
-                            <TableCell className="hidden text-right xl:table-cell">
-                              <Monto usd={boleto.precio} align="right" size="sm" />
-                            </TableCell>
-                            <TableCell className="text-right">
-                              {ui === "PAGO_EN_VERIFICACION" && pago && (
-                                <Button size="sm" variant="outline" className="relative z-10" onClick={() => setPagoAVerificar(pago.id)}>
-                                  Verificar pago
-                                </Button>
+                <ListaResponsive
+                  items={visibles}
+                  clave={(b) => b.id}
+                  etiqueta="Boletos"
+                  vacio={
+                    <EmptyState
+                      icon={ICONO_SECCION.taquillaBoletos}
+                      title={hayFiltros ? "No hay boletos con estos filtros" : "Todavía no hay boletos"}
+                      action={
+                        hayFiltros ? undefined : (
+                          <Button variant="outline" onClick={() => abrirVenta()}>
+                            <Plus aria-hidden />
+                            Vender boletos
+                          </Button>
+                        )
+                      }
+                    />
+                  }
+                  tabla={(items) => (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Código</TableHead>
+                          <TableHead>Viaje</TableHead>
+                          <TableHead>Pasajero</TableHead>
+                          <TableHead>Asiento</TableHead>
+                          <TableHead>Estado</TableHead>
+                          <TableHead className="hidden text-right xl:table-cell">Precio</TableHead>
+                          <TableHead className="text-right">Acciones</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {items.map((boleto) => {
+                          const d = datosFila(boleto);
+                          return (
+                            <TableRow key={boleto.id} className={cn(d.viajeId && "relative")}>
+                              {d.viajeId ? (
+                                <CeldaEnlace
+                                  onAbrir={() => abrirViaje(d.viajeId)}
+                                  etiqueta={`Ver el viaje del boleto ${d.codigo}`}
+                                  className="font-mono text-[13px]"
+                                >
+                                  {d.codigo}
+                                </CeldaEnlace>
+                              ) : (
+                                <TableCell className="font-mono text-[13px] text-foreground">{d.codigo}</TableCell>
                               )}
-                              {(ui === "RESERVA_SIN_PAGAR" || ui === "PAGO_RECHAZADO") && (
-                                <Button size="sm" variant="outline" className="relative z-10" onClick={() => setReservaACobrar(boleto.id)}>
-                                  Cobrar
-                                </Button>
-                              )}
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })
-                    )}
-                  </TableBody>
-                </Table>
+                              <TableCell>
+                                <div className="flex flex-col">
+                                  <span className="font-medium">{d.rutaString}</span>
+                                  {d.salida && (
+                                    <span className="text-[13px] text-muted-foreground tabular-nums">{formatFechaHoraCortaVE(d.salida)}</span>
+                                  )}
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex flex-col">
+                                  <span>{d.nombrePasajero}</span>
+                                  {boleto.pasajero_cedula && (
+                                    <span className="text-[13px] text-muted-foreground">{formatCedula(boleto.pasajero_cedula)}</span>
+                                  )}
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant="outline" className="font-mono tabular-nums">
+                                  {boleto.asiento}
+                                </Badge>
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex flex-col items-start gap-1">
+                                  <StatusBadge status={d.ui} dominio="boleto" />
+                                  {d.ui === "RESERVA_SIN_PAGAR" && boleto.reserva_expira_at && (
+                                    <span className="text-xs text-muted-foreground tabular-nums">
+                                      Vence {formatHoraVE(boleto.reserva_expira_at)}
+                                    </span>
+                                  )}
+                                </div>
+                              </TableCell>
+                              <TableCell className="hidden text-right xl:table-cell">
+                                <Monto usd={boleto.precio} align="right" size="sm" />
+                              </TableCell>
+                              <TableCell className="text-right">
+                                {d.ui === "PAGO_EN_VERIFICACION" && d.pago && (
+                                  <Button size="sm" variant="outline" className="relative z-10" onClick={() => setPagoAVerificar(d.pago!.id)}>
+                                    Verificar pago
+                                  </Button>
+                                )}
+                                {(d.ui === "RESERVA_SIN_PAGAR" || d.ui === "PAGO_RECHAZADO") && (
+                                  <Button size="sm" variant="outline" className="relative z-10" onClick={() => setReservaACobrar(boleto.id)}>
+                                    Cobrar
+                                  </Button>
+                                )}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  )}
+                  tarjeta={(boleto) => {
+                    const d = datosFila(boleto);
+                    const porVerificar = d.ui === "PAGO_EN_VERIFICACION" && d.pago;
+                    const porCobrar = d.ui === "RESERVA_SIN_PAGAR" || d.ui === "PAGO_RECHAZADO";
+                    return (
+                      <EntityCard
+                          onClick={d.viajeId ? () => abrirViaje(d.viajeId) : undefined}
+                          chevron={Boolean(d.viajeId)}
+                          leading={<IconTile icon={ICONO_SECCION.taquillaBoletos} tone={TONO_ESTADO_UI[d.ui] ?? "sky"} />}
+                          title={d.rutaString}
+                          subtitle={[d.nombrePasajero, d.salida ? formatFechaHoraCortaVE(d.salida) : null].filter(Boolean).join(" · ")}
+                          lineasSubtitulo={2}
+                          adorno={<Badge variant="outline" className="font-mono tabular-nums">{boleto.asiento}</Badge>}
+                          badge={<StatusBadge status={d.ui} dominio="boleto" />}
+                          meta={
+                            d.ui === "RESERVA_SIN_PAGAR" && boleto.reserva_expira_at
+                              ? `Vence ${formatHoraVE(boleto.reserva_expira_at)}`
+                              : d.codigo
+                          }
+                          etiqueta={`Boleto ${d.codigo}, asiento ${boleto.asiento}, ${d.nombrePasajero}`}
+                          acciones={
+                            porVerificar ? (
+                              <Button variant="outline" onClick={() => setPagoAVerificar(d.pago!.id)}>
+                                Verificar pago
+                              </Button>
+                            ) : porCobrar ? (
+                              <Button variant="outline" onClick={() => setReservaACobrar(boleto.id)}>
+                                Cobrar
+                              </Button>
+                            ) : undefined
+                          }
+                        />
+                    );
+                  }}
+                />
                 <PaginacionTabla pagina={pagina} paginas={paginas} onCambio={ir} />
               </>
             )}
           </Card>
         )}
         {!loading && boletos.length >= LIMITE && (
-          <p className="text-sm text-muted-foreground">
+          <p className="text-[13px] text-muted-foreground">
             Últimos {LIMITE} boletos{filtroFecha ? ` del ${formatDiaVE(filtroFecha)}` : ""}. Filtra por fecha para ver otros.
           </p>
         )}

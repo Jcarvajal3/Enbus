@@ -29,8 +29,16 @@ export const metadata: Metadata = {
   manifest: "/manifest.json",
 };
 
+// `viewportFit: "cover"` deja que la barra de pestañas use la zona segura (env(safe-area-inset-*)).
+// Sin maximumScale ni userScalable: el zoom del usuario no se bloquea.
 export const viewport: Viewport = {
-  themeColor: "#FFC757",
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#F3F5F9" },
+    { media: "(prefers-color-scheme: dark)", color: "#000000" },
+  ],
 };
 
 export default function RootLayout({

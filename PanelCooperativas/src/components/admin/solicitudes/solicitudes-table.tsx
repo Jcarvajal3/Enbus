@@ -13,11 +13,16 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { StatusBadge } from "@/components/status-badge";
+import { SectionLabel } from "@/components/section-label";
+import { IconTile } from "@/components/icon-tile";
 import { CeldaEnlace } from "@/components/celda-enlace";
+import { EntityCard } from "@/components/entity-card";
+import { ListaResponsive } from "@/components/lista-responsive";
 import { FilaVacia } from "@/components/fila-vacia";
 import { BarraFiltros, TabsUrl } from "@/components/barra-filtros";
 import { PaginacionTabla, usePaginacion } from "@/components/paginacion-tabla";
 import { useParamUrl } from "@/hooks/use-param-url";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { RifIncompletoBadge } from "@/components/admin/cooperativas/cooperativas-table";
 import { Dato, Vacio } from "@/components/admin/detalle";
 import { formatFechaHoraVE, formatFechaVE } from "@/lib/fechas";
@@ -98,10 +103,11 @@ export function SolicitudesTable({ solicitudes }: SolicitudesTableProps) {
   };
 
   const columnas = rechazadas ? 6 : 5;
+  const movil = useIsMobile();
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-end justify-between gap-3">
+      <div className="flex flex-col gap-3 md:flex-row md:flex-wrap md:items-end md:justify-between">
         <BarraFiltros busqueda={{ etiqueta: "Buscar", placeholder: "Nombre, RIF o correo" }} />
         <TabsUrl
           param="tab"
@@ -113,21 +119,16 @@ export function SolicitudesTable({ solicitudes }: SolicitudesTableProps) {
         />
       </div>
 
-      <Card className="gap-0 overflow-hidden p-0">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Cooperativa</TableHead>
-              <TableHead className="hidden lg:table-cell">Representante</TableHead>
-              <TableHead className="hidden sm:table-cell">Recibida</TableHead>
-              <TableHead className="hidden lg:table-cell">Cuenta</TableHead>
-              {rechazadas && <TableHead className="hidden md:table-cell">Estado</TableHead>}
-              <TableHead className="text-right">Acciones</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filtradas.length === 0 ? (
-              <FilaVacia
+      <Card className="gap-0 overflow-hidden p-0 max-md:overflow-visible max-md:bg-transparent max-md:shadow-none">
+        <ListaResponsive
+          items={visibles}
+          clave={(sol) => sol.id}
+          etiqueta={rechazadas ? "Solicitudes rechazadas" : "Solicitudes en revisión"}
+          vacio={
+            <div className="max-md:rounded-xl max-md:bg-card max-md:shadow-card">
+              <Table>
+                <TableBody>
+                  <FilaVacia
                 colSpan={columnas}
                 icon={termino ? MagnifyingGlass : ClipboardText}
                 titulo={
@@ -138,57 +139,98 @@ export function SolicitudesTable({ solicitudes }: SolicitudesTableProps) {
                       : "No hay solicitudes en revisión"
                 }
               />
-            ) : (
-              visibles.map((sol) => (
-                <TableRow key={sol.id} className="relative">
-                  <CeldaEnlace onAbrir={() => abrir(sol.id)} etiqueta={`Ver la solicitud de ${sol.nombre}`}>
-                    <span className="block">{sol.nombre}</span>
-                    <span className="mt-0.5 flex items-center gap-1.5 font-mono text-xs font-normal text-muted-foreground">
-                      {sol.rif}
-                    </span>
-                  </CeldaEnlace>
-                  <TableCell className="hidden lg:table-cell">
-                    <span className="block">{sol.representante || <Vacio />}</span>
-                    <span className="block text-xs text-muted-foreground">{sol.email || "Sin correo"}</span>
-                  </TableCell>
-                  <TableCell className="hidden text-muted-foreground tabular-nums sm:table-cell">{formatFechaVE(sol.created_at)}</TableCell>
-                  <TableCell className="hidden lg:table-cell">
-                    <CuentaBadge cuenta={sol.cuenta} />
-                  </TableCell>
-                  {rechazadas && (
-                    <TableCell className="hidden max-w-64 whitespace-normal md:table-cell">
-                      <StatusBadge status={sol.estado} dominio="cooperativa" />
-                      {sol.motivo_estado && (
-                        <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{sol.motivo_estado}</p>
-                      )}
-                    </TableCell>
-                  )}
-                  <TableCell>
-                    {/* Encima del enlace de la fila (relative z-10): estos botones no abren la hoja. */}
-                    <div className="relative z-10">
-                      <SolicitudAcciones solicitud={sol} variante="fila" />
-                    </div>
-                  </TableCell>
+                </TableBody>
+              </Table>
+            </div>
+          }
+          tarjeta={(sol) => (
+            <EntityCard
+              onClick={() => abrir(sol.id)}
+              etiqueta={`Ver la solicitud de ${sol.nombre}`}
+              leading={<IconTile icon={ClipboardText} tone={rechazadas ? "danger" : "warning"} />}
+              title={sol.nombre}
+              subtitle={sol.representante || sol.rif}
+              badge={rechazadas ? <StatusBadge status={sol.estado} dominio="cooperativa" /> : <CuentaBadge cuenta={sol.cuenta} />}
+              meta={formatFechaVE(sol.created_at)}
+            />
+          )}
+          tabla={(items) => (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Cooperativa</TableHead>
+                  <TableHead className="hidden lg:table-cell">Representante</TableHead>
+                  <TableHead className="hidden md:table-cell">Recibida</TableHead>
+                  <TableHead className="hidden lg:table-cell">Cuenta</TableHead>
+                  {rechazadas && <TableHead className="hidden md:table-cell">Estado</TableHead>}
+                  <TableHead className="text-right">Acciones</TableHead>
                 </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
+              </TableHeader>
+              <TableBody>
+                {items.map((sol) => (
+                    <TableRow key={sol.id} className="relative">
+                      <CeldaEnlace onAbrir={() => abrir(sol.id)} etiqueta={`Ver la solicitud de ${sol.nombre}`}>
+                        <span className="flex items-center gap-3">
+                        <IconTile icon={ClipboardText} tone={rechazadas ? "danger" : "warning"} size="sm" />
+                        <span>
+                        <span className="block">{sol.nombre}</span>
+                        <span className="mt-0.5 flex items-center gap-1.5 font-mono text-[13px] font-normal text-muted-foreground">
+                          {sol.rif}
+                        </span>
+                        </span>
+                        </span>
+                      </CeldaEnlace>
+                      <TableCell className="hidden lg:table-cell">
+                        <span className="block">{sol.representante || <Vacio />}</span>
+                        <span className="block text-[13px] text-muted-foreground">{sol.email || "Sin correo"}</span>
+                      </TableCell>
+                      <TableCell className="hidden text-muted-foreground tabular-nums md:table-cell">{formatFechaVE(sol.created_at)}</TableCell>
+                      <TableCell className="hidden lg:table-cell">
+                        <CuentaBadge cuenta={sol.cuenta} />
+                      </TableCell>
+                      {rechazadas && (
+                        <TableCell className="hidden max-w-64 whitespace-normal md:table-cell">
+                          <StatusBadge status={sol.estado} dominio="cooperativa" />
+                          {sol.motivo_estado && (
+                            <p className="mt-1 line-clamp-2 text-[13px] text-muted-foreground">{sol.motivo_estado}</p>
+                          )}
+                        </TableCell>
+                      )}
+                      <TableCell>
+                        {/* Encima del enlace de la fila (relative z-10): estos botones no abren la hoja. */}
+                        <div className="relative z-10">
+                          <SolicitudAcciones solicitud={sol} variante="fila" />
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        />
         <PaginacionTabla pagina={pagina} paginas={paginas} onCambio={ir} />
       </Card>
 
       <Sheet open={seleccion !== null} onOpenChange={(open) => !open && cerrar()}>
-        {seleccion && <DetalleSolicitud solicitud={seleccion} onHecho={cerrar} />}
+        {seleccion && <DetalleSolicitud solicitud={seleccion} onHecho={cerrar} movil={movil} />}
       </Sheet>
     </div>
   );
 }
 
-function DetalleSolicitud({ solicitud, onHecho }: { solicitud: SolicitudPendiente; onHecho: () => void }) {
+function DetalleSolicitud({
+  solicitud,
+  onHecho,
+  movil,
+}: {
+  solicitud: SolicitudPendiente;
+  onHecho: () => void;
+  movil: boolean;
+}) {
   const telefono = telefonoLegible(solicitud.telefono);
   return (
-    <SheetContent>
-      <SheetHeader className="border-b border-border">
+    <SheetContent side={movil ? "bottom" : "right"}>
+      <SheetHeader>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
           <SheetTitle>{solicitud.nombre}</SheetTitle>
           <StatusBadge status={solicitud.estado} dominio="cooperativa" />
@@ -196,7 +238,7 @@ function DetalleSolicitud({ solicitud, onHecho }: { solicitud: SolicitudPendient
         <SheetDescription>Recibida el {formatFechaHoraVE(solicitud.created_at)}</SheetDescription>
       </SheetHeader>
 
-      <div className="flex flex-col gap-6 p-6">
+      <div className="flex flex-col gap-8 px-6 pb-6 md:p-6">
         {solicitud.estado === "RECHAZADA" && (
           <dl className="flex flex-col gap-3">
             <Dato etiqueta="Motivo del rechazo">{solicitud.motivo_estado || <Vacio texto="Sin motivo registrado" />}</Dato>
@@ -206,8 +248,8 @@ function DetalleSolicitud({ solicitud, onHecho }: { solicitud: SolicitudPendient
           </dl>
         )}
 
-        <section aria-labelledby="sol-coop" className="flex flex-col gap-3">
-          <h3 id="sol-coop" className="text-sm font-semibold">Cooperativa</h3>
+        <section className="flex flex-col gap-3">
+          <SectionLabel nivel={3}>Cooperativa</SectionLabel>
           <dl className="flex flex-col gap-3">
             <Dato etiqueta="RIF">
               <span className="inline-flex flex-wrap items-center gap-1.5">
@@ -220,8 +262,8 @@ function DetalleSolicitud({ solicitud, onHecho }: { solicitud: SolicitudPendient
           </dl>
         </section>
 
-        <section aria-labelledby="sol-contacto" className="flex flex-col gap-3 border-t border-border pt-6">
-          <h3 id="sol-contacto" className="text-sm font-semibold">Contacto</h3>
+        <section className="flex flex-col gap-3">
+          <SectionLabel nivel={3}>Contacto</SectionLabel>
           <dl className="flex flex-col gap-3">
             <Dato etiqueta="Correo">
               {solicitud.email ? (
@@ -240,22 +282,22 @@ function DetalleSolicitud({ solicitud, onHecho }: { solicitud: SolicitudPendient
               <span className="flex flex-col items-start gap-1">
                 <CuentaBadge cuenta={solicitud.cuenta} />
                 {solicitud.cuenta === "INVITACION_PENDIENTE" && solicitud.cuenta_email && (
-                  <span className="text-xs text-muted-foreground">Invitación enviada a {solicitud.cuenta_email}</span>
+                  <span className="text-[13px] text-muted-foreground">Invitación enviada a {solicitud.cuenta_email}</span>
                 )}
               </span>
             </Dato>
           </dl>
         </section>
 
-        <section aria-labelledby="sol-mensaje" className="flex flex-col gap-3 border-t border-border pt-6">
-          <h3 id="sol-mensaje" className="text-sm font-semibold">Mensaje de la cooperativa</h3>
-          <p className="text-sm whitespace-pre-line">
+        <section className="flex flex-col gap-3">
+          <SectionLabel nivel={3}>Mensaje de la cooperativa</SectionLabel>
+          <p className="text-[15px] whitespace-pre-line">
             {solicitud.mensaje_registro || <Vacio texto="No dejó mensaje" />}
           </p>
         </section>
       </div>
 
-      <SheetFooter className="border-t border-border">
+      <SheetFooter>
         <SolicitudAcciones solicitud={solicitud} onHecho={onHecho} />
       </SheetFooter>
     </SheetContent>

@@ -6,11 +6,15 @@
 // único de verificación (aprobar o rechazar con motivo).
 
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { ArrowClockwise, CheckCircle, Info, Warning } from "@phosphor-icons/react";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
+import { IconTile } from "@/components/icon-tile";
 import { ErrorState } from "@/components/error-state";
 import { CeldaEnlace } from "@/components/celda-enlace";
+import { EntityCard } from "@/components/entity-card";
+import { ListaResponsive } from "@/components/lista-responsive";
 import { Monto } from "@/components/monto";
 import { TonoBadge } from "@/components/status-badge";
 import { TabsUrl } from "@/components/barra-filtros";
@@ -18,7 +22,7 @@ import { TablaSkeleton } from "@/components/tabla-skeleton";
 import { PaginacionTabla, usePaginacion } from "@/components/paginacion-tabla";
 import { VerificarPagoDialog } from "@/components/pagos/verificar-pago-dialog";
 import { CerrarAvisosPagos } from "@/components/push/cerrar-avisos-pagos";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useParamUrl } from "@/hooks/use-param-url";
@@ -51,7 +55,7 @@ function leerPestana(valor: string | null): Pestana {
 function Diferencia({ pago }: { pago: PagoPorVerificar }) {
   if (pago.esperado == null || pago.declarado == null) {
     return (
-      <span className="text-sm text-muted-foreground">
+      <span className="text-[13px] text-muted-foreground">
         {pago.declarado == null ? "Sin monto declarado" : "Sin monto en Bs"}
       </span>
     );
@@ -59,7 +63,7 @@ function Diferencia({ pago }: { pago: PagoPorVerificar }) {
   const dif = pago.diferencia ?? pago.declarado - pago.esperado;
   if (Math.abs(dif) < 0.01) {
     return (
-      <span className="inline-flex items-center gap-1 text-sm font-medium text-success-text">
+      <span className="inline-flex items-center gap-1 text-[13px] font-medium text-success-text">
         <CheckCircle weight="fill" className="size-4 shrink-0" aria-hidden />
         Coincide
       </span>
@@ -69,7 +73,7 @@ function Diferencia({ pago }: { pago: PagoPorVerificar }) {
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 text-sm font-medium whitespace-nowrap tabular-nums",
+        "inline-flex items-center gap-1 text-[13px] font-medium whitespace-nowrap tabular-nums",
         falta ? "text-warning-text" : "text-info-text"
       )}
     >
@@ -81,6 +85,14 @@ function Diferencia({ pago }: { pago: PagoPorVerificar }) {
       {falta ? "Faltan" : "Sobran"} {formatEnMoneda(Math.abs(dif), pago.moneda)}
     </span>
   );
+}
+
+function tasaDe(p: PagoPorVerificar): TasaRef | null {
+  return p.tasa_bcv && p.tasa_bcv_fecha ? { tasa: Number(p.tasa_bcv), fecha: p.tasa_bcv_fecha } : null;
+}
+
+function viajeYaSalio(p: PagoPorVerificar, ahora: number) {
+  return p.tipo_recurso === "boleto" && !!p.viaje_salida && ahora > 0 && new Date(p.viaje_salida).getTime() < ahora;
 }
 
 function BandejaPagos() {
@@ -134,13 +146,11 @@ function BandejaPagos() {
   const primeraCarga = cargando && pagos.length === 0 && !errorCarga;
 
   return (
-    <div className="flex flex-col gap-6">
-      <PageHeader title="Pagos por verificar">
-        <Button variant="outline" onClick={() => void cargar()} disabled={cargando} aria-busy={cargando || undefined}>
-          <ArrowClockwise className={cn(cargando && "motion-safe:animate-spin")} aria-hidden />
-          Actualizar
-        </Button>
-      </PageHeader>
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-8">
+      <PageHeader
+        title="Pagos por verificar"
+        secundarias={[{ etiqueta: "Actualizar", icono: ArrowClockwise, onClick: () => void cargar(), cargando }]}
+      />
 
       <TabsUrl
         param="tipo"
@@ -159,103 +169,160 @@ function BandejaPagos() {
           <EmptyState
             icon={ICONO_SECCION.pagos}
             title="Todo al día"
+            tono="mint"
             description={
               pestana === "todos"
                 ? "Aquí llegan los pagos que registran tus clientes en la app."
                 : `No hay pagos de ${pestana === "boleto" ? "boletos" : "encomiendas"} por verificar.`
             }
+            action={
+              <Link href="/cooperativas/dashboard" className={buttonVariants({ variant: "outline", size: "lg" })}>
+                Ir al resumen
+              </Link>
+            }
           />
         </Card>
       ) : (
-        <Card className="gap-0 overflow-hidden p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Cliente</TableHead>
-                <TableHead className="hidden 2xl:table-cell">Registrado</TableHead>
-                <TableHead className="hidden sm:table-cell">Concepto</TableHead>
-                <TableHead className="hidden xl:table-cell">Método</TableHead>
-                <TableHead className="hidden md:table-cell">Referencia</TableHead>
-                <TableHead className="text-right">Monto</TableHead>
-                <TableHead className="text-right">
-                  <span className="sr-only">Acciones</span>
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {visibles.map((p) => {
-                const tasa: TasaRef | null =
-                  p.tasa_bcv && p.tasa_bcv_fecha ? { tasa: Number(p.tasa_bcv), fecha: p.tasa_bcv_fecha } : null;
-                const viajeSalio =
-                  p.tipo_recurso === "boleto" && !!p.viaje_salida && ahora > 0 && new Date(p.viaje_salida).getTime() < ahora;
-                const cliente = p.cliente_nombre || "Sin nombre";
-                return (
-                  <TableRow key={p.pago_id} className="relative">
-                    <CeldaEnlace onAbrir={() => setPagoAbierto(p.pago_id)} etiqueta={`Verificar el pago de ${cliente}`}>
-                      <span className="block">{cliente}</span>
-                      <span className="block text-xs font-normal text-muted-foreground">
-                        {[p.cliente_cedula ? formatCedula(p.cliente_cedula) : null, ROL_PAGADOR[p.pagador_rol] ?? null]
-                          .filter(Boolean)
-                          .join(" · ")}
-                      </span>
-                    </CeldaEnlace>
-                    <TableCell className="hidden whitespace-nowrap 2xl:table-cell">
-                      <span className="block text-sm">{ahora > 0 ? formatHaceTiempo(p.creado_at, new Date(ahora)) : ""}</span>
-                      <span className="block text-xs text-muted-foreground tabular-nums">
-                        {formatFechaHoraCortaVE(p.creado_at)}
-                      </span>
-                    </TableCell>
-                    <TableCell className="hidden min-w-56 max-w-[18rem] sm:table-cell">
-                      <span className="block text-sm whitespace-normal">{conceptoDePago(p)}</span>
-                      {(viajeSalio || p.recurso_vencido) && (
-                        <span className="mt-1 flex flex-wrap gap-1">
-                          {viajeSalio && <TonoBadge tono="pendiente">El viaje ya salió</TonoBadge>}
-                          {p.recurso_vencido && (
-                            <TonoBadge tono="peligro">
-                              {p.tipo_recurso === "encomienda" ? "Envío cerrado" : "Boletos vencidos"}
-                            </TonoBadge>
-                          )}
-                        </span>
-                      )}
-                    </TableCell>
-                    <TableCell className="hidden xl:table-cell">
-                      <span className="block text-sm">{nombreMetodo(p.metodo_tipo)}</span>
-                      {p.metodo_tipo !== "ZELLE" && p.banco_emisor && (
-                        <span className="block text-xs text-muted-foreground">Desde {p.banco_emisor}</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="hidden md:table-cell">
-                      <span className="font-mono text-sm text-foreground">{p.numero_referencia || "—"}</span>
-                      {p.referencia_repetida && (
-                        <span className="mt-1 flex items-center gap-1 text-xs font-medium text-warning-text">
-                          <Warning weight="fill" className="size-3.5 shrink-0" aria-hidden />
-                          Repetida
-                        </span>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Monto usd={p.monto_usd} bs={p.monto_bs} tasa={tasa} moneda={p.moneda} size="sm" align="right" />
-                      {/* Lo declarado frente a lo esperado, bajo el monto (sin columna propia: la tabla cabe a 1024). */}
-                      <span className="mt-1 hidden justify-end lg:flex">
-                        <Diferencia pago={p} />
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="relative z-10"
-                        onClick={() => setPagoAbierto(p.pago_id)}
-                        aria-label={`Verificar el pago de ${cliente}`}
-                      >
-                        Verificar pago
-                      </Button>
-                    </TableCell>
+        <Card className="gap-0 overflow-hidden p-0 max-md:overflow-visible max-md:bg-transparent max-md:shadow-none">
+          <ListaResponsive
+            items={visibles}
+            clave={(p) => p.pago_id}
+            etiqueta="Pagos por verificar"
+            tabla={(items) => (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Cliente</TableHead>
+                    <TableHead className="hidden 2xl:table-cell">Registrado</TableHead>
+                    <TableHead>Concepto</TableHead>
+                    <TableHead className="hidden xl:table-cell">Método</TableHead>
+                    <TableHead className="hidden md:table-cell">Referencia</TableHead>
+                    <TableHead className="text-right">Monto</TableHead>
+                    <TableHead className="text-right">
+                      <span className="sr-only">Acciones</span>
+                    </TableHead>
                   </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
+                </TableHeader>
+                <TableBody>
+                  {items.map((p) => {
+                    const tasa = tasaDe(p);
+                    const viajeSalio = viajeYaSalio(p, ahora);
+                    const cliente = p.cliente_nombre || "Sin nombre";
+                    return (
+                      <TableRow key={p.pago_id} className="relative">
+                        <CeldaEnlace onAbrir={() => setPagoAbierto(p.pago_id)} etiqueta={`Verificar el pago de ${cliente}`}>
+                          <span className="block">{cliente}</span>
+                          <span className="block text-[13px] font-normal text-muted-foreground">
+                            {[p.cliente_cedula ? formatCedula(p.cliente_cedula) : null, ROL_PAGADOR[p.pagador_rol] ?? null]
+                              .filter(Boolean)
+                              .join(" · ")}
+                          </span>
+                        </CeldaEnlace>
+                        <TableCell className="hidden whitespace-nowrap 2xl:table-cell">
+                          <span className="block">{ahora > 0 ? formatHaceTiempo(p.creado_at, new Date(ahora)) : ""}</span>
+                          <span className="block text-[13px] text-muted-foreground tabular-nums">
+                            {formatFechaHoraCortaVE(p.creado_at)}
+                          </span>
+                        </TableCell>
+                        <TableCell className="min-w-56 max-w-[18rem]">
+                          <div className="flex items-center gap-3">
+                            <IconTile
+                              icon={p.tipo_recurso === "encomienda" ? ICONO_SECCION.taquillaEncomiendas : ICONO_SECCION.taquillaBoletos}
+                              tone={p.tipo_recurso === "encomienda" ? "coral" : "sky"}
+                              size="sm"
+                            />
+                            <span className="block min-w-0 whitespace-normal">{conceptoDePago(p)}</span>
+                          </div>
+                          {(viajeSalio || p.recurso_vencido) && (
+                            <span className="mt-2 flex flex-wrap gap-1">
+                              {viajeSalio && <TonoBadge tono="pendiente">El viaje ya salió</TonoBadge>}
+                              {p.recurso_vencido && (
+                                <TonoBadge tono="peligro">
+                                  {p.tipo_recurso === "encomienda" ? "Envío cerrado" : "Boletos vencidos"}
+                                </TonoBadge>
+                              )}
+                            </span>
+                          )}
+                        </TableCell>
+                        <TableCell className="hidden xl:table-cell">
+                          <span className="block">{nombreMetodo(p.metodo_tipo)}</span>
+                          {p.metodo_tipo !== "ZELLE" && p.banco_emisor && (
+                            <span className="block text-[13px] text-muted-foreground">Desde {p.banco_emisor}</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell">
+                          <span className="font-mono text-[13px] text-foreground">{p.numero_referencia || "—"}</span>
+                          {p.referencia_repetida && (
+                            <span className="mt-1 flex items-center gap-1 text-[13px] font-medium text-warning-text">
+                              <Warning weight="fill" className="size-3.5 shrink-0" aria-hidden />
+                              Repetida
+                            </span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Monto usd={p.monto_usd} bs={p.monto_bs} tasa={tasa} moneda={p.moneda} size="sm" align="right" />
+                          {/* Lo declarado frente a lo esperado, bajo el monto (sin columna propia: la tabla cabe a 1024). */}
+                          <span className="mt-1 hidden justify-end lg:flex">
+                            <Diferencia pago={p} />
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="relative z-10"
+                            onClick={() => setPagoAbierto(p.pago_id)}
+                            aria-label={`Verificar el pago de ${cliente}`}
+                          >
+                            Verificar pago
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            )}
+            tarjeta={(p) => {
+              const tasa = tasaDe(p);
+              const cliente = p.cliente_nombre || "Sin nombre";
+              const salio = viajeYaSalio(p, ahora);
+              return (
+                <EntityCard
+                  onClick={() => setPagoAbierto(p.pago_id)}
+                  etiqueta={`Verificar el pago de ${cliente}`}
+                  leading={
+                    <IconTile
+                      icon={p.tipo_recurso === "encomienda" ? ICONO_SECCION.taquillaEncomiendas : ICONO_SECCION.taquillaBoletos}
+                      tone={p.tipo_recurso === "encomienda" ? "coral" : "sky"}
+                    />
+                  }
+                  title={cliente}
+                  subtitle={conceptoDePago(p)}
+                  lineasSubtitulo={2}
+                  adorno={<Monto usd={p.monto_usd} bs={p.monto_bs} tasa={tasa} moneda={p.moneda} size="sm" align="right" />}
+                  badge={
+                    <span className="flex min-w-0 flex-col items-start gap-1">
+                      <Diferencia pago={p} />
+                      {p.referencia_repetida && (
+                        <span className="flex items-center gap-1 text-[13px] font-medium text-warning-text">
+                          <Warning weight="fill" className="size-3.5 shrink-0" aria-hidden />
+                          Referencia repetida
+                        </span>
+                      )}
+                      {salio && <span className="text-[13px] font-medium text-warning-text">El viaje ya salió</span>}
+                      {p.recurso_vencido && (
+                        <span className="text-[13px] font-medium text-destructive-text">
+                          {p.tipo_recurso === "encomienda" ? "Envío cerrado" : "Boletos vencidos"}
+                        </span>
+                      )}
+                    </span>
+                  }
+                  meta={ahora > 0 ? formatHaceTiempo(p.creado_at, new Date(ahora)) : undefined}
+                />
+              );
+            }}
+          />
           <PaginacionTabla pagina={pagina} paginas={paginas} onCambio={ir} />
         </Card>
       )}
@@ -281,7 +348,7 @@ export default function PagosPorVerificarPage() {
   return (
     <Suspense
       fallback={
-        <div className="flex flex-col gap-6">
+        <div className="mx-auto flex w-full max-w-7xl flex-col gap-8">
           <PageHeader title="Pagos por verificar" />
           <TablaSkeleton columnas={COLUMNAS} />
         </div>

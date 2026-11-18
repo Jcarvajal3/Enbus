@@ -15,10 +15,10 @@ interface TarifaVigenteCardProps {
 
 function Concepto({ etiqueta, valor, ayuda }: { etiqueta: string; valor: string; ayuda?: string }) {
   return (
-    <div className="flex min-w-0 flex-col gap-0.5 rounded-md bg-muted p-3">
-      <dt className="text-xs text-muted-foreground">{etiqueta}</dt>
-      <dd className="text-base font-semibold text-foreground tabular-nums">{valor}</dd>
-      {ayuda && <dd className="text-xs text-muted-foreground">{ayuda}</dd>}
+    <div className="flex min-w-0 flex-col gap-0.5 rounded-md bg-surface p-3">
+      <dt className="text-[13px] text-muted-foreground">{etiqueta}</dt>
+      <dd className="text-[15px] font-semibold text-foreground tabular-nums">{valor}</dd>
+      {ayuda && <dd className="text-[13px] text-muted-foreground">{ayuda}</dd>}
     </div>
   );
 }
@@ -63,18 +63,18 @@ export function TarifaVigenteCard({ tarifa, programada = null }: TarifaVigenteCa
           <Concepto etiqueta="Medida máxima" valor={`${formatNumeroVE(tarifa.dimensiones_max_cm, 0)} cm`} />
         </dl>
 
-        <dl className="grid grid-cols-1 gap-4 border-t border-border pt-4 text-sm sm:grid-cols-2">
+        <dl className="grid grid-cols-1 gap-4 text-[15px] md:grid-cols-2">
           <div className="flex flex-col gap-0.5">
-            <dt className="text-xs text-muted-foreground">Vigente desde</dt>
+            <dt className="text-[13px] text-muted-foreground">Vigente desde</dt>
             <dd className="tabular-nums">{formatFechaHoraVE(tarifa.vigente_desde)}</dd>
           </div>
           <div className="flex min-w-0 flex-col gap-0.5">
-            <dt className="text-xs text-muted-foreground">Publicada por</dt>
+            <dt className="text-[13px] text-muted-foreground">Publicada por</dt>
             <dd className="truncate">{tarifa.creador_nombre || "Sistema"}</dd>
           </div>
           {tarifa.nota && (
-            <div className="flex flex-col gap-0.5 sm:col-span-2">
-              <dt className="text-xs text-muted-foreground">Nota</dt>
+            <div className="flex flex-col gap-0.5 md:col-span-2">
+              <dt className="text-[13px] text-muted-foreground">Nota</dt>
               <dd>{tarifa.nota}</dd>
             </div>
           )}

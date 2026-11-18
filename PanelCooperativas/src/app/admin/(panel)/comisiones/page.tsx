@@ -14,10 +14,12 @@ export default async function AdminComisionesPage() {
   ]);
 
   return (
-    <div className="flex flex-col gap-6">
-      <PageHeader title="Comisiones" description="Ciclos de comisión de cada cooperativa y sus pagos.">
-        <GenerarCicloDialog cooperativas={cooperativas} tasa={tasa} />
-      </PageHeader>
+    <div className="flex flex-col gap-8">
+      <PageHeader
+        title="Comisiones"
+        description="Ciclos de comisión de cada cooperativa y sus pagos."
+        principal={<GenerarCicloDialog cooperativas={cooperativas} tasa={tasa} />}
+      />
 
       <CiclosTable data={ciclos} truncado={truncado} cooperativas={cooperativas} tasa={tasa} />
     </div>

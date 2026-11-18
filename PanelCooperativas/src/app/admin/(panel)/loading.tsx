@@ -5,9 +5,9 @@ import { TablaSkeleton } from "@/components/tabla-skeleton";
 // (PageHeader + filtros + tabla a ancho completo; PN-25, AD5-42). Sin animación de entrada.
 export default function AdminPanelLoading() {
   return (
-    <div className="flex w-full flex-col gap-6">
+    <div className="flex w-full flex-col gap-8">
       <div className="flex flex-col gap-2" aria-hidden>
-        <Skeleton className="h-8 w-56" />
+        <Skeleton className="h-10 w-56" />
       </div>
       <TablaSkeleton columnas={6} conFiltros />
     </div>

@@ -103,23 +103,24 @@ export function OpcionTile({
         if (!seleccionado) onSelect();
       }}
       className={cn(
-        "relative flex min-w-0 flex-col items-start gap-2 rounded-md border border-border bg-card p-4 text-left text-foreground transition-colors outline-none",
-        "hover:border-input-border hover:bg-muted/50",
-        "focus-visible:ring-[3px] focus-visible:ring-ring/50",
+        "relative flex min-w-0 flex-col items-start gap-2 rounded-xl border-2 border-transparent bg-surface p-4 text-left text-foreground transition-colors outline-none",
+        "hover:bg-surface-dark",
+        "focus-visible:ring-[3px] focus-visible:ring-accent-strong/30",
         "disabled:cursor-not-allowed disabled:opacity-50",
-        seleccionado && "border-accent-strong bg-accent-light ring-1 ring-accent-strong hover:border-accent-strong hover:bg-accent-light",
+        seleccionado && "border-accent-strong bg-card shadow-card hover:bg-card",
         !Icono && "pr-10",
         className
       )}
     >
       {Icono && (
         <Icono
-          className={cn("size-5 shrink-0", seleccionado ? "text-accent-strong" : "text-muted-foreground")}
+          className={cn("size-6 shrink-0", seleccionado ? "text-accent-strong" : "text-muted-foreground")}
+          weight="fill"
           aria-hidden
         />
       )}
-      <span className="min-w-0 text-sm leading-tight font-semibold">{titulo}</span>
-      {detalle && <span className="min-w-0 text-sm text-muted-foreground">{detalle}</span>}
+      <span className="min-w-0 text-[15px] leading-tight font-semibold">{titulo}</span>
+      {detalle && <span className="min-w-0 text-[13px] text-muted-foreground">{detalle}</span>}
       {seleccionado && (
         <CheckCircle className="absolute top-3 right-3 size-5 text-accent-strong" weight="fill" aria-hidden />
       )}

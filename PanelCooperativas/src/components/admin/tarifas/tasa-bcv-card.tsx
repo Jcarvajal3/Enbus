@@ -112,12 +112,12 @@ export function TasaBCVCard({ tasa, hoy, className }: TasaBCVCardProps) {
   const errorDe = (campo: Campo) => (error?.campo === campo ? error.mensaje : null);
 
   return (
-    <Card id="tasa-bcv" className={cn("scroll-mt-20", desactualizada && "border-warning/50", className)}>
+    <Card id="tasa-bcv" className={cn("scroll-mt-20", desactualizada && "ring-1 ring-warning/40", className)}>
       <CardHeader>
         <CardTitle>Tasa BCV</CardTitle>
         {!formAbierto && (
           <CardAction>
-            <Button variant="outline" size="sm" onClick={abrirFormulario}>
+            <Button variant="outline" onClick={abrirFormulario}>
               <PencilSimple aria-hidden /> Cargar tasa manual
             </Button>
           </CardAction>
@@ -128,38 +128,38 @@ export function TasaBCVCard({ tasa, hoy, className }: TasaBCVCardProps) {
         <div role="status" className="flex flex-col gap-1">
           {tasa ? (
             <>
-              <p className="text-2xl font-semibold tracking-tight tabular-nums">
-                {formatNumeroVE(tasa.tasa)} <span className="text-base font-medium text-muted-foreground">Bs/USD</span>
+              <p className="text-[28px] leading-tight font-semibold tracking-tight tabular-nums">
+                {formatNumeroVE(tasa.tasa)} <span className="text-[15px] font-medium text-muted-foreground">Bs/USD</span>
               </p>
-              <p className="text-xs text-muted-foreground tabular-nums">
+              <p className="text-[13px] text-muted-foreground tabular-nums">
                 {formatFechaVE(tasa.fecha)} · fuente {tasa.fuente === "manual" ? "manual" : "automática"}
                 {actualizacion ? ` · ${actualizacion}` : ""}
               </p>
             </>
           ) : (
             <>
-              <p className="text-base font-semibold">Sin tasa BCV registrada</p>
-              <p className="text-sm text-muted-foreground">Sin tasa no se puede cobrar en bolívares. Cárgala a mano.</p>
+              <p className="text-[15px] font-semibold">Sin tasa BCV registrada</p>
+              <p className="text-[15px] text-muted-foreground">Sin tasa no se puede cobrar en bolívares. Cárgala a mano.</p>
             </>
           )}
         </div>
 
         {tasa && desactualizada && (
-          <div className="flex items-start gap-2 rounded-md bg-warning-light p-3 text-sm text-warning-deep">
-            <Warning weight="fill" className="mt-0.5 size-4 shrink-0 text-warning-text" aria-hidden />
+          <div className="flex items-start gap-2 rounded-md bg-warning-light p-3 text-[15px] text-warning-deep">
+            <Warning weight="fill" className="mt-0.5 size-5 shrink-0 text-warning-text" aria-hidden />
             <p>No se actualiza desde el {fechaTasaCorta(tasa.fecha)}. Revisa la tarea programada o cárgala a mano.</p>
           </div>
         )}
 
         {formAbierto && (
-          <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4 border-t border-border pt-4">
+          <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-5 pt-2">
             <div className="flex flex-col gap-1">
-              <h3 className="text-sm font-semibold">Cargar tasa manual</h3>
-              <p className="text-sm text-muted-foreground">Solo si la automática falla; la manual no se sobrescribe.</p>
+              <h3 className="text-[17px] font-semibold">Cargar tasa manual</h3>
+              <p className="text-[15px] text-muted-foreground">Solo si la automática falla; la manual no se sobrescribe.</p>
             </div>
 
-            <FieldGroup className="gap-4">
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <FieldGroup className="gap-5">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <Field data-invalid={errorDe("fecha") ? true : undefined}>
                   <FieldLabel htmlFor="tasa-fecha">Fecha de vigencia</FieldLabel>
                   <Input
@@ -217,7 +217,7 @@ export function TasaBCVCard({ tasa, hoy, className }: TasaBCVCardProps) {
 
             {error && !error.campo && <AvisoError>{error.mensaje}</AvisoError>}
 
-            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <div className="flex flex-col-reverse gap-2 md:flex-row md:justify-end">
               <Button type="button" variant="outline" onClick={() => setFormAbierto(false)} disabled={guardando}>
                 Cancelar
               </Button>

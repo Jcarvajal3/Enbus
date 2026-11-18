@@ -112,7 +112,7 @@ export function AprobarDialog({ cooperativaId, nombre, rif, trigger, onHecho }: 
             <DialogDescription>Quedará activa y podrá vender en la app. Le avisaremos por correo.</DialogDescription>
           </DialogHeader>
 
-          <dl className="flex flex-col gap-2 rounded-md bg-muted p-4 text-sm">
+          <dl className="flex flex-col gap-2 rounded-md bg-surface p-4 text-[15px]">
             <div className="flex justify-between gap-4">
               <dt className="text-muted-foreground">Cooperativa</dt>
               <dd className="text-right font-medium">{nombre}</dd>
@@ -138,10 +138,10 @@ export function AprobarDialog({ cooperativaId, nombre, rif, trigger, onHecho }: 
           {error && <AvisoError>{error}</AvisoError>}
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={loading}>
+            <Button size="lg" type="button" variant="outline" onClick={() => setOpen(false)} disabled={loading}>
               Cancelar
             </Button>
-            <Button type="submit" disabled={loading} aria-busy={loading || undefined}>
+            <Button size="lg" type="submit" disabled={loading} aria-busy={loading || undefined}>
               {loading && <Spinner size="sm" aria-hidden />}
               {loading ? "Aprobando…" : "Aprobar y avisar"}
             </Button>

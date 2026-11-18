@@ -4,19 +4,15 @@
 import dynamic from "next/dynamic";
 import { Coins } from "@phosphor-icons/react/dist/ssr";
 import { PageHeader } from "@/components/page-header";
+import { SectionLabel } from "@/components/section-label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
-import { StatusBadge } from "@/components/status-badge";
 import { KpiCard } from "@/components/kpi-card";
-import { FilaVacia } from "@/components/fila-vacia";
-import { CeldaEnlace } from "@/components/celda-enlace";
 import { ChecklistPuestaEnMarcha, type ChecklistCooperativa } from "@/components/checklist-puesta-en-marcha";
 import type { MontoFormateado } from "@/lib/dinero";
-import { formatFechaHoraCortaVE } from "@/lib/fechas";
-import { formatCiudad } from "@/lib/ciudades";
 import { ICONO_SECCION } from "@/lib/navigation";
 import { BandejaAtencion } from "./bandeja-atencion";
+import { EncomiendasRecientes } from "./encomiendas-recientes";
 import { ErrorRecargable } from "./error-recargable";
 import type { ResultadoBandeja } from "./actions";
 
@@ -30,7 +26,7 @@ const ActivityChart = dynamic(
           <CardTitle>Actividad</CardTitle>
         </CardHeader>
         <CardContent>
-          <Skeleton className="h-[250px] w-full" />
+          <Skeleton className="h-[240px] w-full md:h-[250px]" />
         </CardContent>
       </Card>
     ),
@@ -49,14 +45,6 @@ export type EncomiendaReciente = {
   remitente_nombre?: string | null;
   sender: unknown;
 };
-
-/** Quién envía: en el alta presencial `sender_id` es el empleado; el remitente real está en `remitente_nombre`. */
-function nombreRemitente(enc: EncomiendaReciente) {
-  if (enc.origen_registro === "TAQUILLA" && enc.remitente_nombre) return enc.remitente_nombre;
-  const embed = enc.sender;
-  const sender = (Array.isArray(embed) ? embed[0] : embed) as { nombre_completo?: string | null } | null;
-  return enc.remitente_nombre || sender?.nombre_completo || "Sin nombre";
-}
 
 export type DatosResumen = {
   esAdmin: boolean;
@@ -84,27 +72,37 @@ export function ResumenVista({
   recientesError,
 }: DatosResumen) {
   return (
-    <div className="flex flex-col gap-6">
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-8">
       <PageHeader title="Resumen" />
 
       {checklist && <ChecklistPuestaEnMarcha checklist={checklist} />}
 
       <BandejaAtencion inicial={bandeja} />
 
-      <section aria-labelledby="hoy-titulo" className="flex flex-col gap-3">
-        <h2 id="hoy-titulo" className="text-lg font-semibold">
-          Hoy
-        </h2>
+      <section aria-label="Hoy" className="flex flex-col gap-4">
+        <SectionLabel>Hoy</SectionLabel>
         {kpisConError && <ErrorRecargable titulo="No pudimos cargar algunos datos de hoy" />}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <KpiCard title="Encomiendas recibidas" value={kpis.recibidas} icon={ICONO_SECCION.taquillaEncomiendas} />
-          <KpiCard title="Encomiendas despachadas" value={kpis.despachadas} icon={ICONO_SECCION.despacho} />
+        {/* Móvil: rejilla compacta de 2 columnas; escritorio: 2 y luego 4. */}
+        <div className="grid grid-cols-2 gap-3 md:gap-4 xl:grid-cols-4">
           <KpiCard title="Boletos vendidos" value={kpis.boletos} icon={ICONO_SECCION.taquillaBoletos} />
           <KpiCard
             title="Ingresos verificados"
+            tono="mint"
             value={ingresos ? <span aria-label={ingresos.accesible}>{ingresos.principal}</span> : "—"}
             detail={ingresos?.secundario ?? null}
             icon={Coins}
+          />
+          <KpiCard
+            title="Encomiendas recibidas"
+            value={kpis.recibidas}
+            icon={ICONO_SECCION.taquillaEncomiendas}
+            tono="coral"
+          />
+          <KpiCard
+            title="Encomiendas despachadas"
+            value={kpis.despachadas}
+            icon={ICONO_SECCION.despacho}
+            tono="coral"
           />
         </div>
       </section>
@@ -112,53 +110,12 @@ export function ResumenVista({
       {/* La tarjeta «Comisión con EnBus» queda oculta temporalmente mientras se valida el modelo de negocio. */}
       {esAdmin && <ActivityChart data={chartData} />}
 
-      <section aria-labelledby="recientes-titulo" className="flex flex-col gap-3">
-        <h2 id="recientes-titulo" className="text-lg font-semibold">
-          Encomiendas recientes
-        </h2>
+      <section aria-label="Encomiendas recientes" className="flex flex-col gap-4">
+        <SectionLabel>Encomiendas recientes</SectionLabel>
         {recientesError ? (
           <ErrorRecargable titulo="No pudimos cargar las encomiendas recientes" />
         ) : (
-          <Card className="gap-0 overflow-hidden p-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Código</TableHead>
-                  <TableHead className="hidden xl:table-cell">Remitente</TableHead>
-                  <TableHead className="hidden sm:table-cell">Destinatario</TableHead>
-                  <TableHead className="hidden lg:table-cell">Ruta</TableHead>
-                  <TableHead>Estado</TableHead>
-                  <TableHead className="hidden sm:table-cell">Fecha</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {encomiendasRecientes.length > 0 ? (
-                  encomiendasRecientes.map((enc) => (
-                    <TableRow key={enc.id ?? enc.tracking_id} className="relative">
-                      <CeldaEnlace
-                        href={`/cooperativas/taquilla/encomiendas?encomienda=${encodeURIComponent(enc.id)}`}
-                        etiqueta={`Ver encomienda ${enc.tracking_id}`}
-                        className="font-mono text-sm text-foreground"
-                      >
-                        {enc.tracking_id}
-                      </CeldaEnlace>
-                      <TableCell className="hidden max-w-48 truncate xl:table-cell">{nombreRemitente(enc)}</TableCell>
-                      <TableCell className="hidden max-w-48 truncate sm:table-cell">{enc.receiver_nombre}</TableCell>
-                      <TableCell className="hidden lg:table-cell">
-                        {formatCiudad(enc.ciudad_origen)} → {formatCiudad(enc.ciudad_destino)}
-                      </TableCell>
-                      <TableCell>
-                        <StatusBadge status={enc.estado} dominio="encomienda" />
-                      </TableCell>
-                      <TableCell className="hidden whitespace-nowrap tabular-nums sm:table-cell">{formatFechaHoraCortaVE(enc.created_at)}</TableCell>
-                    </TableRow>
-                  ))
-                ) : (
-                  <FilaVacia colSpan={6} icon={ICONO_SECCION.taquillaEncomiendas} titulo="Todavía no hay encomiendas" />
-                )}
-              </TableBody>
-            </Table>
-          </Card>
+          <EncomiendasRecientes items={encomiendasRecientes} />
         )}
       </section>
     </div>

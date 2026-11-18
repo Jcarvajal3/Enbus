@@ -16,7 +16,7 @@ export function DesbloquearPinButton({ encomiendaId, tracking }: { encomiendaId:
 
   return (
     <>
-      <Button variant="outline" onClick={() => setOpen(true)}>
+      <Button variant="outline" size="lg" onClick={() => setOpen(true)}>
         <Key aria-hidden /> Desbloquear PIN
       </Button>
       <ConfirmDialog

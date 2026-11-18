@@ -37,19 +37,19 @@ export function useUltimoEscaneo(): {
 const TONOS: Record<ResultadoEscaneo["tono"], { icono: Icon; caja: string; icon: string; lector: string }> = {
   exito: {
     icono: CheckCircle,
-    caja: "border-success/40 bg-success-light text-success-deep",
+    caja: "bg-success-light text-success-deep",
     icon: "text-success-text",
     lector: "Correcto",
   },
   error: {
     icono: XCircle,
-    caja: "border-destructive/40 bg-destructive-light text-destructive-deep",
+    caja: "bg-destructive-light text-destructive-deep",
     icon: "text-destructive-text",
     lector: "Error",
   },
   aviso: {
     icono: Warning,
-    caja: "border-warning/40 bg-warning-light text-warning-deep",
+    caja: "bg-warning-light text-warning-deep",
     icon: "text-warning-text",
     lector: "Atención",
   },
@@ -96,13 +96,13 @@ export function UltimoEscaneo({
     <section
       aria-label="Último escaneo"
       className={cn(
-        "rounded-md border p-3 text-sm",
-        estilo ? estilo.caja : "border-dashed border-border bg-muted/40 text-muted-foreground",
+        "rounded-xl p-5 text-[15px]",
+        estilo ? estilo.caja : "bg-card text-muted-foreground shadow-card",
         className
       )}
     >
       {/* La hora relativa queda fuera de la región viva: no se anuncia cada segundo. */}
-      <p className="mb-1.5 text-xs font-medium">
+      <p className="mb-2 text-[13px] font-medium">
         Último escaneo
         {resultado && ahora > 0 && <span> · {haceCuanto(resultado.at, ahora)}</span>}
       </p>
@@ -114,13 +114,13 @@ export function UltimoEscaneo({
           >
             <Icono className={cn("mt-0.5 size-6 shrink-0", estilo.icon)} weight="fill" aria-hidden />
             <div className="min-w-0 flex-1">
-              <p className="text-base font-semibold leading-snug">
+              <p className="text-[17px] font-semibold leading-snug">
                 <span className="sr-only">{estilo.lector}: </span>
                 {resultado.titulo}
               </p>
               {resultado.detalle && <p className="leading-snug">{resultado.detalle}</p>}
               {resultado.codigo && (
-                <p className="mt-1 truncate font-mono text-xs" title={resultado.codigo}>
+                <p className="mt-1 truncate font-mono text-[13px]" title={resultado.codigo}>
                   <span className="sr-only">Código: </span>
                   {resultado.codigo}
                 </p>

@@ -11,11 +11,11 @@ export function AvisoError({ children, className }: { children: ReactNode; class
     <div
       role="alert"
       className={cn(
-        "flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive-light p-3 text-sm text-destructive-deep",
+        "flex items-start gap-2 rounded-xl bg-destructive-light p-4 text-[15px] text-destructive-deep",
         className
       )}
     >
-      <WarningCircle className="mt-0.5 size-4 shrink-0 text-destructive-text" weight="fill" aria-hidden />
+      <WarningCircle className="mt-0.5 size-5 shrink-0 text-destructive-text" weight="fill" aria-hidden />
       <div className="min-w-0 flex-1">{children}</div>
     </div>
   );

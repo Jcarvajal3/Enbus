@@ -10,6 +10,10 @@ import Link from "next/link";
 import { ArrowRight, CheckCircle } from "@phosphor-icons/react";
 import type { Icon } from "@phosphor-icons/react";
 import { ErrorState } from "@/components/error-state";
+import { IconTile } from "@/components/icon-tile";
+import { EntityCard } from "@/components/entity-card";
+import { SectionLabel } from "@/components/section-label";
+import { Card } from "@/components/ui/card";
 import { MSG } from "@/lib/errores";
 import { Monto } from "@/components/monto";
 import { fechaVE, formatFechaVE, formatHoraVE, hoyVE, sumarDiasVE } from "@/lib/fechas";
@@ -141,10 +145,8 @@ export function BandejaAtencion({ inicial }: { inicial: ResultadoBandeja }) {
   };
 
   return (
-    <section aria-labelledby="bandeja-titulo" className="flex flex-col gap-3">
-      <h2 id="bandeja-titulo" className="text-lg font-semibold">
-        Requiere tu atención
-      </h2>
+    <section aria-label="Requiere tu atención" className="flex flex-col gap-4">
+      <SectionLabel>Requiere tu atención</SectionLabel>
       {!resultado.ok ? (
         <ErrorState
           compacto
@@ -163,41 +165,60 @@ function ListaTarjetas({ bandeja }: { bandeja: BandejaCooperativa }) {
   const lista = tarjetas(bandeja);
   if (lista.length === 0) {
     return (
-      <p className="flex items-center gap-2 rounded-md border border-border bg-card p-4 text-sm font-medium text-success-text">
-        <CheckCircle className="size-5 shrink-0" weight="fill" aria-hidden />
-        Todo al día. Nada pendiente por ahora.
-      </p>
+      <Card className="flex-row items-center gap-4 px-5 py-5">
+        <IconTile icon={CheckCircle} tone="success" />
+        <p className="text-[15px] font-medium text-foreground">Todo al día. Nada pendiente por ahora.</p>
+      </Card>
     );
   }
   return (
-    <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-      {lista.map(({ clave, href, icono: Icono, titulo, detalle, urgente }) => (
-        <li key={clave}>
-          <Link
-            href={href}
-            className={cn(
-              "group flex h-full items-start gap-3 rounded-md border bg-card p-4 outline-none motion-safe:transition-colors",
-              "focus-visible:ring-[3px] focus-visible:ring-ring/50",
-              urgente ? "border-warning/50 hover:border-warning" : "border-border hover:border-input-border"
-            )}
-          >
-            <Icono
-              className={cn("mt-0.5 size-5 shrink-0", urgente ? "text-warning-text" : "text-muted-foreground")}
-              aria-hidden
+    <>
+      {/* Móvil: cada pendiente es una EntityCard tocable. */}
+      <ul role="list" aria-label="Requiere tu atención" className="flex flex-col gap-3 md:hidden">
+        {lista.map(({ clave, href, icono: Icono, titulo, detalle, urgente }) => (
+          <li key={clave}>
+            <EntityCard
+              href={href}
+              leading={<IconTile icon={Icono} tone={urgente ? "warning" : "sky"} />}
+              title={titulo}
+              subtitle={typeof detalle === "string" ? detalle : undefined}
+              adorno={typeof detalle === "string" ? undefined : detalle}
+              lineasSubtitulo={2}
+              etiqueta={typeof detalle === "string" ? `${titulo}. ${detalle}` : titulo}
+              className={cn(urgente && "ring-1 ring-warning/40")}
             />
-            <span className="flex min-w-0 flex-1 flex-col gap-1">
-              <span className={cn("text-sm font-medium leading-snug", urgente ? "text-warning-text" : "text-foreground")}>
-                {titulo}
-              </span>
-              <span className="text-sm text-muted-foreground">{detalle}</span>
-            </span>
-            <ArrowRight
-              className="mt-0.5 size-4 shrink-0 text-muted-foreground motion-safe:transition-transform motion-safe:group-hover:translate-x-0.5"
-              aria-hidden
-            />
-          </Link>
-        </li>
-      ))}
-    </ul>
+          </li>
+        ))}
+      </ul>
+      <ul className="hidden gap-4 md:grid md:grid-cols-2 xl:grid-cols-3">
+        {lista.map(({ clave, href, icono: Icono, titulo, detalle, urgente }) => (
+          <li key={clave}>
+            <Link
+              href={href}
+              className="group block h-full rounded-xl outline-none focus-visible:ring-[3px] focus-visible:ring-accent-strong/30"
+            >
+              <Card
+                className={cn(
+                  "h-full flex-row items-start gap-4 px-5 py-5 motion-safe:transition-shadow group-hover:shadow-raised",
+                  urgente && "ring-1 ring-warning/40"
+                )}
+              >
+                <IconTile icon={Icono} tone={urgente ? "warning" : "sky"} />
+                <span className="flex min-w-0 flex-1 flex-col gap-1">
+                  <span className={cn("text-[15px] leading-snug font-semibold", urgente ? "text-warning-text" : "text-foreground")}>
+                    {titulo}
+                  </span>
+                  <span className="text-[13px] text-muted-foreground">{detalle}</span>
+                </span>
+                <ArrowRight
+                  className="mt-1 size-4 shrink-0 text-muted-foreground motion-safe:transition-transform motion-safe:group-hover:translate-x-0.5"
+                  aria-hidden
+                />
+              </Card>
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </>
   );
 }

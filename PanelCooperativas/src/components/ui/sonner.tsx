@@ -14,6 +14,9 @@ const Toaster = ({ ...props }: ToasterProps) => {
       theme={theme as ToasterProps["theme"]}
       className="toaster group"
       closeButton
+      // En móvil los avisos quedan por encima de la barra de pestañas (`--alto-pestanas`, globals.css).
+      offset={{ bottom: "calc(var(--alto-pestanas, 0px) + 1.5rem)" }}
+      mobileOffset={{ bottom: "calc(var(--alto-pestanas, 0px) + 0.75rem)" }}
       duration={3000}
       icons={{
         success: <CheckCircleIcon className="size-4 text-success-text" weight="fill" aria-hidden />,

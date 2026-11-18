@@ -5,13 +5,15 @@
 // embarque. Pestañas en la URL (`?ver=`): Por embarcar · Embarcados · Todos.
 // Pensada para el teléfono en la puerta del bus: filas apiladas, sin tabla.
 
-import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import { EntityCard } from "@/components/entity-card";
+import { ListaResponsive } from "@/components/lista-responsive";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/empty-state";
 import { ErrorState } from "@/components/error-state";
 import { StatusBadge } from "@/components/status-badge";
 import { TabsUrl } from "@/components/barra-filtros";
+import { SectionLabel } from "@/components/section-label";
 import { useParamUrl } from "@/hooks/use-param-url";
 import { formatCodigoBoleto } from "@/lib/artefactos.generated";
 import { formatHoraVE } from "@/lib/fechas";
@@ -56,6 +58,28 @@ export function conteoEmbarque(pasajeros: PasajeroEmbarque[]) {
 
 const VISTAS = ["por-embarcar", "embarcados", "todos"] as const;
 
+function datosPasajero(b: PasajeroEmbarque) {
+  return {
+    nombre: b.pasajero_nombre || b.comprador?.nombre_completo || "Sin nombre",
+    cedula: b.pasajero_cedula || b.comprador?.cedula_rif,
+    usado: b.estado === "USADO",
+  };
+}
+
+function AsientoPasajero({ asiento, usado }: { asiento: string; usado: boolean }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex h-11 min-w-11 shrink-0 items-center justify-center rounded-2xl px-2 font-mono text-[15px] font-semibold tabular-nums",
+        usado ? "bg-success-light text-success-text" : "bg-accent-light text-accent-strong"
+      )}
+    >
+      <span className="sr-only">Asiento </span>
+      {asiento}
+    </span>
+  );
+}
+
 export function PasajerosEmbarque({
   pasajeros,
   cargando,
@@ -75,11 +99,9 @@ export function PasajerosEmbarque({
   const visibles = ver === "por-embarcar" ? porEmbarcar : ver === "embarcados" ? embarcados : pasajeros;
 
   return (
-    <section aria-labelledby="embarque-pasajeros" className="flex flex-col gap-3">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h2 id="embarque-pasajeros" className="text-lg font-semibold tracking-tight">
-          Pasajeros del bus
-        </h2>
+    <section aria-label="Pasajeros del bus" className="flex flex-col gap-4">
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <SectionLabel>Pasajeros del bus</SectionLabel>
         <TabsUrl
           param="ver"
           defecto="por-embarcar"
@@ -91,57 +113,82 @@ export function PasajerosEmbarque({
         />
       </div>
 
-      <Card className="gap-0 overflow-hidden p-0">
-        {error ? (
-          <ErrorState compacto titulo="No pudimos cargar los pasajeros" descripcion={error} onReintentar={onReintentar} />
-        ) : cargando && pasajeros.length === 0 ? (
-          <div className="flex flex-col gap-2 p-4" role="status" aria-label="Cargando los pasajeros">
-            {[0, 1, 2, 3].map((i) => (
-              <Skeleton key={i} className="h-14 w-full rounded-md" />
-            ))}
-          </div>
-        ) : visibles.length === 0 ? (
-          <EmptyState
-            compacto
-            icon={ICONO_SECCION.embarque}
-            title={
-              pasajeros.length === 0
-                ? "Este bus todavía no tiene pasajeros"
-                : ver === "por-embarcar"
-                  ? "Ya embarcaron todos"
-                  : "Nadie ha embarcado todavía"
-            }
-          />
-        ) : (
-          <ul className="divide-y divide-border">
-            {visibles.map((b) => {
-              const nombre = b.pasajero_nombre || b.comprador?.nombre_completo || "Sin nombre";
-              const cedula = b.pasajero_cedula || b.comprador?.cedula_rif;
-              const usado = b.estado === "USADO";
-              return (
-                <li key={b.id} className={cn("flex items-center gap-3 px-4 py-3", usado && "bg-muted/40")}>
-                  <Badge variant="outline" className="h-9 min-w-11 shrink-0 justify-center font-mono text-base tabular-nums">
-                    {b.asiento}
-                  </Badge>
-                  <div className="flex min-w-0 flex-1 flex-col">
-                    <span className="truncate font-medium">{nombre}</span>
-                    <span className="truncate text-xs text-muted-foreground">
-                      {cedula ? `${formatCedula(cedula)} · ` : ""}
-                      <span className="font-mono">{formatCodigoBoleto(b.codigo_boleto)}</span>
-                    </span>
-                  </div>
-                  <div className="flex shrink-0 flex-col items-end gap-1">
-                    <StatusBadge status={estadoUiPasajero(b)} dominio="boleto" />
-                    {usado && b.embarcado_at && (
-                      <span className="text-xs text-muted-foreground tabular-nums">{formatHoraVE(b.embarcado_at)}</span>
-                    )}
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </Card>
+      {error || (cargando && pasajeros.length === 0) || visibles.length === 0 ? (
+        <Card className="gap-0 p-0">
+          {error ? (
+            <ErrorState compacto titulo="No pudimos cargar los pasajeros" descripcion={error} onReintentar={onReintentar} />
+          ) : cargando && pasajeros.length === 0 ? (
+            <div className="flex flex-col gap-2 p-5" role="status" aria-label="Cargando los pasajeros">
+              {[0, 1, 2, 3].map((i) => (
+                <Skeleton key={i} className="h-14 w-full rounded-md" />
+              ))}
+            </div>
+          ) : (
+            <EmptyState
+              compacto
+              icon={ICONO_SECCION.embarque}
+              title={
+                pasajeros.length === 0
+                  ? "Este bus todavía no tiene pasajeros"
+                  : ver === "por-embarcar"
+                    ? "Ya embarcaron todos"
+                    : "Nadie ha embarcado todavía"
+              }
+            />
+          )}
+        </Card>
+      ) : (
+        <ListaResponsive
+          items={visibles}
+          clave={(b) => b.id}
+          etiqueta="Pasajeros del bus"
+          tabla={(items) => (
+            <Card className="gap-0 p-0">
+              <ul className="divide-y divide-border">
+                {items.map((b) => {
+                  const { nombre, cedula, usado } = datosPasajero(b);
+                  return (
+                    <li key={b.id} className={cn("flex items-center gap-3 px-4 py-3", usado && "bg-surface")}>
+                      <AsientoPasajero asiento={b.asiento} usado={usado} />
+                      <div className="flex min-w-0 flex-1 flex-col">
+                        <span className="truncate font-medium">{nombre}</span>
+                        <span className="truncate text-[13px] text-muted-foreground">
+                          {cedula ? `${formatCedula(cedula)} · ` : ""}
+                          <span className="font-mono">{formatCodigoBoleto(b.codigo_boleto)}</span>
+                        </span>
+                      </div>
+                      <div className="flex shrink-0 flex-col items-end gap-1">
+                        <StatusBadge status={estadoUiPasajero(b)} dominio="boleto" />
+                        {usado && b.embarcado_at && (
+                          <span className="text-[13px] text-muted-foreground tabular-nums">{formatHoraVE(b.embarcado_at)}</span>
+                        )}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </Card>
+          )}
+          tarjeta={(b) => {
+            const { nombre, cedula, usado } = datosPasajero(b);
+            return (
+              <EntityCard
+                leading={<AsientoPasajero asiento={b.asiento} usado={usado} />}
+                title={nombre}
+                subtitle={cedula ? formatCedula(cedula) : undefined}
+                badge={<StatusBadge status={estadoUiPasajero(b)} dominio="boleto" />}
+                meta={
+                  usado && b.embarcado_at
+                    ? `Embarcó ${formatHoraVE(b.embarcado_at)}`
+                    : formatCodigoBoleto(b.codigo_boleto)
+                }
+                etiqueta={`Asiento ${b.asiento}, ${nombre}`}
+                className={cn(usado && "bg-surface")}
+              />
+            );
+          }}
+        />
+      )}
     </section>
   );
 }

@@ -92,7 +92,7 @@ export function ChecklistPuestaEnMarcha({ checklist }: { checklist: ChecklistCoo
             : "Completa estos pasos para empezar a vender."}
         </CardDescription>
         <div
-          className="mt-2 h-2 w-full overflow-hidden rounded-full bg-muted"
+          className="mt-2 h-2 w-full overflow-hidden rounded-full bg-surface-dark"
           role="progressbar"
           aria-label="Pasos completados"
           aria-valuemin={0}
@@ -106,12 +106,12 @@ export function ChecklistPuestaEnMarcha({ checklist }: { checklist: ChecklistCoo
         </div>
       </CardHeader>
       <CardContent>
-        <ol className="divide-y divide-border overflow-hidden rounded-md border border-border">
+        <ol className="divide-y divide-border overflow-hidden rounded-md bg-surface">
           {lista.map((p) => (
             <li key={p.href}>
               <Link
                 href={p.href}
-                className="group flex items-center gap-3 p-3 outline-none hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:ring-inset motion-safe:transition-colors"
+                className="group flex items-center gap-3 p-4 outline-none hover:bg-surface-dark focus-visible:bg-surface-dark focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:ring-inset motion-safe:transition-colors"
               >
                 {p.hecho ? (
                   <CheckCircle className="size-5 shrink-0 text-success-text" weight="fill" aria-hidden />
@@ -119,11 +119,11 @@ export function ChecklistPuestaEnMarcha({ checklist }: { checklist: ChecklistCoo
                   <Circle className="size-5 shrink-0 text-muted-foreground" aria-hidden />
                 )}
                 <span className="min-w-0 flex-1">
-                  <span className={cn("block text-sm font-medium", p.hecho ? "text-muted-foreground" : "text-foreground")}>
+                  <span className={cn("block text-[15px] font-medium", p.hecho ? "text-muted-foreground" : "text-foreground")}>
                     {p.titulo}
                     {p.opcional && <span className="font-normal text-muted-foreground"> (opcional)</span>}
                   </span>
-                  <span className="block text-xs text-muted-foreground">{p.ayuda}</span>
+                  <span className="block text-[13px] text-muted-foreground">{p.ayuda}</span>
                   <span className="sr-only">{p.hecho ? "Hecho." : "Pendiente."}</span>
                 </span>
                 {!p.hecho && (

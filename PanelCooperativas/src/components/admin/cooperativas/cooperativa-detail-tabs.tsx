@@ -4,18 +4,20 @@
 // Pestañas en `?tab=` con el contador en la pestaña. Cada pestaña es su propia
 // tarjeta o tabla (sin título que repita la pestaña). Estados con `StatusBadge`.
 
-import { Coins, CreditCard, Receipt, Star } from "@phosphor-icons/react";
+import { Coins, CreditCard, MapPin, Path, Receipt, Star, User } from "@phosphor-icons/react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import type { CooperativaDetalle } from "@/lib/types/admin-cooperativas";
 import { Monto } from "@/components/monto";
 import { KpiCard } from "@/components/kpi-card";
 import { EmptyState } from "@/components/empty-state";
+import { EntityCard } from "@/components/entity-card";
+import { IconTile } from "@/components/icon-tile";
+import { ListaResponsive } from "@/components/lista-responsive";
 import { FilaVacia } from "@/components/fila-vacia";
-import { StatusBadge } from "@/components/status-badge";
+import { StatusBadge, TonoBadge } from "@/components/status-badge";
 import { useParamUrl } from "@/hooks/use-param-url";
 import { useTasaBCVAdmin } from "@/components/admin/dashboard/use-tasa-bcv-admin";
 import { CLASE_PESTANA, ConteoPestana, Dato, Vacio } from "@/components/admin/detalle";
@@ -97,16 +99,16 @@ export function CooperativaDetailTabs({ cooperativa }: CooperativaDetailTabsProp
       <TabsContent value="general">
         <Card>
           <CardHeader className="flex flex-row items-center gap-3">
-            <Avatar className="size-10 border border-border">
+            <Avatar className="size-12">
               <AvatarImage src={cooperativa.logo_url || ""} alt="" />
-              <AvatarFallback className="bg-muted text-xs font-semibold text-muted-foreground">
+              <AvatarFallback className="bg-surface text-[13px] font-semibold text-muted-foreground">
                 {cooperativa.nombre.substring(0, 2).toUpperCase()}
               </AvatarFallback>
             </Avatar>
             <CardTitle>Datos de la cooperativa</CardTitle>
           </CardHeader>
           <CardContent>
-            <dl className="grid gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
+            <dl className="grid gap-x-6 gap-y-4 md:grid-cols-2 lg:grid-cols-3">
               <Dato etiqueta="Nombre comercial">{cooperativa.nombre}</Dato>
               <Dato etiqueta="RIF">
                 <span className="flex flex-wrap items-center gap-2">
@@ -127,7 +129,7 @@ export function CooperativaDetailTabs({ cooperativa }: CooperativaDetailTabsProp
                 <span className="tabular-nums">{formatFechaVE(cooperativa.created_at)}</span>
               </Dato>
               {cooperativa.mensaje_registro && (
-                <Dato etiqueta="Mensaje al registrarse" className="sm:col-span-2 lg:col-span-3">
+                <Dato etiqueta="Mensaje al registrarse" className="md:col-span-2 lg:col-span-3">
                   <span className="whitespace-pre-line">{cooperativa.mensaje_registro}</span>
                 </Dato>
               )}
@@ -138,8 +140,32 @@ export function CooperativaDetailTabs({ cooperativa }: CooperativaDetailTabsProp
 
       {/* Sucursales */}
       <TabsContent value="sucursales">
-        <Card className="gap-0 overflow-hidden p-0">
-          <Table>
+        <Card className="gap-0 overflow-hidden p-0 max-md:overflow-visible max-md:bg-transparent max-md:shadow-none">
+          <ListaResponsive
+            items={cooperativa.sucursales}
+            clave={(suc) => suc.id}
+            etiqueta="sucursales"
+            vacio={
+              <div className="max-md:rounded-xl max-md:bg-card max-md:shadow-card">
+                <Table>
+                  <TableBody>
+                    <FilaVacia colSpan={5} titulo="Todavía no tiene sucursales" />
+                  </TableBody>
+                </Table>
+              </div>
+            }
+            tarjeta={(suc) => (
+              <EntityCard
+                leading={<IconTile icon={MapPin} tone={suc.activa ? "sky" : "neutral"} />}
+                title={suc.nombre}
+                subtitle={`${formatCiudad(suc.ciudad)} · ${formatCiudad(suc.estado_geografico) || suc.estado_geografico}`}
+                lineasSubtitulo={2}
+                badge={<StatusBadge status={String(suc.activa)} dominio="recurso" />}
+                meta={suc.telefono ? telefonoOVacio(suc.telefono) : undefined}
+              />
+            )}
+            tabla={(items) => (
+              <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Nombre</TableHead>
@@ -150,10 +176,7 @@ export function CooperativaDetailTabs({ cooperativa }: CooperativaDetailTabsProp
               </TableRow>
             </TableHeader>
             <TableBody>
-              {cooperativa.sucursales.length === 0 ? (
-                <FilaVacia colSpan={5} titulo="Todavía no tiene sucursales" />
-              ) : (
-                cooperativa.sucursales.map((suc) => (
+              {items.map((suc) => (
                   <TableRow key={suc.id}>
                     <TableCell className="font-medium">{suc.nombre}</TableCell>
                     <TableCell>
@@ -168,10 +191,11 @@ export function CooperativaDetailTabs({ cooperativa }: CooperativaDetailTabsProp
                       <StatusBadge status={String(suc.activa)} dominio="recurso" />
                     </TableCell>
                   </TableRow>
-                ))
-              )}
+                ))}
             </TableBody>
           </Table>
+            )}
+          />
         </Card>
       </TabsContent>
 
@@ -182,7 +206,7 @@ export function CooperativaDetailTabs({ cooperativa }: CooperativaDetailTabsProp
             <EmptyState compacto icon={CreditCard} title="Todavía no tiene métodos de pago" />
           </Card>
         ) : (
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {cooperativa.metodos_pago.map((metodo) => (
               <Card key={metodo.id} size="sm">
                 <CardHeader className="flex flex-row items-center justify-between gap-2">
@@ -215,8 +239,35 @@ export function CooperativaDetailTabs({ cooperativa }: CooperativaDetailTabsProp
 
       {/* Rutas */}
       <TabsContent value="rutas">
-        <Card className="gap-0 overflow-hidden p-0">
-          <Table>
+        <Card className="gap-0 overflow-hidden p-0 max-md:overflow-visible max-md:bg-transparent max-md:shadow-none">
+          <ListaResponsive
+            items={cooperativa.rutas}
+            clave={(ruta) => ruta.id}
+            etiqueta="rutas"
+            vacio={
+              <div className="max-md:rounded-xl max-md:bg-card max-md:shadow-card">
+                <Table>
+                  <TableBody>
+                    <FilaVacia colSpan={5} titulo="Todavía no tiene rutas" />
+                  </TableBody>
+                </Table>
+              </div>
+            }
+            tarjeta={(ruta) => (
+              <EntityCard
+                leading={<IconTile icon={Path} tone={ruta.activa ? "sky" : "neutral"} />}
+                title={`${formatCiudad(ruta.ciudad_origen)} → ${formatCiudad(ruta.ciudad_destino)}`}
+                subtitle={formatDuracion(ruta.duracion_estimada_min)}
+                adorno={
+                  ruta.precio_pasaje === null || ruta.precio_pasaje === undefined ? undefined : (
+                    <Monto usd={Number(ruta.precio_pasaje)} tasa={tasa} moneda="USD" size="sm" align="right" />
+                  )
+                }
+                badge={<StatusBadge status={String(ruta.activa)} dominio="recurso" />}
+              />
+            )}
+            tabla={(items) => (
+              <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Origen</TableHead>
@@ -227,18 +278,15 @@ export function CooperativaDetailTabs({ cooperativa }: CooperativaDetailTabsProp
               </TableRow>
             </TableHeader>
             <TableBody>
-              {cooperativa.rutas.length === 0 ? (
-                <FilaVacia colSpan={5} titulo="Todavía no tiene rutas" />
-              ) : (
-                cooperativa.rutas.map((ruta) => (
+              {items.map((ruta) => (
                   <TableRow key={ruta.id}>
                     <TableCell>
                       <span className="font-medium">{formatCiudad(ruta.ciudad_origen)}</span>
-                      <span className="block text-xs text-muted-foreground">{formatCiudad(ruta.estado_origen) || ruta.estado_origen}</span>
+                      <span className="block text-[13px] text-muted-foreground">{formatCiudad(ruta.estado_origen) || ruta.estado_origen}</span>
                     </TableCell>
                     <TableCell>
                       <span className="font-medium">{formatCiudad(ruta.ciudad_destino)}</span>
-                      <span className="block text-xs text-muted-foreground">{formatCiudad(ruta.estado_destino) || ruta.estado_destino}</span>
+                      <span className="block text-[13px] text-muted-foreground">{formatCiudad(ruta.estado_destino) || ruta.estado_destino}</span>
                     </TableCell>
                     <TableCell className="hidden text-right tabular-nums md:table-cell">
                       {formatDuracion(ruta.duracion_estimada_min)}
@@ -254,17 +302,41 @@ export function CooperativaDetailTabs({ cooperativa }: CooperativaDetailTabsProp
                       <StatusBadge status={String(ruta.activa)} dominio="recurso" />
                     </TableCell>
                   </TableRow>
-                ))
-              )}
+                ))}
             </TableBody>
           </Table>
+            )}
+          />
         </Card>
       </TabsContent>
 
       {/* Empleados */}
       <TabsContent value="empleados">
-        <Card className="gap-0 overflow-hidden p-0">
-          <Table>
+        <Card className="gap-0 overflow-hidden p-0 max-md:overflow-visible max-md:bg-transparent max-md:shadow-none">
+          <ListaResponsive
+            items={cooperativa.empleados}
+            clave={(emp) => emp.id}
+            etiqueta="empleados"
+            vacio={
+              <div className="max-md:rounded-xl max-md:bg-card max-md:shadow-card">
+                <Table>
+                  <TableBody>
+                    <FilaVacia colSpan={5} titulo="Todavía no tiene empleados" />
+                  </TableBody>
+                </Table>
+              </div>
+            }
+            tarjeta={(emp) => (
+              <EntityCard
+                leading={<IconTile icon={User} tone={emp.isBanned ? "danger" : "sky"} />}
+                title={emp.nombre_completo}
+                subtitle={emp.email || "Sin correo"}
+                badge={<StatusBadge status={emp.isBanned ? "SUSPENDIDA" : "ACTIVA"} dominio="cuenta" />}
+                meta={etiquetaRol(emp.role)}
+              />
+            )}
+            tabla={(items) => (
+              <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Nombre</TableHead>
@@ -275,44 +347,42 @@ export function CooperativaDetailTabs({ cooperativa }: CooperativaDetailTabsProp
               </TableRow>
             </TableHeader>
             <TableBody>
-              {cooperativa.empleados.length === 0 ? (
-                <FilaVacia colSpan={5} titulo="Todavía no tiene empleados" />
-              ) : (
-                cooperativa.empleados.map((emp) => (
+              {items.map((emp) => (
                   <TableRow key={emp.id}>
                     <TableCell>
                       <span className="block font-medium">{emp.nombre_completo}</span>
-                      <span className="block text-xs text-muted-foreground">{emp.email || "Sin correo"}</span>
+                      <span className="block text-[13px] text-muted-foreground">{emp.email || "Sin correo"}</span>
                     </TableCell>
-                    <TableCell className="hidden font-mono text-sm lg:table-cell">{documentoLegible(emp.cedula_rif)}</TableCell>
+                    <TableCell className="hidden font-mono text-[13px] lg:table-cell">{documentoLegible(emp.cedula_rif)}</TableCell>
                     <TableCell className="hidden md:table-cell">{telefonoOVacio(emp.telefono)}</TableCell>
                     <TableCell>
-                      <Badge variant="secondary">{etiquetaRol(emp.role)}</Badge>
+                      <TonoBadge tono="neutro">{etiquetaRol(emp.role)}</TonoBadge>
                     </TableCell>
                     <TableCell>
                       <StatusBadge status={emp.isBanned ? "SUSPENDIDA" : "ACTIVA"} dominio="cuenta" />
                     </TableCell>
                   </TableRow>
-                ))
-              )}
+                ))}
             </TableBody>
           </Table>
+            )}
+          />
         </Card>
       </TabsContent>
 
       {/* Calificaciones */}
       <TabsContent value="calificaciones" className="flex flex-col gap-4">
         <Card>
-          <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <CardContent className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div className="flex flex-col gap-1">
-              <span className="text-xs text-muted-foreground">Calificación general</span>
+              <span className="text-[13px] text-muted-foreground">Calificación general</span>
               <div className="flex items-center gap-3">
-                <span className="text-2xl font-semibold tracking-tight tabular-nums">
+                <span className="text-[28px] font-semibold tracking-tight tabular-nums">
                   {cooperativa.total_calificaciones > 0 ? formatNumeroVE(promedio, 1) : "—"}
                 </span>
                 <div className="flex flex-col gap-0.5">
                   <Estrellas n={Math.round(promedio)} className="size-4" />
-                  <span className="text-xs text-muted-foreground">
+                  <span className="text-[13px] text-muted-foreground">
                     {cooperativa.total_calificaciones === 1
                       ? "1 opinión"
                       : `${formatNumeroVE(cooperativa.total_calificaciones, 0)} opiniones`}
@@ -338,14 +408,14 @@ export function CooperativaDetailTabs({ cooperativa }: CooperativaDetailTabsProp
                 <li key={cal.id} className="flex flex-col gap-2 px-6 py-4">
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex min-w-0 items-center gap-3">
-                      <Avatar className="size-8 border border-border">
-                        <AvatarFallback className="bg-muted text-xs font-semibold text-muted-foreground">
+                      <Avatar className="size-10">
+                        <AvatarFallback className="bg-surface text-[13px] font-semibold text-muted-foreground">
                           {cal.usuario_nombre?.substring(0, 2).toUpperCase() || "US"}
                         </AvatarFallback>
                       </Avatar>
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-medium">{cal.usuario_nombre || "Pasajero"}</p>
-                        <p className="text-xs text-muted-foreground tabular-nums">{formatFechaVE(cal.created_at)}</p>
+                        <p className="truncate text-[15px] font-medium">{cal.usuario_nombre || "Pasajero"}</p>
+                        <p className="text-[13px] text-muted-foreground tabular-nums">{formatFechaVE(cal.created_at)}</p>
                       </div>
                     </div>
                     <span className="flex items-center gap-2">
@@ -353,12 +423,12 @@ export function CooperativaDetailTabs({ cooperativa }: CooperativaDetailTabsProp
                       <span className="sr-only">{cal.estrellas} de 5 estrellas</span>
                     </span>
                   </div>
-                  <p className="pl-11 text-sm">{cal.comentario || <Vacio texto="Sin comentario" />}</p>
+                  <p className="pl-13 text-[15px]">{cal.comentario || <Vacio texto="Sin comentario" />}</p>
                 </li>
               ))}
             </ul>
             {cooperativa.calificaciones.length < (cooperativa.total_calificaciones ?? 0) && (
-              <p className="border-t border-border px-6 py-3 text-xs text-muted-foreground">
+              <p className="border-t border-border px-6 py-3 text-[13px] text-muted-foreground">
                 Se muestran las {formatNumeroVE(cooperativa.calificaciones.length, 0)} reseñas más recientes.
               </p>
             )}

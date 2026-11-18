@@ -12,16 +12,18 @@ import { Suspense, useState, useEffect, useCallback, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import { X } from "@phosphor-icons/react";
 import { PageHeader } from "@/components/page-header";
+import { IconTile } from "@/components/icon-tile";
+import { SectionLabel } from "@/components/section-label";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AvisoError } from "@/components/aviso-error";
 import { ConfirmDialog, type ResultadoConfirmacion } from "@/components/confirm-dialog";
 import { EmptyState } from "@/components/empty-state";
 import { ErrorState } from "@/components/error-state";
+import { BarraAccionFija } from "@/components/barra-accion-fija";
 import { GrupoOpciones, OpcionTile } from "@/components/opcion-tile";
 import { ScanInput } from "@/components/scan-input";
 import { TonoBadge } from "@/components/status-badge";
@@ -129,11 +131,11 @@ function nEncomiendas(n: number) {
 /** Carga de la página: misma forma que la pantalla (dos columnas, sin spinner). */
 function DespachoSkeleton() {
   return (
-    <div className="flex flex-col gap-6" role="status" aria-label="Cargando">
+    <div className="flex flex-col gap-8" role="status" aria-label="Cargando">
       <Skeleton className="h-8 w-40" />
-      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
-        <Skeleton className="h-80 w-full rounded-md" />
-        <Skeleton className="h-48 w-full rounded-md" />
+      <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-2">
+        <Skeleton className="h-80 w-full rounded-xl" />
+        <Skeleton className="h-48 w-full rounded-xl" />
       </div>
     </div>
   );
@@ -358,18 +360,17 @@ function Despacho() {
   const IconoEscanear = ICONO_SECCION.escanear;
 
   return (
-    <div className="flex flex-col gap-6">
-      <PageHeader title="Despacho" />
+    <div className="flex flex-col gap-8">
+      <PageHeader title="Despacho" description="Elige el viaje y escanea los paquetes que suben al bus" />
 
-      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
+      <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-2">
         {/* Columna izquierda: viajes */}
         <section aria-labelledby="despacho-paso-1" className="flex flex-col gap-4">
-          <h2 id="despacho-paso-1" className="flex items-center gap-2 text-lg font-semibold">
-            <IconoDespacho className="size-5 text-muted-foreground" aria-hidden />
+          <SectionLabel id="despacho-paso-1" icono={IconoDespacho} tono="coral">
             1. Elige el viaje
-          </h2>
-          <Card className="gap-4 p-4">
-            <div className="flex flex-col gap-2 sm:w-56">
+          </SectionLabel>
+          <Card className="gap-5 p-5">
+            <div className="flex flex-col gap-2 md:w-56">
               <Label htmlFor="despacho-fecha-viaje">Fecha del viaje</Label>
               <Input
                 id="despacho-fecha-viaje"
@@ -407,31 +408,27 @@ function Despacho() {
         </section>
 
         {/* Columna derecha: encomiendas */}
-        <section aria-labelledby="despacho-paso-2" className="flex flex-col gap-4">
-          <h2
-            id="despacho-paso-2"
-            className={cn("flex items-center gap-2 text-lg font-semibold", !selectedViaje && "text-muted-foreground")}
-          >
-            <IconoEscanear className="size-5 text-muted-foreground" aria-hidden />
+        <section aria-labelledby="despacho-paso-2" className={cn("flex flex-col gap-4", selectedViaje && "max-md:order-first")}>
+          <SectionLabel id="despacho-paso-2" icono={IconoEscanear} tono={selectedViaje ? "coral" : "neutral"}>
             2. Escanea los paquetes
-          </h2>
+          </SectionLabel>
 
           {!selectedViaje ? (
             <Card className="py-0">
-              <EmptyState compacto icon={IconoEscanear} title="Primero elige el viaje" />
+              <EmptyState compacto icon={IconoEscanear} tono="coral" title="Primero elige el viaje" />
             </Card>
           ) : (
             <>
-              <Card className="flex-row flex-wrap items-center justify-between gap-3 p-4">
+              <Card className="flex-row flex-wrap items-center justify-between gap-3 p-5 max-md:flex-col max-md:items-stretch">
                 <div className="flex min-w-0 flex-col gap-0.5">
-                  <p className="font-semibold">{rutaDe(selectedViaje)}</p>
-                  <p className="text-sm text-muted-foreground tabular-nums">
+                  <p className="text-[17px] font-semibold">{rutaDe(selectedViaje)}</p>
+                  <p className="text-[13px] text-muted-foreground tabular-nums">
                     {formatFechaVE(selectedViaje.fecha_hora_salida)} · {detalleViaje(selectedViaje)}
                   </p>
                 </div>
                 <Button
                   variant="outline"
-                  size="sm"
+                  className="max-md:w-full"
                   onClick={() => setSalidaOpen(true)}
                   disabled={n > 0}
                   title={n > 0 ? "Despacha o vacía la lista antes de marcar la salida." : undefined}
@@ -439,6 +436,11 @@ function Despacho() {
                   <ICONO_SECCION.unidad aria-hidden />
                   Marcar salida
                 </Button>
+                {n > 0 && (
+                  <p className="text-[13px] text-muted-foreground md:hidden">
+                    Despacha o vacía la lista antes de marcar la salida.
+                  </p>
+                )}
               </Card>
 
               <ScanInput
@@ -452,39 +454,40 @@ function Despacho() {
               <UltimoEscaneo resultado={ultimo} />
 
               <Card className="gap-0 p-0">
-                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
-                  <h3 className="text-base font-semibold">Lista de despacho</h3>
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-5 py-4">
+                  <h3 className="text-[17px] font-semibold">Lista de despacho</h3>
                   <div className="flex flex-wrap gap-2">
                     {cobroDestino > 0 && <TonoBadge tono="neutro">{cobroDestino} pagan al retirar</TonoBadge>}
-                    <Badge variant="secondary" className="tabular-nums">
+                    <TonoBadge tono="neutro" className="tabular-nums">
                       {n === 1 ? "1 paquete" : `${n} paquetes`}
-                    </Badge>
+                    </TonoBadge>
                   </div>
                 </div>
                 {n === 0 ? (
-                  <EmptyState compacto icon={ICONO_SECCION.taquillaEncomiendas} title="Escanea una encomienda para agregarla" />
+                  <EmptyState compacto icon={ICONO_SECCION.taquillaEncomiendas} tono="coral" title="Escanea una encomienda para agregarla" />
                 ) : (
                   <ul className="divide-y divide-border">
                     {lista.map((enc) => (
                       <li
                         key={enc.id}
-                        className={cn("flex items-center justify-between gap-3 px-4 py-3", enc.rechazo && "bg-destructive-light/60")}
+                        className={cn("flex items-center gap-3 px-4 py-3 md:px-5", enc.rechazo && "bg-destructive-light/60")}
                       >
-                        <div className="flex min-w-0 flex-col gap-1">
+                        <IconTile icon={ICONO_SECCION.taquillaEncomiendas} tone={enc.rechazo ? "danger" : "coral"} size="sm" />
+                        <div className="flex min-w-0 flex-1 flex-col gap-1">
                           <div className="flex flex-wrap items-center gap-2">
-                            <span className="font-mono text-sm text-foreground">{enc.tracking_id}</span>
+                            <span className="font-mono text-[15px] font-medium text-foreground">{enc.tracking_id}</span>
                             {enc.cobro_en_destino && <TonoBadge tono="neutro">{MODALIDAD_PAGO.DESTINO.corto}</TonoBadge>}
                           </div>
-                          <p className="truncate text-sm text-muted-foreground">
+                          <p className="truncate text-[13px] text-muted-foreground">
                             {enc.receiver_nombre} · {formatCiudad(enc.ciudad_destino)}
                             {enc.peso_kg ? ` · ${String(enc.peso_kg).replace(".", ",")} kg` : ""}
                           </p>
                           {enc.cobro_en_destino && enc.costo_usd != null && <Monto usd={Number(enc.costo_usd)} size="sm" />}
-                          {enc.rechazo && <p className="text-sm font-medium text-destructive-text">{enc.rechazo}</p>}
+                          {enc.rechazo && <p className="text-[13px] font-medium text-destructive-text">{enc.rechazo}</p>}
                         </div>
                         <Button
                           variant="ghost"
-                          size="icon-sm"
+                          size="icon"
                           onClick={() => removerEncomienda(enc.id)}
                           aria-label={`Quitar ${enc.tracking_id} de la lista`}
                           className="shrink-0"
@@ -499,9 +502,11 @@ function Despacho() {
 
               {hayRechazadas && <AvisoError>Quita las encomiendas marcadas para poder despachar.</AvisoError>}
 
-              <Button size="lg" className="w-full" onClick={() => setConfirmarOpen(true)} disabled={n === 0 || hayRechazadas}>
-                Despachar {nEncomiendas(n)}
-              </Button>
+              <BarraAccionFija anchoCompleto resumen={<>Lista de despacho <span>{n === 1 ? "1 paquete" : `${n} paquetes`}</span></>}>
+                <Button size="xl" onClick={() => setConfirmarOpen(true)} disabled={n === 0 || hayRechazadas}>
+                  Despachar {nEncomiendas(n)}
+                </Button>
+              </BarraAccionFija>
             </>
           )}
         </section>

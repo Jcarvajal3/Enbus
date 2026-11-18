@@ -308,8 +308,8 @@ export function CobroEncomiendaForm({ encomienda, onCobrado, onCambioExterno, di
       {!tasa && !sinCosto && <AvisoError>Sin tasa BCV de hoy: no se puede cobrar.</AvisoError>}
 
       <div className="flex flex-col gap-2">
-        <p className="text-sm font-medium">¿Cómo pagó?</p>
-        <GrupoOpciones etiqueta="¿Cómo pagó?" className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+        <p className="text-[13px] font-medium">¿Cómo pagó?</p>
+        <GrupoOpciones etiqueta="¿Cómo pagó?" className="grid grid-cols-2 gap-2 md:grid-cols-3">
           {OPCIONES.map((o) => (
             <OpcionTile
               key={o.valor}
@@ -322,19 +322,20 @@ export function CobroEncomiendaForm({ encomienda, onCobrado, onCambioExterno, di
             />
           ))}
         </GrupoOpciones>
-        {errores.metodo && <p className="text-sm text-destructive-text">{errores.metodo}</p>}
+        {errores.metodo && <p className="text-[13px] text-destructive-text">{errores.metodo}</p>}
       </div>
 
       {opcionActual && !sinCosto && (
         <div className="flex flex-col gap-4">
           {efectivo ? (
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-4 md:grid-cols-2">
               <div className="flex flex-col gap-2">
                 <Label htmlFor={id("recibido")}>Monto recibido ({moneda === "USD" ? "USD" : "Bs"})</Label>
                 <Input
                   id={id("recibido")}
                   inputMode="decimal"
                   autoComplete="off"
+                  enterKeyHint="done"
                   placeholder={esperado != null ? `Ej.: ${formatEnMoneda(esperado, moneda)}` : undefined}
                   value={recibido}
                   // Al elegir efectivo el foco va al monto; Enter pide confirmar el cobro.
@@ -349,19 +350,19 @@ export function CobroEncomiendaForm({ encomienda, onCobrado, onCambioExterno, di
                   onKeyDown={alPulsarEnter}
                 />
                 {errores.monto ? (
-                  <p id={id("recibido-error")} className="text-sm text-destructive-text">
+                  <p id={id("recibido-error")} className="text-[13px] text-destructive-text">
                     {errores.monto}
                   </p>
                 ) : (
-                  <p className="text-sm text-muted-foreground">Para calcular el vuelto.</p>
+                  <p className="text-[13px] text-muted-foreground">Para calcular el vuelto.</p>
                 )}
               </div>
               <div
                 id={id("vuelto")}
                 aria-live="polite"
-                className="flex flex-col gap-1 self-start rounded-md border border-border bg-card p-4"
+                className="flex flex-col gap-1 self-start rounded-md bg-surface p-4"
               >
-                <p className="text-xs font-medium text-muted-foreground">Vuelto</p>
+                <p className="text-[13px] font-medium text-muted-foreground">Vuelto</p>
                 <p
                   className={cn(
                     "text-2xl font-semibold tabular-nums",
@@ -380,13 +381,13 @@ export function CobroEncomiendaForm({ encomienda, onCobrado, onCambioExterno, di
             <div className="grid gap-4">
               {!puntoVenta && (
                 <div className="flex flex-col gap-2">
-                  <p className="text-sm font-medium">Cuenta que recibió el pago</p>
+                  <p className="text-[13px] font-medium">Cuenta que recibió el pago</p>
                   {cuentasDelTipo.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-[13px] text-muted-foreground">
                       Sin cuentas de {NOMBRE_METODO[opcionActual.tipo]} activas: se registra sin cuenta.
                     </p>
                   ) : (
-                    <GrupoOpciones etiqueta="Cuenta que recibió el pago" className="grid gap-2 sm:grid-cols-2">
+                    <GrupoOpciones etiqueta="Cuenta que recibió el pago" className="grid gap-2 md:grid-cols-2">
                       {cuentasDelTipo.map((c) => (
                         <OpcionTile
                           key={c.id}
@@ -401,7 +402,7 @@ export function CobroEncomiendaForm({ encomienda, onCobrado, onCambioExterno, di
                 </div>
               )}
 
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-4 md:grid-cols-2">
                 <div className="flex flex-col gap-2">
                   <Label htmlFor={id("referencia")}>
                     {opcionActual.tipo === "ZELLE"
@@ -413,6 +414,7 @@ export function CobroEncomiendaForm({ encomienda, onCobrado, onCambioExterno, di
                   <Input
                     id={id("referencia")}
                     autoComplete="off"
+                    enterKeyHint="next"
                     inputMode={opcionActual.tipo === "ZELLE" ? "text" : "numeric"}
                     className="font-mono"
                     value={referencia}
@@ -426,7 +428,7 @@ export function CobroEncomiendaForm({ encomienda, onCobrado, onCambioExterno, di
                     onKeyDown={alPulsarEnter}
                   />
                   {errores.referencia && (
-                    <p id={id("referencia-error")} className="text-sm text-destructive-text">
+                    <p id={id("referencia-error")} className="text-[13px] text-destructive-text">
                       {errores.referencia}
                     </p>
                   )}
@@ -447,13 +449,13 @@ export function CobroEncomiendaForm({ encomienda, onCobrado, onCambioExterno, di
                     }}
                   />
                   {errores.fecha && (
-                    <p id={id("fecha-error")} className="text-sm text-destructive-text">
+                    <p id={id("fecha-error")} className="text-[13px] text-destructive-text">
                       {errores.fecha}
                     </p>
                   )}
                 </div>
                 {opcionActual.tipo !== "ZELLE" && !puntoVenta && (
-                  <div className="flex flex-col gap-2 sm:col-span-2">
+                  <div className="flex flex-col gap-2 md:col-span-2">
                     <Label htmlFor={id("banco")}>Banco del cliente</Label>
                     <Input
                       id={id("banco")}
@@ -475,21 +477,21 @@ export function CobroEncomiendaForm({ encomienda, onCobrado, onCambioExterno, di
                       ))}
                     </datalist>
                     {errores.banco && (
-                      <p id={id("banco-error")} className="text-sm text-destructive-text">
+                      <p id={id("banco-error")} className="text-[13px] text-destructive-text">
                         {errores.banco}
                       </p>
                     )}
                   </div>
                 )}
               </div>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-[13px] text-muted-foreground">
                 {puntoVenta ? "Regístralo cuando el punto apruebe el pago." : "Regístralo cuando ya lo veas en la cuenta."}
               </p>
             </div>
           )}
 
-          <div className="flex justify-end border-t border-border pt-4">
-            <Button onClick={pedirConfirmacion} disabled={disabled || enviando || !tasa}>
+          <div className="flex justify-end pt-2 max-md:sticky max-md:bottom-0 max-md:z-10 max-md:bg-popover max-md:pb-1 max-md:*:w-full">
+            <Button size="xl" onClick={pedirConfirmacion} disabled={disabled || enviando || !tasa}>
               Cobrar {totalTexto}
             </Button>
           </div>
@@ -595,12 +597,12 @@ export function PagoModal({ encomienda, isOpen, onClose, onSuccess }: PagoModalP
   if (cargando && !cobro) {
     cuerpo = (
       <div className="flex flex-col gap-4" role="status" aria-label="Revisando si el cliente ya reportó un pago">
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+        <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
           {[0, 1, 2, 3, 4, 5].map((i) => (
             <Skeleton key={i} className="h-20 rounded-md" />
           ))}
         </div>
-        <Skeleton className="h-9 w-full rounded-full" />
+        <Skeleton className="h-14 w-full rounded-full" />
       </div>
     );
   } else if (errorCarga && !cobro) {
@@ -609,7 +611,7 @@ export function PagoModal({ encomienda, isOpen, onClose, onSuccess }: PagoModalP
     );
   } else if (cobro?.aprobado) {
     cuerpo = (
-      <p role="status" className="flex items-start gap-2 rounded-md border border-success/40 bg-success-light p-3 text-sm text-success-deep">
+      <p role="status" className="flex items-start gap-2 rounded-md bg-success-light p-4 text-[15px] text-success-deep">
         <CheckCircle className="mt-0.5 size-4 shrink-0 text-success-text" weight="fill" aria-hidden />
         Ya está pagada.
       </p>
@@ -639,7 +641,7 @@ export function PagoModal({ encomienda, isOpen, onClose, onSuccess }: PagoModalP
     cuerpo = (
       <div className="flex flex-col gap-4">
         {cobro?.rechazado && (
-          <p role="status" className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning-light p-3 text-sm text-warning-deep">
+          <p role="status" className="flex items-start gap-2 rounded-md bg-warning-light p-4 text-[15px] text-warning-deep">
             <Warning weight="fill" className="mt-0.5 size-4 shrink-0 text-warning-text" aria-hidden />
             <span>
               El cliente reportó un pago que se rechazó
@@ -669,24 +671,24 @@ export function PagoModal({ encomienda, isOpen, onClose, onSuccess }: PagoModalP
         </DialogHeader>
 
         <div className="grid gap-5">
-          <section aria-label="Resumen" className="grid grid-cols-2 gap-x-4 gap-y-3 rounded-md bg-muted/50 p-4 text-sm">
+          <section aria-label="Resumen" className="grid grid-cols-2 gap-x-4 gap-y-3 rounded-md bg-surface p-4 text-[15px]">
             <div className="flex min-w-0 flex-col gap-0.5">
-              <p className="text-xs text-muted-foreground">Remitente</p>
+              <p className="text-[13px] text-muted-foreground">Remitente</p>
               <p className="truncate font-medium">{remitenteDe(encomienda).nombre}</p>
             </div>
             <div className="flex min-w-0 flex-col gap-0.5">
-              <p className="text-xs text-muted-foreground">Destinatario</p>
+              <p className="text-[13px] text-muted-foreground">Destinatario</p>
               <p className="truncate font-medium">{encomienda.receiver_nombre}</p>
             </div>
             <div className="flex flex-col gap-0.5">
-              <p className="text-xs text-muted-foreground">Peso</p>
+              <p className="text-[13px] text-muted-foreground">Peso</p>
               <p className="font-medium tabular-nums">
                 {encomienda.peso_kg ? `${String(encomienda.peso_kg).replace(".", ",")} kg` : "Por pesar"}
               </p>
             </div>
             <div className="flex flex-col gap-0.5">
-              <p className="text-xs text-muted-foreground">Total a cobrar</p>
-              <Monto usd={encomienda.costo_calculado} size="md" />
+              <p className="text-[13px] text-muted-foreground">Total a cobrar</p>
+              <Monto usd={encomienda.costo_calculado} size="xl" />
             </div>
             <p className="col-span-2 text-muted-foreground">{modalidad}</p>
           </section>

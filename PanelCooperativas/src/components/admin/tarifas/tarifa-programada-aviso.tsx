@@ -29,9 +29,9 @@ export function TarifaProgramadaAviso({
   const [vencida] = useState(() => new Date(tarifa.vigente_desde).getTime() < Date.now());
 
   return (
-    <div className={cn("flex flex-col gap-3 rounded-md bg-info-light p-4 text-sm text-info-deep", className)}>
+    <div className={cn("flex flex-col gap-3 rounded-md bg-info-light p-4 text-[15px] text-info-deep", className)}>
       <div className="flex items-start gap-2">
-        <CalendarCheck className="mt-0.5 size-4 shrink-0" weight="fill" aria-hidden />
+        <CalendarCheck className="mt-0.5 size-5 shrink-0" weight="fill" aria-hidden />
         <div className="flex flex-col gap-1">
           <p className="font-semibold">Programada para el {cuando}</p>
           <p className="tabular-nums">
@@ -44,7 +44,7 @@ export function TarifaProgramadaAviso({
           {vencida && <p className="font-medium">Su hora ya llegó: se activará en los próximos minutos.</p>}
         </div>
       </div>
-      <Button type="button" variant="outline" size="sm" onClick={() => setOpen(true)} className="self-start">
+      <Button type="button" variant="outline" onClick={() => setOpen(true)} className="self-start">
         <XCircle aria-hidden /> Cancelar programación
       </Button>
 

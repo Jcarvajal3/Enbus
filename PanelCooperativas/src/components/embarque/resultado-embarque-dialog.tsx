@@ -186,7 +186,7 @@ export function ResultadoEmbarqueDialog({
     const ruta = `${formatCiudad(viaje.origen)} → ${formatCiudad(viaje.destino)}`;
     const pasajero = [boleto.pasajero_nombre || "Sin nombre", cedulaLegible(boleto.pasajero_cedula)].filter(Boolean).join(" · ");
     const resumen = (
-      <div className="flex flex-col gap-1 rounded-md bg-muted/50 p-3 text-sm">
+      <div className="flex flex-col gap-1 rounded-md bg-surface p-4 text-[15px]">
         <p className="font-medium">
           {ruta} · {diaYHora(viaje.salida, r.dias_diferencia)}
           {viaje.unidad ? ` · Unidad ${viaje.unidad}` : ""}
@@ -194,7 +194,7 @@ export function ResultadoEmbarqueDialog({
         <p>
           Asiento <strong>{boleto.asiento}</strong> · {pasajero}
         </p>
-        <p className="font-mono text-xs text-muted-foreground">{formatCodigoBoleto(boleto.codigo_boleto)}</p>
+        <p className="font-mono text-[13px] text-muted-foreground">{formatCodigoBoleto(boleto.codigo_boleto)}</p>
       </div>
     );
 
@@ -209,8 +209,8 @@ export function ResultadoEmbarqueDialog({
         cuerpo = (
           <div className="flex flex-col gap-3">
             <div className="flex items-center gap-4">
-              <div className="flex shrink-0 flex-col items-center rounded-md border border-border px-4 py-2">
-                <span className="text-xs text-muted-foreground">Asiento</span>
+              <div className="flex shrink-0 flex-col items-center rounded-2xl bg-surface px-5 py-3">
+                <span className="text-[13px] text-muted-foreground">Asiento</span>
                 <span className="text-4xl font-semibold tabular-nums">{boleto.asiento}</span>
               </div>
               <div className="flex min-w-0 flex-col gap-0.5">
@@ -222,7 +222,7 @@ export function ResultadoEmbarqueDialog({
               Sale {diaYHora(viaje.salida, r.dias_diferencia)} · {ruta}
               {viaje.unidad ? ` · Unidad ${viaje.unidad}` : ""}
             </p>
-            <p className="font-mono text-xs text-muted-foreground">{formatCodigoBoleto(boleto.codigo_boleto)}</p>
+            <p className="font-mono text-[13px] text-muted-foreground">{formatCodigoBoleto(boleto.codigo_boleto)}</p>
           </div>
         );
         acciones = (
@@ -285,7 +285,7 @@ export function ResultadoEmbarqueDialog({
         titulo = "Pago por verificar";
         cuerpo = (
           <div className="flex flex-col gap-3">
-            <p className="text-sm">Compáralo con tu banco: si lo apruebas, lo embarcas de inmediato.</p>
+            <p className="text-[15px]">Compáralo con tu banco: si lo apruebas, lo embarcas de inmediato.</p>
             {resumen}
             {pago && (
               <VerificarPagoDialog
@@ -344,7 +344,7 @@ export function ResultadoEmbarqueDialog({
         cuerpo = (
           <div className="flex flex-col gap-3">
             <p className="text-base font-medium">{pago?.motivo_rechazo || "La cooperativa rechazó el pago que registró el pasajero."}</p>
-            <p className="text-sm text-muted-foreground">Cobra el pasaje para poder embarcarlo.</p>
+            <p className="text-[13px] text-muted-foreground">Cobra el pasaje para poder embarcarlo.</p>
             {resumen}
           </div>
         );
@@ -431,12 +431,12 @@ export function ResultadoEmbarqueDialog({
 
   return (
     <Dialog open={!!escaneo} onOpenChange={(abierto) => !abierto && !confirmando && onCerrar()}>
-      <DialogContent initialFocus={principalRef} className={cn("gap-5", estilo.borde)}>
+      <DialogContent initialFocus={principalRef} className="gap-5">
         <DialogHeader className={cn("-mx-6 -mt-6 py-5 pr-14 pl-6", estilo.franja)}>
           <DialogTitle className="flex items-center gap-3 text-2xl leading-tight">
             <Icono weight="fill" className={cn("size-10 shrink-0", estilo.icono)} aria-hidden />
             <span className="flex min-w-0 flex-col">
-              <span className="text-sm font-medium">{estilo.veredicto}</span>
+              <span className="text-[15px] font-medium">{estilo.veredicto}</span>
               <span>{titulo}</span>
             </span>
           </DialogTitle>
@@ -450,7 +450,7 @@ export function ResultadoEmbarqueDialog({
         ) : (
           cuerpo
         )}
-        <DialogFooter className="sm:justify-between">{acciones}</DialogFooter>
+        <DialogFooter className="md:justify-between">{acciones}</DialogFooter>
       </DialogContent>
     </Dialog>
   );

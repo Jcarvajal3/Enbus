@@ -1,6 +1,7 @@
 "use client";
 
 import { Package } from "@phosphor-icons/react";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { EmptyState } from "@/components/empty-state";
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import {
@@ -30,6 +31,7 @@ interface RutasChartProps {
 }
 
 export function RutasChart({ data }: RutasChartProps) {
+  const movil = useIsMobile();
   return (
     <Card>
       <CardHeader>
@@ -45,7 +47,7 @@ export function RutasChart({ data }: RutasChartProps) {
               accessibilityLayer
               data={data}
               layout="vertical"
-              margin={{ left: 10, right: 10, top: 10, bottom: 10 }}
+              margin={{ left: 0, right: 8, top: 10, bottom: 10 }}
             >
               <CartesianGrid horizontal={false} className="stroke-border" />
               {/* Barras horizontales: los nombres de las rutas no se solapan (AD-08). */}
@@ -54,10 +56,11 @@ export function RutasChart({ data }: RutasChartProps) {
                 type="category"
                 tickLine={false}
                 axisLine={false}
-                width={170}
-                className="text-xs text-muted-foreground"
+                width={movil ? 104 : 170}
+                tickFormatter={(v: string) => (movil && v.length > 16 ? `${v.slice(0, 15)}…` : v)}
+                className="text-[13px] text-muted-foreground"
               />
-              <XAxis type="number" allowDecimals={false} tickLine={false} axisLine={false} className="text-xs text-muted-foreground" />
+              <XAxis type="number" allowDecimals={false} tickLine={false} axisLine={false} className="text-[13px] text-muted-foreground" />
               <ChartTooltip content={<ChartTooltipContent />} />
               <Bar
                 dataKey="total"

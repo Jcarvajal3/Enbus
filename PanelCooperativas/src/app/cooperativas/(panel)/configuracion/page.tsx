@@ -51,7 +51,7 @@ export default async function ConfiguracionPage() {
   const defecto: Pestana = estado === "PENDIENTE" || estado === "RECHAZADA" ? "datos" : "sucursales";
 
   return (
-    <div className="flex w-full max-w-4xl flex-col gap-6">
+    <div className="flex w-full max-w-4xl flex-col gap-8">
       <PageHeader title="Configuración" />
 
       <PestanasConfiguracion
