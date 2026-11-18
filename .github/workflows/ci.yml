@@ -104,3 +104,5 @@ jobs:
         run: npx tsc --noEmit
       - name: Lint
         run: npm run lint
+      - name: Dependencias alineadas con el SDK (si se desfasan, cambia el fingerprint OTA)
+        run: npx expo-doctor

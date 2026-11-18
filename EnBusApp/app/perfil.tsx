@@ -31,6 +31,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import Constants from 'expo-constants';
+import * as Updates from 'expo-updates';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '@/src/contexts/AuthContext';
 import {
@@ -76,6 +77,12 @@ import { Colors, Gradients, Layout, Motion, Radius, Shadows, Sizes, Spacing } fr
 
 /** Versión real de la app (app.json / EAS), no un texto fijo (APP-52). */
 const APP_VERSION = Constants.expoConfig?.version ?? null;
+
+/** Canal y código que corre (para soporte); nada en Expo Go ni en desarrollo. */
+const DIAGNOSTICO_OTA =
+  Updates.isEnabled && !__DEV__
+    ? `${Updates.channel ?? 'sin canal'} · ${Updates.updateId ? Updates.updateId.slice(0, 8) : 'integrada'}`
+    : null;
 
 const NOMBRE_CAMPO: Record<CampoPerfil, string> = {
   nombre: 'tu nombre',
@@ -479,6 +486,7 @@ export default function PerfilScreen() {
             </Button>
             <Text variant="caption" color="muted" align="center">
               {APP_VERSION ? `EnBus · versión ${APP_VERSION}` : 'EnBus'}
+              {DIAGNOSTICO_OTA ? `\n${DIAGNOSTICO_OTA}` : ''}
             </Text>
           </StaggerItem>
         </ScrollView>

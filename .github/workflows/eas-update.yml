@@ -1,0 +1,67 @@
+# Publica una actualización OTA (EAS Update) de EnBusApp en el canal elegido.
+# Se lanza a mano desde Actions > "EAS Update" > Run workflow.
+# Requiere el secreto EXPO_TOKEN (token de acceso de expo.dev).
+# Se publica desde Linux a propósito: el runtimeVersion (fingerprint) debe coincidir
+# con el que calcula EAS Build, y hacerlo desde un entorno limpio evita diferencias.
+name: EAS Update
+
+on:
+  workflow_dispatch:
+    inputs:
+      canal:
+        description: Canal (y entorno de EAS) donde publicar
+        type: choice
+        options:
+          - preview
+          - production
+        default: preview
+      mensaje:
+        description: Mensaje de la actualización (qué cambia)
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: eas-update-${{ inputs.canal }}
+  cancel-in-progress: false
+
+jobs:
+  publicar:
+    name: Publicar en ${{ inputs.canal }}
+    # Producción solo desde main: cualquier rama podría publicar código sin revisar.
+    if: inputs.canal != 'production' || github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: EnBusApp
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: EnBusApp/package-lock.json
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+      - run: npm ci
+      - name: Tipos
+        run: npx tsc --noEmit
+      - name: Lint
+        run: npm run lint
+      - name: Variables de Supabase en el entorno de EAS
+        # El mismo chequeo que corre en EAS Build: sin ellas el update abriría
+        # "La app no está configurada" en todos los teléfonos del canal.
+        env:
+          CANAL: ${{ inputs.canal }}
+        run: eas env:exec "$CANAL" "node scripts/verificar-env-eas.js" --non-interactive
+      - name: Publicar update
+        env:
+          # Por variables de entorno (no interpolado en el script) para evitar inyección de comandos.
+          CANAL: ${{ inputs.canal }}
+          MENSAJE: ${{ inputs.mensaje }}
+        run: eas update --channel "$CANAL" --environment "$CANAL" --message "$MENSAJE" --non-interactive

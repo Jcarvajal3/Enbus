@@ -19,6 +19,7 @@ import { AuthProvider, useAuth } from '@/src/contexts/AuthContext';
 import { BrandMark } from '@/src/components/BrandMark';
 import { ErrorBoundary } from '@/src/components/ErrorBoundary';
 import { ToastProvider, useToast } from '@/src/components/Toast';
+import { useActualizacionesOTA } from '@/src/hooks/useActualizacionesOTA';
 import { usePushNotifications } from '@/src/hooks/usePushNotifications';
 import { abrirRecurso } from '@/src/utils/notificaciones';
 import { configuracionFaltante } from '@/src/utils/supabase';
@@ -133,6 +134,7 @@ function RootLayoutNav() {
   const params = useGlobalSearchParams();
   const router = useRouter();
   const toast = useToast();
+  useActualizacionesOTA();
 
   // Al volver la conexión, un aviso verde de 3 s (SY-09).
   const estabaSinConexionRef = useRef(isOffline);

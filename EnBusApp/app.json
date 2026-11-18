@@ -55,7 +55,13 @@
       "reactCompiler": true
     },
     "updates": {
-      "enabled": false
+      "enabled": true,
+      "url": "https://u.expo.dev/477ae525-ec36-4c24-98d8-d8440137ce72",
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0
+    },
+    "runtimeVersion": {
+      "policy": "fingerprint"
     },
     "extra": {
       "eas": {

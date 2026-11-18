@@ -1,0 +1,6 @@
+# Estos archivos entran crudos al fingerprint de EAS Update (runtimeVersion).
+# Con core.autocrlf=true en Windows se sacarían con CRLF y el hash local
+# diferiría del de EAS Build (Linux). Se fuerza LF en el árbol de trabajo.
+eas.json text eol=lf
+.easignore text eol=lf
+.gitignore text eol=lf
