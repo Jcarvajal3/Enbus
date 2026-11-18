@@ -32,7 +32,7 @@ export default async function CooperativaDetailPage({ params }: PageProps) {
       : undefined;
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-8">
       <MigaObjeto label={cooperativa.nombre} />
       <PageHeader
         title={cooperativa.nombre}

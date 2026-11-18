@@ -57,13 +57,12 @@ export function ViajeOpcion({
         if (!seleccionado) onSelect();
       }}
       className={cn(
-        "grid w-full min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-3 rounded-md border border-border bg-card p-4 text-left text-foreground transition-colors outline-none",
-        "sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:gap-x-4",
-        "hover:border-input-border hover:bg-muted/50",
-        "focus-visible:ring-[3px] focus-visible:ring-ring/50",
-        "disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:border-border disabled:hover:bg-card",
-        seleccionado &&
-          "border-accent-strong bg-accent-light ring-2 ring-accent-strong hover:border-accent-strong hover:bg-accent-light"
+        "grid w-full min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-3 min-h-16 rounded-xl border-2 border-transparent bg-surface p-4 text-left text-foreground transition-colors outline-none",
+        "md:grid-cols-[auto_minmax(0,1fr)_auto] md:gap-x-4",
+        "hover:bg-surface-dark",
+        "focus-visible:ring-[3px] focus-visible:ring-accent-strong/30",
+        "disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-surface",
+        seleccionado && "border-accent-strong bg-card shadow-card hover:bg-card"
       )}
     >
       {/* Indicador de selección (forma de radio: vacío / relleno con check). */}
@@ -90,13 +89,13 @@ export function ViajeOpcion({
       </span>
 
       {/* Asientos y precio: a la derecha en escritorio, debajo en móvil. */}
-      <span className="col-start-2 flex min-w-0 flex-wrap items-center justify-between gap-x-4 gap-y-2 sm:col-start-3 sm:row-start-1 sm:row-span-2 sm:flex-col sm:items-end sm:justify-start">
+      <span className="col-start-2 flex min-w-0 flex-wrap items-center justify-between gap-x-4 gap-y-2 md:col-start-3 md:row-start-1 md:row-span-2 md:flex-col md:items-end md:justify-start">
         {agotado ? (
           <TonoBadge tono="peligro">Agotado</TonoBadge>
         ) : (
           <span
             className={cn(
-              "flex items-center gap-1.5 text-sm font-semibold tabular-nums",
+              "flex items-center gap-1.5 text-[15px] font-semibold tabular-nums",
               pocos ? "text-warning-text" : "text-foreground"
             )}
           >
@@ -117,7 +116,7 @@ export function ViajeOpcion({
 
       {/* Unidad y chofer: secundarios. */}
       {(viaje.numero_unidad || viaje.nombre_chofer) && (
-        <span className="col-start-2 flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
+        <span className="col-start-2 flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1 text-[13px] text-muted-foreground">
           {viaje.numero_unidad && (
             <span className="flex items-center gap-1.5">
               <Bus className="size-4 shrink-0" aria-hidden />

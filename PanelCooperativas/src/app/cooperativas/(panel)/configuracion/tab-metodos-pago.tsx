@@ -6,11 +6,13 @@ import {
   Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { BarraAccionFija } from "@/components/barra-accion-fija";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { IconTile } from "@/components/icon-tile";
 import { CreditCard, Plus, PencilSimple, Trash, Eye } from "@phosphor-icons/react";
 import { AvisoError } from "@/components/aviso-error";
 import { EmptyState } from "@/components/empty-state";
@@ -330,15 +332,15 @@ export function MetodosPagoTab({ metodos: initialMetodos, errorCarga = null }: M
         <CardTitle>Métodos de pago</CardTitle>
         <CardDescription>Los pasajeros solo ven los activos.</CardDescription>
         {!showForm && metodos.length > 0 && (
-          <CardAction>
-            <Button onClick={openCreate}>
+          <CardAction anchoMovil>
+            <Button size="lg" onClick={openCreate}>
               <Plus aria-hidden />
               Agregar método
             </Button>
           </CardAction>
         )}
       </CardHeader>
-      <CardContent className="flex flex-col gap-4">
+      <CardContent className="flex flex-col gap-6">
         {errorCarga && (
           <ErrorState
             compacto
@@ -350,14 +352,14 @@ export function MetodosPagoTab({ metodos: initialMetodos, errorCarga = null }: M
 
         {/* Formulario */}
         {showForm && (
-          <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4 rounded-md border-border sm:border sm:p-4">
-            <h3 className="text-sm font-semibold text-foreground">
+          <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-5 border-b border-border pb-6">
+            <h3 className="text-[17px] font-semibold tracking-tight text-foreground">
               {editingId ? "Editar método de pago" : "Nuevo método de pago"}
             </h3>
 
             <div className="grid gap-4 lg:grid-cols-[1fr_18rem]">
-              <div className="grid content-start gap-4 sm:grid-cols-2">
-                <div className="flex flex-col gap-2 sm:col-span-2">
+              <div className="grid content-start gap-4 md:grid-cols-2">
+                <div className="flex flex-col gap-2 md:col-span-2">
                   <Label htmlFor={id("tipo")}>Tipo</Label>
                   <Select
                     value={form.tipo}
@@ -365,7 +367,7 @@ export function MetodosPagoTab({ metodos: initialMetodos, errorCarga = null }: M
                     items={TIPOS.map((t) => ({ value: t, label: METODO_PAGO[t] }))}
                     disabled={guardando}
                   >
-                    <SelectTrigger id={id("tipo")} className="w-full sm:w-72">
+                    <SelectTrigger id={id("tipo")} className="w-full md:w-72">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -374,11 +376,11 @@ export function MetodosPagoTab({ metodos: initialMetodos, errorCarga = null }: M
                       ))}
                     </SelectContent>
                   </Select>
-                  <p className="text-sm text-muted-foreground">{AYUDA_TIPO[form.tipo]}</p>
+                  <p className="text-[13px] text-muted-foreground">{AYUDA_TIPO[form.tipo]}</p>
                 </div>
 
                 {pideBanco && (
-                  <div className="flex flex-col gap-2 sm:col-span-2">
+                  <div className="flex flex-col gap-2 md:col-span-2">
                     <Label htmlFor={id("banco")}>Banco</Label>
                     <Select
                       value={form.bancoOpcion}
@@ -402,7 +404,7 @@ export function MetodosPagoTab({ metodos: initialMetodos, errorCarga = null }: M
                       <Input
                         id={id("banco-otro")}
                         aria-label="Nombre del banco"
-                        placeholder="Nombre del banco"
+                        placeholder="Ej. Banco del Tesoro"
                         value={form.bancoOtro}
                         disabled={guardando}
                         aria-invalid={errores.banco ? true : undefined}
@@ -439,7 +441,7 @@ export function MetodosPagoTab({ metodos: initialMetodos, errorCarga = null }: M
                     }
                     error={errores.numero_cuenta}
                     disabled={guardando}
-                    className="sm:col-span-2"
+                    className="md:col-span-2"
                   />
                 )}
 
@@ -478,11 +480,11 @@ export function MetodosPagoTab({ metodos: initialMetodos, errorCarga = null }: M
                     placeholder="Ej.: Transporte Los Andes C.A."
                     error={errores.titular}
                     disabled={guardando}
-                    className={form.tipo === "ZELLE" ? "" : "sm:col-span-2"}
+                    className={form.tipo === "ZELLE" ? "" : "md:col-span-2"}
                   />
                 )}
 
-                <div className="flex flex-col gap-2 sm:col-span-2">
+                <div className="flex flex-col gap-2 md:col-span-2">
                   <Label htmlFor={id("instrucciones")}>
                     {form.tipo === "EFECTIVO" ? "Instrucciones (opcional)" : "Instrucciones para el pasajero (opcional)"}
                   </Label>
@@ -505,13 +507,13 @@ export function MetodosPagoTab({ metodos: initialMetodos, errorCarga = null }: M
               {/* Vista previa */}
               <section
                 aria-label="Así lo verá el pasajero"
-                className="flex flex-col gap-2 self-start rounded-md border border-border bg-muted/50 p-4 text-sm"
+                className="flex flex-col gap-2 self-start rounded-md bg-surface p-4 text-[15px]"
               >
                 <p className="flex items-center gap-2 font-medium text-foreground">
                   <Eye className="size-4" aria-hidden />
                   Así lo verá el pasajero
                 </p>
-                <p className="text-xs text-muted-foreground">{METODO_PAGO[form.tipo]}</p>
+                <p className="text-[13px] text-muted-foreground">{METODO_PAGO[form.tipo]}</p>
                 {form.tipo === "EFECTIVO" ? (
                   <p className="text-muted-foreground">Paga en efectivo en la taquilla.</p>
                 ) : filasPrevia.length === 0 ? (
@@ -527,14 +529,14 @@ export function MetodosPagoTab({ metodos: initialMetodos, errorCarga = null }: M
                   </dl>
                 )}
                 {form.instrucciones.trim() && (
-                  <p className="text-xs text-muted-foreground">{form.instrucciones.trim()}</p>
+                  <p className="text-[13px] text-muted-foreground">{form.instrucciones.trim()}</p>
                 )}
               </section>
             </div>
 
             {errorGeneral && <AvisoError>{errorGeneral}</AvisoError>}
 
-            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <BarraAccionFija>
               <Button type="button" variant="outline" onClick={closeForm} disabled={guardando}>
                 Cancelar
               </Button>
@@ -542,7 +544,7 @@ export function MetodosPagoTab({ metodos: initialMetodos, errorCarga = null }: M
                 {guardando && <Spinner size="sm" aria-hidden />}
                 {guardando ? "Guardando…" : editingId ? "Guardar cambios" : "Agregar método"}
               </Button>
-            </div>
+            </BarraAccionFija>
           </form>
         )}
 
@@ -572,13 +574,16 @@ export function MetodosPagoTab({ metodos: initialMetodos, errorCarga = null }: M
             return (
               <li
                 key={m.id}
-                className="flex flex-col gap-3 rounded-md border border-border bg-card p-4 sm:flex-row sm:items-center sm:justify-between"
+                className="flex flex-col gap-3 rounded-md bg-surface p-4 md:flex-row md:items-center md:justify-between"
               >
-                <div className="flex min-w-0 flex-col gap-0.5">
-                  <p className={cn("truncate text-sm font-medium", m.activo ? "text-foreground" : "text-muted-foreground")}>{nombre}</p>
-                  <p className="text-xs text-muted-foreground truncate">
+                <div className="flex min-w-0 items-center gap-3">
+                  <IconTile icon={CreditCard} tone={m.activo ? "sky" : "neutral"} size="sm" />
+                  <div className="flex min-w-0 flex-col gap-0.5">
+                  <p className={cn("truncate text-[15px] font-medium", m.activo ? "text-foreground" : "text-muted-foreground")}>{nombre}</p>
+                  <p className="text-[13px] text-muted-foreground truncate">
                     {m.tipo === "EFECTIVO" ? m.instrucciones || "Pago en la taquilla" : detalle}
                   </p>
+                  </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
                   <div className="flex items-center gap-2">
@@ -588,13 +593,13 @@ export function MetodosPagoTab({ metodos: initialMetodos, errorCarga = null }: M
                       disabled={cambiandoId === m.id}
                       onCheckedChange={(v) => void cambiarActivo(m, v)}
                     />
-                    <Label htmlFor={switchId} className="w-14 text-sm font-normal">
+                    <Label htmlFor={switchId} className="w-14 text-[15px] font-normal">
                       {m.activo ? "Activo" : "Inactivo"}
                     </Label>
                   </div>
                   <Button
                     variant="ghost"
-                    size="icon-sm"
+                    size="icon-sm" className="max-md:size-11"
                     aria-label={`Editar ${nombre}`}
                     onClick={() => openEdit(m)}
                   >
@@ -603,7 +608,7 @@ export function MetodosPagoTab({ metodos: initialMetodos, errorCarga = null }: M
                   <Button
                     variant="ghost"
                     size="icon-sm"
-                    className="text-destructive-text hover:text-destructive-text"
+                    className="text-destructive-text hover:text-destructive-text max-md:size-11"
                     aria-label={`Eliminar ${nombre}`}
                     onClick={() => pedirEliminar(m)}
                   >
@@ -629,7 +634,6 @@ export function MetodosPagoTab({ metodos: initialMetodos, errorCarga = null }: M
                 <Button
                   type="button"
                   variant="outline"
-                  size="sm"
                   disabled={cambiandoId === aEliminar.id}
                   onClick={async () => {
                     const ok = await cambiarActivo(aEliminar, false);
@@ -659,7 +663,7 @@ export function MetodosPagoTab({ metodos: initialMetodos, errorCarga = null }: M
 function ErrorCampo({ id, texto }: { id: string; texto?: string }) {
   if (!texto) return null;
   return (
-    <p id={id} className="text-sm text-destructive-text">
+    <p id={id} className="text-[13px] text-destructive-text">
       {texto}
     </p>
   );
@@ -698,7 +702,7 @@ function Campo({
       {error ? (
         <ErrorCampo id={`${id}-error`} texto={error} />
       ) : ayuda ? (
-        <p id={`${id}-ayuda`} className="text-sm text-muted-foreground">{ayuda}</p>
+        <p id={`${id}-ayuda`} className="text-[13px] text-muted-foreground">{ayuda}</p>
       ) : null}
     </div>
   );

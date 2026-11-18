@@ -153,7 +153,7 @@ export default function LoginPageClient({ aviso }: { aviso: AvisoLogin | null })
               id="email"
               type="email"
               inputMode="email"
-              placeholder="tu@correo.com"
+              placeholder="Ej. tu@correo.com"
               autoComplete="username"
               autoCapitalize="none"
               spellCheck={false}
@@ -181,7 +181,7 @@ export default function LoginPageClient({ aviso }: { aviso: AvisoLogin | null })
           </Field>
         </FieldGroup>
 
-        <Button type="submit" className="w-full" disabled={loading} aria-busy={loading || undefined}>
+        <Button type="submit" size="lg" className="w-full" disabled={loading} aria-busy={loading || undefined}>
           {loading && <Spinner size="sm" aria-hidden />}
           {loading ? "Entrando…" : "Entrar"}
         </Button>

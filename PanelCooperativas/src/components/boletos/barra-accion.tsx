@@ -44,12 +44,12 @@ export function BarraAccion({
       className={cn(
         "sticky bottom-0 z-10 -mx-6 -mb-6 flex flex-col gap-3 border-t border-border bg-popover px-6 pt-3",
         "pb-[max(1rem,env(safe-area-inset-bottom))]",
-        "sm:flex-row sm:items-center sm:justify-between sm:gap-4",
+        "md:flex-row md:items-center md:justify-between md:gap-4",
         className
       )}
     >
       {resumen !== undefined && (
-        <div className="min-w-0 text-sm text-muted-foreground" aria-live="polite" aria-atomic="true">
+        <div className="min-w-0 text-[15px] text-muted-foreground" aria-live="polite" aria-atomic="true">
           {resumen}
         </div>
       )}
@@ -58,8 +58,8 @@ export function BarraAccion({
           // En móvil la acción principal ocupa el ancho que queda (y baja de fila si no cabe);
           // en escritorio los botones van a la derecha y la salida, sin resumen, a la izquierda.
           "flex flex-wrap gap-2 [&>*:last-child]:flex-1",
-          "sm:flex-nowrap sm:[&>*:last-child]:flex-none",
-          resumen === undefined ? "sm:flex-1 sm:[&>*:first-child]:mr-auto" : "sm:shrink-0"
+          "md:flex-nowrap md:[&>*:last-child]:flex-none",
+          resumen === undefined ? "md:flex-1 md:[&>*:first-child]:mr-auto" : "md:shrink-0"
         )}
       >
         {children}

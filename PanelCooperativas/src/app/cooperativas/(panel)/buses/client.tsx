@@ -16,6 +16,9 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { AvisoError } from "@/components/aviso-error";
 import { ErrorState } from "@/components/error-state";
 import { StatusBadge } from "@/components/status-badge";
+import { EntityCard } from "@/components/entity-card";
+import { IconTile } from "@/components/icon-tile";
+import { ListaResponsive } from "@/components/lista-responsive";
 import { PaginacionTabla, usePaginacion } from "@/components/paginacion-tabla";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
@@ -45,12 +48,7 @@ function CeldaUnidad({ bus }: { bus: Bus }) {
   return (
     <span className="flex flex-col">
       <span>{bus.numero_unidad}</span>
-      {bus.placa && <span className="text-xs font-normal text-muted-foreground">Placa {bus.placa}</span>}
-      {/* En teléfono, el chofer y el estado van aquí (sus columnas se ocultan). */}
-      <span className="text-xs font-normal text-muted-foreground sm:hidden">
-        {bus.chofer_nombre || "Sin chofer"}
-        {!bus.activo && " · Inactivo"}
-      </span>
+      {bus.placa && <span className="text-[13px] font-normal text-muted-foreground">Placa {bus.placa}</span>}
     </span>
   );
 }
@@ -234,15 +232,19 @@ export function BusesClient({ buses, errorCarga }: { buses: Bus[]; errorCarga: s
   const invalido = (campo: CampoBus) => (errorCampo === campo ? true : undefined);
 
   return (
-    <div className="flex flex-col gap-6">
-      <PageHeader title="Buses" description="Unidades, asientos y chofer para programar viajes.">
-        {buses.length > 0 && (
-          <Button onClick={abrirCrear}>
-            <Plus aria-hidden />
-            Registrar bus
-          </Button>
-        )}
-      </PageHeader>
+    <div className="flex flex-col gap-8">
+      <PageHeader
+        title="Buses"
+        description="Unidades, asientos y chofer para programar viajes."
+        principal={
+          buses.length > 0 ? (
+            <Button size="lg" onClick={abrirCrear}>
+              <Plus aria-hidden />
+              Registrar bus
+            </Button>
+          ) : undefined
+        }
+      />
 
       {errorCarga ? (
         <Card className="p-0">
@@ -255,7 +257,7 @@ export function BusesClient({ buses, errorCarga }: { buses: Bus[]; errorCarga: s
             title="Todavía no tienes buses"
             description="Registra cada unidad una vez con sus asientos y su chofer; luego la eliges al programar un viaje."
             action={
-              <Button onClick={abrirCrear}>
+              <Button size="lg" onClick={abrirCrear}>
                 <Plus aria-hidden />
                 Registrar bus
               </Button>
@@ -263,14 +265,30 @@ export function BusesClient({ buses, errorCarga }: { buses: Bus[]; errorCarga: s
           />
         </Card>
       ) : (
-        <Card className="gap-0 overflow-hidden p-0">
+        <Card className="gap-0 overflow-hidden p-0 max-md:overflow-visible max-md:bg-transparent max-md:shadow-none">
+          <ListaResponsive
+            items={visibles}
+            clave={(bus) => bus.id}
+            etiqueta="Buses"
+            tarjeta={(bus) => (
+              <EntityCard
+                onClick={() => abrirEditar(bus)}
+                etiqueta={`Editar bus ${nombreBus(bus)}`}
+                leading={<IconTile icon={ICONO_SECCION.buses} tone={bus.activo ? "sky" : "neutral"} />}
+                title={bus.numero_unidad}
+                subtitle={[bus.placa ? `Placa ${bus.placa}` : null, bus.chofer_nombre || "Sin chofer"].filter(Boolean).join(" · ")}
+                badge={<StatusBadge status={bus.activo ? "ACTIVO" : "INACTIVO"} dominio="recurso" />}
+                meta={`${bus.asientos} asientos`}
+              />
+            )}
+            tabla={() => (
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Unidad</TableHead>
                 <TableHead className="text-right">Asientos</TableHead>
-                <TableHead className="hidden sm:table-cell">Chofer</TableHead>
-                <TableHead className="hidden sm:table-cell">Estado</TableHead>
+                <TableHead>Chofer</TableHead>
+                <TableHead>Estado</TableHead>
                 <TableHead className="text-right">
                   <span className="sr-only">Acciones</span>
                 </TableHead>
@@ -287,12 +305,12 @@ export function BusesClient({ buses, errorCarga }: { buses: Bus[]; errorCarga: s
                     <CeldaUnidad bus={bus} />
                   </CeldaEnlace>
                   <TableCell className="text-right tabular-nums">{bus.asientos}</TableCell>
-                  <TableCell className="hidden whitespace-normal sm:table-cell">
+                  <TableCell className="whitespace-normal">
                     {bus.chofer_nombre ? (
                       <span className="flex flex-col">
                         <span>{bus.chofer_nombre}</span>
                         {bus.chofer_telefono && (
-                          <span className="text-xs text-muted-foreground tabular-nums">
+                          <span className="text-[13px] text-muted-foreground tabular-nums">
                             {formatTelefono(bus.chofer_telefono)}
                           </span>
                         )}
@@ -301,7 +319,7 @@ export function BusesClient({ buses, errorCarga }: { buses: Bus[]; errorCarga: s
                       <span className="text-muted-foreground">Sin asignar</span>
                     )}
                   </TableCell>
-                  <TableCell className="hidden sm:table-cell">
+                  <TableCell>
                     <StatusBadge status={bus.activo ? "ACTIVO" : "INACTIVO"} dominio="recurso" />
                   </TableCell>
                   <TableCell className="text-right">
@@ -336,6 +354,8 @@ export function BusesClient({ buses, errorCarga }: { buses: Bus[]; errorCarga: s
               ))}
             </TableBody>
           </Table>
+            )}
+          />
           <PaginacionTabla pagina={pagina} paginas={paginas} onCambio={ir} />
         </Card>
       )}
@@ -364,7 +384,7 @@ export function BusesClient({ buses, errorCarga }: { buses: Bus[]; errorCarga: s
               {/* El error del teléfono se ve bajo su campo. */}
               {formError && errorCampo !== "telefono" && <AvisoError>{formError}</AvisoError>}
 
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div className="grid content-start gap-2">
                   <Label htmlFor={`${uid}-unidad`}>Unidad</Label>
                   <Input
@@ -388,6 +408,7 @@ export function BusesClient({ buses, errorCarga }: { buses: Bus[]; errorCarga: s
                     id={`${uid}-placa`}
                     name="placa"
                     autoComplete="off"
+                    autoCapitalize="characters"
                     maxLength={12}
                     placeholder="Ej.: AB123CD"
                     className="uppercase placeholder:normal-case"
@@ -420,20 +441,21 @@ export function BusesClient({ buses, errorCarga }: { buses: Bus[]; errorCarga: s
                   aria-describedby={`${uid}-asientos-ayuda`}
                   required
                 />
-                <p id={`${uid}-asientos-ayuda`} className="text-sm text-muted-foreground">
+                <p id={`${uid}-asientos-ayuda`} className="text-[13px] text-muted-foreground">
                   Los que se venden en cada viaje de este bus (1 a {ASIENTOS_MAX}).
                 </p>
               </div>
 
               <fieldset className="grid gap-4">
-                <legend className="mb-2 text-sm font-medium text-foreground">Chofer asignado (opcional)</legend>
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <legend className="mb-2 text-[13px] font-medium text-foreground">Chofer asignado (opcional)</legend>
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <div className="grid content-start gap-2">
                     <Label htmlFor={`${uid}-chofer`}>Nombre</Label>
                     <Input
                       id={`${uid}-chofer`}
                       name="chofer_nombre"
                       autoComplete="off"
+                      autoCapitalize="words"
                       maxLength={80}
                       value={chofer}
                       onChange={(e) => {
@@ -455,20 +477,51 @@ export function BusesClient({ buses, errorCarga }: { buses: Bus[]; errorCarga: s
                     error={errorCampo === "telefono" ? formError : null}
                   />
                 </div>
-                <p className="flex items-start gap-2 text-sm text-muted-foreground">
+                <p className="flex items-start gap-2 text-[13px] text-muted-foreground">
                   <Info className="mt-0.5 size-4 shrink-0" aria-hidden />
                   Al programar un viaje puedes poner otro chofer solo para esa salida.
                 </p>
               </fieldset>
 
-              <div className="flex items-center justify-between gap-4 rounded-md border border-border p-4">
+              <div className="flex items-center justify-between gap-4 rounded-md bg-surface p-4">
                 <div className="flex flex-col gap-0.5">
                   <Label htmlFor={`${uid}-activo`}>Bus activo</Label>
-                  <p className="text-sm text-muted-foreground">Solo los activos se pueden elegir al programar viajes.</p>
+                  <p className="text-[13px] text-muted-foreground">Solo los activos se pueden elegir al programar viajes.</p>
                 </div>
                 <Switch id={`${uid}-activo`} checked={activo} onCheckedChange={setActivo} />
               </div>
             </div>
+
+            {/* Móvil: la tarjeta no lleva menú, las acciones del bus viven en la hoja. */}
+            {editando && (
+              <div className="flex flex-col gap-2 md:hidden">
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={isPending}
+                  onClick={() => {
+                    setIsModalOpen(false);
+                    alternarActivo(editando);
+                  }}
+                >
+                  {editando.activo ? <Prohibit aria-hidden /> : <ArrowCounterClockwise aria-hidden />}
+                  {editando.activo ? "Desactivar bus" : "Reactivar bus"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="text-destructive-text hover:text-destructive-text"
+                  disabled={isPending}
+                  onClick={() => {
+                    setIsModalOpen(false);
+                    pedirEliminar(editando);
+                  }}
+                >
+                  <Trash aria-hidden />
+                  Eliminar bus
+                </Button>
+              </div>
+            )}
 
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)} disabled={isPending}>

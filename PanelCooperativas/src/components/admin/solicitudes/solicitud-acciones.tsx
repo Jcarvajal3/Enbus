@@ -55,7 +55,7 @@ function ReabrirSolicitudButton({
   return (
     <Button
       type="button"
-      size={enFila ? "sm" : "default"}
+      size={enFila ? "sm" : "lg"}
       variant={enFila ? "outline" : "default"}
       onClick={reabrir}
       disabled={cargando}
@@ -133,7 +133,7 @@ export function SolicitudAcciones({
   const rechazada = solicitud.estado === "RECHAZADA";
 
   return (
-    <div className={enFila ? "flex items-center justify-end gap-1" : "flex flex-wrap items-center justify-end gap-2"}>
+    <div className={enFila ? "flex items-center justify-end gap-1" : "flex flex-wrap items-center justify-end gap-2 max-md:flex-col max-md:items-stretch max-md:*:w-full"}>
       {rechazada ? (
         <ReabrirSolicitudButton solicitud={solicitud} enFila={enFila} onHecho={onHecho} />
       ) : (
@@ -145,7 +145,7 @@ export function SolicitudAcciones({
           trigger={
             <Button
               type="button"
-              size={enFila ? "sm" : "default"}
+              size={enFila ? "sm" : "lg"}
               variant={enFila ? "outline" : "default"}
               aria-label={enFila ? `Aprobar la solicitud de ${solicitud.nombre}` : undefined}
             >
@@ -156,7 +156,7 @@ export function SolicitudAcciones({
       )}
 
       {!rechazada && !enFila && (
-        <Button type="button" variant="outline" onClick={() => setRechazarOpen(true)}>
+        <Button type="button" size="lg" variant="outline" onClick={() => setRechazarOpen(true)}>
           <X aria-hidden /> Rechazar
         </Button>
       )}

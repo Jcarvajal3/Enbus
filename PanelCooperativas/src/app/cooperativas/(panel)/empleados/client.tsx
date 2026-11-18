@@ -19,17 +19,21 @@ import {
   Check,
   Copy,
   DotsThree,
+  EnvelopeSimple,
   MapPin,
   Prohibit,
   UserPlus,
   WhatsappLogo,
   XCircle,
 } from "@phosphor-icons/react";
+import { SectionLabel } from "@/components/section-label";
 import { PageHeader } from "@/components/page-header";
 import { requireOnline } from "@/components/connectivity-banner";
 import { EmptyState } from "@/components/empty-state";
 import { ErrorState } from "@/components/error-state";
-import { FilaVacia } from "@/components/fila-vacia";
+import { EntityCard } from "@/components/entity-card";
+import { IconTile } from "@/components/icon-tile";
+import { ListaResponsive } from "@/components/lista-responsive";
 import { AvisoError } from "@/components/aviso-error";
 import { StatusBadge, TonoBadge } from "@/components/status-badge";
 import { GrupoOpciones, OpcionTile } from "@/components/opcion-tile";
@@ -148,6 +152,9 @@ export function EmpleadosClient({
   const [revocarOpen, setRevocarOpen] = useState(false);
   const [renovandoId, setRenovandoId] = useState<string | null>(null);
   const [copiadoId, setCopiadoId] = useState<string | null>(null);
+  // Móvil: la tarjeta abre una hoja con las acciones (en escritorio, el menú de la fila).
+  const [hojaEmp, setHojaEmp] = useState<Empleado | null>(null);
+  const [hojaInv, setHojaInv] = useState<InvitacionPendiente | null>(null);
 
   const nombreSucursal = (id: string | null) =>
     id ? sucursales.find((s) => s.id === id)?.nombre ?? "Sucursal eliminada" : "Sin sucursal";
@@ -215,13 +222,17 @@ export function EmpleadosClient({
   const hayInvitaciones = invitaciones.length > 0 || Boolean(errorInvitaciones);
 
   return (
-    <div className="flex flex-col gap-6">
-      <PageHeader title="Empleados" description="Invita a tu equipo y decide quién entra al panel.">
-        <Button onClick={() => setIsInviteOpen(true)}>
-          <UserPlus aria-hidden />
-          Invitar empleado
-        </Button>
-      </PageHeader>
+    <div className="flex flex-col gap-8">
+      <PageHeader
+        title="Empleados"
+        description="Invita a tu equipo y decide quién entra al panel."
+        principal={
+          <Button size="lg" onClick={() => setIsInviteOpen(true)}>
+            <UserPlus aria-hidden />
+            Invitar empleado
+          </Button>
+        }
+      />
 
       <InvitarDialog
         open={isInviteOpen}
@@ -234,11 +245,15 @@ export function EmpleadosClient({
 
       {/* Invitaciones pendientes */}
       {hayInvitaciones && (
-        <section aria-labelledby="titulo-invitaciones" className="flex flex-col gap-3">
-          <h2 id="titulo-invitaciones" className="flex items-center gap-2 text-lg font-semibold">
-            Invitaciones pendientes
-            {invitaciones.length > 0 && <TonoBadge tono="neutro">{invitaciones.length}</TonoBadge>}
-          </h2>
+        <section aria-labelledby="titulo-invitaciones" className="flex flex-col gap-4">
+          <div id="titulo-invitaciones">
+            <SectionLabel>
+              <span className="flex items-center gap-2">
+                Invitaciones pendientes
+                {invitaciones.length > 0 && <TonoBadge tono="neutro">{invitaciones.length}</TonoBadge>}
+              </span>
+            </SectionLabel>
+          </div>
           {errorInvitaciones ? (
             <ErrorState
               compacto
@@ -247,14 +262,33 @@ export function EmpleadosClient({
               onReintentar={() => router.refresh()}
             />
           ) : (
-            <Card className="gap-0 overflow-hidden p-0">
+            <Card className="gap-0 overflow-hidden p-0 max-md:overflow-visible max-md:bg-transparent max-md:shadow-none">
+              <ListaResponsive
+                items={invitaciones}
+                clave={(inv) => inv.id}
+                etiqueta="Invitaciones pendientes"
+                tarjeta={(inv) => {
+                  const vencida = ahora > 0 && new Date(inv.expira_at).getTime() <= ahora;
+                  return (
+                    <EntityCard
+                      onClick={() => setHojaInv(inv)}
+                      etiqueta={`Acciones de la invitación de ${inv.email}`}
+                      leading={<IconTile icon={EnvelopeSimple} tone={vencida ? "neutral" : "sky"} />}
+                      title={inv.email}
+                      subtitle={`${etiquetaRol(inv.role)} · ${nombreSucursal(inv.sucursal_id)}`}
+                      badge={vencida ? <TonoBadge tono="neutro">Vencida</TonoBadge> : undefined}
+                      meta={ahora > 0 && !vencida ? venceEn(inv.expira_at, ahora) : undefined}
+                    />
+                  );
+                }}
+                tabla={() => (
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Correo</TableHead>
                     <TableHead className="hidden lg:table-cell">Rol</TableHead>
                     <TableHead className="hidden lg:table-cell">Sucursal</TableHead>
-                    <TableHead className="hidden sm:table-cell">Vencimiento</TableHead>
+                    <TableHead>Vencimiento</TableHead>
                     <TableHead className="text-right">
                       <span className="sr-only">Acciones</span>
                     </TableHead>
@@ -268,15 +302,10 @@ export function EmpleadosClient({
                       <TableRow key={inv.id}>
                         <TableCell>
                           <span className="block font-medium text-foreground">{inv.email}</span>
-                          {ahora > 0 && (
-                            <span className="block text-xs text-muted-foreground sm:hidden">
-                              {vencida ? "Vencida" : venceEn(inv.expira_at, ahora)}
-                            </span>
-                          )}
                         </TableCell>
                         <TableCell className="hidden lg:table-cell">{etiquetaRol(inv.role)}</TableCell>
                         <TableCell className="hidden lg:table-cell">{nombreSucursal(inv.sucursal_id)}</TableCell>
-                        <TableCell className="hidden sm:table-cell">
+                        <TableCell>
                           {ahora === 0 ? (
                             ""
                           ) : vencida ? (
@@ -296,7 +325,7 @@ export function EmpleadosClient({
                                 onClick={() => void renovar(inv)}
                               >
                                 {renovando ? <Spinner size="sm" aria-hidden /> : <ArrowClockwise aria-hidden />}
-                                <span className="hidden sm:inline">Renovar</span>
+                                <span>Renovar</span>
                               </Button>
                             ) : (
                               <Button
@@ -306,7 +335,7 @@ export function EmpleadosClient({
                                 onClick={() => void copiar(inv)}
                               >
                                 {copiadoId === inv.id ? <Check aria-hidden /> : <Copy aria-hidden />}
-                                <span className="hidden sm:inline">{copiadoId === inv.id ? "Copiado" : "Copiar enlace"}</span>
+                                <span>{copiadoId === inv.id ? "Copiado" : "Copiar enlace"}</span>
                               </Button>
                             )}
                             <DropdownMenu>
@@ -348,30 +377,64 @@ export function EmpleadosClient({
                   })}
                 </TableBody>
               </Table>
+                )}
+              />
             </Card>
           )}
         </section>
       )}
 
       {/* Empleados */}
-      <section aria-labelledby={hayInvitaciones ? "titulo-empleados" : undefined} className="flex flex-col gap-3">
+      <section aria-labelledby={hayInvitaciones ? "titulo-empleados" : undefined} className="flex flex-col gap-4">
         {hayInvitaciones && (
-          <h2 id="titulo-empleados" className="flex items-center gap-2 text-lg font-semibold">
-            Equipo
-            <TonoBadge tono="neutro">{empleados.length}</TonoBadge>
-          </h2>
+          <div id="titulo-empleados">
+            <SectionLabel>
+              <span className="flex items-center gap-2">
+                Equipo
+                <TonoBadge tono="neutro">{empleados.length}</TonoBadge>
+              </span>
+            </SectionLabel>
+          </div>
         )}
         {errorCarga && empleados.length === 0 ? (
           <Card className="p-0">
             <ErrorState titulo="No pudimos cargar los empleados" descripcion={errorCarga} onReintentar={() => router.refresh()} />
           </Card>
         ) : (
-          <Card className="gap-0 overflow-hidden p-0">
+          <Card className="gap-0 overflow-hidden p-0 max-md:overflow-visible max-md:bg-transparent max-md:shadow-none">
+            <ListaResponsive
+              items={visibles}
+              clave={(emp) => emp.id}
+              etiqueta="Empleados"
+              vacio={
+                <EmptyState
+                  icon={ICONO_SECCION.empleados}
+                  title="Todavía no tienes empleados"
+                  action={
+                    <Button onClick={() => setIsInviteOpen(true)}>
+                      <UserPlus aria-hidden />
+                      Invitar empleado
+                    </Button>
+                  }
+                />
+              }
+              tarjeta={(emp) => (
+                <EntityCard
+                  onClick={emp.id === currentUserId ? undefined : () => setHojaEmp(emp)}
+                  etiqueta={`Acciones para ${emp.nombre_completo}`}
+                  leading={<IconTile icon={ICONO_SECCION.empleados} tone={emp.isBanned ? "neutral" : "sky"} />}
+                  title={`${emp.nombre_completo}${emp.id === currentUserId ? " (tú)" : ""}`}
+                  subtitle={emp.email ?? "Sin correo"}
+                  badge={<StatusBadge status={emp.isBanned ? "SUSPENDIDA" : "ACTIVA"} dominio="cuenta" />}
+                  meta={etiquetaRol(emp.role)}
+                />
+              )}
+              tabla={() => (
             <Table aria-labelledby={hayInvitaciones ? "titulo-empleados" : undefined}>
               <TableHeader>
                 <TableRow>
                   <TableHead>Nombre</TableHead>
-                  <TableHead className="hidden sm:table-cell">Rol</TableHead>
+                  <TableHead>Rol</TableHead>
                   <TableHead className="hidden lg:table-cell">Sucursal</TableHead>
                   <TableHead className="hidden lg:table-cell">Alta</TableHead>
                   <TableHead>Estado</TableHead>
@@ -391,10 +454,9 @@ export function EmpleadosClient({
                           {emp.nombre_completo}
                           {esYo && <span className="font-normal text-muted-foreground"> (tú)</span>}
                         </span>
-                        <span className="block text-xs text-muted-foreground">{emp.email ?? "Sin correo"}</span>
-                        <span className="block text-xs text-muted-foreground sm:hidden">{etiquetaRol(emp.role)}</span>
+                        <span className="block text-[13px] text-muted-foreground">{emp.email ?? "Sin correo"}</span>
                       </TableCell>
-                      <TableCell className="hidden sm:table-cell">{etiquetaRol(emp.role)}</TableCell>
+                      <TableCell>{etiquetaRol(emp.role)}</TableCell>
                       <TableCell className="hidden lg:table-cell">
                         {emp.role === "admin_cooperativa" && !emp.sucursal_id ? "Todas" : nombreSucursal(emp.sucursal_id)}
                       </TableCell>
@@ -404,7 +466,7 @@ export function EmpleadosClient({
                       </TableCell>
                       <TableCell className="text-right">
                         {esYo ? (
-                          <span className="hidden text-xs text-muted-foreground sm:inline">Tu cuenta</span>
+                          <span className="text-[13px] text-muted-foreground">Tu cuenta</span>
                         ) : (
                           <DropdownMenu>
                             <DropdownMenuTrigger
@@ -444,25 +506,110 @@ export function EmpleadosClient({
                   );
                 })}
 
-                {empleados.length === 0 && (
-                  <FilaVacia
-                    colSpan={6}
-                    icon={ICONO_SECCION.empleados}
-                    titulo="Todavía no tienes empleados"
-                    accion={
-                      <Button variant="outline" size="sm" onClick={() => setIsInviteOpen(true)}>
-                        <UserPlus aria-hidden />
-                        Invitar empleado
-                      </Button>
-                    }
-                  />
-                )}
               </TableBody>
             </Table>
+              )}
+            />
             <PaginacionTabla pagina={pagina} paginas={paginas} onCambio={ir} />
           </Card>
         )}
       </section>
+
+      <Dialog open={hojaEmp !== null} onOpenChange={(abierto) => !abierto && setHojaEmp(null)}>
+        {hojaEmp && (
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>{hojaEmp.nombre_completo}</DialogTitle>
+              <DialogDescription>{hojaEmp.email ?? "Sin correo"}</DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setHojaEmp(null)}>
+                Cerrar
+              </Button>
+              <Button
+                type="button"
+                variant={hojaEmp.isBanned ? "default" : "outline"}
+                className={hojaEmp.isBanned ? undefined : "text-destructive-text hover:text-destructive-text"}
+                onClick={() => {
+                  setEmpleadoAccion({ empleado: hojaEmp, accion: hojaEmp.isBanned ? "reactivar" : "desactivar" });
+                  setAccionOpen(true);
+                  setHojaEmp(null);
+                }}
+              >
+                {hojaEmp.isBanned ? <ArrowCounterClockwise aria-hidden /> : <Prohibit aria-hidden />}
+                {hojaEmp.isBanned ? "Reactivar cuenta" : "Suspender cuenta"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        )}
+      </Dialog>
+
+      <Dialog open={hojaInv !== null} onOpenChange={(abierto) => !abierto && setHojaInv(null)}>
+        {hojaInv && (
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="break-all">{hojaInv.email}</DialogTitle>
+              <DialogDescription>
+                {ahora > 0 && new Date(hojaInv.expira_at).getTime() <= ahora
+                  ? "La invitación venció. Renuévala para darle otras 48 horas."
+                  : `${venceEn(hojaInv.expira_at, ahora)}. Sirve una sola vez.`}
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="ghost"
+                className="text-destructive-text hover:text-destructive-text"
+                onClick={() => {
+                  setARevocar(hojaInv);
+                  setRevocarOpen(true);
+                  setHojaInv(null);
+                }}
+              >
+                <XCircle aria-hidden />
+                Revocar invitación
+              </Button>
+              {ahora > 0 && new Date(hojaInv.expira_at).getTime() <= ahora ? (
+                <Button
+                  type="button"
+                  disabled={renovandoId === hojaInv.id}
+                  onClick={async () => {
+                    await renovar(hojaInv);
+                    setHojaInv(null);
+                  }}
+                >
+                  <ArrowClockwise aria-hidden />
+                  Renovar invitación
+                </Button>
+              ) : (
+                <>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      abrirWhatsApp(cooperativaNombre, hojaInv.token);
+                      setHojaInv(null);
+                    }}
+                  >
+                    <WhatsappLogo aria-hidden />
+                    Enviar por WhatsApp
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={async () => {
+                      await copiar(hojaInv);
+                      setHojaInv(null);
+                    }}
+                  >
+                    <Copy aria-hidden />
+                    Copiar enlace
+                  </Button>
+                </>
+              )}
+            </DialogFooter>
+          </DialogContent>
+        )}
+      </Dialog>
 
       <ConfirmDialog
         open={accionOpen && empleadoAccion !== null}
@@ -601,10 +748,10 @@ function FormularioInvitacion({
             Sirve una sola vez.
           </DialogDescription>
         </DialogHeader>
-        <div className="rounded-md bg-muted p-4">
-          <p className="font-mono text-sm break-all text-foreground">{enlace}</p>
+        <div className="rounded-md bg-surface p-4">
+          <p className="font-mono text-[15px] break-all text-foreground">{enlace}</p>
         </div>
-        <div className="grid gap-2 sm:grid-cols-2">
+        <div className="grid gap-2 md:grid-cols-2">
           <Button
             type="button"
             variant="outline"
@@ -678,7 +825,7 @@ function FormularioInvitacion({
 
   return (
     <DialogContent showCloseButton={!enviando}>
-      <form onSubmit={enviar} noValidate className="grid gap-4">
+      <form onSubmit={enviar} noValidate className="grid gap-5">
         <DialogHeader>
           <DialogTitle>Invitar empleado</DialogTitle>
           <DialogDescription>Recibirá un enlace para crear su cuenta. Vence en 48 horas.</DialogDescription>
@@ -704,12 +851,12 @@ function FormularioInvitacion({
               ))}
             </SelectContent>
           </Select>
-          {errores.sucursal && <p className="text-sm text-destructive-text">{errores.sucursal}</p>}
+          {errores.sucursal && <p className="text-[13px] text-destructive-text">{errores.sucursal}</p>}
         </div>
 
         <div className="grid gap-2">
-          <p className="text-sm font-medium text-foreground">Rol</p>
-          <GrupoOpciones etiqueta="Rol" className="grid gap-2 sm:grid-cols-2">
+          <p className="text-[13px] font-medium text-foreground">Rol</p>
+          <GrupoOpciones etiqueta="Rol" className="grid gap-2 md:grid-cols-2">
             {ROLES_INVITACION.map((r) => (
               <OpcionTile
                 key={r.value}
@@ -731,7 +878,10 @@ function FormularioInvitacion({
             type="email"
             inputMode="email"
             autoComplete="off"
-            placeholder="tu@correo.com"
+            autoCapitalize="none"
+            spellCheck={false}
+            enterKeyHint="done"
+            placeholder="Ej. empleado@correo.com"
             value={email}
             disabled={enviando}
             aria-invalid={errores.email ? true : undefined}
@@ -742,7 +892,7 @@ function FormularioInvitacion({
             }}
           />
           {errores.email && (
-            <p id={`${uid}-email-error`} className="text-sm text-destructive-text">
+            <p id={`${uid}-email-error`} className="text-[13px] text-destructive-text">
               {errores.email}
             </p>
           )}

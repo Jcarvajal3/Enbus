@@ -125,7 +125,7 @@ export function CreateTarifaDialog({ vigente, rutas }: CreateTarifaDialogProps) 
       }}
     >
       <DialogTrigger asChild>
-        <Button>
+        <Button size="lg">
           <Plus aria-hidden /> Nueva tarifa
         </Button>
       </DialogTrigger>
@@ -290,7 +290,7 @@ function Formulario({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="overflow-hidden rounded-md border border-border">
+        <div className="overflow-hidden rounded-md bg-surface">
           <Table>
             <caption className="sr-only">Valores antes y después del cambio</caption>
             <TableHeader>
@@ -319,15 +319,15 @@ function Formulario({
         </div>
 
         <section aria-labelledby={id("ejemplos")} className="flex flex-col gap-3">
-          <h3 id={id("ejemplos")} className="text-sm font-semibold">
+          <h3 id={id("ejemplos")} className="text-[17px] font-semibold">
             Ejemplos
           </h3>
           {ejemplos.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No hay rutas activas para mostrar ejemplos.</p>
+            <p className="text-[15px] text-muted-foreground">No hay rutas activas para mostrar ejemplos.</p>
           ) : (
             ejemplos.map((r) => (
-              <div key={r.id} className="overflow-hidden rounded-md border border-border">
-                <p className="border-b border-border bg-muted/50 px-3 py-2 text-sm font-medium">
+              <div key={r.id} className="overflow-hidden rounded-md bg-surface">
+                <p className="px-4 py-3 text-[15px] font-medium">
                   {formatCiudad(r.ciudad_origen)} → {formatCiudad(r.ciudad_destino)}
                 </p>
                 <Table>
@@ -370,11 +370,11 @@ function Formulario({
               </div>
             ))
           )}
-          <p className="text-xs text-muted-foreground">En USD de referencia; se cobra en Bs a la tasa BCV del día.</p>
+          <p className="text-[13px] text-muted-foreground">En USD de referencia; se cobra en Bs a la tasa BCV del día.</p>
         </section>
 
         {nota.trim() && (
-          <p className="text-sm">
+          <p className="text-[15px]">
             <span className="text-muted-foreground">Nota: </span>
             {nota.trim()}
           </p>
@@ -382,11 +382,11 @@ function Formulario({
 
         {errorGeneral && <AvisoError>{errorGeneral}</AvisoError>}
 
-        <DialogFooter className="sm:justify-between">
-          <Button type="button" variant="outline" onClick={() => setPaso(1)} disabled={publicando}>
+        <DialogFooter className="md:justify-between">
+          <Button size="lg" type="button" variant="outline" onClick={() => setPaso(1)} disabled={publicando}>
             <ArrowLeft aria-hidden /> Atrás
           </Button>
-          <Button type="button" onClick={publicar} disabled={publicando} aria-busy={publicando || undefined}>
+          <Button size="lg" type="button" onClick={publicar} disabled={publicando} aria-busy={publicando || undefined}>
             {publicando && <Spinner size="sm" aria-hidden />}
             {publicando
               ? programada
@@ -452,7 +452,7 @@ function Formulario({
         <DialogDescription>Precio de las encomiendas para todas las cooperativas, en USD de referencia.</DialogDescription>
       </DialogHeader>
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-5 md:grid-cols-2">
         {campoNumero("tarifa_por_kg", "Precio por kilo (USD)", porKg, setPorKg, "Ej.: 2,50")}
         {campoNumero(
           "factor_distancia_por_min",
@@ -493,7 +493,7 @@ function Formulario({
           </TabsList>
         </Tabs>
         {cuando === "programar" && (
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-4 md:grid-cols-2">
             <Field data-invalid={errores.vigente_desde ? true : undefined}>
               <FieldLabel htmlFor={id("vigente_desde")}>Fecha</FieldLabel>
               <Input
@@ -525,7 +525,7 @@ function Formulario({
                 className="tabular-nums"
               />
             </Field>
-            <div className="sm:col-span-2">
+            <div className="md:col-span-2">
               {errores.vigente_desde
                 ? errorCampo("vigente_desde")
                 : programada && (
@@ -554,10 +554,10 @@ function Formulario({
       </Field>
 
       <DialogFooter>
-        <Button type="button" variant="outline" onClick={onCerrar} disabled={publicando}>
+        <Button size="lg" type="button" variant="outline" onClick={onCerrar} disabled={publicando}>
           Cancelar
         </Button>
-        <Button type="submit" disabled={publicando}>
+        <Button size="lg" type="submit" disabled={publicando}>
           Continuar <ArrowRight aria-hidden />
         </Button>
       </DialogFooter>

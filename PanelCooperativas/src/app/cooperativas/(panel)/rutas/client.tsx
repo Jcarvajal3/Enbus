@@ -25,6 +25,9 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { AvisoError } from "@/components/aviso-error";
 import { ErrorState } from "@/components/error-state";
 import { StatusBadge } from "@/components/status-badge";
+import { EntityCard } from "@/components/entity-card";
+import { IconTile } from "@/components/icon-tile";
+import { ListaResponsive } from "@/components/lista-responsive";
 import { PaginacionTabla, usePaginacion } from "@/components/paginacion-tabla";
 import { ESTADOS_VENEZUELA, CIUDADES_POR_ESTADO } from "@/lib/data/venezuela";
 import { guardarRuta, toggleActivaRuta, checkDesactivarRuta } from "./actions";
@@ -163,7 +166,7 @@ function SelectorTerminal({
           )}
         </SelectContent>
       </Select>
-      <p id={`${id}-ayuda`} className="text-sm text-muted-foreground">
+      <p id={`${id}-ayuda`} className="text-[13px] text-muted-foreground">
         {terminales.ciudad.length + terminales.estado.length === 0
           ? `Aún no tenemos terminales de ${nombreCiudad}: queda sin indicar.`
           : "Los pasajeros lo verán al buscar los viajes de esta ruta."}
@@ -188,17 +191,12 @@ function NombreRuta({ ruta }: { ruta: Ruta }) {
       <span>
         {formatCiudad(ruta.ciudad_origen)} → {formatCiudad(ruta.ciudad_destino)}
       </span>
-      <span className="text-xs font-normal text-muted-foreground">
+      <span className="text-[13px] font-normal text-muted-foreground">
         {formatCiudad(ruta.estado_origen)} → {formatCiudad(ruta.estado_destino)}
       </span>
       {textoTerminales(ruta) && (
-        <span className="text-xs font-normal text-muted-foreground">{textoTerminales(ruta)}</span>
+        <span className="text-[13px] font-normal text-muted-foreground">{textoTerminales(ruta)}</span>
       )}
-      {/* En teléfono, la duración y el estado van aquí (sus columnas se ocultan). */}
-      <span className="text-xs font-normal text-muted-foreground sm:hidden">
-        {formatDuracion(Number(ruta.duracion_estimada_min) || 0)}
-        {!ruta.activa && " · Inactiva"}
-      </span>
     </span>
   );
 }
@@ -407,15 +405,19 @@ export function RutasClient({ rutas, errorCarga }: { rutas: Ruta[]; errorCarga: 
   const mismaSeleccion = Boolean(ciudadOrigen && ciudadDestino && mismaCiudad(ciudadOrigen, ciudadDestino));
 
   return (
-    <div className="flex flex-col gap-6">
-      <PageHeader title="Rutas" description="Duración y precio del pasaje en USD.">
-        {rutas.length > 0 && (
-          <Button onClick={openCreateModal}>
-            <Plus aria-hidden />
-            Crear ruta
-          </Button>
-        )}
-      </PageHeader>
+    <div className="flex flex-col gap-8">
+      <PageHeader
+        title="Rutas"
+        description="Duración y precio del pasaje en USD."
+        principal={
+          rutas.length > 0 ? (
+            <Button size="lg" onClick={openCreateModal}>
+              <Plus aria-hidden />
+              Crear ruta
+            </Button>
+          ) : undefined
+        }
+      />
 
       {errorCarga ? (
         <Card className="p-0">
@@ -428,7 +430,7 @@ export function RutasClient({ rutas, errorCarga }: { rutas: Ruta[]; errorCarga: 
             title="Todavía no tienes rutas"
             description="Crea una con su duración y su precio para programar viajes."
             action={
-              <Button onClick={openCreateModal}>
+              <Button size="lg" onClick={openCreateModal}>
                 <Plus aria-hidden />
                 Crear ruta
               </Button>
@@ -436,14 +438,31 @@ export function RutasClient({ rutas, errorCarga }: { rutas: Ruta[]; errorCarga: 
           />
         </Card>
       ) : (
-        <Card className="gap-0 overflow-hidden p-0">
+        <Card className="gap-0 overflow-hidden p-0 max-md:overflow-visible max-md:bg-transparent max-md:shadow-none">
+          <ListaResponsive
+            items={visibles}
+            clave={(ruta) => ruta.id}
+            etiqueta="Rutas"
+            tarjeta={(ruta) => (
+              <EntityCard
+                onClick={() => openEditModal(ruta)}
+                etiqueta={`Editar ruta ${nombreRuta(ruta)}`}
+                leading={<IconTile icon={ICONO_SECCION.rutas} tone={ruta.activa ? "sky" : "neutral"} />}
+                title={nombreRuta(ruta)}
+                subtitle={[formatDuracion(Number(ruta.duracion_estimada_min) || 0), textoTerminales(ruta)].filter(Boolean).join(" · ")}
+                lineasSubtitulo={2}
+                adorno={formatUsd(Number(ruta.precio_pasaje))}
+                badge={<StatusBadge status={ruta.activa ? "ACTIVO" : "INACTIVO"} dominio="recurso" />}
+              />
+            )}
+            tabla={() => (
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Ruta</TableHead>
-                <TableHead className="hidden sm:table-cell">Duración</TableHead>
+                <TableHead>Duración</TableHead>
                 <TableHead className="text-right">Precio</TableHead>
-                <TableHead className="hidden sm:table-cell">Estado</TableHead>
+                <TableHead>Estado</TableHead>
                 <TableHead className="text-right">
                   <span className="sr-only">Acciones</span>
                 </TableHead>
@@ -459,13 +478,11 @@ export function RutasClient({ rutas, errorCarga }: { rutas: Ruta[]; errorCarga: 
                   >
                     <NombreRuta ruta={ruta} />
                   </CeldaEnlace>
-                  <TableCell className="hidden tabular-nums sm:table-cell">{formatDuracion(Number(ruta.duracion_estimada_min) || 0)}</TableCell>
+                  <TableCell className="tabular-nums">{formatDuracion(Number(ruta.duracion_estimada_min) || 0)}</TableCell>
                   <TableCell className="text-right">
-                    <Monto usd={Number(ruta.precio_pasaje)} size="sm" align="right" className="hidden sm:inline-flex" />
-                    {/* En teléfono, solo el precio de referencia: la fila cabe sin desplazarse. */}
-                    <span className="text-sm font-medium tabular-nums sm:hidden">{formatUsd(Number(ruta.precio_pasaje))}</span>
+                    <Monto usd={Number(ruta.precio_pasaje)} size="sm" align="right" />
                   </TableCell>
-                  <TableCell className="hidden sm:table-cell">
+                  <TableCell>
                     <StatusBadge status={ruta.activa ? "ACTIVO" : "INACTIVO"} dominio="recurso" />
                   </TableCell>
                   <TableCell className="text-right">
@@ -495,6 +512,8 @@ export function RutasClient({ rutas, errorCarga }: { rutas: Ruta[]; errorCarga: 
               ))}
             </TableBody>
           </Table>
+            )}
+          />
           <PaginacionTabla pagina={pagina} paginas={paginas} onCambio={ir} />
         </Card>
       )}
@@ -515,7 +534,7 @@ export function RutasClient({ rutas, errorCarga }: { rutas: Ruta[]; errorCarga: 
           >
             <div className="grid gap-4">
               {formError && <AvisoError>{formError}</AvisoError>}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div className="grid content-start gap-2">
                   <Label htmlFor={`${uid}-estado-origen`}>Estado de origen</Label>
                   <Select name="estado_origen" value={estadoOrigen} onValueChange={(val) => { setEstadoOrigen(val ?? ""); setCiudadOrigen(""); setTerminal(SIN_TERMINAL); }} required>
@@ -551,7 +570,7 @@ export function RutasClient({ rutas, errorCarga }: { rutas: Ruta[]; errorCarga: 
                 />
               )}
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div className="grid content-start gap-2">
                   <Label htmlFor={`${uid}-estado-destino`}>Estado de destino</Label>
                   <Select name="estado_destino" value={estadoDestino} onValueChange={(val) => { setEstadoDestino(val ?? ""); setCiudadDestino(""); setTerminalDestino(SIN_TERMINAL); }} required>
@@ -578,7 +597,7 @@ export function RutasClient({ rutas, errorCarga }: { rutas: Ruta[]; errorCarga: 
                   </Select>
                 </div>
                 {mismaSeleccion && (
-                  <p id={`${uid}-misma-ciudad`} className="col-span-2 text-sm text-destructive-text">
+                  <p id={`${uid}-misma-ciudad`} className="md:col-span-2 text-[13px] text-destructive-text">
                     {MSG_MISMA_CIUDAD}
                   </p>
                 )}
@@ -600,7 +619,7 @@ export function RutasClient({ rutas, errorCarga }: { rutas: Ruta[]; errorCarga: 
               )}
 
               <fieldset className="grid gap-2">
-                <legend className="mb-2 text-sm font-medium text-foreground">Duración del viaje</legend>
+                <legend className="mb-2 text-[13px] font-medium text-foreground">Duración del viaje</legend>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="grid content-start gap-2">
                     <Label htmlFor={`${uid}-horas`}>Horas</Label>
@@ -649,7 +668,7 @@ export function RutasClient({ rutas, errorCarga }: { rutas: Ruta[]; errorCarga: 
                   aria-describedby={`${uid}-precio-ayuda`}
                   required
                 />
-                <p id={`${uid}-precio-ayuda`} className="text-sm text-muted-foreground">
+                <p id={`${uid}-precio-ayuda`} className="text-[13px] text-muted-foreground">
                   El pasajero paga en Bs a la tasa BCV del día
                   {tasa && precioValido
                     ? ` (hoy ≈ ${formatBs(usdABs(precioUsd, tasa.tasa))}).`
@@ -659,10 +678,10 @@ export function RutasClient({ rutas, errorCarga }: { rutas: Ruta[]; errorCarga: 
                 </p>
               </div>
 
-              <div className="flex items-center justify-between gap-4 rounded-md border border-border p-4">
+              <div className="flex items-center justify-between gap-4 rounded-md bg-surface p-4">
                 <div className="flex flex-col gap-0.5">
                   <Label htmlFor={`${uid}-activa`}>Ruta activa</Label>
-                  <p className="text-sm text-muted-foreground">Solo las activas se pueden programar.</p>
+                  <p className="text-[13px] text-muted-foreground">Solo las activas se pueden programar.</p>
                 </div>
                 <Switch
                   id={`${uid}-activa`}
@@ -672,6 +691,23 @@ export function RutasClient({ rutas, errorCarga }: { rutas: Ruta[]; errorCarga: 
                 />
               </div>
             </div>
+
+            {/* Móvil: la tarjeta no lleva menú, desactivar vive en la hoja. */}
+            {editingRuta && (
+              <Button
+                type="button"
+                variant="outline"
+                className="md:hidden"
+                disabled={isPending}
+                onClick={() => {
+                  setIsModalOpen(false);
+                  handleToggleRuta(editingRuta);
+                }}
+              >
+                {editingRuta.activa ? <Prohibit aria-hidden /> : <ArrowCounterClockwise aria-hidden />}
+                {editingRuta.activa ? "Desactivar ruta" : "Reactivar ruta"}
+              </Button>
+            )}
 
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)} disabled={isPending}>

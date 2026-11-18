@@ -3,9 +3,11 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowClockwise, WarningCircle } from "@phosphor-icons/react";
+import { IconTile } from "@/components/icon-tile";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { INICIO_ADMIN } from "@/lib/admin-navigation";
+import { cn } from "@/lib/utils";
 
 // Error de una sección del admin. Nunca muestra el texto técnico del error
 // (en producción Next.js lo oculta y en desarrollo puede traer datos internos):
@@ -35,13 +37,11 @@ export default function AdminPanelError({
   };
 
   return (
-    <div role="alert" className="flex flex-1 flex-col items-center justify-center gap-4 p-12 text-center">
-      <div className="flex size-16 items-center justify-center rounded-full bg-destructive-light">
-        <WarningCircle className="size-8 text-destructive-deep" aria-hidden />
-      </div>
-      <div className="flex max-w-sm flex-col gap-1">
-        <h1 className="text-base font-semibold text-foreground">No pudimos cargar esta sección</h1>
-        <p className="text-sm text-muted-foreground">
+    <div role="alert" className="flex flex-1 flex-col items-center justify-center gap-4 p-6 text-center md:p-12">
+      <IconTile icon={WarningCircle} tone="danger" size="xl" />
+      <div className="flex max-w-sm flex-col gap-1.5">
+        <h1 className="text-[22px] font-semibold tracking-tight text-foreground">No pudimos cargar esta sección</h1>
+        <p className="text-[15px] text-muted-foreground">
           {error.digest ? (
             <>
               Si sigue pasando, avísanos con este código:{" "}
@@ -52,11 +52,11 @@ export default function AdminPanelError({
           )}
         </p>
       </div>
-      <div className="flex flex-wrap justify-center gap-2">
-        <Link href={INICIO_ADMIN} className={buttonVariants({ variant: "outline" })}>
+      <div className="flex w-full flex-col-reverse gap-3 md:w-auto md:flex-row md:flex-wrap md:justify-center">
+        <Link href={INICIO_ADMIN} className={cn(buttonVariants({ variant: "outline", size: "lg" }), "max-md:w-full")}>
           Ir al Resumen
         </Link>
-        <Button onClick={reintentar} disabled={reintentando} aria-busy={reintentando || undefined}>
+        <Button size="lg" className="max-md:w-full" onClick={reintentar} disabled={reintentando} aria-busy={reintentando || undefined}>
           {reintentando ? <Spinner size="sm" aria-hidden /> : <ArrowClockwise aria-hidden />}
           {reintentando ? "Reintentando…" : "Reintentar"}
         </Button>

@@ -5,8 +5,8 @@
   "lang": "es-VE",
   "start_url": "/cooperativas/dashboard",
   "display": "standalone",
-  "background_color": "#FFFFFF",
-  "theme_color": "#FFC757",
+  "background_color": "#F3F5F9",
+  "theme_color": "#F3F5F9",
   "icons": [
     {
       "src": "/icon-192.png",

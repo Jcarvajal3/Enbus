@@ -23,7 +23,7 @@ export default async function UsuarioDetailPage({ params }: PageProps) {
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-8">
       <MigaObjeto label={usuario.nombre_completo} />
       <PageHeader
         title={usuario.nombre_completo}

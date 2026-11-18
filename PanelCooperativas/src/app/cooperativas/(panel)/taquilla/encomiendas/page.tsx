@@ -9,14 +9,19 @@
 
 import { Suspense, useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
-import { Plus, Printer } from "@phosphor-icons/react";
+import { Package, Plus, Printer } from "@phosphor-icons/react";
 import { PageHeader } from "@/components/page-header";
+import { SectionLabel } from "@/components/section-label";
 import { ScanInput } from "@/components/scan-input";
 import { UltimoEscaneo, useUltimoEscaneo } from "@/components/ultimo-escaneo";
 import { CeldaEnlace } from "@/components/celda-enlace";
 import { StatusBadge, TonoBadge } from "@/components/status-badge";
 import { ErrorState } from "@/components/error-state";
-import { FilaVacia } from "@/components/fila-vacia";
+import { EmptyState } from "@/components/empty-state";
+import { EntityCard } from "@/components/entity-card";
+import { IconTile } from "@/components/icon-tile";
+import { ListaResponsive } from "@/components/lista-responsive";
+import { BarraAccionFija } from "@/components/barra-accion-fija";
 import { TablaSkeleton } from "@/components/tabla-skeleton";
 import { TabsUrl } from "@/components/barra-filtros";
 import { PaginacionTabla, usePaginacion } from "@/components/paginacion-tabla";
@@ -92,9 +97,9 @@ export default function TaquillaEncomiendasPage() {
   return (
     <Suspense
       fallback={
-        <div className="flex flex-col gap-6">
+        <div className="flex flex-col gap-8">
           <Skeleton className="h-8 w-64" />
-          <Skeleton className="h-24 w-full rounded-md" />
+          <Skeleton className="h-24 w-full rounded-xl" />
           <TablaSkeleton columnas={COLUMNAS} />
         </div>
       }
@@ -279,15 +284,15 @@ function TaquillaEncomiendas() {
   const { visibles, pagina, paginas, ir } = usePaginacion(encomiendas);
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-8">
       <PageHeader title="Taquilla de encomiendas">
-        <Button onClick={() => cambiarModal({ type: "nueva" })}>
+        <Button size="lg" className="max-md:hidden" onClick={() => cambiarModal({ type: "nueva" })}>
           <Plus aria-hidden />
           Nueva encomienda
         </Button>
       </PageHeader>
 
-      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
         <ScanInput
           onEncomiendaFound={alEscanear}
           onError={(e) => registrar({ codigo: e.codigo, tono: "error", titulo: "No encontrada", detalle: e.mensaje })}
@@ -297,7 +302,8 @@ function TaquillaEncomiendas() {
         <UltimoEscaneo resultado={ultimo} />
       </div>
 
-      <div className="flex flex-col gap-4">
+      <section className="flex flex-col gap-4">
+        <SectionLabel>Encomiendas</SectionLabel>
         <TabsUrl param="estado" defecto="todas" opciones={PESTANAS} />
 
         {errorCarga && encomiendas.length > 0 && (
@@ -312,11 +318,50 @@ function TaquillaEncomiendas() {
         {loading && encomiendas.length === 0 ? (
           <TablaSkeleton columnas={COLUMNAS} />
         ) : (
-          <Card className="gap-0 overflow-hidden p-0">
+          <Card className="gap-0 overflow-hidden p-0 max-md:overflow-visible max-md:bg-transparent max-md:shadow-none">
             {errorCarga && encomiendas.length === 0 ? (
               <ErrorState titulo="No pudimos cargar las encomiendas" descripcion={errorCarga} onReintentar={fetchEncomiendas} />
             ) : (
               <>
+                <ListaResponsive
+                  items={visibles}
+                  clave={(e) => e.id}
+                  etiqueta="Encomiendas"
+                  vacio={
+                    <EmptyState
+                      icon={ICONO_SECCION.taquillaEncomiendas}
+                      tono="coral"
+                      title={
+                        filtroEstado === "todas"
+                          ? "Todavía no hay encomiendas"
+                          : `No hay encomiendas «${etiquetaEstado("encomienda", filtroEstado)}»`
+                      }
+                    />
+                  }
+                  tarjeta={(e) => (
+                    <EntityCard
+                      onClick={() => handleRowClick(e)}
+                      etiqueta={`${ETIQUETA_ACCION[accionDe(e)]} ${e.tracking_id}`}
+                      leading={<IconTile icon={Package} tone="coral" />}
+                      title={`${formatCiudad(e.ciudad_origen)} → ${formatCiudad(e.ciudad_destino)}`}
+                      subtitle={`Para ${e.receiver_nombre ?? "—"} · de ${remitenteDe(e).nombre ?? "—"}`}
+                      adorno={
+                        Number(e.costo_calculado) > 0 ? (
+                          <Monto usd={Number(e.costo_calculado)} size="sm" align="right" />
+                        ) : (
+                          <span className="text-[13px] font-normal text-muted-foreground">Por calcular</span>
+                        )
+                      }
+                      badge={
+                        <span className="flex flex-wrap items-center gap-2">
+                          <StatusBadge status={e.estado} dominio="encomienda" />
+                          {faltaFoto(e) && <TonoBadge tono="pendiente">Falta foto</TonoBadge>}
+                        </span>
+                      }
+                      meta={e.tracking_id}
+                    />
+                  )}
+                  tabla={(items) => (
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -333,38 +378,19 @@ function TaquillaEncomiendas() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {encomiendas.length === 0 ? (
-                      <FilaVacia
-                        colSpan={COLUMNAS}
-                        icon={ICONO_SECCION.taquillaEncomiendas}
-                        titulo={
-                          filtroEstado === "todas"
-                            ? "Todavía no hay encomiendas"
-                            : `No hay encomiendas «${etiquetaEstado("encomienda", filtroEstado)}»`
-                        }
-                        accion={
-                          filtroEstado === "todas" ? (
-                            <Button onClick={() => cambiarModal({ type: "nueva" })}>
-                              <Plus aria-hidden />
-                              Nueva encomienda
-                            </Button>
-                          ) : undefined
-                        }
-                      />
-                    ) : (
-                      visibles.map((encomienda) => (
+                    {items.map((encomienda) => (
                         <TableRow key={encomienda.id} className="relative">
                           <CeldaEnlace
                             onAbrir={() => handleRowClick(encomienda)}
                             etiqueta={`${ETIQUETA_ACCION[accionDe(encomienda)]} ${encomienda.tracking_id}`}
-                            className="font-mono text-sm"
+                            className="font-mono text-[15px] font-medium"
                           >
                             {encomienda.tracking_id}
                           </CeldaEnlace>
                           <TableCell className="hidden max-w-40 truncate xl:table-cell 2xl:max-w-48" title={remitenteDe(encomienda).nombre ?? undefined}>{remitenteDe(encomienda).nombre}</TableCell>
                           <TableCell className="max-w-40 truncate 2xl:max-w-48" title={encomienda.receiver_nombre ?? undefined}>{encomienda.receiver_nombre}</TableCell>
                           <TableCell>
-                            <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                            <div className="flex items-center gap-1.5 text-[15px] text-muted-foreground">
                               <span className="max-w-28 truncate" title={formatCiudad(encomienda.ciudad_origen)}>
                                 {formatCiudad(encomienda.ciudad_origen)}
                               </span>
@@ -380,7 +406,7 @@ function TaquillaEncomiendas() {
                               <StatusBadge status={encomienda.estado} dominio="encomienda" />
                               {encomienda.modalidad_pago === "DESTINO" &&
                                 ["POR_PAGAR", "EN_TRANSITO", "EN_OFICINA_DESTINO"].includes(encomienda.estado) && (
-                                  <span className="text-xs text-muted-foreground">{MODALIDAD_PAGO.DESTINO.corto}</span>
+                                  <span className="text-[13px] text-muted-foreground">{MODALIDAD_PAGO.DESTINO.corto}</span>
                                 )}
                               {faltaFoto(encomienda) && <TonoBadge tono="pendiente">Falta foto</TonoBadge>}
                             </div>
@@ -389,10 +415,10 @@ function TaquillaEncomiendas() {
                             {Number(encomienda.costo_calculado) > 0 ? (
                               <Monto usd={Number(encomienda.costo_calculado)} size="sm" align="right" />
                             ) : (
-                              <span className="text-sm text-muted-foreground">Por calcular</span>
+                              <span className="text-[13px] text-muted-foreground">Por calcular</span>
                             )}
                           </TableCell>
-                          <TableCell className="hidden text-sm whitespace-nowrap text-muted-foreground 2xl:table-cell">
+                          <TableCell className="hidden text-[13px] whitespace-nowrap text-muted-foreground 2xl:table-cell">
                             {capitalizarInicio(formatHaceTiempo(encomienda.created_at))}
                           </TableCell>
                           <TableCell className="text-right">
@@ -401,16 +427,24 @@ function TaquillaEncomiendas() {
                             )}
                           </TableCell>
                         </TableRow>
-                      ))
-                    )}
+                      ))}
                   </TableBody>
                 </Table>
+                  )}
+                />
                 <PaginacionTabla pagina={pagina} paginas={paginas} onCambio={ir} />
               </>
             )}
           </Card>
         )}
-      </div>
+      </section>
+
+      <BarraAccionFija escritorio="oculta">
+        <Button size="xl" onClick={() => cambiarModal({ type: "nueva" })}>
+          <Plus aria-hidden />
+          Nueva encomienda
+        </Button>
+      </BarraAccionFija>
 
       {modalState.type === "recepcion" && (
         <RecepcionModal

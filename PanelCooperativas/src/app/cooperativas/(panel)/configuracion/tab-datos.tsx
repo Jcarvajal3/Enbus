@@ -139,10 +139,10 @@ export function DatosCooperativaTab({ cooperativa, estado }: DatosCooperativaTab
           {editable ? "Puedes corregir el nombre y el RIF mientras te revisamos." : "Los pasajeros los ven en la app y en sus boletos."}
         </CardDescription>
       </CardHeader>
-      <CardContent className="flex flex-col gap-6">
+      <CardContent className="flex flex-col gap-6 md:gap-8">
         {/* Logo */}
-        <div className="flex items-center gap-6">
-          <div className="flex size-24 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border bg-muted">
+        <div className="flex items-center gap-4 md:gap-6">
+          <div className="flex size-24 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-surface">
             {logoUrl ? (
               <Image
                 src={logoUrl}
@@ -158,13 +158,12 @@ export function DatosCooperativaTab({ cooperativa, estado }: DatosCooperativaTab
           </div>
           <div className="flex flex-col items-start gap-2">
             <div className="flex flex-col gap-0.5">
-              <p className="text-sm font-medium text-foreground">Logo</p>
-              <p className="text-xs text-muted-foreground">PNG, JPG o WebP de hasta 2 MB.</p>
+              <p className="text-[13px] font-medium text-foreground">Logo</p>
+              <p className="text-[13px] text-muted-foreground">PNG, JPG o WebP de hasta 2 MB.</p>
             </div>
             <Button
               type="button"
               variant="outline"
-              size="sm"
               onClick={() => fileInputRef.current?.click()}
               disabled={isPending}
               aria-busy={isPending || undefined}
@@ -184,8 +183,8 @@ export function DatosCooperativaTab({ cooperativa, estado }: DatosCooperativaTab
         </div>
 
         {editable ? (
-          <form onSubmit={guardarDatos} noValidate className="flex flex-col items-start gap-4">
-            <div className="grid w-full gap-4 sm:grid-cols-2">
+          <form onSubmit={guardarDatos} noValidate className="flex flex-col items-start gap-5">
+            <div className="grid w-full gap-5 md:grid-cols-2">
               <div className="grid content-start gap-2">
                 <Label htmlFor={`${uid}-nombre`}>Nombre de la cooperativa</Label>
                 <Input
@@ -204,30 +203,31 @@ export function DatosCooperativaTab({ cooperativa, estado }: DatosCooperativaTab
                   value={rif}
                   placeholder={RIF_PLACEHOLDER}
                   autoCapitalize="characters"
+                  enterKeyHint="done"
                   disabled={guardando}
                   aria-invalid={errorCampo?.campo === "rif" ? true : undefined}
                   aria-describedby={`${uid}-rif-ayuda`}
                   onChange={(e) => setRif(e.target.value)}
                   onBlur={() => setRif((actual) => normalizeRif(actual) ?? actual)}
                 />
-                <p id={`${uid}-rif-ayuda`} className="text-sm text-muted-foreground">
+                <p id={`${uid}-rif-ayuda`} className="text-[13px] text-muted-foreground">
                   {RIF_AYUDA_CORTA}
                 </p>
               </div>
             </div>
             {errorCampo && <AvisoError className="w-full">{errorCampo.mensaje}</AvisoError>}
-            <Button type="submit" disabled={guardando || !cambiado} aria-busy={guardando || undefined}>
+            <Button type="submit" className="max-md:w-full" disabled={guardando || !cambiado} aria-busy={guardando || undefined}>
               {guardando && <Spinner size="sm" aria-hidden />}
               {guardando ? "Guardando…" : "Guardar cambios"}
             </Button>
           </form>
         ) : (
           <div className="flex flex-col gap-3">
-            <dl className="grid gap-4 sm:grid-cols-2">
+            <dl className="grid gap-4 md:grid-cols-2">
               <ReadOnlyField label="Nombre de la cooperativa" value={cooperativa.nombre} />
               <ReadOnlyField label="RIF" value={cooperativa.rif ?? "—"} />
             </dl>
-            <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
+            <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-muted-foreground">
               <Lock className="size-4" aria-hidden />
               Para cambiar el nombre o el RIF, escríbenos.
               {soporte && (
@@ -245,7 +245,7 @@ export function DatosCooperativaTab({ cooperativa, estado }: DatosCooperativaTab
           </div>
         )}
 
-        <dl className="grid gap-4 sm:grid-cols-2">
+        <dl className="grid gap-4 md:grid-cols-2">
           <ReadOnlyField
             label="Comisión de EnBus"
             value={
@@ -264,9 +264,9 @@ export function DatosCooperativaTab({ cooperativa, estado }: DatosCooperativaTab
 
 function ReadOnlyField({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex flex-col gap-1">
-      <dt className="text-sm text-muted-foreground">{label}</dt>
-      <dd className="text-sm font-medium text-foreground">{value}</dd>
+    <div className="flex flex-col gap-1 rounded-md bg-surface p-4">
+      <dt className="text-[13px] text-muted-foreground">{label}</dt>
+      <dd className="text-[15px] font-medium text-foreground">{value}</dd>
     </div>
   );
 }

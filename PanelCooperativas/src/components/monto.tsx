@@ -11,9 +11,10 @@ import { useTasaBCV } from "@/components/tasa-bcv-provider";
 import { cn } from "@/lib/utils";
 
 const TAMANOS = {
-  lg: "text-2xl font-semibold tracking-tight",
-  md: "text-base font-medium",
-  sm: "text-sm font-medium",
+  xl: "text-[40px] leading-none font-semibold tracking-tight",
+  lg: "text-[28px] font-semibold tracking-tight",
+  md: "text-[17px] font-semibold",
+  sm: "text-[15px] font-medium",
 } as const;
 
 export type MontoProps = {
@@ -25,6 +26,18 @@ export type MontoProps = {
   align?: "left" | "right";
   className?: string;
 };
+
+/** "Bs 1.250,00" → símbolo pequeño y cifra grande en la misma línea base (como CifraMonto de la app). */
+function CifraGrande({ texto }: { texto: string }) {
+  const espacio = texto.indexOf(" ");
+  if (espacio <= 0) return <>{texto}</>;
+  return (
+    <>
+      <span className="text-[22px] font-medium">{texto.slice(0, espacio)} </span>
+      {texto.slice(espacio + 1)}
+    </>
+  );
+}
 
 export function Monto({ usd, bs, tasa, moneda, size = "md", align = "left", className }: MontoProps) {
   const tasaContexto = useTasaBCV();
@@ -40,7 +53,7 @@ export function Monto({ usd, bs, tasa, moneda, size = "md", align = "left", clas
       )}
     >
       <span aria-hidden className={cn("whitespace-nowrap", TAMANOS[size])}>
-        {principal}
+        {size === "xl" ? <CifraGrande texto={principal} /> : principal}
       </span>
       {secundario && (
         <span aria-hidden className="text-xs text-muted-foreground">

@@ -86,11 +86,11 @@ export function CooperativaActions({ cooperativa }: CooperativaActionsProps) {
 
   return (
     <>
-      <Button onClick={() => setEditOpen(true)}>
+      <Button size="lg" variant="outline" onClick={() => setEditOpen(true)}>
         <PencilSimple aria-hidden /> Editar datos
       </Button>
       {suspendida && (
-        <Button variant="outline" onClick={() => setConfirmar("ACTIVA")}>
+        <Button size="lg" onClick={() => setConfirmar("ACTIVA")}>
           <CheckCircle aria-hidden /> Reactivar
         </Button>
       )}
@@ -255,17 +255,17 @@ function EditarDialog({
           </DialogHeader>
 
           <div className="flex items-center gap-4">
-            <Avatar className="size-16 border border-border bg-muted">
+            <Avatar className="size-16 bg-surface">
               <AvatarImage src={logoPreview || ""} alt="Vista previa del logo" />
-              <AvatarFallback className="bg-muted text-muted-foreground">
+              <AvatarFallback className="bg-surface text-muted-foreground">
                 <UploadSimple className="size-6" aria-hidden />
               </AvatarFallback>
             </Avatar>
             <div className="flex flex-col items-start gap-1">
-              <Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} disabled={guardando}>
+              <Button type="button" variant="outline" size="sm" className="max-md:h-11" onClick={() => fileInputRef.current?.click()} disabled={guardando}>
                 Cambiar logo
               </Button>
-              <p className="text-xs text-muted-foreground">JPEG, PNG, WebP o GIF de hasta 2 MB.</p>
+              <p className="text-[13px] text-muted-foreground">JPEG, PNG, WebP o GIF de hasta 2 MB.</p>
             </div>
             <input
               type="file"
@@ -278,7 +278,7 @@ function EditarDialog({
             />
           </div>
 
-          <FieldGroup className="gap-4">
+          <FieldGroup className="gap-5">
             <Field>
               <FieldLabel htmlFor="editar-nombre">Nombre de la cooperativa</FieldLabel>
               <Input id="editar-nombre" name="nombre" defaultValue={cooperativa.nombre} required disabled={guardando} />
@@ -316,10 +316,10 @@ function EditarDialog({
           {error && <AvisoError>{error}</AvisoError>}
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => cambiarAbierto(false)} disabled={guardando}>
+            <Button size="lg" type="button" variant="outline" onClick={() => cambiarAbierto(false)} disabled={guardando}>
               Cancelar
             </Button>
-            <Button type="submit" disabled={guardando} aria-busy={guardando || undefined}>
+            <Button size="lg" type="submit" disabled={guardando} aria-busy={guardando || undefined}>
               {guardando && <Spinner size="sm" aria-hidden />}
               {guardando ? "Guardando…" : "Guardar cambios"}
             </Button>
@@ -390,6 +390,8 @@ function InvitarDialog({
                 id="invitar-email"
                 name="email"
                 type="email"
+                inputMode="email"
+                autoCapitalize="none"
                 autoComplete="off"
                 placeholder="Ej.: admin@cooperativa.com"
                 required
@@ -398,10 +400,10 @@ function InvitarDialog({
             </Field>
             {error && <AvisoError>{error}</AvisoError>}
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => cambiarAbierto(false)} disabled={invitando}>
+              <Button size="lg" type="button" variant="outline" onClick={() => cambiarAbierto(false)} disabled={invitando}>
                 Cancelar
               </Button>
-              <Button type="submit" disabled={invitando} aria-busy={invitando || undefined}>
+              <Button size="lg" type="submit" disabled={invitando} aria-busy={invitando || undefined}>
                 {invitando && <Spinner size="sm" aria-hidden />}
                 {invitando ? "Creando…" : "Crear invitación"}
               </Button>

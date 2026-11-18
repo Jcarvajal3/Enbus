@@ -60,7 +60,7 @@ function Persona({
         {nota && <CardDescription>{nota}</CardDescription>}
       </CardHeader>
       <CardContent>
-        <dl className="flex flex-col gap-4">
+        <dl className="flex flex-col gap-5">
           <Dato etiqueta="Nombre">
             {usuarioId && nombre ? (
               <Link href={`/admin/usuarios/${usuarioId}`} className={ENLACE}>
@@ -89,7 +89,7 @@ function Resultado({ e }: { e: EncomiendaAdmin }) {
       <Card>
         <CardHeader>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <CardTitle className="font-mono text-lg">{e.tracking_id}</CardTitle>
+            <CardTitle className="font-mono text-[22px] tracking-tight">{e.tracking_id}</CardTitle>
             <StatusBadge status={e.estado} dominio="encomienda" />
           </div>
           <CardDescription className="tabular-nums">
@@ -97,7 +97,7 @@ function Resultado({ e }: { e: EncomiendaAdmin }) {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <dl className="grid gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-4">
+          <dl className="grid gap-x-6 gap-y-4 md:grid-cols-2 lg:grid-cols-4">
             <Dato etiqueta="Cooperativa">
               {e.cooperativa_id && e.cooperativa_nombre ? (
                 <Link href={`/admin/cooperativas/${e.cooperativa_id}`} className={ENLACE}>
@@ -165,15 +165,20 @@ export default async function AdminEncomiendasPage({ searchParams }: PageProps) 
   const resultado = busqueda ? await buscarEncomiendaAdmin(busqueda) : null;
 
   return (
-    <div className="flex flex-col gap-6">
-      <PageHeader title="Encomiendas" />
+    <div className="flex flex-col gap-8">
+      <PageHeader title="Encomiendas" description="Busca una encomienda por su código de seguimiento." />
 
-      <form action="/admin/encomiendas" method="get" role="search" className="flex w-full max-w-xl flex-col gap-2">
+      <form
+        action="/admin/encomiendas"
+        method="get"
+        role="search"
+        className="flex w-full max-w-xl flex-col gap-2 rounded-xl bg-card p-4 shadow-card"
+      >
         <Label htmlFor="codigo">Código de seguimiento</Label>
-        <div className="flex gap-2">
+        <div className="flex flex-col gap-3 md:flex-row">
           <div className="relative flex-1">
             <MagnifyingGlass
-              className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
+              className="pointer-events-none absolute top-1/2 left-4 size-5 -translate-y-1/2 text-muted-foreground"
               aria-hidden
             />
             <Input
@@ -184,13 +189,14 @@ export default async function AdminEncomiendasPage({ searchParams }: PageProps) 
               placeholder="Ej.: EB-261003-12345"
               autoComplete="off"
               autoCapitalize="characters"
+              enterKeyHint="search"
               spellCheck={false}
               autoFocus={!busqueda}
               required
-              className="pl-9 font-mono"
+              className="pl-11 font-mono"
             />
           </div>
-          <Button type="submit">Buscar</Button>
+          <Button type="submit" size="lg" className="max-md:w-full">Buscar</Button>
         </div>
       </form>
 

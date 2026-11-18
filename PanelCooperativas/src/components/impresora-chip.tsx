@@ -36,23 +36,23 @@ export function ImpresoraChip({ className }: { className?: string }) {
       title={`Impresora · ${detalle}`}
       aria-label={`Impresora: ${detalle}. Abrir Impresora y lector`}
       className={cn(
-        "inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full border px-2.5 text-xs font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+        "inline-flex h-11 shrink-0 items-center gap-2 rounded-full px-3.5 md:h-9 md:px-3 text-[13px] font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
         tono === "aviso"
-          ? "border-warning/40 bg-warning-light text-warning-deep hover:border-warning/70"
-          : "border-border bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground",
+          ? "bg-warning-light text-warning-deep hover:bg-warning-light/70"
+          : "bg-surface text-muted-foreground hover:bg-surface-dark hover:text-foreground",
         className
       )}
     >
       <span
         aria-hidden
         className={cn(
-          "size-1.5 shrink-0 rounded-full",
-          tono === "exito" ? "bg-success" : tono === "aviso" ? "bg-warning" : "bg-muted-foreground/60"
+          "size-2 shrink-0 rounded-full",
+          tono === "exito" ? "bg-success" : tono === "aviso" ? "bg-warning" : "bg-muted-foreground"
         )}
       />
       {/* En teléfono, solo el icono (el texto completo queda en el title y el aria-label). */}
-      <Impresora className="size-4 sm:hidden" aria-hidden />
-      <span className="hidden sm:inline">Impresora</span>
+      <Impresora className="size-4 md:hidden" aria-hidden />
+      <span className="hidden md:inline">Impresora</span>
     </Link>
   );
 }

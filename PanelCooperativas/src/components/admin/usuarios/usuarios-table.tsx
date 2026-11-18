@@ -7,18 +7,20 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { MagnifyingGlass, UserMinus, Users } from "@phosphor-icons/react";
+import { MagnifyingGlass, User, UserMinus, Users } from "@phosphor-icons/react";
 import { Card } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CeldaEnlace } from "@/components/celda-enlace";
+import { EntityCard } from "@/components/entity-card";
+import { ListaResponsive } from "@/components/lista-responsive";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { FilaVacia } from "@/components/fila-vacia";
 import { StatusBadge, TonoBadge } from "@/components/status-badge";
 import { BarraFiltros, TabsUrl } from "@/components/barra-filtros";
 import { PaginacionTabla } from "@/components/paginacion-tabla";
 import { PARAM_PAGINA, useCambiarParams } from "@/hooks/use-param-url";
+import { IconTile, type IconTileTone } from "@/components/icon-tile";
 import { Vacio } from "@/components/admin/detalle";
 import { ROLES, etiquetaEstado, etiquetaRol } from "@/lib/estados";
 import { formatFechaVE } from "@/lib/fechas";
@@ -34,6 +36,12 @@ interface UsuariosTableProps {
   /** Todas las cooperativas, para el filtro (las activas primero). */
   cooperativas: CooperativaFiltro[];
 }
+
+const TONO_ROL: Record<string, IconTileTone> = {
+  super_admin: "brand",
+  admin_cooperativa: "sky",
+  taquillero: "coral",
+};
 
 const ORDEN_ESTADOS = ["ACTIVA", "PENDIENTE", "SUSPENDIDA", "RECHAZADA", "DESACTIVADA"];
 
@@ -72,7 +80,7 @@ export function UsuariosTable({ resultado, filtros, cooperativas }: UsuariosTabl
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-end justify-between gap-3">
+      <div className="flex flex-col gap-3 md:flex-row md:flex-wrap md:items-end md:justify-between">
         <BarraFiltros
           busqueda={{ etiqueta: "Buscar", placeholder: "Nombre, cédula o teléfono" }}
           selects={[
@@ -95,21 +103,16 @@ export function UsuariosTable({ resultado, filtros, cooperativas }: UsuariosTabl
         />
       </div>
 
-      <Card className="gap-0 overflow-hidden p-0">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Usuario</TableHead>
-              <TableHead>Rol</TableHead>
-              {conCooperativa && <TableHead className="hidden md:table-cell">Cooperativa</TableHead>}
-              <TableHead className="hidden lg:table-cell">Estado</TableHead>
-              <TableHead className="hidden lg:table-cell">Registro</TableHead>
-              {vistaBajas && <TableHead className="text-right">Acciones</TableHead>}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {usuarios.length === 0 ? (
-              <FilaVacia
+      <Card className="gap-0 overflow-hidden p-0 max-md:overflow-visible max-md:bg-transparent max-md:shadow-none">
+        <ListaResponsive
+          items={usuarios}
+          clave={(u) => u.id}
+          etiqueta="Usuarios"
+          vacio={
+            <div className="max-md:rounded-xl max-md:bg-card max-md:shadow-card">
+              <Table>
+                <TableBody>
+                  <FilaVacia
                 colSpan={columnas}
                 icon={hayFiltros ? MagnifyingGlass : Users}
                 titulo={
@@ -120,50 +123,84 @@ export function UsuariosTable({ resultado, filtros, cooperativas }: UsuariosTabl
                       : "Todavía no hay usuarios"
                 }
               />
-            ) : (
-              usuarios.map((u) => (
-                <TableRow key={u.id} className="relative">
-                  <CeldaEnlace href={`/admin/usuarios/${u.id}`} etiqueta={`Ver usuario ${u.nombre_completo}`}>
-                    <span className="block">{u.nombre_completo}</span>
-                    <span className="block text-xs font-normal text-muted-foreground">{u.email || "Sin correo"}</span>
-                  </CeldaEnlace>
-                  <TableCell>
-                    <Badge variant="secondary">{etiquetaRol(u.role)}</Badge>
-                    {/* En pantallas chicas el estado va bajo el rol (la columna se oculta). */}
-                    {(u.eliminada_at || u.is_banned) && (
-                      <div className="mt-1 lg:hidden">
-                        <EstadoCuenta u={u} />
-                      </div>
-                    )}
-                  </TableCell>
-                  {conCooperativa && (
-                    <TableCell className="hidden md:table-cell">{u.cooperativa_nombre || <Vacio />}</TableCell>
-                  )}
-                  <TableCell className="hidden lg:table-cell">
-                    <EstadoCuenta u={u} />
-                  </TableCell>
-                  <TableCell className="hidden text-muted-foreground tabular-nums lg:table-cell">
-                    {formatFechaVE(u.created_at)}
-                  </TableCell>
-                  {vistaBajas && (
-                    <TableCell className="text-right">
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        className="relative z-10"
-                        aria-label={`Completar baja de ${u.email || u.nombre_completo}`}
-                        onClick={() => setACompletar(u)}
-                      >
-                        <UserMinus aria-hidden /> Completar baja
-                      </Button>
-                    </TableCell>
-                  )}
+                </TableBody>
+              </Table>
+            </div>
+          }
+          tarjeta={(u) => (
+            <EntityCard
+              {...(vistaBajas ? { onClick: () => setACompletar(u) } : { href: `/admin/usuarios/${u.id}` })}
+              chevron
+              etiqueta={vistaBajas ? `Completar baja de ${u.email || u.nombre_completo}` : undefined}
+              leading={<IconTile icon={vistaBajas ? UserMinus : User} tone={u.is_banned ? "danger" : (TONO_ROL[u.role] ?? "neutral")} />}
+              title={u.nombre_completo}
+              subtitle={u.email || "Sin correo"}
+              badge={<EstadoCuenta u={u} />}
+              meta={vistaBajas ? "Completar baja" : etiquetaRol(u.role)}
+            />
+          )}
+          tabla={(items) => (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Usuario</TableHead>
+                  <TableHead>Rol</TableHead>
+                  {conCooperativa && <TableHead className="hidden md:table-cell">Cooperativa</TableHead>}
+                  <TableHead className="hidden lg:table-cell">Estado</TableHead>
+                  <TableHead className="hidden lg:table-cell">Registro</TableHead>
+                  {vistaBajas && <TableHead className="text-right">Acciones</TableHead>}
                 </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
+              </TableHeader>
+              <TableBody>
+                {items.map((u) => (
+                    <TableRow key={u.id} className="relative">
+                      <CeldaEnlace href={`/admin/usuarios/${u.id}`} etiqueta={`Ver usuario ${u.nombre_completo}`}>
+                        <span className="flex items-center gap-3">
+                          <IconTile icon={User} tone={u.is_banned ? "danger" : (TONO_ROL[u.role] ?? "neutral")} size="sm" />
+                          <span className="min-w-0">
+                            <span className="block">{u.nombre_completo}</span>
+                            <span className="block text-[13px] font-normal text-muted-foreground">{u.email || "Sin correo"}</span>
+                          </span>
+                        </span>
+                      </CeldaEnlace>
+                      <TableCell>
+                        <TonoBadge tono="neutro">{etiquetaRol(u.role)}</TonoBadge>
+                        {/* En pantallas chicas el estado va bajo el rol (la columna se oculta). */}
+                        {(u.eliminada_at || u.is_banned) && (
+                          <div className="mt-1 lg:hidden">
+                            <EstadoCuenta u={u} />
+                          </div>
+                        )}
+                      </TableCell>
+                      {conCooperativa && (
+                        <TableCell className="hidden md:table-cell">{u.cooperativa_nombre || <Vacio />}</TableCell>
+                      )}
+                      <TableCell className="hidden lg:table-cell">
+                        <EstadoCuenta u={u} />
+                      </TableCell>
+                      <TableCell className="hidden text-muted-foreground tabular-nums lg:table-cell">
+                        {formatFechaVE(u.created_at)}
+                      </TableCell>
+                      {vistaBajas && (
+                        <TableCell className="text-right">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="relative z-10"
+                            aria-label={`Completar baja de ${u.email || u.nombre_completo}`}
+                            onClick={() => setACompletar(u)}
+                          >
+                            <UserMinus aria-hidden /> Completar baja
+                          </Button>
+                        </TableCell>
+                      )}
+                    </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        />
         <PaginacionTabla
           pagina={pagina}
           paginas={paginas}

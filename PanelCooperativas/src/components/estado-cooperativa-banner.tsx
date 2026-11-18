@@ -172,7 +172,7 @@ export function EstadoCooperativaBanner() {
       <div
         role="status"
         className={cn(
-          "flex flex-col gap-3 border-b px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between",
+          "flex flex-col gap-3 border-b px-5 py-3 text-sm md:flex-row md:items-center md:justify-between md:px-4",
           ESTILOS[tono].caja
         )}
       >
@@ -180,7 +180,7 @@ export function EstadoCooperativaBanner() {
           <Icono className="mt-0.5 size-4 shrink-0" weight="fill" aria-hidden />
           <p>{mensaje}</p>
         </div>
-        {acciones && <div className="flex shrink-0 flex-wrap gap-2 pl-6 sm:pl-0">{acciones}</div>}
+        {acciones && <div className="flex shrink-0 flex-wrap gap-2 pl-6 max-md:*:h-11 max-md:*:flex-1 md:pl-0">{acciones}</div>}
       </div>
 
       {estado === "RECHAZADA" && esAdmin && (

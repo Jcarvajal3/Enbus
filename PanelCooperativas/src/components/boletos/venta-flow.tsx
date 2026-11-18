@@ -30,6 +30,7 @@ import { ViajeOpcion } from "./viaje-opcion";
 import { Monto } from "@/components/monto";
 import { AvisoError } from "@/components/aviso-error";
 import { EmptyState } from "@/components/empty-state";
+import { IconTile } from "@/components/icon-tile";
 import { ErrorState } from "@/components/error-state";
 import { GrupoOpciones, OpcionTile } from "@/components/opcion-tile";
 import { avisarError, avisarExito } from "@/lib/avisos";
@@ -316,17 +317,17 @@ export function CobroTaquillaForm({
 
   return (
     <form onSubmit={enviar} className="flex flex-col gap-5" noValidate>
-      <section aria-label="Total a cobrar" className="flex flex-col gap-1 rounded-md bg-muted/50 p-4">
-        <p className="text-xs font-medium text-muted-foreground">Total a cobrar</p>
-        <Monto usd={totalUsd} moneda={enUsd ? "USD" : undefined} size="lg" />
+      <section aria-label="Total a cobrar" className="flex flex-col gap-1 rounded-md bg-surface p-5">
+        <p className="text-[13px] font-medium text-muted-foreground">Total a cobrar</p>
+        <Monto usd={totalUsd} moneda={enUsd ? "USD" : undefined} size="xl" />
       </section>
       {!tasa && <AvisoError>Sin tasa BCV de hoy: no se puede cobrar.</AvisoError>}
 
       <div className="flex flex-col gap-2">
-        <p id={`${ids}-metodo`} className="text-sm font-medium text-foreground">
+        <p id={`${ids}-metodo`} className="text-[13px] font-medium text-foreground">
           ¿Cómo pagó?
         </p>
-        <GrupoOpciones etiqueta="¿Cómo pagó?" className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+        <GrupoOpciones etiqueta="¿Cómo pagó?" className="grid grid-cols-2 gap-2 md:grid-cols-3">
           {METODOS.map(({ id, titulo, Icono }) => (
             <OpcionTile
               key={id}
@@ -341,7 +342,7 @@ export function CobroTaquillaForm({
       </div>
 
       {efectivo ? (
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-4 md:grid-cols-2">
           <div className="flex flex-col gap-2">
             <Label htmlFor={`${ids}-recibido`}>Monto recibido ({enUsd ? "USD" : "Bs"})</Label>
             <Input
@@ -356,9 +357,9 @@ export function CobroTaquillaForm({
               aria-describedby={`${ids}-recibido-ayuda`}
               onChange={(e) => editar(setRecibidoTexto)(e.target.value)}
             />
-            <div className="flex flex-wrap gap-1.5">
+            <div className="flex flex-wrap gap-2">
               {esperado !== null && (
-                <Button type="button" variant="outline" size="xs" onClick={() => editar(setRecibidoTexto)(formatNumeroVE(esperado))}>
+                <Button type="button" variant="outline" size="sm" className="max-md:h-11 max-md:px-4" onClick={() => editar(setRecibidoTexto)(formatNumeroVE(esperado))}>
                   Monto exacto
                 </Button>
               )}
@@ -367,18 +368,18 @@ export function CobroTaquillaForm({
                   .filter((b) => esperado !== null && b >= esperado)
                   .slice(0, 3)
                   .map((b) => (
-                    <Button key={b} type="button" variant="outline" size="xs" onClick={() => editar(setRecibidoTexto)(String(b))}>
+                    <Button key={b} type="button" variant="outline" size="sm" className="max-md:h-11 max-md:px-4" onClick={() => editar(setRecibidoTexto)(String(b))}>
                       USD {b}
                     </Button>
                   ))}
             </div>
-            <p id={`${ids}-recibido-ayuda`} className={cn("text-sm", ayudaMonto ? "text-destructive-text" : "text-muted-foreground")}>
+            <p id={`${ids}-recibido-ayuda`} className={cn("text-[13px]", ayudaMonto ? "text-destructive-text" : "text-muted-foreground")}>
               {ayudaMonto ?? "Para calcular el vuelto."}
             </p>
           </div>
-          <div className="flex flex-col gap-1 self-start rounded-md border border-border bg-card p-4" aria-live="polite">
-            <p className="text-xs font-medium text-muted-foreground">Vuelto</p>
-            <p className={cn("text-2xl font-semibold tabular-nums", diferencia !== null && diferencia < 0 && "text-destructive-text")}>
+          <div className="flex flex-col gap-1 self-start rounded-md bg-surface p-4" aria-live="polite">
+            <p className="text-[13px] font-medium text-muted-foreground">Vuelto</p>
+            <p className={cn("text-[28px] leading-tight font-semibold tracking-tight tabular-nums", diferencia !== null && diferencia < 0 && "text-destructive-text")}>
               {diferencia === null ? "—" : diferencia < 0 ? `Faltan ${fmt(-diferencia)}` : fmt(diferencia)}
             </p>
           </div>
@@ -386,7 +387,7 @@ export function CobroTaquillaForm({
       ) : (
         <div className="grid gap-4">
           {tasa && (
-            <p className="text-sm text-muted-foreground">
+            <p className="text-[15px] text-muted-foreground">
               {puntoVenta ? "Confirma que el punto de venta aprobó " : "Confirma que llegaron "}
               <strong className="font-semibold text-foreground">{metodo === "ZELLE" ? formatUsd(totalUsd) : formatBs(totalBs ?? 0)}</strong>.
             </p>
@@ -396,7 +397,7 @@ export function CobroTaquillaForm({
             <div className="flex flex-col gap-2">
               <Label htmlFor={`${ids}-cuenta`}>Cuenta que recibió el pago</Label>
               {cuentasTipo.length === 0 ? (
-                <p id={`${ids}-cuenta`} className="text-sm text-muted-foreground">
+                <p id={`${ids}-cuenta`} className="text-[13px] text-muted-foreground">
                   {errorCuentas
                     ? "No pudimos cargar las cuentas: el pago se registra sin cuenta."
                     : `Sin cuentas de ${NOMBRE_TIPO[tipo as TipoConCuenta]} activas: se registra sin cuenta.`}
@@ -417,11 +418,11 @@ export function CobroTaquillaForm({
                   </SelectContent>
                 </Select>
               )}
-              {mostrar("cuenta") && <p className="text-sm text-destructive-text">{mostrar("cuenta")}</p>}
+              {mostrar("cuenta") && <p className="text-[13px] text-destructive-text">{mostrar("cuenta")}</p>}
             </div>
           )}
 
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-4 md:grid-cols-2">
             <div className="flex flex-col gap-2">
               <Label htmlFor={`${ids}-ref`}>
                 {metodo === "ZELLE" ? "Código de confirmación" : puntoVenta ? "Referencia del comprobante" : "Número de referencia"}
@@ -438,7 +439,7 @@ export function CobroTaquillaForm({
                 onChange={(e) => editar(setReferencia)(e.target.value)}
               />
               {mostrar("referencia", "referencia") && (
-                <p className="text-sm text-destructive-text">{mostrar("referencia", "referencia")}</p>
+                <p className="text-[13px] text-destructive-text">{mostrar("referencia", "referencia")}</p>
               )}
             </div>
             <div className="flex flex-col gap-2">
@@ -452,7 +453,7 @@ export function CobroTaquillaForm({
                 aria-invalid={mostrar("fecha", "fecha") ? true : undefined}
                 onChange={(e) => editar(setFecha)(e.target.value)}
               />
-              {mostrar("fecha", "fecha") && <p className="text-sm text-destructive-text">{mostrar("fecha", "fecha")}</p>}
+              {mostrar("fecha", "fecha") && <p className="text-[13px] text-destructive-text">{mostrar("fecha", "fecha")}</p>}
             </div>
           </div>
 
@@ -469,7 +470,7 @@ export function CobroTaquillaForm({
                   ))}
                 </SelectContent>
               </Select>
-              {mostrar("banco", "banco") && <p className="text-sm text-destructive-text">{mostrar("banco", "banco")}</p>}
+              {mostrar("banco", "banco") && <p className="text-[13px] text-destructive-text">{mostrar("banco", "banco")}</p>}
             </div>
           )}
         </div>
@@ -480,11 +481,11 @@ export function CobroTaquillaForm({
       {/* Barra fija: "Cobrar" siempre a la vista, con el total en el botón. */}
       <BarraAccion resumen={resumen}>
         {onVolver ? (
-          <Button type="button" variant="outline" onClick={onVolver} disabled={enviando}>
+          <Button type="button" variant="outline" size="lg" onClick={onVolver} disabled={enviando}>
             {textoVolver}
           </Button>
         ) : <span />}
-        <Button type="submit" disabled={enviando || !tasa} aria-busy={enviando || undefined}>
+        <Button type="submit" size="xl" disabled={enviando || !tasa} aria-busy={enviando || undefined}>
           {enviando && <Spinner size="sm" />}
           {enviando ? "Cobrando…" : textoCobrar}
         </Button>
@@ -601,49 +602,47 @@ function TicketsEmitidos({
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-col items-center gap-2 text-center">
-        <div className="flex size-12 items-center justify-center rounded-full bg-success-light">
-          <CheckCircle className="size-7 text-success-text" weight="fill" aria-hidden />
-        </div>
-        <h2 className="text-lg font-semibold">
+        <IconTile icon={CheckCircle} tone="success" size="lg" />
+        <h2 className="font-heading text-[22px] font-semibold tracking-tight">
           {operacion.impresion.length === 1 ? "Boleto emitido" : `${operacion.impresion.length} boletos emitidos`}
         </h2>
-        <p className="text-sm text-muted-foreground">{ruta}{salida ? ` · ${salida}` : ""}</p>
+        <p className="text-[15px] text-muted-foreground">{ruta}{salida ? ` · ${salida}` : ""}</p>
       </div>
 
-      <div className="grid gap-3 rounded-md bg-muted/50 p-4 sm:grid-cols-3" aria-live="polite">
+      <div className="grid gap-3 rounded-md bg-surface p-5 md:grid-cols-3" aria-live="polite">
         <div>
-          <p className="text-xs text-muted-foreground">Cobrado</p>
+          <p className="text-[13px] text-muted-foreground">Cobrado</p>
           <p className="font-semibold tabular-nums">{fmt(cobro.esperado)}</p>
           {cobro.total_usd != null && !enUsd && (
-            <p className="text-xs text-muted-foreground">
+            <p className="text-[13px] text-muted-foreground">
               ≈ {formatUsd(cobro.total_usd)}{cobro.tasa_fecha ? ` · BCV ${fechaTasaCorta(cobro.tasa_fecha)}` : ""}
             </p>
           )}
         </div>
         <div>
-          <p className="text-xs text-muted-foreground">Recibido</p>
+          <p className="text-[13px] text-muted-foreground">Recibido</p>
           <p className="font-semibold tabular-nums">{fmt(cobro.recibido)}</p>
         </div>
         <div>
-          <p className="text-xs text-muted-foreground">Vuelto</p>
-          <p className={cn("font-semibold tabular-nums", cobro.vuelto > 0 && "text-2xl")}>
+          <p className="text-[13px] text-muted-foreground">Vuelto</p>
+          <p className={cn("font-semibold tabular-nums", cobro.vuelto > 0 && "text-[28px] leading-tight tracking-tight")}>
             {fmt(cobro.vuelto)}
           </p>
         </div>
       </div>
       {operacion.repetido && (
-        <p className="text-sm text-muted-foreground" role="status">
+        <p className="text-[13px] text-muted-foreground" role="status">
           Esta venta ya estaba registrada: no se cobró dos veces.
         </p>
       )}
 
-      <div ref={ticketsRef} className="grid gap-3 sm:grid-cols-2">
+      <div ref={ticketsRef} className="grid gap-3 md:grid-cols-2">
         {operacion.impresion.map((b) => (
-          <article key={b.codigo_boleto} className="flex flex-col gap-2 rounded-md border border-border bg-card p-4">
-            <p className="text-xs font-medium text-muted-foreground">Boleto de viaje</p>
-            {cooperativa && <p className="text-sm font-semibold">{cooperativa}</p>}
+          <article key={b.codigo_boleto} className="flex flex-col gap-2 rounded-md bg-surface p-4">
+            <p className="text-[13px] font-medium text-muted-foreground">Boleto de viaje</p>
+            {cooperativa && <p className="text-[15px] font-semibold">{cooperativa}</p>}
             <p className="font-mono text-lg font-semibold text-foreground">{formatCodigoBoleto(b.codigo_boleto)}</p>
-            <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
+            <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[15px]">
               <dt className="text-muted-foreground">Ruta</dt>
               <dd>{ruta}</dd>
               {salida && (
@@ -680,7 +679,7 @@ function TicketsEmitidos({
 
       <BarraAccion>
         {acciones}
-        <Button onClick={() => void imprimir()} disabled={printing} aria-busy={printing || undefined} autoFocus>
+        <Button size="xl" onClick={() => void imprimir()} disabled={printing} aria-busy={printing || undefined} autoFocus>
           {printing ? <Spinner size="sm" /> : <Printer aria-hidden />}
           {operacion.impresion.length === 1 ? "Imprimir boleto" : `Imprimir ${operacion.impresion.length} boletos`}
         </Button>
@@ -1065,7 +1064,7 @@ export function VentaFlow({ isOpen, onClose, viajeIdInicial }: VentaFlowProps) {
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
       {/* El diálogo desplaza; `scroll-pb` evita que el foco quede bajo la barra fija. */}
-      <DialogContent tamano="flujo" className="scroll-pb-32">
+      <DialogContent tamano="flujo" movil="pantalla">
         <DialogHeader>
           <DialogTitle>Vender boletos</DialogTitle>
           <DialogDescription>
@@ -1079,7 +1078,7 @@ export function VentaFlow({ isOpen, onClose, viajeIdInicial }: VentaFlowProps) {
             <li
               key={p.id}
               aria-current={i === pasoActual ? "step" : undefined}
-              className={cn("h-1.5 flex-1 rounded-full", i <= pasoActual ? "bg-accent-strong" : "bg-muted")}
+              className={cn("h-1.5 flex-1 rounded-full", i <= pasoActual ? "bg-accent-strong" : "bg-surface-dark")}
             >
               <span className="sr-only">{p.titulo}</span>
             </li>
@@ -1091,9 +1090,9 @@ export function VentaFlow({ isOpen, onClose, viajeIdInicial }: VentaFlowProps) {
         {step === "viaje" && (
           <div className="flex flex-col gap-4">
             {/* Filtros: día de salida (en el servidor) y ruta; se combinan. */}
-            <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-end">
+            <div className="flex flex-col gap-4 md:flex-row md:flex-wrap md:items-end">
               <SelectorDia dia={dia} onCambio={cambiarDia} disabled={dia === null} />
-              <div className="flex w-full flex-col gap-2 sm:w-64">
+              <div className="flex w-full flex-col gap-2 md:w-64">
                 <Label htmlFor={`${ids}-ruta`}>Ruta</Label>
                 <Select
                   value={filtroRuta}
@@ -1142,7 +1141,7 @@ export function VentaFlow({ isOpen, onClose, viajeIdInicial }: VentaFlowProps) {
                 }
                 action={
                   proximoDia && (
-                    <Button variant="outline" onClick={() => cambiarDia(proximoDia)}>
+                    <Button variant="outline" size="lg" onClick={() => cambiarDia(proximoDia)}>
                       Ver {diaEnFrase(proximoDia)}
                       <ArrowRight aria-hidden />
                     </Button>
@@ -1151,7 +1150,7 @@ export function VentaFlow({ isOpen, onClose, viajeIdInicial }: VentaFlowProps) {
               />
             ) : (
               <div className="flex flex-col gap-2">
-                <p className="text-sm text-muted-foreground" aria-live="polite">
+                <p className="text-[13px] text-muted-foreground" aria-live="polite">
                   <span className="font-medium text-foreground">{nombreDia(dia ?? hoyVE())}</span>
                   {" · "}
                   {viajes.length === 1 ? "1 salida" : `${viajes.length} salidas`}
@@ -1186,10 +1185,10 @@ export function VentaFlow({ isOpen, onClose, viajeIdInicial }: VentaFlowProps) {
                 )
               }
             >
-              <Button variant="outline" onClick={() => handleOpenChange(false)}>
+              <Button variant="outline" size="lg" onClick={() => handleOpenChange(false)}>
                 Cancelar
               </Button>
-              <Button onClick={continuarConViaje} disabled={!viajeEnLista}>
+              <Button size="lg" onClick={continuarConViaje} disabled={!viajeEnLista}>
                 Continuar
               </Button>
             </BarraAccion>
@@ -1209,31 +1208,35 @@ export function VentaFlow({ isOpen, onClose, viajeIdInicial }: VentaFlowProps) {
         )}
 
         {step === "pasajero" && (
-          <form className="flex flex-col gap-4" onSubmit={continuarAPago} noValidate>
+          <form className="flex flex-col gap-6" onSubmit={continuarAPago} noValidate>
             {asientos.map((asiento, i) => {
               const p = pasajeros[asiento] ?? { nombre: "", cedula: "", telefono: "" };
               const err = intentoPasajeros ? erroresPasajero(p) : { nombre: null, cedula: null };
               return (
-                <fieldset key={asiento} className="flex flex-col gap-4 rounded-md border border-border p-4">
-                  <legend className="px-1 text-sm font-semibold">Asiento {asiento}</legend>
+                <fieldset key={asiento} className="flex min-w-0 flex-col gap-5 border-0 p-0">
+                  <legend className="mb-1 p-0 text-[17px] font-semibold">Asiento {asiento}</legend>
                   <div className="flex flex-col gap-2">
                     <Label htmlFor={`${ids}-nombre-${asiento}`}>Nombre y apellido</Label>
                     <Input
                       id={`${ids}-nombre-${asiento}`}
                       autoFocus={i === 0}
                       autoComplete="off"
+                      autoCapitalize="words"
+                      enterKeyHint="next"
                       value={p.nombre}
                       aria-invalid={err.nombre ? true : undefined}
                       onChange={(e) => actualizarPasajero(asiento, "nombre", e.target.value)}
                     />
-                    {err.nombre && <p className="text-sm text-destructive-text">{err.nombre}</p>}
+                    {err.nombre && <p className="text-[13px] text-destructive-text">{err.nombre}</p>}
                   </div>
-                  <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="grid gap-5 md:grid-cols-2 md:gap-4">
                     <div className="flex flex-col gap-2">
                       <Label htmlFor={`${ids}-cedula-${asiento}`}>Cédula</Label>
                       <Input
                         id={`${ids}-cedula-${asiento}`}
                         autoComplete="off"
+                        inputMode="numeric"
+                        enterKeyHint="next"
                         placeholder={`Ej.: ${CEDULA_PLACEHOLDER}`}
                         value={p.cedula}
                         aria-invalid={err.cedula ? true : undefined}
@@ -1242,14 +1245,16 @@ export function VentaFlow({ isOpen, onClose, viajeIdInicial }: VentaFlowProps) {
                           if (cedulaValida(e.target.value)) actualizarPasajero(asiento, "cedula", formatearCedula(e.target.value));
                         }}
                       />
-                      {err.cedula && <p className="text-sm text-destructive-text">{err.cedula}</p>}
+                      {err.cedula && <p className="text-[13px] text-destructive-text">{err.cedula}</p>}
                     </div>
                     <div className="flex flex-col gap-2">
                       <Label htmlFor={`${ids}-telefono-${asiento}`}>Teléfono (opcional)</Label>
                       <Input
                         id={`${ids}-telefono-${asiento}`}
                         type="tel"
+                        inputMode="tel"
                         autoComplete="off"
+                        enterKeyHint={i === asientos.length - 1 ? "done" : "next"}
                         placeholder={`Ej.: ${TELEFONO_PLACEHOLDER}`}
                         value={p.telefono}
                         onChange={(e) => actualizarPasajero(asiento, "telefono", e.target.value)}
@@ -1268,10 +1273,10 @@ export function VentaFlow({ isOpen, onClose, viajeIdInicial }: VentaFlowProps) {
                 </span>
               }
             >
-              <Button type="button" variant="outline" onClick={() => irA("asiento")}>
+              <Button type="button" variant="outline" size="lg" onClick={() => irA("asiento")}>
                 Atrás
               </Button>
-              <Button type="submit">Continuar</Button>
+              <Button type="submit" size="lg">Continuar</Button>
             </BarraAccion>
           </form>
         )}
@@ -1298,10 +1303,10 @@ export function VentaFlow({ isOpen, onClose, viajeIdInicial }: VentaFlowProps) {
             unidad={selectedViaje?.numero_unidad}
             acciones={
               <>
-                <Button variant="outline" onClick={() => handleOpenChange(false)}>
+                <Button variant="outline" size="lg" onClick={() => handleOpenChange(false)}>
                   Listo
                 </Button>
-                <Button variant="outline" onClick={reiniciar}>
+                <Button variant="outline" size="lg" onClick={reiniciar}>
                   Vender otro
                 </Button>
               </>
@@ -1449,7 +1454,7 @@ export function CobrarReservaDialog({
 
   return (
     <Dialog open={open} onOpenChange={cambiarAbierto}>
-      <DialogContent tamano="flujo">
+      <DialogContent tamano="flujo" movil="pantalla">
         <DialogHeader>
           <DialogTitle>{operacion ? "Reserva cobrada" : "Cobrar reserva"}</DialogTitle>
           <DialogDescription>
@@ -1466,18 +1471,18 @@ export function CobrarReservaDialog({
         {cargando && !reserva ? (
           <div className="flex flex-col gap-4" role="status" aria-label="Cargando la reserva">
             <Skeleton className="h-20 w-full rounded-md" />
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+            <div className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-5">
               {[0, 1, 2, 3, 4].map((i) => (
                 <Skeleton key={i} className="h-20 rounded-md" />
               ))}
             </div>
-            <Skeleton className="h-9 w-full rounded-full" />
+            <Skeleton className="h-12 w-full rounded-full" />
           </div>
         ) : errorCarga && !reserva ? (
           <div className="flex flex-col gap-4">
             <ErrorState compacto titulo="No pudimos cargar la reserva" descripcion={errorCarga} onReintentar={cargar} />
             <div className="flex justify-start border-t border-border pt-4">
-              <Button variant="outline" onClick={() => onOpenChange(false)}>
+              <Button variant="outline" size="lg" onClick={() => onOpenChange(false)}>
                 Cancelar
               </Button>
             </div>
@@ -1488,7 +1493,7 @@ export function CobrarReservaDialog({
             trayecto={reserva?.trayecto ?? null}
             unidad={reserva?.unidad}
             acciones={
-              <Button variant="outline" className="flex-1" onClick={() => onOpenChange(false)}>
+              <Button variant="outline" size="lg" className="flex-1" onClick={() => onOpenChange(false)}>
                 Listo
               </Button>
             }

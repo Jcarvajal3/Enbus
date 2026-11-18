@@ -57,7 +57,7 @@ export function SelectorDia({
 
   return (
     <div role="group" aria-labelledby={`${id}-etiqueta`} className={cn("flex flex-col gap-2", className)}>
-      <span id={`${id}-etiqueta`} className="text-sm leading-none font-medium text-foreground select-none">
+      <span id={`${id}-etiqueta`} className="text-[13px] leading-none font-medium text-foreground select-none">
         Día de salida
       </span>
       <div className="flex flex-wrap items-center gap-2">
@@ -88,7 +88,7 @@ export function SelectorDia({
           }}
           // Al salir con una fecha incompleta o pasada, vuelve al día elegido.
           onBlur={() => setTexto(dia ?? "")}
-          className="h-9 w-auto min-w-0 flex-1 text-sm tabular-nums sm:w-44 sm:flex-none md:text-sm"
+          className="w-auto min-w-0 flex-1 tabular-nums md:w-44 md:flex-none"
         />
       </div>
     </div>

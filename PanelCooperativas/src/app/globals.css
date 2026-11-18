@@ -77,7 +77,49 @@
   --color-info-deep: var(--info-deep);
   --color-destructive-deep: var(--destructive-deep);
 
+  /* Amanecer: fondo de página y la noche (menú, protagonistas) */
+  --color-canvas: var(--canvas);
+  --color-night: var(--night);
+  --color-night-raised: var(--night-raised);
+  --color-night-muted: var(--night-muted);
+
   /* Radios: la escala --radius-xs…3xl y --radius-full la escribe tokens.generated.css (@theme). */
+}
+
+/* Sombras de Amanecer, teñidas de noche (una sombra gris sobre azul se ve sucia).
+   Utilidades: shadow-card, shadow-raised, shadow-overlay, shadow-sun. */
+@theme {
+  --shadow-card: 0px 1px 2px rgba(15, 27, 51, 0.04), 0px 8px 24px rgba(15, 27, 51, 0.06);
+  --shadow-raised: 0px 2px 4px rgba(15, 27, 51, 0.04), 0px 18px 40px rgba(15, 27, 51, 0.11);
+  --shadow-overlay: 0px 8px 16px rgba(15, 27, 51, 0.08), 0px 24px 64px rgba(15, 27, 51, 0.2);
+  --shadow-sun: 0px 1px 2px rgba(255, 179, 0, 0.3), 0px 8px 18px rgba(255, 179, 0, 0.28);
+  --shadow-subtle: 0px 1px 2px rgba(15, 27, 51, 0.08), 0px 2px 6px rgba(15, 27, 51, 0.05);
+}
+
+/* En oscuro no hay azul de noche: las sombras son negras y neutras (más densas, porque sobre negro casi no se ven). */
+.dark {
+  --shadow-card: 0px 1px 2px rgba(0, 0, 0, 0.5), 0px 8px 24px rgba(0, 0, 0, 0.45);
+  --shadow-raised: 0px 2px 4px rgba(0, 0, 0, 0.5), 0px 18px 40px rgba(0, 0, 0, 0.55);
+  --shadow-overlay: 0px 8px 16px rgba(0, 0, 0, 0.55), 0px 24px 64px rgba(0, 0, 0, 0.7);
+  --shadow-subtle: 0px 1px 2px rgba(0, 0, 0, 0.55), 0px 2px 6px rgba(0, 0, 0, 0.4);
+}
+
+/* Barra de pestañas móvil: alto que ocupa desde el borde inferior (barra 68 px + margen 12 px +
+   zona segura). Vale 0 en ≥ md y donde no hay barra (login…). La barra marca <html data-pestanas>.
+   Úsala para colocar algo encima de la barra: bottom: calc(var(--alto-pestanas) + 0.75rem). */
+:root {
+  --alto-pestanas: 0px;
+}
+@media (max-width: 767.98px) {
+  html[data-pestanas] {
+    --alto-pestanas: calc(5rem + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+/* Sin scroll horizontal de página en el shell (360–414 px). */
+html,
+body {
+  overflow-x: clip;
 }
 
 @layer base {
@@ -85,7 +127,7 @@
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground font-sans;
+    @apply bg-canvas text-foreground font-sans;
   }
   html {
     @apply font-sans;

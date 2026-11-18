@@ -1,13 +1,14 @@
 import { Skeleton } from "@/components/ui/skeleton";
 import { TablaSkeleton } from "@/components/tabla-skeleton";
 
-// Misma forma que la página: encabezado con botón + tabla (PU-13).
+// Misma forma que la página: encabezado con acción principal (ancho completo en móvil) +
+// lista (tarjetas en móvil, tabla desde md) (PU-13).
 export default function BusesLoading() {
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between gap-4" aria-hidden>
-        <Skeleton className="h-8 w-32" />
-        <Skeleton className="h-9 w-36 rounded-full" />
+    <div className="flex flex-col gap-8">
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between" aria-hidden>
+        <Skeleton className="h-8 w-40 md:h-10" />
+        <Skeleton className="h-12 w-full rounded-full md:w-40" />
       </div>
       <TablaSkeleton columnas={5} />
     </div>

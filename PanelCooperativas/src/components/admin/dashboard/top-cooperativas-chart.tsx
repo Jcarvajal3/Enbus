@@ -1,6 +1,7 @@
 "use client";
 
 import { Buildings } from "@phosphor-icons/react";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { EmptyState } from "@/components/empty-state";
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import {
@@ -30,6 +31,7 @@ interface TopCooperativasChartProps {
 }
 
 export function TopCooperativasChart({ data }: TopCooperativasChartProps) {
+  const movil = useIsMobile();
   return (
     <Card>
       <CardHeader>
@@ -45,7 +47,7 @@ export function TopCooperativasChart({ data }: TopCooperativasChartProps) {
               accessibilityLayer
               data={data}
               layout="vertical"
-              margin={{ left: 10, right: 10, top: 10, bottom: 10 }}
+              margin={{ left: 0, right: 8, top: 10, bottom: 10 }}
             >
               <CartesianGrid horizontal={false} className="stroke-border" />
               <YAxis
@@ -53,10 +55,11 @@ export function TopCooperativasChart({ data }: TopCooperativasChartProps) {
                 type="category"
                 tickLine={false}
                 axisLine={false}
-                className="text-xs text-muted-foreground"
-                width={150}
+                className="text-[13px] text-muted-foreground"
+                width={movil ? 104 : 150}
+                tickFormatter={(v: string) => (movil && v.length > 16 ? `${v.slice(0, 15)}…` : v)}
               />
-              <XAxis type="number" allowDecimals={false} tickLine={false} axisLine={false} className="text-xs text-muted-foreground" />
+              <XAxis type="number" allowDecimals={false} tickLine={false} axisLine={false} className="text-[13px] text-muted-foreground" />
               <ChartTooltip content={<ChartTooltipContent />} />
               <Bar
                 dataKey="total_transacciones"

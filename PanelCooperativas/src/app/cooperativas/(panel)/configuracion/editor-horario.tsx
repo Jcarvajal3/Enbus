@@ -65,14 +65,14 @@ export function CampoHorario({ id, semana, textoAnterior, onChange, error, disab
       role="group"
       aria-labelledby={`${id}-titulo`}
       aria-describedby={error ? `${id}-error` : undefined}
-      className="flex min-w-0 flex-col gap-3 outline-none sm:col-span-2"
+      className="flex min-w-0 flex-col gap-3 outline-none md:col-span-2"
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p id={`${id}-titulo`} className="text-sm leading-none font-medium text-foreground">
+        <p id={`${id}-titulo`} className="text-[13px] leading-none font-medium text-foreground">
           Horario de atención (opcional)
         </p>
         {semana && (
-          <Button type="button" variant="link" size="sm" className="h-auto px-0" disabled={disabled} onClick={() => onChange(null, "")}>
+          <Button type="button" variant="link" size="sm" className="h-auto px-0 max-md:min-h-11" disabled={disabled} onClick={() => onChange(null, "")}>
             Quitar horario
           </Button>
         )}
@@ -81,13 +81,13 @@ export function CampoHorario({ id, semana, textoAnterior, onChange, error, disab
       {semana ? (
         <>
           {textoAnterior && (
-            <p className="text-sm text-muted-foreground">
+            <p className="text-[13px] text-muted-foreground">
               Antes decía «{textoAnterior}». Se reemplaza al guardar.{" "}
               <Button
                 type="button"
                 variant="link"
                 size="sm"
-                className="h-auto px-0"
+                className="h-auto px-0 max-md:min-h-11"
                 disabled={disabled}
                 onClick={() => onChange(null, textoAnterior)}
               >
@@ -98,28 +98,28 @@ export function CampoHorario({ id, semana, textoAnterior, onChange, error, disab
           <EditorHorario id={id} value={semana} onChange={(s) => onChange(s, textoAnterior)} disabled={disabled} />
         </>
       ) : textoAnterior ? (
-        <div className="flex flex-col gap-3 rounded-md border border-border p-3">
+        <div className="flex flex-col gap-3 rounded-md bg-surface p-4">
           <div className="flex flex-col gap-1">
-            <p className="text-xs text-muted-foreground">Horario actual (texto libre)</p>
-            <p className="text-sm text-foreground">{textoAnterior}</p>
+            <p className="text-[13px] text-muted-foreground">Horario actual (texto libre)</p>
+            <p className="text-[15px] text-foreground">{textoAnterior}</p>
           </div>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-[13px] text-muted-foreground">
             Pásalo al editor por días para que los pasajeros lo vean ordenado. El texto actual se mantiene hasta que guardes.
           </p>
           <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="outline" size="sm" disabled={disabled} onClick={() => onChange(horarioInicial(), textoAnterior)}>
+            <Button type="button" variant="outline" size="sm" className="max-md:h-11" disabled={disabled} onClick={() => onChange(horarioInicial(), textoAnterior)}>
               <Clock aria-hidden />
               Pasar al editor por días
             </Button>
-            <Button type="button" variant="ghost" size="sm" disabled={disabled} onClick={() => onChange(null, "")}>
+            <Button type="button" variant="ghost" size="sm" className="max-md:h-11" disabled={disabled} onClick={() => onChange(null, "")}>
               Quitar horario
             </Button>
           </div>
         </div>
       ) : (
-        <div className="flex flex-col items-start gap-2 rounded-md border border-dashed border-border p-3">
-          <p className="text-sm text-muted-foreground">Sin horario. Los pasajeros no verán a qué hora atiende esta sucursal.</p>
-          <Button type="button" variant="outline" size="sm" disabled={disabled} onClick={() => onChange(horarioInicial(), "")}>
+        <div className="flex flex-col items-start gap-2 rounded-md bg-surface p-4">
+          <p className="text-[13px] text-muted-foreground">Sin horario. Los pasajeros no verán a qué hora atiende esta sucursal.</p>
+          <Button type="button" variant="outline" size="sm" className="max-md:h-11" disabled={disabled} onClick={() => onChange(horarioInicial(), "")}>
             <Plus aria-hidden />
             Agregar horario
           </Button>
@@ -127,7 +127,7 @@ export function CampoHorario({ id, semana, textoAnterior, onChange, error, disab
       )}
 
       {error && (
-        <p id={`${id}-error`} className="text-sm text-destructive-text">
+        <p id={`${id}-error`} className="text-[13px] text-destructive-text">
           {error}
         </p>
       )}
@@ -166,10 +166,10 @@ function EditorHorario({
               key={p.id}
               type="button"
               variant="outline"
-              size="xs"
+              size="sm"
               aria-pressed={activo}
               disabled={disabled}
-              className={cn(activo && "border-accent-strong bg-muted")}
+              className={cn("max-md:h-11", activo && "border-accent-strong bg-accent-light")}
               onClick={() => onChange(p.crear())}
             >
               {p.label}
@@ -178,7 +178,7 @@ function EditorHorario({
         })}
       </div>
 
-      <ul className="flex flex-col divide-y divide-border rounded-md border border-border">
+      <ul className="flex flex-col divide-y divide-border rounded-md bg-surface">
         {DIAS.map((dia) => (
           <FilaDia
             key={dia}
@@ -193,13 +193,13 @@ function EditorHorario({
         ))}
       </ul>
 
-      <div className="flex flex-col gap-1 rounded-md bg-muted px-3 py-2" aria-live="polite">
-        <p className="text-xs text-muted-foreground">Así lo verán los pasajeros en la app</p>
-        <p className="text-sm text-foreground">{texto}</p>
+      <div className="flex flex-col gap-1 rounded-md bg-surface p-4" aria-live="polite">
+        <p className="text-[13px] text-muted-foreground">Así lo verán los pasajeros en la app</p>
+        <p className="text-[15px] text-foreground">{texto}</p>
         {todoCerrado ? (
-          <p className="text-xs text-muted-foreground">Si la sucursal ya no atiende, mejor desactívala.</p>
+          <p className="text-[13px] text-muted-foreground">Si la sucursal ya no atiende, mejor desactívala.</p>
         ) : texto.length > TEXTO_HORARIO_LARGO ? (
-          <p className="text-xs text-muted-foreground">Es un horario largo: en la app se verá en varias líneas.</p>
+          <p className="text-[13px] text-muted-foreground">Es un horario largo: en la app se verá en varias líneas.</p>
         ) : null}
       </div>
     </div>
@@ -253,22 +253,22 @@ function FilaDia({
     onCambiar(tramos.map((t, j) => (j === i ? { ...t, [campo]: hora } : t)));
 
   return (
-    <li className="flex flex-col gap-2 px-3 py-2.5 sm:flex-row sm:items-start sm:gap-3">
-      <div className="flex h-8 items-center gap-2 sm:w-32 sm:shrink-0">
+    <li className="grid grid-cols-[1fr_auto] items-center gap-x-2 gap-y-1 px-4 py-3 md:flex md:flex-row md:items-start md:gap-3">
+      <div className="flex h-11 items-center gap-2 md:w-36 md:shrink-0">
         <Switch
           id={`${id}-abierto`}
           checked={abierto}
           disabled={disabled}
           onCheckedChange={(v) => (v ? onAbrir() : onCambiar([]))}
         />
-        <Label htmlFor={`${id}-abierto`} className="text-sm font-medium">
+        <Label htmlFor={`${id}-abierto`} className="text-[13px] font-medium">
           {nombre}
         </Label>
       </div>
 
-      <div className="flex min-w-0 flex-1 flex-col gap-2">
+      <div className="flex min-w-0 flex-1 flex-col gap-2 max-md:col-span-2 max-md:row-start-2">
         {!abierto ? (
-          <p className="flex h-8 items-center text-sm text-muted-foreground">Cerrado</p>
+          <p className="flex h-11 items-center text-[13px] text-muted-foreground">Cerrado</p>
         ) : (
           tramos.map((t, i) => (
             <div key={i} className="flex flex-wrap items-center gap-2">
@@ -279,7 +279,7 @@ function FilaDia({
                 disabled={disabled}
                 onChange={(h) => cambiarTramo(i, "abre", h)}
               />
-              <span className="text-sm text-muted-foreground">a</span>
+              <span className="text-[13px] text-muted-foreground max-md:hidden">a</span>
               <SelectHora
                 value={t.cierra}
                 opciones={OPCIONES_CIERRA}
@@ -287,12 +287,13 @@ function FilaDia({
                 disabled={disabled}
                 onChange={(h) => cambiarTramo(i, "cierra", h)}
               />
-              {cruzaMedianoche(t) && <span className="text-xs text-muted-foreground">(día siguiente)</span>}
+              {cruzaMedianoche(t) && <span className="text-[13px] text-muted-foreground">(día siguiente)</span>}
               {i > 0 && (
                 <Button
                   type="button"
                   variant="ghost"
                   size="icon-sm"
+                  className="max-md:size-11"
                   aria-label={`Quitar el turno ${i + 1} del ${nombre.toLowerCase()}`}
                   disabled={disabled}
                   onClick={() => onCambiar(tramos.filter((_, j) => j !== i))}
@@ -303,15 +304,16 @@ function FilaDia({
             </div>
           ))
         )}
-        {error && <p className="text-sm text-destructive-text">{error}</p>}
+        {error && <p className="text-[13px] text-destructive-text">{error}</p>}
       </div>
 
-      <div className="flex items-center gap-1 sm:shrink-0">
+      <div className="flex items-center gap-1 max-md:col-start-2 max-md:row-start-1 md:shrink-0">
         {segundoTurno && (
           <Button
             type="button"
             variant="ghost"
             size="sm"
+            className="max-md:h-11"
             disabled={disabled}
             aria-label={`Agregar un segundo turno el ${nombre.toLowerCase()}`}
             onClick={() => onCambiar(segundoTurno)}
@@ -322,7 +324,7 @@ function FilaDia({
         )}
         <DropdownMenu>
           <DropdownMenuTrigger
-            className={buttonVariants({ variant: "ghost", size: "icon-sm" })}
+            className={buttonVariants({ variant: "ghost", size: "icon-sm", className: "max-md:size-11" })}
             aria-label={`Copiar el horario del ${nombre.toLowerCase()}`}
             disabled={disabled}
           >
@@ -353,7 +355,7 @@ function SelectHora({
     : [...opciones, { value, label: hora12(value) }].sort((a, b) => (aMinutos(a.value) ?? 0) - (aMinutos(b.value) ?? 0));
   return (
     <Select value={value} onValueChange={(v) => v && onChange(v)} disabled={disabled}>
-      <SelectTrigger size="sm" aria-label={label} className="w-[8.5rem]">
+      <SelectTrigger aria-label={label} className="w-36 max-md:w-auto max-md:min-w-32 max-md:flex-1">
         <SelectValue>{(v: string) => hora12(v)}</SelectValue>
       </SelectTrigger>
       <SelectContent className="max-h-72">

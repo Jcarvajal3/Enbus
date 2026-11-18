@@ -24,7 +24,7 @@ export default async function AdminIncidenciasPage({ searchParams }: PageProps) 
   const resultado = await fetchIncidencias({ tipo, estado, q, pagina });
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-8">
       <PageHeader title="Incidencias" description="Primero las de prioridad alta." />
 
       <IncidenciasTable

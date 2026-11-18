@@ -6,6 +6,7 @@
 
 import { Bell, Info, WarningCircle } from "@phosphor-icons/react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { IconTile } from "@/components/icon-tile";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { usePushPanel } from "@/hooks/use-push-panel";
@@ -26,7 +27,7 @@ const TEXTO_ESTADO: Record<EstadoPush, string> = {
 
 function PasosBloqueadas() {
   return (
-    <div className="flex flex-col gap-2 rounded-md bg-warning-light p-3 text-sm text-warning-deep">
+    <div className="flex flex-col gap-2 rounded-md bg-warning-light p-3 text-[15px] text-warning-deep">
       <p className="font-medium">Para volver a permitirlas:</p>
       <ul className="flex list-disc flex-col gap-1 pl-5">
         <li>
@@ -42,7 +43,7 @@ function PasosBloqueadas() {
 
 function PasosIOS() {
   return (
-    <div className="flex flex-col gap-2 rounded-md bg-muted/50 p-3 text-sm">
+    <div className="flex flex-col gap-2 rounded-md bg-surface p-3 text-[15px]">
       <p className="font-medium">En iPhone y iPad (iOS 16.4 o posterior):</p>
       <ol className="flex list-decimal flex-col gap-1 pl-5 text-muted-foreground">
         <li>Abre el panel en Safari.</li>
@@ -79,14 +80,14 @@ export function NotificacionesPushCard() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Bell className="size-5 text-muted-foreground" aria-hidden />
+        <CardTitle className="flex items-center gap-3">
+          <IconTile icon={Bell} tone="sky" size="sm" />
           Notificaciones
         </CardTitle>
         <CardDescription>Avisos de pagos por verificar en este equipo.</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
-        <div className="flex items-center gap-3 rounded-md bg-muted/50 p-4" role="status" aria-live="polite">
+        <div className="flex items-center gap-3 rounded-md bg-surface p-4" role="status" aria-live="polite">
           {estado === "cargando" ? (
             <Spinner size="sm" />
           ) : (
@@ -102,13 +103,13 @@ export function NotificacionesPushCard() {
         </div>
 
         {estado === "desactivadas" && (
-          <Button onClick={() => void alActivar()} disabled={ocupado}>
+          <Button variant="secondary" className="max-md:w-full" onClick={() => void alActivar()} disabled={ocupado}>
             {ocupado ? "Activando…" : "Activar notificaciones"}
           </Button>
         )}
 
         {activadas && (
-          <div className="flex flex-col gap-3 sm:flex-row">
+          <div className="flex flex-col gap-3 md:flex-row">
             <Button variant="outline" className="flex-1" onClick={() => void alProbar()} disabled={ocupado}>
               Enviar una de prueba
             </Button>
@@ -121,17 +122,17 @@ export function NotificacionesPushCard() {
         {estado === "bloqueadas" && <PasosBloqueadas />}
         {estado === "instalar-ios" && <PasosIOS />}
         {estado === "no-soportado" && (
-          <p className="flex items-start gap-2 text-sm text-muted-foreground">
+          <p className="flex items-start gap-2 text-[13px] text-muted-foreground">
             <WarningCircle className="mt-0.5 size-4 shrink-0" aria-hidden />
             Usa Chrome, Edge o Firefox actualizados. En iPhone o iPad hace falta iOS 16.4 o posterior y el panel
             instalado en la pantalla de inicio.
           </p>
         )}
         {estado === "sin-configurar" && (
-          <p className="text-sm text-muted-foreground">Avísale a soporte de EnBus para activarlas.</p>
+          <p className="text-[13px] text-muted-foreground">Avísale a soporte de EnBus para activarlas.</p>
         )}
 
-        <p className="flex items-start gap-2 rounded-md bg-info-light p-3 text-sm text-info-deep">
+        <p className="flex items-start gap-2 rounded-md bg-info-light p-3 text-[15px] text-info-deep">
           <Info className="mt-0.5 size-4 shrink-0 text-info-text" weight="fill" aria-hidden />
           <span>
             Te avisamos cuando un cliente reporta desde la app el pago de un boleto o una encomienda. Al tocar el

@@ -35,7 +35,7 @@ export default async function AdminUsuariosPage({ searchParams }: PageProps) {
   const [resultado, cooperativas] = await Promise.all([fetchUsuarios(filtros), fetchCooperativas()]);
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-8">
       <PageHeader title="Usuarios" />
 
       <UsuariosTable

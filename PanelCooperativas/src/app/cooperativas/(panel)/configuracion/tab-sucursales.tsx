@@ -6,10 +6,12 @@ import {
   Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { BarraAccionFija } from "@/components/barra-accion-fija";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { IconTile } from "@/components/icon-tile";
 import { MapPin, Plus, PencilSimple, Trash } from "@phosphor-icons/react";
 import { AvisoError } from "@/components/aviso-error";
 import { EmptyState } from "@/components/empty-state";
@@ -309,15 +311,15 @@ export function SucursalesTab({ sucursales: initialSucursales, errorCarga = null
         <CardTitle>Sucursales</CardTitle>
         <CardDescription>Los pasajeros ven su dirección y horario.</CardDescription>
         {!showForm && sucursales.length > 0 && (
-          <CardAction>
-            <Button onClick={openCreate}>
+          <CardAction anchoMovil>
+            <Button size="lg" onClick={openCreate}>
               <Plus aria-hidden />
               Nueva sucursal
             </Button>
           </CardAction>
         )}
       </CardHeader>
-      <CardContent className="flex flex-col gap-4">
+      <CardContent className="flex flex-col gap-6">
         {errorCarga && (
           <ErrorState
             compacto
@@ -328,11 +330,11 @@ export function SucursalesTab({ sucursales: initialSucursales, errorCarga = null
         )}
 
         {showForm && (
-          <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4 rounded-md border-border sm:border sm:p-4">
-            <h3 className="text-sm font-semibold text-foreground">
+          <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-5 border-b border-border pb-6">
+            <h3 className="text-[17px] font-semibold tracking-tight text-foreground">
               {editingId ? "Editar sucursal" : "Nueva sucursal"}
             </h3>
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-4 md:grid-cols-2">
               <Campo
                 id={id("nombre")}
                 label="Nombre"
@@ -341,7 +343,7 @@ export function SucursalesTab({ sucursales: initialSucursales, errorCarga = null
                 placeholder="Ej.: Terminal de Valencia"
                 error={errores.nombre}
                 disabled={guardando}
-                className="sm:col-span-2"
+                className="md:col-span-2"
               />
 
               <div className="flex flex-col gap-2">
@@ -358,7 +360,7 @@ export function SucursalesTab({ sucursales: initialSucursales, errorCarga = null
                     ))}
                   </SelectContent>
                 </Select>
-                {errores.estado && <p className="text-sm text-destructive-text">{errores.estado}</p>}
+                {errores.estado && <p className="text-[13px] text-destructive-text">{errores.estado}</p>}
               </div>
 
               <div className="flex flex-col gap-2">
@@ -382,7 +384,7 @@ export function SucursalesTab({ sucursales: initialSucursales, errorCarga = null
                     ))}
                   </SelectContent>
                 </Select>
-                {errores.ciudad && <p className="text-sm text-destructive-text">{errores.ciudad}</p>}
+                {errores.ciudad && <p className="text-[13px] text-destructive-text">{errores.ciudad}</p>}
               </div>
 
               <Campo
@@ -393,7 +395,7 @@ export function SucursalesTab({ sucursales: initialSucursales, errorCarga = null
                 placeholder="Ej.: Terminal Big Low Center, local 12"
                 error={errores.direccion}
                 disabled={guardando}
-                className="sm:col-span-2"
+                className="md:col-span-2"
               />
               <Campo
                 id={id("telefono")}
@@ -417,7 +419,7 @@ export function SucursalesTab({ sucursales: initialSucursales, errorCarga = null
 
             {errorGeneral && <AvisoError>{errorGeneral}</AvisoError>}
 
-            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <BarraAccionFija>
               <Button type="button" variant="outline" onClick={closeForm} disabled={guardando}>
                 Cancelar
               </Button>
@@ -425,7 +427,7 @@ export function SucursalesTab({ sucursales: initialSucursales, errorCarga = null
                 {guardando && <Spinner size="sm" aria-hidden />}
                 {guardando ? "Guardando…" : editingId ? "Guardar cambios" : "Crear sucursal"}
               </Button>
-            </div>
+            </BarraAccionFija>
           </form>
         )}
 
@@ -458,11 +460,14 @@ export function SucursalesTab({ sucursales: initialSucursales, errorCarga = null
             return (
               <li
                 key={s.id}
-                className="flex flex-col gap-3 rounded-md border border-border bg-card p-4 sm:flex-row sm:items-center sm:justify-between"
+                className="flex flex-col gap-3 rounded-md bg-surface p-4 md:flex-row md:items-center md:justify-between"
               >
-                <div className="flex min-w-0 flex-col gap-0.5">
-                  <p className={cn("truncate text-sm font-medium", s.activa ? "text-foreground" : "text-muted-foreground")}>{s.nombre}</p>
-                  <p className="text-xs text-muted-foreground">{detalle}</p>
+                <div className="flex min-w-0 items-center gap-3">
+                  <IconTile icon={MapPin} tone={s.activa ? "sky" : "neutral"} size="sm" />
+                  <div className="flex min-w-0 flex-col gap-0.5">
+                  <p className={cn("truncate text-[15px] font-medium", s.activa ? "text-foreground" : "text-muted-foreground")}>{s.nombre}</p>
+                  <p className="text-[13px] text-muted-foreground">{detalle}</p>
+                  </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
                   <div className="flex items-center gap-2">
@@ -472,17 +477,17 @@ export function SucursalesTab({ sucursales: initialSucursales, errorCarga = null
                       disabled={cambiandoId === s.id}
                       onCheckedChange={(v) => void cambiarActiva(s, v)}
                     />
-                    <Label htmlFor={switchId} className="w-14 text-sm font-normal">
+                    <Label htmlFor={switchId} className="w-14 text-[15px] font-normal">
                       {s.activa ? "Activa" : "Inactiva"}
                     </Label>
                   </div>
-                  <Button variant="ghost" size="icon-sm" aria-label={`Editar sucursal ${s.nombre}`} onClick={() => openEdit(s)}>
+                  <Button variant="ghost" size="icon-sm" className="max-md:size-11" aria-label={`Editar sucursal ${s.nombre}`} onClick={() => openEdit(s)}>
                     <PencilSimple aria-hidden />
                   </Button>
                   <Button
                     variant="ghost"
                     size="icon-sm"
-                    className="text-destructive-text hover:text-destructive-text"
+                    className="text-destructive-text hover:text-destructive-text max-md:size-11"
                     aria-label={`Eliminar sucursal ${s.nombre}`}
                     onClick={() => pedirEliminar(s)}
                   >
@@ -508,7 +513,6 @@ export function SucursalesTab({ sucursales: initialSucursales, errorCarga = null
                 <Button
                   type="button"
                   variant="outline"
-                  size="sm"
                   disabled={cambiandoId === aEliminar.id}
                   onClick={async () => {
                     const ok = await cambiarActiva(aEliminar, false);
@@ -554,6 +558,8 @@ function Campo({
       <Input
         id={id}
         type={type}
+        inputMode={type === "tel" ? "tel" : undefined}
+        autoComplete={type === "tel" ? "tel" : undefined}
         value={value}
         placeholder={placeholder}
         disabled={disabled}
@@ -562,7 +568,7 @@ function Campo({
         onChange={(e) => onChange(e.target.value)}
       />
       {error && (
-        <p id={`${id}-error`} className="text-sm text-destructive-text">
+        <p id={`${id}-error`} className="text-[13px] text-destructive-text">
           {error}
         </p>
       )}

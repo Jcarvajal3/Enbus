@@ -132,7 +132,7 @@ export function ConnectivityBanner() {
       <div
         role="alert"
         aria-live="assertive"
-        className="flex items-center justify-center gap-2 border-b border-warning/40 bg-warning-light px-4 py-2 text-center text-sm font-medium text-warning-deep motion-safe:animate-in motion-safe:slide-in-from-top motion-safe:duration-300"
+        className="flex items-center justify-center gap-2 border-b border-warning/40 bg-warning-light px-5 py-2.5 text-center text-sm text-balance font-medium text-warning-deep motion-safe:animate-in motion-safe:slide-in-from-top motion-safe:duration-300"
       >
         <WifiSlash className="size-4 shrink-0 text-warning-text" weight="fill" aria-hidden />
         Sin conexión. No se guardarán cambios.
@@ -146,7 +146,7 @@ export function ConnectivityBanner() {
       <div
         role="status"
         aria-live="polite"
-        className="flex items-center justify-center gap-2 border-b border-success/40 bg-success-light px-4 py-2 text-center text-sm font-medium text-success-deep motion-safe:animate-in motion-safe:slide-in-from-top motion-safe:duration-300"
+        className="flex items-center justify-center gap-2 border-b border-success/40 bg-success-light px-5 py-2.5 text-center text-sm text-balance font-medium text-success-deep motion-safe:animate-in motion-safe:slide-in-from-top motion-safe:duration-300"
       >
         <WifiHigh className="size-4 shrink-0 text-success-text" weight="fill" aria-hidden />
         Conexión restaurada

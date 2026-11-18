@@ -36,6 +36,11 @@ interface ScanInputProps {
   onError?: (error: ErrorEscaneo) => void;
   cooperativaId: string;
   disabled?: boolean;
+  /**
+   * Botón de cámara junto al campo: "siempre" (por defecto) o solo en escritorio (`lg`), cuando la
+   * pantalla ya ofrece su propio botón de cámara grande en móvil y tablet.
+   */
+  camara?: "siempre" | "escritorio";
   mode?: "encomiendas" | "boletos";
   /** Texto de ayuda dentro del campo (por defecto, uno según el modo). */
   placeholder?: string;
@@ -56,6 +61,11 @@ function focoLibre() {
   return !activo || activo === document.body;
 }
 
+/** Pantalla táctil (teléfono, tablet): enfocar el campo abriría el teclado y taparía la pantalla. */
+function esTactil() {
+  return typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches;
+}
+
 /**
  * Columnas que usan las pantallas al escanear (tipo `Encomienda`). Sin `select("*")`:
  * así no viajan al navegador el PIN de retiro ni la clave de idempotencia.
@@ -74,6 +84,7 @@ export function ScanInput({
   onError,
   cooperativaId,
   disabled = false,
+  camara = "siempre",
   mode = "encomiendas",
   placeholder,
   sonido = true,
@@ -195,7 +206,7 @@ export function ScanInput({
   useEffect(() => {
     if (disabled) return;
 
-    if (focoLibre()) inputRef.current?.focus();
+    if (!esTactil() && focoLibre()) inputRef.current?.focus();
 
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
 
@@ -203,7 +214,7 @@ export function ScanInput({
       clearTimeout(timeoutId);
       // Use ref to avoid stale closure capturing initial value of `disabled`
       timeoutId = setTimeout(() => {
-        if (!disabledRef.current && focoLibre()) {
+        if (!disabledRef.current && !esTactil() && focoLibre()) {
           inputRef.current?.focus();
         }
       }, 2000);
@@ -221,7 +232,7 @@ export function ScanInput({
   // Mientras busca, el campo queda deshabilitado y pierde el foco: al terminar
   // se devuelve para el siguiente escaneo (si nadie más lo tomó).
   useEffect(() => {
-    if (!isSearching && !disabledRef.current && focoLibre()) inputRef.current?.focus();
+    if (!isSearching && !disabledRef.current && !esTactil() && focoLibre()) inputRef.current?.focus();
   }, [isSearching]);
 
   // Código no resuelto: queda escrito y seleccionado, listo para corregirlo o
@@ -246,10 +257,10 @@ export function ScanInput({
   const texto = placeholder ?? PLACEHOLDER[mode];
 
   return (
-    <div className="flex w-full items-center gap-2">
+    <div className="flex w-full items-center gap-3">
       <div className="relative flex-1">
-        <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5">
-          <ICONO_SECCION.escanear className="size-5 text-muted-foreground" aria-hidden />
+        <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4">
+          <ICONO_SECCION.escanear className="size-6 text-muted-foreground" aria-hidden />
         </div>
         <Input
           ref={inputRef}
@@ -260,6 +271,8 @@ export function ScanInput({
           autoComplete="off"
           autoCapitalize="characters"
           spellCheck={false}
+          inputMode="text"
+          enterKeyHint="search"
           value={value}
           onChange={(e) => {
             setValue(e.target.value);
@@ -268,14 +281,15 @@ export function ScanInput({
           onKeyDown={handleManualKeyDown}
           disabled={disabled || isSearching}
           aria-busy={isSearching || undefined}
-          className="h-12 pl-11 text-base md:text-base"
-          autoFocus
+          className="h-14 pl-12 text-base md:text-base"
         />
       </div>
-      <CameraQRTrigger
-        onScan={(code) => { if (!isSearching) handleSearch(code); }}
-        disabled={disabled || isSearching}
-      />
+      <div className={camara === "escritorio" ? "hidden lg:block" : undefined}>
+        <CameraQRTrigger
+          onScan={(code) => { if (!isSearching) handleSearch(code); }}
+          disabled={disabled || isSearching}
+        />
+      </div>
     </div>
   );
 }

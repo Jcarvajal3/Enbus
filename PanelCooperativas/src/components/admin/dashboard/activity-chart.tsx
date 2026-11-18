@@ -57,16 +57,18 @@ export function ActivityChart({ data }: ActivityChartProps) {
           <EmptyState compacto icon={ChartLine} title="Sin actividad en estos 30 días" />
         ) : (
           <ChartContainer config={chartConfig} className="min-h-[300px] w-full">
-            <LineChart accessibilityLayer data={formattedData} margin={{ left: 10, right: 10, top: 10, bottom: 10 }}>
+            <LineChart accessibilityLayer data={formattedData} margin={{ left: 0, right: 8, top: 10, bottom: 10 }}>
               <CartesianGrid vertical={false} strokeDasharray="3 3" className="stroke-border" />
               <XAxis
                 dataKey="displayDate"
                 tickLine={false}
                 tickMargin={10}
+                minTickGap={24}
+                interval="preserveStartEnd"
                 axisLine={false}
-                className="text-xs text-muted-foreground"
+                className="text-[13px] text-muted-foreground"
               />
-              <YAxis allowDecimals={false} tickLine={false} axisLine={false} width={32} className="text-xs text-muted-foreground" />
+              <YAxis allowDecimals={false} tickLine={false} axisLine={false} width={32} className="text-[13px] text-muted-foreground" />
               <ChartTooltip content={<ChartTooltipContent />} />
               <ChartLegend content={<ChartLegendContent />} />
               <Line

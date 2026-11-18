@@ -319,7 +319,7 @@ export function PhotoCaptureModal({ encomiendaId, trackingId, isOpen, onClose, o
                 <AlertDescription>{cameraError}</AlertDescription>
               </Alert>
             ) : (
-              <div className="relative flex aspect-video w-full items-center justify-center overflow-hidden rounded-md border border-border bg-black">
+              <div className="relative flex aspect-[3/4] w-full items-center md:aspect-video justify-center overflow-hidden rounded-md bg-black">
                 {/* Se ve el cuadro completo que se guardará: object-contain, sin recortar los bordes. */}
                 <video
                   ref={videoRef}
@@ -332,14 +332,14 @@ export function PhotoCaptureModal({ encomiendaId, trackingId, isOpen, onClose, o
                 {!stream && (
                   <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-white/80">
                     <Spinner size="md" />
-                    <span className="text-sm">Encendiendo la cámara…</span>
+                    <span className="text-[15px]">Encendiendo la cámara…</span>
                   </div>
                 )}
               </div>
             )}
 
-            <div className="grid gap-2 sm:grid-cols-2">
-              <Button size="lg" onClick={capturar} disabled={!stream || guardando}>
+            <div className="grid gap-3 md:grid-cols-2">
+              <Button size="xl" onClick={capturar} disabled={!stream || guardando}>
                 <Camera aria-hidden />
                 Tomar foto
               </Button>
@@ -354,7 +354,7 @@ export function PhotoCaptureModal({ encomiendaId, trackingId, isOpen, onClose, o
         {modo === "vista" && previewUrl && (
           <div className="flex flex-col gap-4">
             {/* Con su proporción (vertical u horizontal): la foto se guarda tal cual. */}
-            <div className="flex w-full justify-center overflow-hidden rounded-md border border-border bg-black">
+            <div className="flex w-full justify-center overflow-hidden rounded-md bg-black">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={previewUrl}
@@ -389,7 +389,6 @@ export function PhotoCaptureModal({ encomiendaId, trackingId, isOpen, onClose, o
                 <Button
                   key={m}
                   type="button"
-                  size="sm"
                   variant="outline"
                   className={cn(
                     chip === m && "border-accent-strong bg-accent-strong text-accent-strong-foreground hover:bg-accent-strong/90"
@@ -423,12 +422,12 @@ export function PhotoCaptureModal({ encomiendaId, trackingId, isOpen, onClose, o
                 />
               </div>
             )}
-            {errorMotivo && <p className="text-sm text-destructive-text">{errorMotivo}</p>}
-            <DialogFooter className="mt-2 sm:justify-between">
-              <Button type="button" variant="outline" onClick={() => setModo("camara")} disabled={guardando}>
+            {errorMotivo && <p className="text-[13px] text-destructive-text">{errorMotivo}</p>}
+            <DialogFooter className="mt-2 md:justify-between">
+              <Button type="button" variant="outline" size="lg" onClick={() => setModo("camara")} disabled={guardando}>
                 Atrás
               </Button>
-              <Button type="submit" disabled={guardando} aria-busy={guardando || undefined}>
+              <Button type="submit" size="lg" disabled={guardando} aria-busy={guardando || undefined}>
                 {guardando && <Spinner size="sm" />}
                 {guardando ? "Guardando…" : "Omitir por ahora"}
               </Button>
@@ -439,10 +438,9 @@ export function PhotoCaptureModal({ encomiendaId, trackingId, isOpen, onClose, o
         {error && <AvisoError>{error}</AvisoError>}
 
         {modo !== "omitir" && (
-          <div className="flex flex-col-reverse gap-2 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col-reverse gap-3 pt-2 md:flex-row md:items-center md:justify-between">
             <Button
               variant="outline"
-              size="sm"
               onClick={() => {
                 apagarCamara();
                 setError(null);
@@ -453,7 +451,7 @@ export function PhotoCaptureModal({ encomiendaId, trackingId, isOpen, onClose, o
               <FastForward aria-hidden />
               Omitir por ahora
             </Button>
-            {siguiente && <p className="text-sm text-muted-foreground">{siguiente}</p>}
+            {siguiente && <p className="text-[13px] text-muted-foreground">{siguiente}</p>}
           </div>
         )}
       </DialogContent>

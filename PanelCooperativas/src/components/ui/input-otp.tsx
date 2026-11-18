@@ -32,7 +32,7 @@ function InputOTPGroup({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="input-otp-group"
       className={cn(
-        "flex items-center rounded-full has-aria-invalid:border-destructive has-aria-invalid:ring-[3px] has-aria-invalid:ring-destructive/20 dark:has-aria-invalid:ring-destructive/40",
+        "flex items-center gap-1.5 rounded-md md:gap-2 has-aria-invalid:border-destructive has-aria-invalid:ring-[3px] has-aria-invalid:ring-destructive/20 dark:has-aria-invalid:ring-destructive/40",
         className
       )}
       {...props}
@@ -43,9 +43,12 @@ function InputOTPGroup({ className, ...props }: React.ComponentProps<"div">) {
 function InputOTPSlot({
   index,
   className,
+  size = "default",
   ...props
 }: React.ComponentProps<"div"> & {
   index: number
+  /** `lg`: casilla grande de PIN (64 px, cifra 30 px tabular). */
+  size?: "default" | "lg"
 }) {
   const inputOTPContext = React.useContext(OTPInputContext)
   const { char, hasFakeCaret, isActive } = inputOTPContext?.slots[index] ?? {}
@@ -54,8 +57,9 @@ function InputOTPSlot({
     <div
       data-slot="input-otp-slot"
       data-active={isActive}
+      data-size={size}
       className={cn(
-        "relative flex size-9 items-center justify-center border-y border-r border-input-border bg-background text-sm transition-all outline-none first:rounded-l-full first:border-l last:rounded-r-full aria-invalid:border-destructive data-[active=true]:z-10 data-[active=true]:border-ring data-[active=true]:ring-[3px] data-[active=true]:ring-ring/50 data-[active=true]:aria-invalid:border-destructive data-[active=true]:aria-invalid:ring-destructive/20 dark:data-[active=true]:aria-invalid:ring-destructive/40",
+        "relative flex h-12 w-11 items-center justify-center rounded-md border border-input-border bg-background text-lg font-semibold transition-all outline-none data-[size=lg]:size-16 data-[size=lg]:text-3xl data-[size=lg]:tabular-nums aria-invalid:border-destructive data-[active=true]:z-10 data-[active=true]:border-accent-strong data-[active=true]:ring-[3px] data-[active=true]:ring-accent-strong/20 data-[active=true]:aria-invalid:border-destructive data-[active=true]:aria-invalid:ring-destructive/20 dark:data-[active=true]:aria-invalid:ring-destructive/40",
         className
       )}
       {...props}

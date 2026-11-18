@@ -43,7 +43,7 @@ export function listaAsientos(asientos: string[]): string {
   return `${orden.slice(0, -1).join(", ")} y ${orden[orden.length - 1]}`;
 }
 
-const CASILLA = "size-12 sm:size-14";
+const CASILLA = "size-12 md:size-14";
 
 /** Filas de 4 (2 + pasillo + 2), con huecos al final. */
 function filasDe(totalAsientos: number): (string | null)[][] {
@@ -56,15 +56,15 @@ function filasDe(totalAsientos: number): (string | null)[][] {
 
 function Bus({ filas, casilla }: { filas: (string | null)[][]; casilla: (asiento: string | null, idx: number) => React.ReactNode }) {
   return (
-    <div className="w-full max-w-sm rounded-md border border-border bg-card p-6">
-      <p className="mb-6 border-b border-dashed border-border-strong pb-4 text-center text-xs font-medium text-muted-foreground">
+    <div className="w-full max-w-sm rounded-xl bg-surface p-4 md:p-6">
+      <p className="mb-6 border-b border-dashed border-border-strong pb-4 text-center text-[13px] font-medium text-muted-foreground">
         Frente
       </p>
       <div className="flex flex-col gap-3" role="group" aria-label="Asientos del bus">
         {filas.map((fila, filaIdx) => (
           <div key={`fila-${filaIdx}`} className="flex w-full items-center justify-between">
             <div className="flex gap-2">{fila.slice(0, 2).map((a, i) => casilla(a, filaIdx * 4 + i))}</div>
-            <div className="w-6 sm:w-8" aria-hidden />
+            <div className="w-6 md:w-8" aria-hidden />
             <div className="flex gap-2">{fila.slice(2, 4).map((a, i) => casilla(a, filaIdx * 4 + 2 + i))}</div>
           </div>
         ))}
@@ -152,11 +152,11 @@ export function SeatSelector({
         )
       }
     >
-      <Button variant="outline" onClick={onCancel}>
+      <Button variant="outline" size="lg" onClick={onCancel}>
         Atrás
       </Button>
       {!loading && !errorCarga && (
-        <Button disabled={seleccion.length === 0} onClick={() => seleccion.length > 0 && onConfirm(seleccion)}>
+        <Button size="lg" disabled={seleccion.length === 0} onClick={() => seleccion.length > 0 && onConfirm(seleccion)}>
           Continuar
         </Button>
       )}
@@ -202,7 +202,7 @@ export function SeatSelector({
         onClick={() => alternar(asiento)}
         className={cn(
           CASILLA,
-          "flex items-center justify-center rounded-sm border text-sm font-semibold tabular-nums transition-colors outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
+          "flex items-center justify-center rounded-sm border text-[15px] font-semibold tabular-nums transition-colors outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
           ocupado && "cursor-not-allowed border-transparent bg-surface-dark text-muted-foreground",
           !ocupado && !elegido && "border-border-strong bg-background text-foreground hover:bg-muted",
           !ocupado && !elegido && bloqueado && "cursor-not-allowed opacity-50 hover:bg-background",
@@ -218,7 +218,7 @@ export function SeatSelector({
     <div className="flex flex-col items-center gap-5">
       <Bus filas={filas} casilla={casilla} />
 
-      <div className="flex flex-col items-center gap-2 text-sm text-muted-foreground">
+      <div className="flex flex-col items-center gap-2 text-[13px] text-muted-foreground">
         <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2">
           <span className="flex items-center gap-2">
             <span className="size-4 rounded-xs border border-border-strong bg-background" aria-hidden />

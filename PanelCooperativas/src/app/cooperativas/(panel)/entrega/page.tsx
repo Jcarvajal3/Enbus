@@ -7,8 +7,12 @@
 
 import { Suspense, useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { PageHeader } from "@/components/page-header";
+import { SectionLabel } from "@/components/section-label";
 import { ErrorState } from "@/components/error-state";
-import { FilaVacia } from "@/components/fila-vacia";
+import { EmptyState } from "@/components/empty-state";
+import { EntityCard } from "@/components/entity-card";
+import { IconTile } from "@/components/icon-tile";
+import { ListaResponsive } from "@/components/lista-responsive";
 import { TablaSkeleton } from "@/components/tabla-skeleton";
 import { BarraFiltros } from "@/components/barra-filtros";
 import { PaginacionTabla, usePaginacion } from "@/components/paginacion-tabla";
@@ -86,9 +90,9 @@ export default function EntregaPage() {
   return (
     <Suspense
       fallback={
-        <div className="flex flex-col gap-6">
+        <div className="flex flex-col gap-8">
           <Skeleton className="h-8 w-32" />
-          <Skeleton className="h-24 w-full rounded-md" />
+          <Skeleton className="h-24 w-full rounded-xl" />
           <TablaSkeleton columnas={COLUMNAS} conFiltros />
         </div>
       }
@@ -258,10 +262,10 @@ function Entrega() {
   const { visibles, pagina, paginas, ir } = usePaginacion(filteredEncomiendas);
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-8">
       <PageHeader title="Entrega" />
 
-      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
         <ScanInput
           mode="encomiendas"
           cooperativaId={cooperativaId}
@@ -272,7 +276,8 @@ function Entrega() {
         <UltimoEscaneo resultado={ultimo} />
       </div>
 
-      <div className="flex flex-col gap-4">
+      <section className="flex flex-col gap-4">
+        <SectionLabel descripcion="Más antiguas primero">Listas para entregar</SectionLabel>
         <BarraFiltros busqueda={{ etiqueta: "Buscar", placeholder: "Código o destinatario" }} />
 
         {errorCarga && encomiendas.length > 0 && (
@@ -282,11 +287,44 @@ function Entrega() {
         {loading && encomiendas.length === 0 ? (
           <TablaSkeleton columnas={COLUMNAS} />
         ) : (
-          <Card className="gap-0 overflow-hidden p-0">
+          <Card className="gap-0 overflow-hidden p-0 max-md:overflow-visible max-md:bg-transparent max-md:shadow-none">
             {errorCarga && encomiendas.length === 0 ? (
               <ErrorState titulo="No pudimos cargar las encomiendas" descripcion={errorCarga} onReintentar={fetchEncomiendas} />
             ) : (
               <>
+                <ListaResponsive
+                  items={visibles}
+                  clave={(e) => e.id}
+                  etiqueta="Encomiendas listas para entregar"
+                  vacio={
+                    <EmptyState
+                      icon={ICONO_SECCION.entrega}
+                      tono="coral"
+                      title={searchQuery ? "No hay coincidencias" : "No hay encomiendas por entregar"}
+                    />
+                  }
+                  tarjeta={(e) => {
+                    const dias = diasHabilesDesde(e.updated_at);
+                    return (
+                      <EntityCard
+                        onClick={() => abrirEntrega(e.id)}
+                        etiqueta={`Entregar encomienda ${e.tracking_id}`}
+                        leading={<IconTile icon={ICONO_SECCION.entrega} tone="coral" />}
+                        title={e.receiver_nombre}
+                        subtitle={`${formatTelefono(e.receiver_telefono)} · ${textoDevolucion(dias)}`}
+                        lineasSubtitulo={2}
+                        badge={
+                          <span className="flex flex-wrap items-center gap-2">
+                            <RetentionBadge dias={dias} />
+                            <CobroCelda e={e} />
+                            {e.pin_bloqueado && <TonoBadge tono="peligro">PIN bloqueado</TonoBadge>}
+                          </span>
+                        }
+                        meta={e.tracking_id}
+                      />
+                    );
+                  }}
+                  tabla={(items) => (
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -299,21 +337,14 @@ function Entrega() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredEncomiendas.length === 0 ? (
-                      <FilaVacia
-                        colSpan={COLUMNAS}
-                        icon={ICONO_SECCION.entrega}
-                        titulo={searchQuery ? "No hay coincidencias" : "No hay encomiendas por entregar"}
-                      />
-                    ) : (
-                      visibles.map((encomienda) => {
+                    {items.map((encomienda) => {
                         const dias = diasHabilesDesde(encomienda.updated_at);
                         return (
                           <TableRow key={encomienda.id} className="relative">
                             <CeldaEnlace
                               onAbrir={() => abrirEntrega(encomienda.id)}
                               etiqueta={`Entregar encomienda ${encomienda.tracking_id}`}
-                              className="font-mono text-sm"
+                              className="font-mono text-[15px] font-medium"
                             >
                               {encomienda.tracking_id}
                             </CeldaEnlace>
@@ -324,7 +355,7 @@ function Entrega() {
                             <TableCell>
                               <div className="flex flex-col items-start gap-1">
                                 <RetentionBadge dias={dias} />
-                                <span className="text-xs text-muted-foreground">{textoDevolucion(dias)}</span>
+                                <span className="text-[13px] text-muted-foreground">{textoDevolucion(dias)}</span>
                               </div>
                             </TableCell>
                             <TableCell>
@@ -334,21 +365,22 @@ function Entrega() {
                               {encomienda.pin_bloqueado ? (
                                 <TonoBadge tono="peligro">Bloqueado</TonoBadge>
                               ) : (
-                                <span className="text-sm text-muted-foreground">Activo</span>
+                                <span className="text-[13px] text-muted-foreground">Activo</span>
                               )}
                             </TableCell>
                           </TableRow>
                         );
-                      })
-                    )}
+                      })}
                   </TableBody>
                 </Table>
+                  )}
+                />
                 <PaginacionTabla pagina={pagina} paginas={paginas} onCambio={ir} />
               </>
             )}
           </Card>
         )}
-      </div>
+      </section>
 
       <EntregaModal
         isOpen={modalState.isOpen}

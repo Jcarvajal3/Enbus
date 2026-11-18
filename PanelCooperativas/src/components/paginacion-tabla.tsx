@@ -14,6 +14,9 @@ import { PARAM_PAGINA, useParamUrl } from "@/hooks/use-param-url";
 //     <Table>…{visibles.map(…)}</Table>
 //     <PaginacionTabla pagina={pagina} paginas={paginas} onCambio={ir} />
 //   </Card>
+//
+// En móvil (< md): "Página X de Y" centrado y debajo "Anterior" / "Siguiente" en
+// dos botones grandes (48 px) de igual ancho. Misma API y misma lógica.
 
 export const POR_PAGINA = 25;
 
@@ -55,17 +58,17 @@ export function PaginacionTabla({
   return (
     <nav
       aria-label="Paginación"
-      className="flex items-center justify-between gap-3 border-t border-border px-4 py-3"
+      className="flex flex-col gap-3 border-t border-border px-5 py-3 md:flex-row md:items-center md:justify-between"
     >
-      <p className="text-sm text-muted-foreground tabular-nums" aria-live="polite">
+      <p className="text-center text-[13px] text-muted-foreground tabular-nums md:text-left" aria-live="polite">
         Página <span className="font-medium text-foreground">{pagina}</span> de{" "}
         <span className="font-medium text-foreground">{paginas}</span>
       </p>
-      <div className="flex items-center gap-2">
+      <div className="grid grid-cols-2 gap-3 md:flex md:items-center md:gap-2">
         <Button
           type="button"
           variant="outline"
-          size="sm"
+          className="h-12 md:h-11"
           onClick={() => onCambio(pagina - 1)}
           disabled={pagina <= 1}
         >
@@ -75,7 +78,7 @@ export function PaginacionTabla({
         <Button
           type="button"
           variant="outline"
-          size="sm"
+          className="h-12 md:h-11"
           onClick={() => onCambio(pagina + 1)}
           disabled={pagina >= paginas}
         >

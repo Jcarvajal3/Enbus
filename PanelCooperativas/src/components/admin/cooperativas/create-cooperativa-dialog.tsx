@@ -43,11 +43,11 @@ export function EnlaceInvitacion({ enlace }: { enlace: string }) {
   };
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex items-center gap-2 rounded-md border border-border bg-muted p-2 pl-3">
-        <span className="min-w-0 flex-1 truncate text-sm text-foreground">{enlace}</span>
+      <div className="flex items-center gap-2 rounded-md bg-surface p-2 pl-3">
+        <span className="min-w-0 flex-1 truncate text-[15px] text-foreground">{enlace}</span>
         <Button
           type="button"
-          size="icon-sm"
+          size="icon"
           variant="ghost"
           onClick={copiar}
           aria-label={copiado ? "Enlace de invitación copiado" : "Copiar enlace de invitación"}
@@ -178,7 +178,7 @@ export function CreateCooperativaDialog() {
       }}
     >
       <DialogTrigger asChild>
-        <Button>
+        <Button size="lg">
           <Plus aria-hidden /> Nueva cooperativa
         </Button>
       </DialogTrigger>
@@ -203,17 +203,17 @@ export function CreateCooperativaDialog() {
             </DialogHeader>
 
             <div className="flex items-center gap-4">
-              <Avatar className="size-16 border border-border bg-muted">
+              <Avatar className="size-16 bg-surface">
                 <AvatarImage src={logoPreview || ""} alt="Vista previa del logo" />
-                <AvatarFallback className="bg-muted text-muted-foreground">
+                <AvatarFallback className="bg-surface text-muted-foreground">
                   <UploadSimple className="size-6" aria-hidden />
                 </AvatarFallback>
               </Avatar>
               <div className="flex flex-col items-start gap-1">
-                <Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} disabled={loading}>
+                <Button type="button" variant="outline" size="sm" className="max-md:h-11" onClick={() => fileInputRef.current?.click()} disabled={loading}>
                   Subir logo
                 </Button>
-                <p className="text-xs text-muted-foreground">JPEG, PNG, WebP o GIF de hasta 2 MB.</p>
+                <p className="text-[13px] text-muted-foreground">JPEG, PNG, WebP o GIF de hasta 2 MB.</p>
               </div>
               <input
                 type="file"
@@ -226,7 +226,7 @@ export function CreateCooperativaDialog() {
               />
             </div>
 
-            <FieldGroup className="gap-4">
+            <FieldGroup className="gap-5">
               <Field>
                 <FieldLabel htmlFor="nombre">Nombre de la cooperativa</FieldLabel>
                 <Input id="nombre" name="nombre" placeholder="Ej.: Expresos del Táchira" required disabled={loading} />
@@ -271,17 +271,17 @@ export function CreateCooperativaDialog() {
                 <FieldLabel htmlFor="email_admin">
                   Correo del administrador <span className="font-normal text-muted-foreground">(opcional)</span>
                 </FieldLabel>
-                <Input id="email_admin" name="email_admin" type="email" placeholder="Ej.: admin@cooperativa.com" disabled={loading} />
+                <Input id="email_admin" name="email_admin" type="email" inputMode="email" autoComplete="off" autoCapitalize="none" placeholder="Ej.: admin@cooperativa.com" disabled={loading} />
               </Field>
             </FieldGroup>
 
             {error && <AvisoError>{error}</AvisoError>}
 
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={loading}>
+              <Button size="lg" type="button" variant="outline" onClick={() => setOpen(false)} disabled={loading}>
                 Cancelar
               </Button>
-              <Button type="submit" disabled={loading} aria-busy={loading || undefined}>
+              <Button size="lg" type="submit" disabled={loading} aria-busy={loading || undefined}>
                 {loading && <Spinner size="sm" aria-hidden />}
                 {loading ? "Creando…" : "Crear cooperativa"}
               </Button>

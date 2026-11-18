@@ -12,6 +12,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 export const PESTANAS = ["sucursales", "metodos-pago", "datos"] as const;
 export type Pestana = (typeof PESTANAS)[number];
 
+const CORTAS: Partial<Record<Pestana, string>> = { "metodos-pago": "Pagos" };
+
 const ETIQUETAS: Record<Pestana, string> = {
   sucursales: "Sucursales",
   "metodos-pago": "Métodos de pago",
@@ -33,11 +35,18 @@ export function PestanasConfiguracion({ defecto, paneles }: { defecto: Pestana; 
   };
 
   return (
-    <Tabs value={activa} onValueChange={cambiar} className="flex flex-col gap-6">
-      <TabsList>
+    <Tabs value={activa} onValueChange={cambiar} className="flex flex-col gap-5 md:gap-8">
+      <TabsList className="w-full md:w-fit" aria-label="Secciones de configuración">
         {PESTANAS.map((p) => (
-          <TabsTrigger key={p} value={p} className="flex-none">
-            {ETIQUETAS[p]}
+          <TabsTrigger key={p} value={p} className="h-11 px-2 md:h-9 md:flex-none md:px-4">
+            {CORTAS[p] ? (
+              <>
+                <span className="md:hidden">{CORTAS[p]}</span>
+                <span className="hidden md:inline">{ETIQUETAS[p]}</span>
+              </>
+            ) : (
+              ETIQUETAS[p]
+            )}
           </TabsTrigger>
         ))}
       </TabsList>

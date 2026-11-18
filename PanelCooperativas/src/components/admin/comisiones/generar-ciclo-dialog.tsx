@@ -152,7 +152,7 @@ export function GenerarCicloDialog({ cooperativas, tasa: tasaServidor }: Generar
       }}
     >
       <DialogTrigger asChild>
-        <Button>
+        <Button size="lg">
           <Plus aria-hidden /> Generar ciclo
         </Button>
       </DialogTrigger>
@@ -168,7 +168,7 @@ export function GenerarCicloDialog({ cooperativas, tasa: tasaServidor }: Generar
               resetForm();
             }}
           >
-            <dl className="flex flex-col gap-4 rounded-md bg-muted p-4 text-sm">
+            <dl className="flex flex-col gap-4 rounded-md bg-surface p-4 text-[15px]">
               {resumen.generated.length > 0 && (
                 <div className="flex flex-col gap-1">
                   <dt className="font-medium">Generados ({resumen.generated.length})</dt>
@@ -196,7 +196,7 @@ export function GenerarCicloDialog({ cooperativas, tasa: tasaServidor }: Generar
               <DialogDescription>Comisión de cada cooperativa por sus ventas en un período.</DialogDescription>
             </DialogHeader>
 
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
               <Field>
                 <FieldLabel htmlFor="periodo_inicio">Desde</FieldLabel>
                 <Input
@@ -245,17 +245,17 @@ export function GenerarCicloDialog({ cooperativas, tasa: tasaServidor }: Generar
             </div>
 
             {previews && previews.length === 0 && (
-              <p role="status" className="text-sm text-muted-foreground">
+              <p role="status" className="text-[15px] text-muted-foreground">
                 No hay cooperativas activas para calcular en ese período.
               </p>
             )}
 
             {previews && previews.length > 0 && (
               <section aria-labelledby="vista-previa" className="flex flex-col gap-3">
-                <h3 id="vista-previa" className="text-sm font-semibold">
+                <h3 id="vista-previa" className="text-[17px] font-semibold">
                   Vista previa
                 </h3>
-                <div className="max-h-72 overflow-y-auto rounded-md border border-border">
+                <div className="max-h-72 overflow-y-auto rounded-md bg-surface">
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -273,7 +273,7 @@ export function GenerarCicloDialog({ cooperativas, tasa: tasaServidor }: Generar
                           <TableRow key={p.cooperativa_id}>
                             <TableCell className="font-medium">
                               {p.cooperativa_nombre}
-                              <span className="block text-xs font-normal text-muted-foreground tabular-nums">
+                              <span className="block text-[13px] font-normal text-muted-foreground tabular-nums">
                                 {formatPorcentaje(p.comision_porcentaje)}
                               </span>
                             </TableCell>
@@ -301,7 +301,7 @@ export function GenerarCicloDialog({ cooperativas, tasa: tasaServidor }: Generar
                     </TableBody>
                   </Table>
                 </div>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-[13px] text-muted-foreground">
                   Solo se generan los marcados «Se generará». Si cambias las fechas, vuelve a calcular.
                 </p>
               </section>
@@ -310,7 +310,7 @@ export function GenerarCicloDialog({ cooperativas, tasa: tasaServidor }: Generar
             {error && <AvisoError>{error}</AvisoError>}
 
             <DialogFooter>
-              <Button
+              <Button size="lg"
                 type="button"
                 variant="outline"
                 onClick={() => {
@@ -322,7 +322,7 @@ export function GenerarCicloDialog({ cooperativas, tasa: tasaServidor }: Generar
                 Cancelar
               </Button>
               {previews && previews.length > 0 ? (
-                <Button
+                <Button size="lg"
                   type="button"
                   onClick={handleGenerate}
                   disabled={loading || generables.length === 0}
@@ -338,7 +338,7 @@ export function GenerarCicloDialog({ cooperativas, tasa: tasaServidor }: Generar
                       : `Generar ${generables.length} ciclos`}
                 </Button>
               ) : (
-                <Button type="button" onClick={handlePreview} disabled={ocupado} aria-busy={previewLoading || undefined}>
+                <Button size="lg" type="button" onClick={handlePreview} disabled={ocupado} aria-busy={previewLoading || undefined}>
                   {previewLoading && <Spinner size="sm" aria-hidden />}
                   {previewLoading ? "Calculando…" : "Ver vista previa"}
                 </Button>

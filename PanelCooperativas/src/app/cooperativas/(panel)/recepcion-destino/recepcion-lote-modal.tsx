@@ -13,6 +13,7 @@ import { requireOnline } from "@/components/connectivity-banner";
 import { AvisoError } from "@/components/aviso-error";
 import { EmptyState } from "@/components/empty-state";
 import { TonoBadge } from "@/components/status-badge";
+import { IconTile } from "@/components/icon-tile";
 import { avisarExito, avisarInfo } from "@/lib/avisos";
 import { humanizeError } from "@/lib/errores";
 import { ErrorState } from "@/components/error-state";
@@ -246,7 +247,7 @@ export function RecepcionLoteModal({ isOpen, onClose, cooperativaId, sucursal, o
         ) : !selectedViaje ? (
           /* PASO 1: ELEGIR VIAJE */
           viajes.length === 0 ? (
-            <EmptyState compacto icon={ICONO_SECCION.recepcion} title="No hay encomiendas en camino" />
+            <EmptyState compacto icon={ICONO_SECCION.recepcion} tono="coral" title="No hay encomiendas en camino" />
           ) : (
             <ul className="flex flex-col gap-2">
               {viajes.map((viaje, i) => {
@@ -258,22 +259,23 @@ export function RecepcionLoteModal({ isOpen, onClose, cooperativaId, sucursal, o
                       // El primer viaje queda enfocado: Enter lo elige.
                       autoFocus={i === 0}
                       aria-label={`${rutaDe(viaje)}: ${pendientes} en camino`}
-                      className="flex w-full items-center justify-between gap-4 rounded-md border border-border bg-card p-4 text-left transition-colors outline-none hover:border-input-border hover:bg-muted/50 focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                      className="flex w-full items-center gap-3 rounded-xl bg-surface p-4 md:gap-4 text-left transition-colors outline-none hover:bg-surface-dark focus-visible:ring-[3px] focus-visible:ring-accent-strong/30"
                       onClick={() => handleViajeSelect(viaje)}
                     >
-                      <span className="flex min-w-0 flex-col gap-1">
-                        <span className="text-base font-semibold">{rutaDe(viaje)}</span>
-                        <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground tabular-nums">
+                      <IconTile icon={ICONO_SECCION.recepcion} tone="coral" />
+                      <span className="flex min-w-0 flex-1 flex-col gap-1">
+                        <span className="text-[17px] leading-snug font-semibold">{rutaDe(viaje)}</span>
+                        <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-muted-foreground tabular-nums">
                           {viaje.fecha_hora_salida && <span>{formatFechaHoraCortaVE(viaje.fecha_hora_salida)}</span>}
                           {viaje.numero_unidad && <span>· Unidad {viaje.numero_unidad}</span>}
                           {viaje.estado === "PROGRAMADO" && <TonoBadge tono="pendiente">Sin salida marcada</TonoBadge>}
                         </span>
                       </span>
-                      <span className="flex shrink-0 items-center gap-2 text-sm text-muted-foreground">
+                      <span className="flex shrink-0 items-center gap-2 text-[13px] text-muted-foreground">
                         <span className="tabular-nums">
                           <span className="font-semibold text-foreground">{pendientes}</span> en camino
                         </span>
-                        <CaretRight className="size-4" aria-hidden />
+                        <CaretRight className="size-5" aria-hidden />
                       </span>
                     </button>
                   </li>
@@ -284,19 +286,19 @@ export function RecepcionLoteModal({ isOpen, onClose, cooperativaId, sucursal, o
         ) : (
           /* PASO 2: MARCAR LAS QUE LLEGARON */
           <div className="flex flex-col gap-4">
-            <div className="flex items-center gap-3 rounded-md bg-muted/50 px-4 py-3">
+            <div className="flex items-center gap-3 rounded-md bg-surface px-4 py-3">
               <Checkbox
                 id="select-all"
                 ref={todasRef}
                 checked={marcadas === encomiendasPendientes.length && encomiendasPendientes.length > 0}
                 onCheckedChange={(c) => handleToggleAll(c === true)}
               />
-              <label htmlFor="select-all" className="cursor-pointer text-sm font-medium">
+              <label htmlFor="select-all" className="cursor-pointer text-[15px] font-medium">
                 Llegaron todas ({encomiendasPendientes.length})
               </label>
             </div>
 
-            <ul className="flex flex-col divide-y divide-border rounded-md border border-border">
+            <ul className="flex flex-col divide-y divide-border rounded-md bg-surface">
               {encomiendasPendientes.map((encomienda) => (
                 <li key={encomienda.id} className="flex items-center gap-3 px-4 py-3">
                   <Checkbox
@@ -304,9 +306,9 @@ export function RecepcionLoteModal({ isOpen, onClose, cooperativaId, sucursal, o
                     checked={selectedEncomiendaIds.has(encomienda.id)}
                     onCheckedChange={(c) => handleToggleEncomienda(encomienda.id, c === true)}
                   />
-                  <label htmlFor={encomienda.id} className="flex flex-1 cursor-pointer items-center justify-between gap-3">
-                    <span className="font-mono text-sm text-foreground">{encomienda.tracking_id}</span>
-                    <span className="max-w-48 truncate text-sm text-muted-foreground">{encomienda.receiver_nombre}</span>
+                  <label htmlFor={encomienda.id} className="-my-3 flex min-h-14 flex-1 cursor-pointer items-center justify-between gap-3 py-3">
+                    <span className="font-mono text-[15px] font-medium text-foreground">{encomienda.tracking_id}</span>
+                    <span className="max-w-32 truncate text-[13px] md:max-w-48 text-muted-foreground">{encomienda.receiver_nombre}</span>
                   </label>
                 </li>
               ))}
@@ -317,11 +319,11 @@ export function RecepcionLoteModal({ isOpen, onClose, cooperativaId, sucursal, o
         )}
 
         {selectedViaje && !loading && !errorCarga && (
-          <DialogFooter className="sm:justify-between">
-            <Button variant="outline" onClick={() => setSelectedViaje(null)} disabled={isSubmitting}>
+          <DialogFooter className="md:justify-between">
+            <Button variant="outline" size="lg" onClick={() => setSelectedViaje(null)} disabled={isSubmitting}>
               Atrás
             </Button>
-            <Button onClick={handleConfirmar} disabled={marcadas === 0 || isSubmitting} aria-busy={isSubmitting || undefined}>
+            <Button size="lg" onClick={handleConfirmar} disabled={marcadas === 0 || isSubmitting} aria-busy={isSubmitting || undefined}>
               {isSubmitting && <Spinner size="sm" />}
               {marcadas === 0 ? "Recibir" : `Recibir ${marcadas} de ${encomiendasPendientes.length}`}
             </Button>

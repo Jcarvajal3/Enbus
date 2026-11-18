@@ -11,6 +11,9 @@ import { Card } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { StatusBadge } from "@/components/status-badge";
 import { CeldaEnlace } from "@/components/celda-enlace";
+import { EntityCard } from "@/components/entity-card";
+import { ListaResponsive } from "@/components/lista-responsive";
+import { IconTile } from "@/components/icon-tile";
 import { FilaVacia } from "@/components/fila-vacia";
 import { BarraFiltros } from "@/components/barra-filtros";
 import { PaginacionTabla } from "@/components/paginacion-tabla";
@@ -94,29 +97,23 @@ export function IncidenciasTable({ resultado, estado, tipo, q = "", ahora }: Inc
       />
 
       {total > 0 && (
-        <p className="text-sm text-muted-foreground tabular-nums" aria-live="polite">
+        <p className="text-[15px] text-muted-foreground tabular-nums" aria-live="polite">
           {total <= porPagina
             ? `${total === 1 ? "1 incidencia" : `${formatNumeroVE(total, 0)} incidencias`} · ordenadas por prioridad y antigüedad`
             : `Mostrando ${formatNumeroVE(desde, 0)}–${formatNumeroVE(hasta, 0)} de ${formatNumeroVE(total, 0)} · ordenadas por prioridad y antigüedad`}
         </p>
       )}
 
-      <Card className="gap-0 overflow-hidden p-0">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Código</TableHead>
-              <TableHead>Prioridad</TableHead>
-              <TableHead className="hidden md:table-cell">Tipo</TableHead>
-              <TableHead className="hidden lg:table-cell">Sobre</TableHead>
-              <TableHead className="hidden xl:table-cell">Reportada por</TableHead>
-              <TableHead>Estado</TableHead>
-              <TableHead className="hidden md:table-cell">Antigüedad</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {data.length === 0 ? (
-              <FilaVacia
+      <Card className="gap-0 overflow-hidden p-0 max-md:overflow-visible max-md:bg-transparent max-md:shadow-none">
+        <ListaResponsive
+          items={data}
+          clave={(item) => item.id}
+          etiqueta="Incidencias"
+          vacio={
+            <div className="max-md:rounded-xl max-md:bg-card max-md:shadow-card">
+              <Table>
+                <TableBody>
+                  <FilaVacia
                 colSpan={7}
                 icon={q ? MagnifyingGlass : Warning}
                 titulo={
@@ -127,50 +124,80 @@ export function IncidenciasTable({ resultado, estado, tipo, q = "", ahora }: Inc
                       : "No hay incidencias abiertas ni en proceso"
                 }
               />
-            ) : (
-              data.map((item) => (
-                <TableRow key={item.id} className="relative">
-                  <CeldaEnlace
-                    href={`/admin/incidencias/${item.id}`}
-                    etiqueta={`Ver incidencia ${codigoIncidencia(item.id)}`}
-                    className="font-mono text-sm"
-                  >
-                    {codigoIncidencia(item.id)}
-                  </CeldaEnlace>
-                  <TableCell>
-                    <PrioridadBadge incidencia={item} />
-                  </TableCell>
-                  <TableCell className="hidden md:table-cell">{tipoConCategoria(item)}</TableCell>
-                  <TableCell className="hidden lg:table-cell">
-                    {item.encomienda ? (
-                      <>
-                        <span className="block font-mono text-sm text-foreground">{item.encomienda.tracking_id}</span>
-                        <span className="block max-w-52 truncate text-xs text-muted-foreground">
-                          {item.encomienda.descripcion_contenido}
-                        </span>
-                      </>
-                    ) : item.boleto ? (
-                      <>
-                        <span className="block font-mono text-sm text-foreground">{formatCodigoBoleto(item.boleto.codigo_boleto)}</span>
-                        <span className="block text-xs text-muted-foreground">Boleto</span>
-                      </>
-                    ) : (
-                      <Vacio />
-                    )}
-                  </TableCell>
-                  <TableCell className="hidden xl:table-cell">{item.reportado_por_profile?.nombre_completo || "Sistema"}</TableCell>
-                  <TableCell>
-                    <StatusBadge status={item.estado} dominio="incidencia" />
-                  </TableCell>
-                  <TableCell className="hidden md:table-cell">
-                    <span className="block">{formatHaceTiempo(item.created_at, fechaAhora)}</span>
-                    <span className="block text-xs text-muted-foreground tabular-nums">{formatFechaHoraVE(item.created_at)}</span>
-                  </TableCell>
+                </TableBody>
+              </Table>
+            </div>
+          }
+          tarjeta={(item) => (
+            <EntityCard
+              href={`/admin/incidencias/${item.id}`}
+              etiqueta={`Ver incidencia ${codigoIncidencia(item.id)}`}
+              leading={<IconTile icon={Warning} tone={item.estado === "RESUELTA" ? "success" : "warning"} />}
+              title={codigoIncidencia(item.id)}
+              subtitle={tipoConCategoria(item)}
+              adorno={<PrioridadBadge incidencia={item} />}
+              badge={<StatusBadge status={item.estado} dominio="incidencia" />}
+              meta={formatHaceTiempo(item.created_at, fechaAhora)}
+            />
+          )}
+          tabla={(items) => (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Código</TableHead>
+                  <TableHead>Prioridad</TableHead>
+                  <TableHead className="hidden md:table-cell">Tipo</TableHead>
+                  <TableHead className="hidden lg:table-cell">Sobre</TableHead>
+                  <TableHead className="hidden xl:table-cell">Reportada por</TableHead>
+                  <TableHead>Estado</TableHead>
+                  <TableHead className="hidden md:table-cell">Antigüedad</TableHead>
                 </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
+              </TableHeader>
+              <TableBody>
+                {items.map((item) => (
+                    <TableRow key={item.id} className="relative">
+                      <CeldaEnlace
+                        href={`/admin/incidencias/${item.id}`}
+                        etiqueta={`Ver incidencia ${codigoIncidencia(item.id)}`}
+                        className="font-mono text-[15px]"
+                      >
+                        {codigoIncidencia(item.id)}
+                      </CeldaEnlace>
+                      <TableCell>
+                        <PrioridadBadge incidencia={item} />
+                      </TableCell>
+                      <TableCell className="hidden md:table-cell">{tipoConCategoria(item)}</TableCell>
+                      <TableCell className="hidden lg:table-cell">
+                        {item.encomienda ? (
+                          <>
+                            <span className="block font-mono text-[15px] text-foreground">{item.encomienda.tracking_id}</span>
+                            <span className="block max-w-52 truncate text-[13px] text-muted-foreground">
+                              {item.encomienda.descripcion_contenido}
+                            </span>
+                          </>
+                        ) : item.boleto ? (
+                          <>
+                            <span className="block font-mono text-[15px] text-foreground">{formatCodigoBoleto(item.boleto.codigo_boleto)}</span>
+                            <span className="block text-[13px] text-muted-foreground">Boleto</span>
+                          </>
+                        ) : (
+                          <Vacio />
+                        )}
+                      </TableCell>
+                      <TableCell className="hidden xl:table-cell">{item.reportado_por_profile?.nombre_completo || "Sistema"}</TableCell>
+                      <TableCell>
+                        <StatusBadge status={item.estado} dominio="incidencia" />
+                      </TableCell>
+                      <TableCell className="hidden md:table-cell">
+                        <span className="block">{formatHaceTiempo(item.created_at, fechaAhora)}</span>
+                        <span className="block text-[13px] text-muted-foreground tabular-nums">{formatFechaHoraVE(item.created_at)}</span>
+                      </TableCell>
+                    </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        />
         <PaginacionTabla pagina={pagina} paginas={paginas} onCambio={ir} />
       </Card>
     </div>

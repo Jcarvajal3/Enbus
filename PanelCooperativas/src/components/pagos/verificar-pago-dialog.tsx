@@ -70,7 +70,7 @@ function Comparacion({ pago }: { pago: PagoPorVerificar }) {
 
   if (Math.abs(dif) < 0.01) {
     return (
-      <p className="flex items-center gap-2 text-sm font-medium text-success-text">
+      <p className="flex items-center gap-2 text-[13px] font-medium text-success-text">
         <CheckCircle weight="fill" className="size-4 shrink-0" aria-hidden />
         El monto coincide: el cliente dice que pagó {declarado}.
       </p>
@@ -80,10 +80,8 @@ function Comparacion({ pago }: { pago: PagoPorVerificar }) {
   return (
     <div
       className={cn(
-        "flex items-start gap-2 rounded-md border px-3 py-2 text-sm",
-        falta
-          ? "border-warning/40 bg-warning-light text-warning-deep"
-          : "border-info/40 bg-info-light text-info-deep"
+        "flex items-start gap-2 rounded-md px-3 py-2 text-[13px]",
+        falta ? "bg-warning-light text-warning-deep" : "bg-info-light text-info-deep"
       )}
     >
       {falta ? (
@@ -114,8 +112,8 @@ function Aviso({ children, tono = "ambar" }: { children: React.ReactNode; tono?:
 
 function Dato({ etiqueta, children }: { etiqueta: string; children: React.ReactNode }) {
   return (
-    <div className="grid grid-cols-[8.5rem_1fr] gap-2 py-2 text-sm">
-      <dt className="text-muted-foreground">{etiqueta}</dt>
+    <div className="grid grid-cols-[6.5rem_1fr] gap-2 py-3 text-[15px] md:grid-cols-[8.5rem_1fr]">
+      <dt className="text-[13px] text-muted-foreground">{etiqueta}</dt>
       <dd className="min-w-0 break-words text-foreground">{children}</dd>
     </div>
   );
@@ -293,7 +291,7 @@ export function VerificarPagoDialog({
   if (!pago && (cargando || !errorCarga)) {
     cuerpo = (
       <div role="status" aria-label="Cargando" className="flex flex-col gap-4">
-        <div className="flex flex-col gap-2 rounded-md bg-muted/50 p-4" aria-hidden>
+        <div className="flex flex-col gap-2 rounded-md bg-surface p-5" aria-hidden>
           <Skeleton className="h-3.5 w-40" />
           <Skeleton className="h-7 w-48" />
           <Skeleton className="h-3.5 w-32" />
@@ -318,14 +316,14 @@ export function VerificarPagoDialog({
     cuerpo = (
       <div className="flex flex-col gap-4">
         {/* Lo que debe aparecer en la cuenta */}
-        <section aria-label="Monto esperado" className="flex flex-col gap-1 rounded-md bg-muted/50 p-4">
-          <p className="text-xs font-medium text-muted-foreground">Debe aparecer en tu cuenta</p>
+        <section aria-label="Monto esperado" className="flex flex-col gap-1 rounded-md bg-surface p-5">
+          <p className="text-[13px] font-medium text-muted-foreground">Debe aparecer en tu cuenta</p>
           {legado ? (
             <div className="flex flex-col">
-              <span className="text-2xl font-semibold tracking-tight tabular-nums">
+              <span className="text-[28px] font-semibold tracking-tight tabular-nums">
                 {formatUsd(pago.monto_usd)}
               </span>
-              <span className="text-xs text-muted-foreground">Registrado antes de la conversión a Bs.</span>
+              <span className="text-[13px] text-muted-foreground">Registrado antes de la conversión a Bs.</span>
             </div>
           ) : (
             <Monto
@@ -374,7 +372,7 @@ export function VerificarPagoDialog({
                 <span className="font-mono text-base font-medium">{pago.numero_referencia}</span>
                 <Button
                   variant="ghost"
-                  size="icon-sm"
+                  size="icon"
                   onClick={() => void copiarReferencia()}
                   aria-label="Copiar referencia"
                   title="Copiar referencia"
@@ -401,7 +399,7 @@ export function VerificarPagoDialog({
               .filter(Boolean)
               .join(" · ")}
             {pago.cliente_telefono && (
-              <span className="block text-xs text-muted-foreground tabular-nums">{formatTelefono(pago.cliente_telefono)}</span>
+              <span className="block text-[13px] text-muted-foreground tabular-nums">{formatTelefono(pago.cliente_telefono)}</span>
             )}
           </Dato>
           <Dato etiqueta="Registrado">{formatFechaHoraVE(pago.creado_at)}</Dato>
@@ -410,7 +408,7 @@ export function VerificarPagoDialog({
               <span className="inline-flex flex-col items-start gap-1">
                 <StatusBadge status={pago.estado_verificacion} dominio="pago" />
                 {pago.motivo_rechazo && (
-                  <span className="text-xs text-muted-foreground">Motivo: {pago.motivo_rechazo}</span>
+                  <span className="text-[13px] text-muted-foreground">Motivo: {pago.motivo_rechazo}</span>
                 )}
               </span>
             </Dato>
@@ -420,20 +418,20 @@ export function VerificarPagoDialog({
         {/* Capture del pago */}
         {pago.comprobante_path ? (
           <section aria-label="Capture del pago" className="flex flex-col gap-2">
-            <p className="text-sm font-medium text-foreground">Capture del pago</p>
+            <p className="text-[13px] font-medium text-foreground">Capture del pago</p>
             {pago.comprobante_url ? (
               <a
                 href={pago.comprobante_url}
                 target="_blank"
                 rel="noopener noreferrer"
                 aria-label="Abrir el capture en otra pestaña"
-                className="block overflow-hidden rounded-md border border-border bg-muted/50 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                className="block overflow-hidden rounded-md bg-surface outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={pago.comprobante_url} alt="Capture del pago que envió el cliente" className="max-h-72 w-full object-contain" />
               </a>
             ) : (
-              <p className="text-sm text-muted-foreground">No pudimos cargar el capture. Vuelve a abrir este pago.</p>
+              <p className="text-[13px] text-muted-foreground">No pudimos cargar el capture. Vuelve a abrir este pago.</p>
             )}
           </section>
         ) : (
@@ -456,6 +454,7 @@ export function VerificarPagoDialog({
         ref={rechazarRef}
         // Si ya no se puede aprobar, rechazar es la única salida: tono destructivo.
         variant={puedeAprobar ? "outline" : "destructive"}
+        size="lg"
         onClick={() => pedirConfirmacion("rechazar")}
         disabled={ocupado}
       >
@@ -463,6 +462,7 @@ export function VerificarPagoDialog({
       </Button>
       <Button
         ref={aprobarRef}
+        size="lg"
         autoFocus={puedeAprobar}
         onClick={() => pedirConfirmacion("aprobar")}
         disabled={ocupado || !puedeAprobar}
@@ -471,7 +471,7 @@ export function VerificarPagoDialog({
       </Button>
     </>
   ) : (
-    <Button variant="outline" onClick={cerrar}>
+    <Button variant="outline" size="lg" onClick={cerrar}>
       Cerrar
     </Button>
   );
@@ -492,15 +492,15 @@ export function VerificarPagoDialog({
   if (embebido) {
     if (!open) return null;
     return (
-      <section aria-labelledby={idTitulo} className="flex flex-col gap-4 rounded-md border border-border p-4">
+      <section aria-labelledby={idTitulo} className="flex flex-col gap-4 rounded-xl bg-card p-5 shadow-card">
         <header className="flex flex-col gap-1">
-          <h3 id={idTitulo} className="text-base font-semibold text-foreground">
+          <h3 id={idTitulo} className="text-[17px] font-semibold text-foreground">
             {titulo}
           </h3>
-          <p className="text-sm text-muted-foreground">{descripcion}</p>
+          <p className="text-[13px] text-muted-foreground">{descripcion}</p>
         </header>
         {cuerpo}
-        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">{acciones}</div>
+        <div className="flex flex-col-reverse gap-2 md:flex-row md:justify-end">{acciones}</div>
         {confirmacion}
       </section>
     );

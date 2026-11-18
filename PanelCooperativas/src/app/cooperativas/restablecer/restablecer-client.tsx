@@ -92,13 +92,13 @@ export default function RestablecerPage() {
         <div role="status" aria-label="Cargando" className="flex flex-col gap-6">
           <div className="flex flex-col gap-2">
             <Skeleton className="h-4 w-32" />
-            <Skeleton className="h-9 w-full rounded-full" />
+            <Skeleton className="h-12 w-full rounded-full" />
           </div>
           <div className="flex flex-col gap-2">
             <Skeleton className="h-4 w-36" />
-            <Skeleton className="h-9 w-full rounded-full" />
+            <Skeleton className="h-12 w-full rounded-full" />
           </div>
-          <Skeleton className="h-9 w-full rounded-full" />
+          <Skeleton className="h-12 w-full rounded-full" />
         </div>
       )}
 
@@ -110,10 +110,10 @@ export default function RestablecerPage() {
             <AlertDescription>Los enlaces sirven una sola vez. Pide uno nuevo.</AlertDescription>
           </Alert>
           <div className="flex flex-col gap-2">
-            <Link href="/cooperativas/recuperar" className={buttonVariants({ className: "w-full" })}>
+            <Link href="/cooperativas/recuperar" className={buttonVariants({ size: "lg", className: "w-full" })}>
               Pedir otro enlace
             </Link>
-            <Link href="/cooperativas/login" className={buttonVariants({ variant: "ghost", className: "w-full" })}>
+            <Link href="/cooperativas/login" className={buttonVariants({ variant: "ghost", size: "lg", className: "w-full" })}>
               <ArrowLeft aria-hidden />
               Volver a iniciar sesión
             </Link>
@@ -183,7 +183,7 @@ export default function RestablecerPage() {
             </Field>
           </FieldGroup>
 
-          <Button type="submit" className="w-full" disabled={loading} aria-busy={loading || undefined}>
+          <Button type="submit" size="lg" className="w-full" disabled={loading} aria-busy={loading || undefined}>
             {loading && <Spinner size="sm" data-icon="inline-start" />}
             Guardar contraseña
           </Button>

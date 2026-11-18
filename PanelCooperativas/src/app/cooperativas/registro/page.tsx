@@ -202,8 +202,11 @@ export default function RegistroCooperativaPage() {
                 id="email"
                 ref={(el) => { refs.current.email = el; }}
                 type="email"
-                placeholder="tu@correo.com"
+                inputMode="email"
+                placeholder="Ej. tu@correo.com"
                 autoComplete="email"
+                autoCapitalize="none"
+                spellCheck={false}
                 aria-invalid={errores.email ? true : undefined}
                 aria-describedby={ayuda("email")}
                 value={email}
@@ -261,7 +264,7 @@ export default function RegistroCooperativaPage() {
             </Field>
           </FieldGroup>
 
-          <Button type="submit" className="w-full" disabled={verificandoCorreo} aria-busy={verificandoCorreo || undefined}>
+          <Button type="submit" size="lg" className="w-full" disabled={verificandoCorreo} aria-busy={verificandoCorreo || undefined}>
             {verificandoCorreo && <Spinner size="sm" data-icon="inline-start" />}
             {verificandoCorreo ? "Verificando el correo…" : "Continuar"}
             {!verificandoCorreo && <ArrowRight aria-hidden />}
@@ -351,6 +354,7 @@ export default function RegistroCooperativaPage() {
             <Button
               type="button"
               variant="outline"
+              size="lg"
               onClick={() => {
                 setErrores({});
                 setStep(1);
@@ -360,14 +364,14 @@ export default function RegistroCooperativaPage() {
               <ArrowLeft aria-hidden />
               Atrás
             </Button>
-            <Button type="submit" className="flex-1" disabled={isPending} aria-busy={isPending || undefined}>
+            <Button type="submit" size="lg" className="flex-1" disabled={isPending} aria-busy={isPending || undefined}>
               {isPending && <Spinner size="sm" data-icon="inline-start" />}
               {isPending ? "Creando tu cuenta…" : "Crear cuenta"}
             </Button>
           </div>
 
           {SITIO_URL && (
-            <p className="text-center text-xs text-muted-foreground">
+            <p className="text-center text-[13px] text-muted-foreground">
               Al registrarte aceptas los{" "}
               <a href={`${SITIO_URL}/terminos`} target="_blank" rel="noopener noreferrer" className={ENLACE}>
                 Términos y condiciones

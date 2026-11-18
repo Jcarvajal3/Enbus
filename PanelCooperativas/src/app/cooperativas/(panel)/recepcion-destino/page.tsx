@@ -6,10 +6,15 @@
 
 import { Suspense, useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { PageHeader } from "@/components/page-header";
+import { SectionLabel } from "@/components/section-label";
 import { ScanInput } from "@/components/scan-input";
 import { UltimoEscaneo, useUltimoEscaneo } from "@/components/ultimo-escaneo";
 import { CeldaEnlace } from "@/components/celda-enlace";
-import { FilaVacia } from "@/components/fila-vacia";
+import { EmptyState } from "@/components/empty-state";
+import { EntityCard } from "@/components/entity-card";
+import { IconTile } from "@/components/icon-tile";
+import { ListaResponsive } from "@/components/lista-responsive";
+import { BarraAccionFija } from "@/components/barra-accion-fija";
 import { TablaSkeleton } from "@/components/tabla-skeleton";
 import { PaginacionTabla, usePaginacion } from "@/components/paginacion-tabla";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -76,9 +81,9 @@ export default function RecepcionDestinoPage() {
   return (
     <Suspense
       fallback={
-        <div className="flex flex-col gap-6">
+        <div className="flex flex-col gap-8">
           <Skeleton className="h-8 w-56" />
-          <Skeleton className="h-24 w-full rounded-md" />
+          <Skeleton className="h-24 w-full rounded-xl" />
           <TablaSkeleton columnas={COLUMNAS} />
         </div>
       }
@@ -261,15 +266,15 @@ function RecepcionDestino() {
   const { visibles, pagina, paginas, ir } = usePaginacion(encomiendas);
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-8">
       <PageHeader title="Recepción en destino">
-        <Button onClick={() => setIsLoteModalOpen(true)} disabled={!alcanceCargado}>
+        <Button variant="outline" size="lg" className="max-md:hidden" onClick={() => setIsLoteModalOpen(true)} disabled={!alcanceCargado}>
           <ICONO_SECCION.recepcion aria-hidden />
           Recibir lote del viaje
         </Button>
       </PageHeader>
 
-      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
         <ScanInput
           onEncomiendaFound={(e) => void handleScanFound(e)}
           onError={(err) => registrar({ codigo: err.codigo, tono: "error", titulo: "No encontrada", detalle: err.mensaje })}
@@ -280,10 +285,12 @@ function RecepcionDestino() {
         <UltimoEscaneo resultado={ultimo} />
       </div>
 
+      <section className="flex flex-col gap-4">
+      <SectionLabel descripcion="Escanéalas al llegar o abre una para ver su detalle">En camino a tu sucursal</SectionLabel>
       {loading && encomiendas.length === 0 ? (
         <TablaSkeleton columnas={COLUMNAS} />
       ) : (
-        <Card className="gap-0 overflow-hidden p-0">
+        <Card className="gap-0 overflow-hidden p-0 max-md:overflow-visible max-md:bg-transparent max-md:shadow-none">
           {errorCarga ? (
             <ErrorState
               titulo="No pudimos cargar las encomiendas en camino"
@@ -292,6 +299,31 @@ function RecepcionDestino() {
             />
           ) : (
             <>
+              <ListaResponsive
+                items={visibles}
+                clave={(e) => e.id}
+                etiqueta="Encomiendas en camino"
+                vacio={<EmptyState icon={ICONO_SECCION.recepcion} tono="coral" title="No hay encomiendas en camino" />}
+                tarjeta={(e) => (
+                  <EntityCard
+                    onClick={() => setEncomiendaAbierta(e.id)}
+                    etiqueta={`Ver encomienda ${e.tracking_id}`}
+                    leading={<IconTile icon={ICONO_SECCION.recepcion} tone="coral" />}
+                    title={`${formatCiudad(e.ciudad_origen)} → ${formatCiudad(e.ciudad_destino)}`}
+                    subtitle={`Para ${e.receiver_nombre} · de ${remitenteDe(e).nombre ?? "—"}`}
+                    badge={
+                      e.viaje ? (
+                        <span className="text-[13px] text-muted-foreground tabular-nums">
+                          Sale {formatFechaHoraCortaVE(e.viaje.fecha_hora_salida)}
+                        </span>
+                      ) : (
+                        <span className="text-[13px] text-muted-foreground">Sin viaje asignado</span>
+                      )
+                    }
+                    meta={e.tracking_id}
+                  />
+                )}
+                tabla={(items) => (
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -303,28 +335,25 @@ function RecepcionDestino() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {encomiendas.length === 0 ? (
-                    <FilaVacia colSpan={COLUMNAS} icon={ICONO_SECCION.recepcion} titulo="No hay encomiendas en camino" />
-                  ) : (
-                    visibles.map((encomienda) => (
+                  {items.map((encomienda) => (
                       <TableRow key={encomienda.id} className="relative">
                         <CeldaEnlace
                           onAbrir={() => setEncomiendaAbierta(encomienda.id)}
                           etiqueta={`Ver encomienda ${encomienda.tracking_id}`}
-                          className="font-mono text-sm"
+                          className="font-mono text-[15px] font-medium"
                         >
                           {encomienda.tracking_id}
                         </CeldaEnlace>
                         <TableCell className="hidden max-w-40 truncate xl:table-cell">{remitenteDe(encomienda).nombre}</TableCell>
                         <TableCell className="max-w-40 truncate">{encomienda.receiver_nombre}</TableCell>
                         <TableCell className="max-w-32 truncate">{formatCiudad(encomienda.ciudad_origen)}</TableCell>
-                        <TableCell className="text-sm">
+                        <TableCell className="text-[15px]">
                           {encomienda.viaje ? (
                             <div className="flex flex-col">
                               <span className="font-medium text-foreground">
                                 {formatCiudad(encomienda.viaje.ruta?.ciudad_origen)} → {formatCiudad(encomienda.viaje.ruta?.ciudad_destino)}
                               </span>
-                              <span className="text-xs text-muted-foreground tabular-nums">
+                              <span className="text-[13px] text-muted-foreground tabular-nums">
                                 {formatFechaHoraCortaVE(encomienda.viaje.fecha_hora_salida)}
                               </span>
                             </div>
@@ -333,15 +362,24 @@ function RecepcionDestino() {
                           )}
                         </TableCell>
                       </TableRow>
-                    ))
-                  )}
+                  ))}
                 </TableBody>
               </Table>
+                )}
+              />
               <PaginacionTabla pagina={pagina} paginas={paginas} onCambio={ir} />
             </>
           )}
         </Card>
       )}
+      </section>
+
+      <BarraAccionFija escritorio="oculta">
+        <Button size="xl" onClick={() => setIsLoteModalOpen(true)} disabled={!alcanceCargado}>
+          <ICONO_SECCION.recepcion aria-hidden />
+          Recibir lote del viaje
+        </Button>
+      </BarraAccionFija>
 
       <RecepcionLoteModal
         isOpen={isLoteModalOpen}

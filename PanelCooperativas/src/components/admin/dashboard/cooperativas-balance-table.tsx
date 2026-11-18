@@ -1,8 +1,13 @@
+"use client";
+
 import { Buildings } from "@phosphor-icons/react/dist/ssr";
 import { CeldaEnlace } from "@/components/celda-enlace";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Monto } from "@/components/monto";
 import { TonoBadge } from "@/components/status-badge";
+import { EntityCard } from "@/components/entity-card";
+import { IconTile } from "@/components/icon-tile";
+import { ListaResponsive } from "@/components/lista-responsive";
 import { FilaVacia } from "@/components/fila-vacia";
 import { TarjetaTabla } from "@/components/admin/detalle";
 import type { TasaRef } from "@/lib/dinero";
@@ -21,47 +26,81 @@ function porcentaje(n: number | string): string {
 
 export function CooperativasBalanceTable({ data, tasa = null }: CooperativasBalanceTableProps) {
   return (
-    <TarjetaTabla titulo="Comisiones pendientes" descripcion="En USD de referencia; se pagan en Bs a la tasa del día.">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Cooperativa</TableHead>
-            <TableHead className="hidden text-right sm:table-cell">Comisión</TableHead>
-            <TableHead className="text-right">Pendiente</TableHead>
-            <TableHead>Ciclos sin pagar</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {data.length === 0 ? (
-            <FilaVacia colSpan={4} icon={Buildings} titulo="No hay cooperativas registradas" />
-          ) : (
-            data.map((item) => (
-              <TableRow key={item.cooperativa_id} className="relative">
-                <CeldaEnlace
-                  href={`/admin/cooperativas/${item.cooperativa_id}?tab=balance`}
-                  etiqueta={`Ver el balance de ${item.nombre}`}
-                >
-                  {item.nombre}
-                </CeldaEnlace>
-                <TableCell className="hidden text-right tabular-nums sm:table-cell">
-                  {porcentaje(item.comision_porcentaje)}
-                </TableCell>
-                <TableCell className="text-right">
-                  <Monto usd={item.monto_pendiente} tasa={tasa} moneda="USD" size="sm" align="right" />
-                </TableCell>
-                <TableCell>
-                  {/* El significado no depende solo del color (AD5-29). */}
-                  {item.ciclos_impagos >= 2 ? (
-                    <TonoBadge tono="peligro">{item.ciclos_impagos} ciclos sin pagar</TonoBadge>
-                  ) : (
-                    <span className="tabular-nums">{item.ciclos_impagos}</span>
-                  )}
-                </TableCell>
+    <TarjetaTabla
+      titulo="Comisiones pendientes"
+      descripcion="En USD de referencia; se pagan en Bs a la tasa del día."
+    >
+      <ListaResponsive
+        items={data}
+        clave={(item) => item.cooperativa_id}
+        etiqueta="Comisiones pendientes"
+        vacio={
+          <div className="max-md:rounded-xl max-md:bg-card max-md:shadow-card">
+            <Table>
+              <TableBody>
+                <FilaVacia colSpan={4} icon={Buildings} titulo="No hay cooperativas registradas" />
+              </TableBody>
+            </Table>
+          </div>
+        }
+        tarjeta={(item) => (
+          <EntityCard
+            href={`/admin/cooperativas/${item.cooperativa_id}?tab=balance`}
+            etiqueta={`Ver el balance de ${item.nombre}`}
+            leading={<IconTile icon={Buildings} tone={item.ciclos_impagos >= 2 ? "danger" : "sky"} />}
+            title={item.nombre}
+            subtitle={`Comisión ${porcentaje(item.comision_porcentaje)}`}
+            adorno={<Monto usd={item.monto_pendiente} tasa={tasa} moneda="USD" size="sm" align="right" />}
+            badge={
+              item.ciclos_impagos >= 2 ? (
+                <TonoBadge tono="peligro">{item.ciclos_impagos} ciclos sin pagar</TonoBadge>
+              ) : (
+                <span className="text-[13px] text-muted-foreground tabular-nums">
+                  {item.ciclos_impagos} {item.ciclos_impagos === 1 ? "ciclo sin pagar" : "ciclos sin pagar"}
+                </span>
+              )
+            }
+          />
+        )}
+        tabla={(items) => (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Cooperativa</TableHead>
+                <TableHead className="hidden text-right md:table-cell">Comisión</TableHead>
+                <TableHead className="text-right">Pendiente</TableHead>
+                <TableHead>Ciclos sin pagar</TableHead>
               </TableRow>
-            ))
-          )}
-        </TableBody>
-      </Table>
+            </TableHeader>
+            <TableBody>
+              {items.map((item) => (
+                <TableRow key={item.cooperativa_id} className="relative">
+                  <CeldaEnlace
+                    href={`/admin/cooperativas/${item.cooperativa_id}?tab=balance`}
+                    etiqueta={`Ver el balance de ${item.nombre}`}
+                  >
+                    {item.nombre}
+                  </CeldaEnlace>
+                  <TableCell className="hidden text-right tabular-nums md:table-cell">
+                    {porcentaje(item.comision_porcentaje)}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Monto usd={item.monto_pendiente} tasa={tasa} moneda="USD" size="sm" align="right" />
+                  </TableCell>
+                  <TableCell>
+                    {/* El significado no depende solo del color (AD5-29). */}
+                    {item.ciclos_impagos >= 2 ? (
+                      <TonoBadge tono="peligro">{item.ciclos_impagos} ciclos sin pagar</TonoBadge>
+                    ) : (
+                      <span className="tabular-nums">{item.ciclos_impagos}</span>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      />
     </TarjetaTabla>
   );
 }

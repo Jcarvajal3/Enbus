@@ -44,7 +44,7 @@ export default function RecuperarPage() {
   const volver = (
     <Link
       href="/cooperativas/login"
-      className={cn(buttonVariants({ variant: success ? "outline" : "ghost" }), "w-full", loading && "pointer-events-none opacity-50")}
+      className={cn(buttonVariants({ variant: success ? "outline" : "ghost", size: "lg" }), "w-full", loading && "pointer-events-none opacity-50")}
     >
       <ArrowLeft aria-hidden />
       Volver a iniciar sesión
@@ -82,8 +82,12 @@ export default function RecuperarPage() {
               <Input
                 id="email"
                 type="email"
-                placeholder="tu@correo.com"
+                inputMode="email"
+                placeholder="Ej. tu@correo.com"
                 autoComplete="email"
+                autoCapitalize="none"
+                spellCheck={false}
+                enterKeyHint="send"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -93,7 +97,7 @@ export default function RecuperarPage() {
           </FieldGroup>
 
           <div className="flex flex-col gap-2">
-            <Button type="submit" className="w-full" disabled={loading} aria-busy={loading || undefined}>
+            <Button type="submit" size="lg" className="w-full" disabled={loading} aria-busy={loading || undefined}>
               {loading && <Spinner size="sm" data-icon="inline-start" />}
               Enviar enlace
             </Button>

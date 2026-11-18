@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
-import { SignOut, Sun, Moon, Monitor } from "@phosphor-icons/react";
+import { CaretDown, SignOut, Sun, Moon, Monitor, type Icon } from "@phosphor-icons/react";
 import { avisarError } from "@/lib/avisos";
 import { useUser } from "@/hooks/use-user";
-import { esRutaActiva, navParaRol, NAV_PIE, type ClaveContador, type NavItem, type RolPanel } from "@/lib/navigation";
+import { esRutaActiva, navParaRol, type ClaveContador, type RolPanel } from "@/lib/navigation";
 import { contadoresCooperativa } from "@/lib/data/contadores-menu";
 import { etiquetaRol } from "@/lib/estados";
 import { humanizeError } from "@/lib/errores";
@@ -20,7 +20,6 @@ import {
   SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuBadge,
@@ -85,11 +84,13 @@ export function ContadorMenu({
   activo,
   tono = "neutro",
   descripcion,
+  className,
 }: {
   n: number | undefined;
   activo: boolean;
   tono?: "neutro" | "aviso";
   descripcion: string;
+  className?: string;
 }) {
   if (!n) return null;
   return (
@@ -98,6 +99,7 @@ export function ContadorMenu({
       title={descripcion}
       className={cn(
         "top-1/2! -translate-y-1/2 rounded-full px-1.5 font-semibold",
+        className,
         activo
           ? "bg-accent-strong text-accent-strong-foreground peer-data-active/menu-button:text-accent-strong-foreground"
           : tono === "aviso"
@@ -125,7 +127,18 @@ export function PuntoContador({ n, tono = "neutro" }: { n: number | undefined; t
 }
 
 /** Menú del usuario (pie): tema con radio y "Cerrar sesión" que avisa si falla. */
-export function MenuUsuario({ nombre, rol, login }: { nombre: string; rol: string; login: string }) {
+export function MenuUsuario({
+  nombre,
+  rol,
+  login,
+  variante = "menu",
+}: {
+  nombre: string;
+  rol: string;
+  login: string;
+  /** "menu": botón del pie del menú lateral. "avatar": botón redondo de la cabecera móvil. */
+  variante?: "menu" | "avatar";
+}) {
   const router = useRouter();
   const { theme, setTheme } = useTheme();
   const { state, isMobile } = useSidebar();
@@ -149,27 +162,36 @@ export function MenuUsuario({ nombre, rol, login }: { nombre: string; rol: strin
 
   const avatar = (
     <Avatar className="size-8 rounded-full">
-      <AvatarFallback className="rounded-full bg-muted font-semibold text-foreground">{inicial}</AvatarFallback>
+      <AvatarFallback className="rounded-full bg-night-raised font-semibold text-sidebar-foreground">{inicial}</AvatarFallback>
     </Avatar>
   );
 
+  const disparador =
+    variante === "avatar" ? (
+      <button
+        type="button"
+        aria-label={`Cuenta: ${nombre}`}
+        className="inline-flex size-11 shrink-0 items-center justify-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card"
+      >
+        {avatar}
+      </button>
+    ) : (
+      <SidebarMenuButton size="lg" aria-label={`Cuenta: ${nombre}`} className="data-popup-open:bg-night-raised">
+        {avatar}
+        <span className="grid min-w-0 flex-1 text-left text-[15px] leading-tight">
+          <span className="truncate font-semibold">{nombre}</span>
+          <span className="truncate text-[13px] font-normal text-night-muted">{rol}</span>
+        </span>
+      </SidebarMenuButton>
+    );
+
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger
-        render={
-          <SidebarMenuButton size="lg" aria-label={`Cuenta: ${nombre}`} className="data-popup-open:bg-sidebar-accent">
-            {avatar}
-            <span className="grid min-w-0 flex-1 text-left text-sm leading-tight">
-              <span className="truncate font-semibold">{nombre}</span>
-              <span className="truncate text-xs text-muted-foreground">{rol}</span>
-            </span>
-          </SidebarMenuButton>
-        }
-      />
+      <DropdownMenuTrigger render={disparador} />
       <DropdownMenuContent
         className="min-w-56"
-        side={isMobile ? "top" : state === "collapsed" ? "right" : "top"}
-        align={state === "collapsed" && !isMobile ? "end" : "start"}
+        side={variante === "avatar" ? "bottom" : isMobile ? "top" : state === "collapsed" ? "right" : "top"}
+        align={variante === "avatar" ? "end" : state === "collapsed" && !isMobile ? "end" : "start"}
         sideOffset={6}
       >
         <DropdownMenuGroup>
@@ -209,27 +231,17 @@ export function MenuUsuario({ nombre, rol, login }: { nombre: string; rol: strin
   );
 }
 
-// ─── Menú del panel de cooperativas ─────────────────────────────────────────
+// ─── Bloques del menú: enlace directo y grupos plegables (Amanecer, §2) ─────
 
-const DESCRIPCION_CONTADOR: Record<ClaveContador, (n: number) => string> = {
-  pagos_por_verificar: (n) => (n === 1 ? "1 pago por verificar" : `${n} pagos por verificar`),
-  reembolsos_por_devolver: (n) => (n === 1 ? "1 reembolso por devolver" : `${n} reembolsos por devolver`),
-  encomiendas_en_camino: (n) => (n === 1 ? "1 encomienda en camino" : `${n} encomiendas en camino`),
-  encomiendas_por_vencer: (n) => (n === 1 ? "1 encomienda por vencer" : `${n} encomiendas por vencer`),
-};
+/** Lo mínimo que el menú necesita de un ítem (lo comparten el panel y el admin). */
+export type ItemBase = { title: string; href: string; icon: Icon; tonoContador?: "neutro" | "aviso" };
+export type GrupoBase = { id: string; titulo: string; icon: Icon; directo?: boolean; items: ItemBase[] };
+/** Contador del ítem y su descripción hablada (vacía si no hay nada que contar). */
+export type ConteoItem = { n: number | undefined; descripcion: string };
 
-function ItemMenu({
-  item,
-  pathname,
-  contadores,
-}: {
-  item: NavItem;
-  pathname: string;
-  contadores: Partial<Record<ClaveContador, number>>;
-}) {
+function ItemMenu({ item, pathname, conteo }: { item: ItemBase; pathname: string; conteo: ConteoItem }) {
   const activo = esRutaActiva(pathname, item.href);
-  const n = item.contador ? contadores[item.contador] : undefined;
-  const descripcion = item.contador && n ? DESCRIPCION_CONTADOR[item.contador](n) : "";
+  const { n, descripcion } = conteo;
   return (
     <SidebarMenuItem>
       <SidebarMenuButton
@@ -250,60 +262,306 @@ function ItemMenu({
   );
 }
 
+const EVENTO_GRUPOS = "enbus-menu-grupos";
+
+function suscribirGrupos(avisar: () => void) {
+  window.addEventListener("storage", avisar);
+  window.addEventListener(EVENTO_GRUPOS, avisar);
+  return () => {
+    window.removeEventListener("storage", avisar);
+    window.removeEventListener(EVENTO_GRUPOS, avisar);
+  };
+}
+
+function leerGrupos(clave: string): string {
+  try {
+    return window.localStorage.getItem(clave) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * Qué grupos están abiertos. El de la ruta activa, siempre al llegar; los demás, según lo
+ * que la persona abrió (se recuerda en este equipo con localStorage). Si cierra el grupo
+ * activo a mano, sigue cerrado mientras no cambie de grupo.
+ */
+function useGruposAbiertos(claveStorage: string, activoId: string | null) {
+  const crudo = useSyncExternalStore(
+    suscribirGrupos,
+    () => leerGrupos(claveStorage),
+    () => ""
+  );
+  const guardado = useMemo<Record<string, boolean>>(() => {
+    try {
+      const valor = JSON.parse(crudo || "null");
+      return valor && typeof valor === "object" ? valor : {};
+    } catch {
+      return {};
+    }
+  }, [crudo]);
+
+  // Elecciones de esta visita (valen aunque el almacenamiento esté bloqueado).
+  const [elegidos, setElegidos] = useState<Record<string, boolean>>({});
+  const [activoPrevio, setActivoPrevio] = useState(activoId);
+  if (activoPrevio !== activoId) {
+    // Ajuste durante el render: al llegar a otro grupo se olvida lo que se cerró a mano.
+    setActivoPrevio(activoId);
+    if (activoId && activoId in elegidos) {
+      const resto = { ...elegidos };
+      delete resto[activoId];
+      setElegidos(resto);
+    }
+  }
+
+  const estaAbierto = (id: string) => elegidos[id] ?? (id === activoId ? true : (guardado[id] ?? false));
+
+  const alternar = (id: string, abierto: boolean) => {
+    setElegidos((previo) => ({ ...previo, [id]: abierto }));
+    try {
+      window.localStorage.setItem(claveStorage, JSON.stringify({ ...guardado, [id]: abierto }));
+      window.dispatchEvent(new Event(EVENTO_GRUPOS));
+    } catch {
+      // Modo privado o almacenamiento bloqueado: el menú sigue funcionando sin recordar.
+    }
+  };
+
+  return { estaAbierto, alternar };
+}
+
+function GrupoMenu({
+  grupo,
+  pathname,
+  abierto,
+  plegadoAIconos,
+  onAlternar,
+  conteo,
+}: {
+  grupo: GrupoBase;
+  pathname: string;
+  abierto: boolean;
+  plegadoAIconos: boolean;
+  onAlternar: (abierto: boolean) => void;
+  conteo: (item: ItemBase) => ConteoItem;
+}) {
+  const idLista = `menu-grupo-${grupo.id}`;
+  const contieneActiva = grupo.items.some((i) => esRutaActiva(pathname, i.href));
+  const conteos = grupo.items.map((item) => ({ item, ...conteo(item) }));
+  const total = conteos.reduce((suma, c) => suma + (c.n ?? 0), 0);
+  const hayAviso = conteos.some((c) => c.n && c.item.tonoContador === "aviso");
+  const descripcionTotal = conteos
+    .filter((c) => c.n)
+    .map((c) => c.descripcion)
+    .join(", ");
+  const nombre = descripcionTotal ? `${grupo.titulo} (${descripcionTotal})` : grupo.titulo;
+
+  // Menú plegado a iconos: el grupo es un icono que abre un menú con sus ítems, así se
+  // llega a cualquier sección en un solo gesto (navegar al primero escondería el resto).
+  if (plegadoAIconos) {
+    return (
+      <SidebarMenuItem>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <SidebarMenuButton
+                isActive={contieneActiva}
+                tooltip={nombre}
+                aria-label={nombre}
+                className="relative data-popup-open:bg-night-raised data-popup-open:data-active:bg-sidebar-accent"
+              >
+                <grupo.icon aria-hidden />
+                <PuntoContador n={total} tono={hayAviso ? "aviso" : "neutro"} />
+              </SidebarMenuButton>
+            }
+          />
+          <DropdownMenuContent side="right" align="start" sideOffset={12} className="min-w-60">
+            <DropdownMenuGroup>
+              <DropdownMenuLabel className="text-[13px]">{grupo.titulo}</DropdownMenuLabel>
+              {conteos.map(({ item, n, descripcion }) => {
+                const activo = esRutaActiva(pathname, item.href);
+                return (
+                  <DropdownMenuItem
+                    key={item.href}
+                    render={<Link href={item.href} aria-current={activo ? "page" : undefined} />}
+                    className={cn("min-h-11 text-[15px]", activo && "bg-muted font-semibold")}
+                  >
+                    <item.icon aria-hidden className="size-5" />
+                    <span className="flex-1">
+                      {item.title}
+                      {descripcion && <span className="sr-only">{` (${descripcion})`}</span>}
+                    </span>
+                    {n ? (
+                      <span
+                        aria-hidden
+                        className={cn(
+                          "rounded-full px-1.5 text-xs font-semibold tabular-nums",
+                          item.tonoContador === "aviso" ? "bg-warning-light text-warning-deep" : "bg-muted text-foreground"
+                        )}
+                      >
+                        {n > 99 ? "99+" : n}
+                      </span>
+                    ) : null}
+                  </DropdownMenuItem>
+                );
+              })}
+            </DropdownMenuGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </SidebarMenuItem>
+    );
+  }
+
+  // Con el grupo abierto la pastilla blanca la lleva el ítem activo; plegado, la lleva el grupo.
+  const activoComoGrupo = contieneActiva && !abierto;
+  return (
+    <SidebarMenuItem>
+      <SidebarMenuButton
+        type="button"
+        isActive={activoComoGrupo}
+        aria-expanded={abierto}
+        aria-controls={idLista}
+        onClick={() => onAlternar(!abierto)}
+        className={cn("relative", contieneActiva && abierto && "font-semibold")}
+      >
+        <grupo.icon aria-hidden />
+        <span className="flex-1">
+          {grupo.titulo}
+          {!abierto && descripcionTotal && <span className="sr-only">{` (${descripcionTotal})`}</span>}
+        </span>
+        <CaretDown aria-hidden className={cn("size-4! shrink-0 transition-transform", abierto && "rotate-180")} />
+      </SidebarMenuButton>
+      {!abierto && (
+        <ContadorMenu
+          n={total}
+          activo={activoComoGrupo}
+          tono={hayAviso ? "aviso" : "neutro"}
+          descripcion={descripcionTotal}
+          className="right-10"
+        />
+      )}
+      <SidebarMenu id={idLista} hidden={!abierto} className="mt-1 gap-1 pl-3">
+        {conteos.map(({ item, ...c }) => (
+          <ItemMenu key={item.href} item={item} pathname={pathname} conteo={c} />
+        ))}
+      </SidebarMenu>
+    </SidebarMenuItem>
+  );
+}
+
+/** Lista de bloques del menú: enlaces directos y grupos plegables. */
+export function GruposMenu({
+  grupos,
+  claveStorage,
+  conteo,
+}: {
+  grupos: GrupoBase[];
+  /** Dónde se recuerdan los grupos abiertos (uno por menú). */
+  claveStorage: string;
+  conteo: (item: ItemBase) => ConteoItem;
+}) {
+  const pathname = usePathname();
+  const { state, isMobile } = useSidebar();
+  const plegadoAIconos = state === "collapsed" && !isMobile;
+  const activoId = grupos.find((g) => !g.directo && g.items.some((i) => esRutaActiva(pathname, i.href)))?.id ?? null;
+  const { estaAbierto, alternar } = useGruposAbiertos(claveStorage, activoId);
+
+  return (
+    <SidebarGroup className="py-2">
+      <SidebarGroupContent>
+        <SidebarMenu className="gap-1">
+          {grupos.map((grupo) =>
+            grupo.directo ? (
+              <ItemMenu key={grupo.id} item={grupo.items[0]} pathname={pathname} conteo={conteo(grupo.items[0])} />
+            ) : (
+              <GrupoMenu
+                key={grupo.id}
+                grupo={grupo}
+                pathname={pathname}
+                abierto={estaAbierto(grupo.id)}
+                plegadoAIconos={plegadoAIconos}
+                onAlternar={(abierto) => alternar(grupo.id, abierto)}
+                conteo={conteo}
+              />
+            )
+          )}
+        </SidebarMenu>
+      </SidebarGroupContent>
+    </SidebarGroup>
+  );
+}
+
+/** Cabecera de los dos menús: marca y, debajo, el contexto (cooperativa / zona). */
+export function CabeceraMenu({ contexto, children }: { contexto: string; children?: React.ReactNode }) {
+  return (
+    <SidebarHeader className="px-4 pt-5 pb-3 group-data-[collapsible=icon]:px-2">
+      <div className="flex min-w-0 items-center gap-3 group-data-[collapsible=icon]:justify-center">
+        <BrandMark tamano="md" />
+        <div className="flex min-w-0 flex-1 flex-col leading-tight group-data-[collapsible=icon]:hidden">
+          <span className="truncate text-base font-semibold tracking-tight text-sidebar-foreground">EnBus</span>
+          <span className="truncate text-[13px] text-night-muted" title={contexto}>
+            {contexto}
+          </span>
+        </div>
+      </div>
+      {children}
+    </SidebarHeader>
+  );
+}
+
+// ─── Menú del panel de cooperativas ─────────────────────────────────────────
+
+const DESCRIPCION_CONTADOR: Record<ClaveContador, (n: number) => string> = {
+  pagos_por_verificar: (n) => (n === 1 ? "1 pago por verificar" : `${n} pagos por verificar`),
+  reembolsos_por_devolver: (n) => (n === 1 ? "1 reembolso por devolver" : `${n} reembolsos por devolver`),
+  encomiendas_en_camino: (n) => (n === 1 ? "1 encomienda en camino" : `${n} encomiendas en camino`),
+  encomiendas_por_vencer: (n) => (n === 1 ? "1 encomienda por vencer" : `${n} encomiendas por vencer`),
+};
+
+const CLAVE_GRUPOS_PANEL = "enbus.menu.grupos.panel";
+
+/** Grupos del menú del rol y contadores de cada ítem (los usan el menú lateral y la barra de pestañas móvil). */
+export function useMenuPanel(): { grupos: ReturnType<typeof navParaRol>; conteo: (item: ItemBase) => ConteoItem } {
+  const { user } = useUser();
+  const contadores = useContadoresMenu(contadoresCooperativa, {});
+  const grupos = navParaRol(user.role as RolPanel);
+
+  // `ItemBase` no lleva la clave del contador: se busca el ítem original por su href.
+  const conteo = (item: ItemBase): ConteoItem => {
+    const clave = grupos.flatMap((g) => g.items).find((i) => i.href === item.href)?.contador;
+    const n = clave ? contadores[clave] : undefined;
+    return { n, descripcion: clave && n ? DESCRIPCION_CONTADOR[clave](n) : "" };
+  };
+  return { grupos, conteo };
+}
+
 export function AppSidebar() {
   const { user } = useUser();
-  const pathname = usePathname();
-  const contadores = useContadoresMenu(contadoresCooperativa, {});
+  const { grupos, conteo } = useMenuPanel();
 
   const rol = user.role as RolPanel;
-  const grupos = navParaRol(rol);
-  const pie = NAV_PIE.filter((i) => i.roles.includes(rol));
   const cooperativa = user.cooperativa_nombre || "Cooperativa";
   const sucursal = user.sucursal_nombre;
   const contexto = sucursal ? `${cooperativa} · ${sucursal}` : cooperativa;
 
   return (
     <Sidebar collapsible="icon">
-      <SidebarHeader className="p-4 group-data-[collapsible=icon]:p-2">
-        <div className="flex min-w-0 items-center gap-2.5">
-          <BrandMark tamano="sm" />
-          <div className="flex min-w-0 flex-1 flex-col leading-tight group-data-[collapsible=icon]:hidden">
-            <span className="truncate text-sm font-semibold tracking-tight">EnBus</span>
-            <span className="truncate text-xs text-muted-foreground" title={contexto}>
-              {contexto}
-            </span>
-          </div>
-        </div>
+      <CabeceraMenu contexto={contexto}>
         {!sucursal && rol === "taquillero" && (
           <span
-            className="inline-flex w-fit items-center rounded-full bg-warning-light px-2 py-0.5 text-xs font-semibold text-warning-deep group-data-[collapsible=icon]:hidden"
+            className="inline-flex w-fit items-center rounded-full bg-warning-light px-2.5 py-0.5 text-[13px] font-semibold text-warning-deep group-data-[collapsible=icon]:hidden"
             title="Pídele al administrador de tu cooperativa que te asigne una sucursal."
           >
             Sin sucursal
           </span>
         )}
-      </SidebarHeader>
+      </CabeceraMenu>
 
-      <SidebarContent>
-        {grupos.map((grupo, i) => (
-          <SidebarGroup key={grupo.titulo ?? `grupo-${i}`} className="py-1">
-            {grupo.titulo && <SidebarGroupLabel>{grupo.titulo}</SidebarGroupLabel>}
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {grupo.items.map((item) => (
-                  <ItemMenu key={item.href} item={item} pathname={pathname} contadores={contadores} />
-                ))}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        ))}
+      <SidebarContent className="px-2">
+        <GruposMenu grupos={grupos} claveStorage={CLAVE_GRUPOS_PANEL} conteo={conteo} />
       </SidebarContent>
 
-      <SidebarFooter className="gap-1 p-2">
+      <SidebarFooter className="p-2">
         <SidebarMenu>
-          {pie.map((item) => (
-            <ItemMenu key={item.href} item={item} pathname={pathname} contadores={contadores} />
-          ))}
           <SidebarMenuItem>
             <MenuUsuario nombre={user.nombre_completo} rol={etiquetaRol(user.role)} login="/cooperativas/login" />
           </SidebarMenuItem>

@@ -25,6 +25,8 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { AvisoError } from "@/components/aviso-error";
 import { StatusBadge } from "@/components/status-badge";
 import { PageHeader } from "@/components/page-header";
+import { BarraAccionFija } from "@/components/barra-accion-fija";
+import { IconTile } from "@/components/icon-tile";
 import { MigaObjeto } from "@/components/miga-objeto";
 import { Monto } from "@/components/monto";
 import { Dato, Vacio } from "@/components/admin/detalle";
@@ -85,8 +87,20 @@ export function IncidenciaDetail({ incidencia, currentUser }: IncidenciaDetailPr
   const whatsapp = telefonoWhatsApp(reportante?.telefono);
   const codigo = codigoIncidencia(incidencia.id);
 
+  const principal =
+    incidencia.estado === "ABIERTA" ? (
+      <Button size="lg" onClick={handleTomarCaso} disabled={tomando} aria-busy={tomando || undefined}>
+        {tomando ? <Spinner size="sm" aria-hidden /> : <HandPointing aria-hidden />}
+        {tomando ? "Tomando…" : "Tomar caso"}
+      </Button>
+    ) : incidencia.estado === "EN_PROCESO" ? (
+      <Button size="lg" onClick={() => setResolverOpen(true)}>
+        <CheckSquare aria-hidden /> Resolver caso
+      </Button>
+    ) : null;
+
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-8">
       <MigaObjeto label={codigo} />
       <PageHeader
         title={codigo}
@@ -98,40 +112,31 @@ export function IncidenciaDetail({ incidencia, currentUser }: IncidenciaDetailPr
         }
         description={tipoConCategoria(incidencia)}
       >
-        {incidencia.estado === "ABIERTA" && (
-          <Button onClick={handleTomarCaso} disabled={tomando} aria-busy={tomando || undefined}>
-            {tomando ? <Spinner size="sm" aria-hidden /> : <HandPointing aria-hidden />}
-            {tomando ? "Tomando…" : "Tomar caso"}
-          </Button>
-        )}
-        {incidencia.estado === "EN_PROCESO" && (
-          <Button onClick={() => setResolverOpen(true)}>
-            <CheckSquare aria-hidden /> Resolver caso
-          </Button>
-        )}
+        {/* La acción principal va en la barra fija en móvil; aquí solo en escritorio. */}
+        {principal && <div className="max-md:hidden">{principal}</div>}
         {/* Seguro (AD-20): solo con el caso tomado y un valor declarado mayor que 0. */}
         {puedeActivarSeguro && (
-          <Button variant="outline" onClick={() => setSeguroOpen(true)}>
+          <Button size="lg" variant="outline" onClick={() => setSeguroOpen(true)}>
             <ShieldCheck aria-hidden /> Activar seguro
           </Button>
         )}
       </PageHeader>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <div className="flex flex-col gap-6 lg:col-span-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <div className="flex flex-col gap-4 lg:col-span-2">
           <Card>
             <CardHeader>
               <CardTitle>Qué pasó</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
-              <p className="text-sm leading-relaxed whitespace-pre-line">{incidencia.descripcion}</p>
+              <p className="text-[15px] leading-relaxed whitespace-pre-line">{incidencia.descripcion}</p>
               {seguroSinValor && incidencia.estado !== "RESUELTA" && (
-                <p className="text-sm text-muted-foreground">
+                <p className="text-[15px] text-muted-foreground">
                   La encomienda no declaró valor: el seguro no aplica. Anota la compensación en la resolución.
                 </p>
               )}
               {esPerdida && !seguroSinValor && incidencia.estado === "ABIERTA" && (
-                <p className="text-sm text-muted-foreground">Toma el caso para activar el seguro.</p>
+                <p className="text-[15px] text-muted-foreground">Toma el caso para activar el seguro.</p>
               )}
             </CardContent>
           </Card>
@@ -142,7 +147,7 @@ export function IncidenciaDetail({ incidencia, currentUser }: IncidenciaDetailPr
                 <CardTitle>Cómo se resolvió</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-sm leading-relaxed whitespace-pre-line">
+                <p className="text-[15px] leading-relaxed whitespace-pre-line">
                   {incidencia.resolucion || <Vacio texto="Se resolvió sin detalles" />}
                 </p>
               </CardContent>
@@ -150,7 +155,7 @@ export function IncidenciaDetail({ incidencia, currentUser }: IncidenciaDetailPr
           )}
         </div>
 
-        <div className="flex flex-col gap-6">
+        <div className="flex flex-col gap-4">
           <Card>
             <CardHeader>
               <CardTitle>Caso</CardTitle>
@@ -208,8 +213,8 @@ export function IncidenciaDetail({ incidencia, currentUser }: IncidenciaDetailPr
           {incidencia.boleto && (
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Ticket className="size-5 text-muted-foreground" aria-hidden /> Boleto
+                <CardTitle className="flex items-center gap-3">
+                  <IconTile icon={Ticket} tone="sky" size="sm" /> Boleto
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -229,8 +234,8 @@ export function IncidenciaDetail({ incidencia, currentUser }: IncidenciaDetailPr
           {incidencia.encomienda && (
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Package className="size-5 text-muted-foreground" aria-hidden /> Encomienda
+                <CardTitle className="flex items-center gap-3">
+                  <IconTile icon={Package} tone="coral" size="sm" /> Encomienda
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -259,6 +264,8 @@ export function IncidenciaDetail({ incidencia, currentUser }: IncidenciaDetailPr
         </div>
       </div>
 
+      {principal && <BarraAccionFija escritorio="oculta">{principal}</BarraAccionFija>}
+
       <ResolverDialog incidenciaId={incidencia.id} open={resolverOpen} onOpenChange={setResolverOpen} />
 
       <ConfirmDialog
@@ -268,8 +275,8 @@ export function IncidenciaDetail({ incidencia, currentUser }: IncidenciaDetailPr
         descripcion={
           <span className="flex flex-col gap-3">
             <span>Se aprueba un reembolso de 3 veces el valor declarado y la incidencia queda resuelta.</span>
-            <span className="flex items-start justify-between gap-4 rounded-md bg-muted p-3 text-foreground">
-              <span className="text-sm">Reembolso</span>
+            <span className="flex items-start justify-between gap-4 rounded-md bg-surface p-3 text-foreground">
+              <span className="text-[15px]">Reembolso</span>
               <Monto usd={montoSeguro} moneda="USD" size="md" align="right" />
             </span>
           </span>
@@ -376,10 +383,10 @@ function ResolverDialog({
           </Field>
           {error && <AvisoError>{error}</AvisoError>}
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => cambiarAbierto(false)} disabled={guardando}>
+            <Button size="lg" type="button" variant="outline" onClick={() => cambiarAbierto(false)} disabled={guardando}>
               Cancelar
             </Button>
-            <Button type="submit" disabled={guardando} aria-busy={guardando || undefined}>
+            <Button size="lg" type="submit" disabled={guardando} aria-busy={guardando || undefined}>
               {guardando && <Spinner size="sm" aria-hidden />}
               {guardando ? "Guardando…" : "Marcar como resuelta"}
             </Button>

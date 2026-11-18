@@ -10,8 +10,8 @@ import { cn } from "@/lib/utils";
 export function Dato({ etiqueta, children, className }: { etiqueta: string; children: ReactNode; className?: string }) {
   return (
     <div className={cn("flex min-w-0 flex-col gap-0.5", className)}>
-      <dt className="text-xs text-muted-foreground">{etiqueta}</dt>
-      <dd className="text-sm text-foreground">{children}</dd>
+      <dt className="text-[13px] text-muted-foreground">{etiqueta}</dt>
+      <dd className="text-[15px] text-foreground">{children}</dd>
     </div>
   );
 }
@@ -25,7 +25,7 @@ export function Vacio({ texto = "—" }: { texto?: string }) {
 export function ConteoPestana({ n }: { n: number }) {
   if (!n) return null;
   return (
-    <span className="min-w-5 rounded-full bg-background px-1.5 text-xs leading-5 font-semibold text-foreground tabular-nums group-data-active/tab:bg-muted">
+    <span className="min-w-5 rounded-full bg-surface-dark px-1.5 text-xs leading-5 font-semibold text-foreground tabular-nums group-data-active/tab:bg-surface">
       {n}
     </span>
   );
@@ -49,13 +49,15 @@ export function TarjetaTabla({
   className?: string;
 }) {
   return (
-    <Card className={cn("gap-0 py-0", className)}>
-      <CardHeader className="py-5">
+    // En móvil es "nativa": sin fondo ni sombra (las filas son tarjetas sueltas) y la cabecera
+    // al ras del borde de la página. Desde md, tarjeta con tabla.
+    <Card className={cn("gap-0 overflow-hidden p-0 max-md:overflow-visible max-md:bg-transparent max-md:shadow-none", className)}>
+      <CardHeader className="p-5 max-md:px-0">
         <CardTitle>{titulo}</CardTitle>
         {descripcion && <CardDescription>{descripcion}</CardDescription>}
         {accion && <CardAction>{accion}</CardAction>}
       </CardHeader>
-      <div className="border-t border-border">{children}</div>
+      <div>{children}</div>
     </Card>
   );
 }

@@ -82,7 +82,7 @@ export function Simulador({ tarifa, rutas, tasa = null }: SimuladorProps) {
 
       <CardContent className="flex flex-col gap-4">
         {!tarifa ? (
-          <p className="text-sm text-muted-foreground">Publica una tarifa con «Nueva tarifa» para usar el simulador.</p>
+          <p className="text-[15px] text-muted-foreground">Publica una tarifa con «Nueva tarifa» para usar el simulador.</p>
         ) : (
           <>
             <Field>
@@ -116,11 +116,12 @@ export function Simulador({ tarifa, rutas, tasa = null }: SimuladorProps) {
                   id="sim-peso"
                   type="number"
                   step="0.1"
+                  inputMode="decimal"
                   min="0.5"
                   max={maxPeso}
                   value={peso === 0 ? "" : Number(peso.toFixed(1))}
                   onChange={(e) => handlePesoChange(parseFloat(e.target.value))}
-                  className="h-8 w-24 text-right tabular-nums"
+                  className="w-28 text-right tabular-nums"
                 />
               </div>
               <input
@@ -132,9 +133,9 @@ export function Simulador({ tarifa, rutas, tasa = null }: SimuladorProps) {
                 onChange={handleSliderChange}
                 aria-label="Peso de la encomienda"
                 aria-valuetext={`${formatNumeroVE(peso, 1)} kg`}
-                className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-muted accent-accent-strong"
+                className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-surface-dark accent-accent-strong"
               />
-              <div className="flex justify-between text-xs text-muted-foreground tabular-nums">
+              <div className="flex justify-between text-[13px] text-muted-foreground tabular-nums">
                 <span>0,5 kg</span>
                 <span>Máximo {formatNumeroVE(maxPeso, 1)} kg</span>
               </div>
@@ -146,30 +147,30 @@ export function Simulador({ tarifa, rutas, tasa = null }: SimuladorProps) {
                   El peso supera el máximo de la tarifa vigente ({formatNumeroVE(tarifa.peso_max_kg, 1)} kg).
                 </AvisoError>
               ) : (
-                <div className="flex flex-col gap-3 rounded-md bg-muted p-4">
+                <div className="flex flex-col gap-3 rounded-md bg-surface p-4">
                   <dl className="grid grid-cols-2 gap-3 border-b border-border pb-3">
                     <div className="flex flex-col gap-0.5">
-                      <dt className="text-xs text-muted-foreground">Costo base</dt>
-                      <dd className="text-sm font-medium tabular-nums">{formatUsd(calculation.costo_base)}</dd>
+                      <dt className="text-[13px] text-muted-foreground">Costo base</dt>
+                      <dd className="text-[15px] font-medium tabular-nums">{formatUsd(calculation.costo_base)}</dd>
                     </div>
                     <div className="flex flex-col gap-0.5">
-                      <dt className="text-xs text-muted-foreground">
+                      <dt className="text-[13px] text-muted-foreground">
                         Recargo por {formatDuracion(selectedRoute?.duracion_estimada_min ?? 0)}
                       </dt>
-                      <dd className="text-sm font-medium tabular-nums">{formatUsd(calculation.costo_distancia)}</dd>
+                      <dd className="text-[15px] font-medium tabular-nums">{formatUsd(calculation.costo_distancia)}</dd>
                     </div>
                   </dl>
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex min-w-0 flex-col gap-0.5">
-                      <span className="text-sm font-semibold">Costo total</span>
-                      <span className="text-xs text-muted-foreground tabular-nums">{calculation.formula}</span>
+                      <span className="text-[15px] font-semibold">Costo total</span>
+                      <span className="text-[13px] text-muted-foreground tabular-nums">{calculation.formula}</span>
                     </div>
                     <Monto usd={calculation.costo_total} tasa={tasa} moneda="USD" size="lg" align="right" />
                   </div>
                 </div>
               )
             ) : (
-              <p className="text-sm text-muted-foreground">Elige una ruta para ver el cálculo.</p>
+              <p className="text-[15px] text-muted-foreground">Elige una ruta para ver el cálculo.</p>
             )}
           </>
         )}

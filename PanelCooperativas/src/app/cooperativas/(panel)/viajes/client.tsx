@@ -27,6 +27,9 @@ import { BarraFiltros } from "@/components/barra-filtros";
 import { PaginacionTabla, usePaginacion } from "@/components/paginacion-tabla";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { CeldaEnlace } from "@/components/celda-enlace";
+import { EntityCard } from "@/components/entity-card";
+import { ListaResponsive } from "@/components/lista-responsive";
+import { IconTile, type IconTileTone } from "@/components/icon-tile";
 import { requireOnline } from "@/components/connectivity-banner";
 import { createClient } from "@/lib/supabase/client";
 import { StatusBadge } from "@/components/status-badge";
@@ -44,6 +47,14 @@ import type { ImpactoCancelarViaje } from "@/lib/types/reembolsos";
 import type { BusParaViaje } from "@/lib/types/operacion";
 import { formatCiudad } from "@/lib/ciudades";
 import { cn } from "@/lib/utils";
+
+/** Color del cuadrito del estado de un viaje en la lista móvil. */
+const TONO_VIAJE: Record<string, IconTileTone> = {
+  PROGRAMADO: "sky",
+  EN_CURSO: "info",
+  COMPLETADO: "success",
+  CANCELADO: "neutral",
+};
 
 export type VistaViajes = "hoy" | "proximos" | "historial";
 
@@ -116,9 +127,9 @@ function etiquetaBus(bus: BusParaViaje) {
 
 /** Aviso bajo el selector de bus cuando no hay buses activos (o no se pudieron cargar). */
 function AvisoSinBuses({ errorBuses }: { errorBuses: string | null }) {
-  if (errorBuses) return <p className="text-sm text-destructive-text">{errorBuses}</p>;
+  if (errorBuses) return <p className="text-[13px] text-destructive-text">{errorBuses}</p>;
   return (
-    <p className="text-sm text-muted-foreground">
+    <p className="text-[13px] text-muted-foreground">
       No tienes buses activos.{" "}
       <Link href="/cooperativas/buses" className="font-medium text-info-text underline underline-offset-4">
         Registra un bus
@@ -295,7 +306,7 @@ function FormularioProgramar({
               </SelectContent>
             </Select>
             {rutasActivas.length === 0 && (
-              <p className="text-sm text-muted-foreground">
+              <p className="text-[13px] text-muted-foreground">
                 No tienes rutas activas.{" "}
                 <Link href="/cooperativas/rutas" className="font-medium text-info-text underline underline-offset-4">
                   Crea una ruta
@@ -303,7 +314,7 @@ function FormularioProgramar({
               </p>
             )}
             {ruta && (
-              <p id={`${uid}-ruta-terminal`} className="text-sm text-muted-foreground">
+              <p id={`${uid}-ruta-terminal`} className="text-[13px] text-muted-foreground">
                 {ruta.terminal_origen ? `Sale de ${ruta.terminal_origen}. ` : "Sin terminal de salida. "}
                 {ruta.terminal_destino ? `Llega a ${ruta.terminal_destino}. ` : "Sin terminal de llegada. "}
                 <Link href="/cooperativas/rutas" className="font-medium text-info-text underline underline-offset-4">
@@ -313,7 +324,7 @@ function FormularioProgramar({
             )}
           </div>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-2 md:gap-4">
             <div className="grid content-start gap-2">
               <Label htmlFor={`${uid}-bus`}>Bus</Label>
               <Select value={busId} onValueChange={(val) => elegirBus(val ?? "")} items={opcionesBus}>
@@ -332,7 +343,7 @@ function FormularioProgramar({
                 {busesActivos.length === 0 ? (
                   <AvisoSinBuses errorBuses={errorBuses} />
                 ) : bus ? (
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-[13px] text-muted-foreground">
                     {plural(bus.asientos, "1 asiento a la venta", "{n} asientos a la venta")}
                     {bus.placa ? ` · Placa ${bus.placa}` : ""}
                   </p>
@@ -344,6 +355,9 @@ function FormularioProgramar({
               <Input
                 id={`${uid}-chofer`}
                 type="text"
+                autoComplete="off"
+                autoCapitalize="words"
+                enterKeyHint="next"
                 maxLength={80}
                 value={chofer}
                 disabled={!bus}
@@ -351,7 +365,7 @@ function FormularioProgramar({
                 onChange={(e) => setChofer(e.target.value)}
                 aria-describedby={`${uid}-chofer-ayuda`}
               />
-              <p id={`${uid}-chofer-ayuda`} className="text-sm text-muted-foreground">
+              <p id={`${uid}-chofer-ayuda`} className="text-[13px] text-muted-foreground">
                 {bus && chofer.trim() && chofer.trim() !== (bus.chofer_nombre ?? "")
                   ? "Solo para este viaje: el bus conserva su chofer."
                   : "El del bus. Cámbialo si hoy maneja otro."}
@@ -359,18 +373,18 @@ function FormularioProgramar({
             </div>
           </div>
 
-          <div className="flex items-center justify-between gap-4 rounded-md border border-border p-4">
+          <div className="flex items-center justify-between gap-4 rounded-md bg-surface p-4">
             <div className="flex flex-col gap-1">
               <Label htmlFor={`${uid}-recurrente`}>Viaje recurrente</Label>
-              <p className="text-sm text-muted-foreground">Una salida por cada día elegido.</p>
+              <p className="text-[13px] text-muted-foreground">Una salida por cada día elegido.</p>
             </div>
             <Switch id={`${uid}-recurrente`} checked={isRecurring} onCheckedChange={setIsRecurring} />
           </div>
 
           {isRecurring ? (
-            <div className="grid gap-4 rounded-md bg-muted/50 p-4">
+            <div className="grid gap-5">
               <div className="grid gap-2">
-                <p id={`${uid}-dias-label`} className="text-sm font-medium">Días de salida</p>
+                <p id={`${uid}-dias-label`} className="text-[13px] font-medium">Días de salida</p>
                 <div
                   id={`${uid}-dias`}
                   tabIndex={-1}
@@ -390,7 +404,7 @@ function FormularioProgramar({
                         aria-label={d.nombre}
                         onClick={() => alternarDia(d.valor)}
                         className={cn(
-                          "min-w-12",
+                          "min-w-12 max-md:h-11 max-md:min-w-11",
                           activo && "border-accent-strong bg-accent-strong text-accent-strong-foreground hover:bg-accent-strong/90"
                         )}
                       >
@@ -402,7 +416,7 @@ function FormularioProgramar({
               </div>
               <div className="grid content-start gap-2">
                 <Label htmlFor={`${uid}-hora`}>Hora de salida</Label>
-                <Input id={`${uid}-hora`} type="time" value={hora} onChange={(e) => setHora(e.target.value)} required />
+                <Input id={`${uid}-hora`} type="time" inputMode="numeric" value={hora} onChange={(e) => setHora(e.target.value)} required />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="grid content-start gap-2">
@@ -425,7 +439,7 @@ function FormularioProgramar({
                 {errorPlan ? (
                   <AvisoError>{errorPlan.error}</AvisoError>
                 ) : plan.ok ? (
-                  <p className="flex items-start gap-2 rounded-md border border-border bg-card p-3 text-sm">
+                  <p className="flex items-start gap-2 rounded-md bg-surface p-4 text-[13px]">
                     <Info className="mt-0.5 size-4 shrink-0 text-info-text" weight="fill" aria-hidden />
                     {resumenSalidas(plan)}
                   </p>
@@ -440,11 +454,11 @@ function FormularioProgramar({
           )}
 
         </div>
-        <DialogFooter className="sm:justify-between">
-          <Button type="button" variant="outline" onClick={onCerrar} disabled={isPending}>
+        <DialogFooter className="md:justify-between">
+          <Button type="button" variant="outline" size="lg" onClick={onCerrar} disabled={isPending}>
             Cancelar
           </Button>
-          <Button type="submit" disabled={isPending} aria-busy={isPending || undefined}>
+          <Button type="submit" size="lg" disabled={isPending} aria-busy={isPending || undefined}>
             {isPending && <Spinner size="sm" />}
             {isPending ? "Programando…" : isRecurring ? textoBotonSalidas(plan) : "Programar viaje"}
           </Button>
@@ -663,16 +677,16 @@ function FormularioEditar({
             }}
           />
           {errores.salida ? (
-            <p id={`${uid}-salida-error`} className="text-sm text-destructive-text">{errores.salida}</p>
+            <p id={`${uid}-salida-error`} className="text-[13px] text-destructive-text">{errores.salida}</p>
           ) : (
-            <p id={`${uid}-salida-ayuda`} className="text-sm text-muted-foreground">
+            <p id={`${uid}-salida-ayuda`} className="text-[13px] text-muted-foreground">
               Hora de Venezuela.
             </p>
           )}
         </div>
 
         {cambiaHora && (
-          <div className="grid gap-3 rounded-md border border-warning/40 bg-warning-light p-3 text-sm text-warning-deep">
+          <div className="grid gap-3 rounded-md bg-warning-light p-4 text-[13px] text-warning-deep">
             <p className="flex items-start gap-2" role="status">
               <WarningCircle className="mt-0.5 size-4 shrink-0" weight="fill" aria-hidden />
               {pasajeros === null
@@ -748,13 +762,13 @@ function FormularioEditar({
             </SelectContent>
           </Select>
           {errores.bus ? (
-            <p id={`${uid}-bus-error`} className="text-sm text-destructive-text">{errores.bus}</p>
+            <p id={`${uid}-bus-error`} className="text-[13px] text-destructive-text">{errores.bus}</p>
           ) : busesActivos.length === 0 ? (
             <div id={`${uid}-bus-ayuda`}>
               <AvisoSinBuses errorBuses={errorBuses} />
             </div>
           ) : (
-            <p id={`${uid}-bus-ayuda`} className="text-sm text-muted-foreground">
+            <p id={`${uid}-bus-ayuda`} className="text-[13px] text-muted-foreground">
               {cambiaBus
                 ? "Se copian la unidad, el chofer y los asientos del bus elegido."
                 : busId
@@ -764,7 +778,7 @@ function FormularioEditar({
           )}
         </div>
 
-        <div className={cn("grid grid-cols-1 gap-4", !busId && "sm:grid-cols-2")}>
+        <div className={cn("grid grid-cols-1 gap-5 md:gap-4", !busId && "md:grid-cols-2")}>
           {/* Viajes anteriores sin bus: la unidad sigue siendo a mano. */}
           {!busId && (
             <div className="grid content-start gap-2">
@@ -796,9 +810,9 @@ function FormularioEditar({
             }}
           />
           {errores.asientos ? (
-            <p id={`${uid}-asientos-error`} className="text-sm text-destructive-text">{errores.asientos}</p>
+            <p id={`${uid}-asientos-error`} className="text-[13px] text-destructive-text">{errores.asientos}</p>
           ) : (
-            <p id={`${uid}-asientos-ayuda`} className="text-sm text-muted-foreground">
+            <p id={`${uid}-asientos-ayuda`} className="text-[13px] text-muted-foreground">
               {minimoAsientos
                 ? `Mínimo ${minimoAsientos}: ya hay pasajeros hasta ese asiento.`
                 : "No puede ser menor que el asiento más alto ya vendido."}
@@ -807,11 +821,11 @@ function FormularioEditar({
           )}
         </div>
 
-        <DialogFooter className="sm:justify-between">
-          <Button type="button" variant="outline" onClick={onCerrar} disabled={enviando}>
+        <DialogFooter className="md:justify-between">
+          <Button type="button" variant="outline" size="lg" onClick={onCerrar} disabled={enviando}>
             Cancelar
           </Button>
-          <Button type="submit" disabled={enviando} aria-busy={enviando || undefined}>
+          <Button type="submit" size="lg" disabled={enviando} aria-busy={enviando || undefined}>
             {enviando && <Spinner size="sm" />}
             {enviando ? "Guardando…" : "Guardar cambios"}
           </Button>
@@ -1014,7 +1028,7 @@ export function ViajesClient({
           titulo="Primero crea una ruta con su precio"
           accion={
             isAdmin ? (
-              <Link href="/cooperativas/rutas" className={buttonVariants()}>
+              <Link href="/cooperativas/rutas" className={buttonVariants({ variant: "outline", size: "lg" })}>
                 <Plus aria-hidden />
                 Crear ruta
               </Link>
@@ -1031,7 +1045,7 @@ export function ViajesClient({
           icon={ICONO_SECCION.buses}
           titulo="Registra un bus para programar viajes"
           accion={
-            <Link href="/cooperativas/buses" className={buttonVariants()}>
+            <Link href="/cooperativas/buses" className={buttonVariants({ variant: "outline", size: "lg" })}>
               <Plus aria-hidden />
               Registrar bus
             </Link>
@@ -1040,7 +1054,7 @@ export function ViajesClient({
       );
     }
     const accionProgramar = isAdmin ? (
-      <Button onClick={() => setIsModalOpen(true)}>
+      <Button variant="outline" size="lg" onClick={() => setIsModalOpen(true)}>
         <Plus aria-hidden />
         Programar viaje
       </Button>
@@ -1063,15 +1077,18 @@ export function ViajesClient({
   }
 
   return (
-    <div className="flex flex-col gap-6">
-      <PageHeader title="Viajes">
-        {isAdmin && (
-          <Button onClick={() => setIsModalOpen(true)}>
-            <Plus aria-hidden />
-            Programar viaje
-          </Button>
-        )}
-      </PageHeader>
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-8">
+      <PageHeader
+        title="Viajes"
+        principal={
+          isAdmin ? (
+            <Button size="lg" onClick={() => setIsModalOpen(true)}>
+              <Plus aria-hidden />
+              Programar viaje
+            </Button>
+          ) : undefined
+        }
+      />
 
       <Tabs value={fecha ? "fecha" : vista}>
         <TabsList aria-label="Vista de viajes">
@@ -1079,7 +1096,7 @@ export function ViajesClient({
             <TabsTrigger key={v.valor} value={v.valor} className="group/tab flex-none" render={<Link href={hrefVista(v.valor)} />}>
               {v.etiqueta}
               {v.valor === "hoy" && totalHoy !== null && totalHoy > 0 && (
-                <span className="min-w-5 rounded-full bg-background px-1.5 text-xs leading-5 font-semibold text-foreground tabular-nums group-data-active/tab:bg-muted">
+                <span className="min-w-5 rounded-full bg-surface-dark px-1.5 text-xs leading-5 font-semibold text-foreground tabular-nums group-data-active/tab:bg-surface">
                   {totalHoy}
                 </span>
               )}
@@ -1101,27 +1118,35 @@ export function ViajesClient({
         fechas={[{ param: "fecha", etiqueta: "Día de salida" }]}
       />
 
-      <Card className="gap-0 overflow-hidden p-0">
+      <Card className="gap-0 overflow-hidden p-0 max-md:overflow-visible max-md:bg-transparent max-md:shadow-none">
         {errorCarga && viajes.length === 0 ? (
           <ErrorState titulo="No pudimos cargar los viajes" descripcion={errorCarga} onReintentar={() => router.refresh()} />
         ) : (
           <>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Ruta</TableHead>
-                  <TableHead>Salida</TableHead>
-                  <TableHead className="hidden 2xl:table-cell">Llegada estimada</TableHead>
-                  <TableHead className="text-right">Asientos libres</TableHead>
-                  <TableHead className="hidden text-right xl:table-cell">Precio</TableHead>
-                  <TableHead>Estado</TableHead>
-                  <TableHead className="text-right">Acciones</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredViajes.length === 0
-                  ? filaVacia()
-                  : visibles.map((viaje) => (
+            <ListaResponsive
+              items={visibles}
+              clave={(v) => v.id}
+              etiqueta="Viajes"
+              vacio={
+                <Table>
+                  <TableBody>{filaVacia()}</TableBody>
+                </Table>
+              }
+              tabla={(items) => (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Ruta</TableHead>
+                      <TableHead>Salida</TableHead>
+                      <TableHead className="hidden 2xl:table-cell">Llegada estimada</TableHead>
+                      <TableHead className="text-right">Asientos libres</TableHead>
+                      <TableHead className="hidden text-right xl:table-cell">Precio</TableHead>
+                      <TableHead>Estado</TableHead>
+                      <TableHead className="text-right">Acciones</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {items.map((viaje) => (
                       <TableRow key={viaje.id} className={cn("relative", viaje.estado === "CANCELADO" && "text-muted-foreground")}>
                         <CeldaEnlace
                           onAbrir={() => abrirViaje(viaje.id)}
@@ -1141,7 +1166,7 @@ export function ViajesClient({
                           {Number(viaje.ruta?.precio_pasaje) > 0 ? (
                             <Monto usd={Number(viaje.ruta.precio_pasaje)} size="sm" align="right" />
                           ) : (
-                            <span className="text-sm text-muted-foreground">Sin precio</span>
+                            <span className="text-[13px] text-muted-foreground">Sin precio</span>
                           )}
                         </TableCell>
                         <TableCell>
@@ -1196,14 +1221,45 @@ export function ViajesClient({
                         </TableCell>
                       </TableRow>
                     ))}
-              </TableBody>
-            </Table>
+                  </TableBody>
+                </Table>
+              )}
+              tarjeta={(viaje) => {
+                const libres = Number(viaje.asientos_disponibles);
+                return (
+                  <EntityCard
+                    onClick={() => abrirViaje(viaje.id)}
+                    etiqueta={`Ver viaje ${rutaViaje(viaje)} del ${salidaLarga(viaje.fecha_hora_salida)}`}
+                    leading={<IconTile icon={ICONO_SECCION.viajes} tone={TONO_VIAJE[viaje.estado] ?? "sky"} />}
+                    title={rutaViaje(viaje)}
+                    subtitle={[
+                      salidaLarga(viaje.fecha_hora_salida),
+                      viaje.numero_unidad ? `Unidad ${viaje.numero_unidad}` : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
+                    lineasSubtitulo={2}
+                    adorno={
+                      <span className="tabular-nums">
+                        {libres}
+                        <span className="text-[13px] font-normal text-muted-foreground"> / {viaje.asientos_totales}</span>
+                      </span>
+                    }
+                    badge={<StatusBadge status={viaje.estado} dominio="viaje" />}
+                    meta={
+                      Number(viaje.ruta?.precio_pasaje) > 0 ? formatUsd(Number(viaje.ruta.precio_pasaje)) : "Sin precio"
+                    }
+                    className={cn(viaje.estado === "CANCELADO" && "opacity-70")}
+                  />
+                );
+              }}
+            />
             <PaginacionTabla pagina={pagina} paginas={paginas} onCambio={ir} />
           </>
         )}
       </Card>
       {historialRecortado && (
-        <p className="text-sm text-muted-foreground">Últimos 100 viajes. Para uno más antiguo, elige su día de salida.</p>
+        <p className="text-[13px] text-muted-foreground">Últimos 100 viajes. Para uno más antiguo, elige su día de salida.</p>
       )}
 
       <ProgramarViajeDialog

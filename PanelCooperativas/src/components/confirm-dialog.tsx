@@ -190,7 +190,7 @@ function Contenido({
         </AlertDialogHeader>
 
         {impacto && impacto.length > 0 && (
-          <div className="rounded-md border border-border bg-muted/50 p-4 text-sm">
+          <div className="rounded-md bg-surface p-4 text-[15px]">
             <p className="mb-2 font-semibold">Qué va a pasar</p>
             <ul className="list-disc space-y-1.5 pl-5 text-foreground">
               {impacto.map((linea, i) => (
@@ -215,6 +215,7 @@ function Contenido({
                       variant="outline"
                       aria-pressed={activo}
                       className={cn(
+                        "max-md:h-11",
                         activo &&
                           "border-accent-strong bg-accent-strong text-accent-strong-foreground hover:bg-accent-strong/90"
                       )}
@@ -243,11 +244,11 @@ function Contenido({
               }}
             />
             {errorMotivo ? (
-              <p id={id("motivo-error")} className="text-sm text-destructive-text">
+              <p id={id("motivo-error")} className="text-[13px] text-destructive-text">
                 {errorMotivo}
               </p>
             ) : (
-              <p id={id("motivo-ayuda")} className="text-sm text-muted-foreground">
+              <p id={id("motivo-ayuda")} className="text-[13px] text-muted-foreground">
                 Obligatorio · mínimo {minimo} caracteres.
               </p>
             )}
@@ -272,6 +273,8 @@ function Contenido({
               ref={escribirRef}
               value={escrito}
               autoComplete="off"
+              autoCapitalize="none"
+              enterKeyHint="done"
               spellCheck={false}
               disabled={enCurso}
               aria-invalid={errorEscrito ? true : undefined}
@@ -282,7 +285,7 @@ function Contenido({
               }}
             />
             {errorEscrito && (
-              <p id={id("escribir-error")} className="text-sm text-destructive-text">
+              <p id={id("escribir-error")} className="text-[13px] text-destructive-text">
                 {errorEscrito}
               </p>
             )}
@@ -295,6 +298,7 @@ function Contenido({
           <Button
             ref={cancelarRef}
             type="button"
+            size="lg"
             variant="outline"
             disabled={enCurso}
             onClick={() => onOpenChange(false)}
@@ -303,6 +307,7 @@ function Contenido({
           </Button>
           <Button
             type="submit"
+            size="lg"
             variant={destructivo ? "destructive" : "default"}
             disabled={enCurso}
             aria-busy={enCurso || undefined}
