@@ -1,6 +1,5 @@
-import { createServerClient } from "@supabase/ssr";
-import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
+import { createAdminClient, createClient } from "@/lib/supabase/server";
 
 /**
  * Sanitize the `next` redirect param to prevent open redirect attacks.
@@ -17,37 +16,97 @@ function sanitizeNext(raw: string | null, fallback: string): string {
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
-  const next = sanitizeNext(searchParams.get("next"), "/cooperativas/restablecer");
+  const rawNext = searchParams.get("next");
 
-  if (code) {
-    const cookieStore = await cookies();
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll() {
-            return cookieStore.getAll();
-          },
-          setAll(cookiesToSet) {
-            try {
-              cookiesToSet.forEach(({ name, value, options }) =>
-                cookieStore.set(name, value, options)
-              );
-            } catch {
-              // Safe to ignore in route handlers if they are set downstream
-            }
-          },
-        },
+  // Flujo de recuperación de contraseña por correo
+  if (rawNext?.startsWith("/cooperativas/restablecer")) {
+    const next = sanitizeNext(rawNext, "/cooperativas/restablecer");
+    if (code) {
+      const supabase = await createClient();
+      const { error } = await supabase.auth.exchangeCodeForSession(code);
+      if (!error) {
+        return NextResponse.redirect(`${origin}${next}`);
       }
-    );
-
-    const { error } = await supabase.auth.exchangeCodeForSession(code);
-    if (!error) {
-      return NextResponse.redirect(`${origin}${next}`);
     }
+    return NextResponse.redirect(`${origin}/cooperativas/login?error=auth-callback-failed`);
   }
 
-  // Redirect to login if something fails
-  return NextResponse.redirect(`${origin}/cooperativas/login?error=auth-callback-failed`);
+  // Flujos OAuth (registro o login con Google)
+  const esRegistro = rawNext?.startsWith("/cooperativas/registro") ?? false;
+  const falloOAuthUrl = `${origin}${esRegistro ? "/cooperativas/registro?error=google" : "/cooperativas/login?error=google"}`;
+
+  if (!code) {
+    return NextResponse.redirect(falloOAuthUrl);
+  }
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+  if (error || !data.session) {
+    return NextResponse.redirect(falloOAuthUrl);
+  }
+
+  const admin = createAdminClient();
+  const { data: profile, error: profileError } = await admin
+    .from("profiles")
+    .select("role, cooperativa_id, eliminada_at")
+    .eq("id", data.session.user.id)
+    .maybeSingle();
+
+  if (profileError) {
+    console.error("[cooperativas/auth/callback] perfil:", profileError);
+    await supabase.auth.signOut({ scope: "local" });
+    return NextResponse.redirect(falloOAuthUrl);
+  }
+
+  if (profile?.eliminada_at) {
+    await supabase.auth.signOut({ scope: "local" });
+    return NextResponse.redirect(`${origin}/cooperativas/login?motivo=sin-acceso`);
+  }
+
+  if (profile?.role === "super_admin") {
+    return NextResponse.redirect(`${origin}/admin/dashboard`);
+  }
+
+  if ((profile?.role === "admin_cooperativa" || profile?.role === "taquillero") && profile?.cooperativa_id) {
+    const candidato = sanitizeNext(rawNext, "/cooperativas/dashboard");
+    const destino =
+      candidato.startsWith("/cooperativas/registro") ||
+      candidato.startsWith("/cooperativas/login") ||
+      candidato.startsWith("/cooperativas/auth")
+        ? "/cooperativas/dashboard"
+        : candidato;
+    return NextResponse.redirect(`${origin}${destino}`);
+  }
+
+  if (esRegistro || profile?.role === "admin_cooperativa") {
+    if (!profile) {
+      const { error: upsertError } = await admin.from("profiles").upsert({
+        id: data.session.user.id,
+        role: "admin_cooperativa",
+        cooperativa_id: null,
+        nombre_completo: (data.session.user.user_metadata?.full_name as string | undefined)?.trim() || "Administrador",
+        telefono: `PENDIENTE-${data.session.user.id}`,
+        cedula_rif: `PENDIENTE-${data.session.user.id}`,
+      });
+      if (upsertError) {
+        console.error("[cooperativas/auth/callback] upsert perfil:", upsertError);
+        await supabase.auth.signOut({ scope: "local" });
+        return NextResponse.redirect(falloOAuthUrl);
+      }
+    } else if (profile.role !== "admin_cooperativa") {
+      const { error: updateError } = await admin
+        .from("profiles")
+        .update({ role: "admin_cooperativa" })
+        .eq("id", data.session.user.id);
+      if (updateError) {
+        console.error("[cooperativas/auth/callback] update perfil:", updateError);
+        await supabase.auth.signOut({ scope: "local" });
+        return NextResponse.redirect(falloOAuthUrl);
+      }
+    }
+    return NextResponse.redirect(`${origin}/cooperativas/registro`);
+  }
+
+  await supabase.auth.signOut({ scope: "local" });
+  return NextResponse.redirect(`${origin}/cooperativas/login?motivo=sin-acceso`);
 }

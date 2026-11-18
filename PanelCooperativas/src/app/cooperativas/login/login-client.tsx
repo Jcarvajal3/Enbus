@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { WarningCircle } from "@phosphor-icons/react";
+import { GoogleLogo, WarningCircle } from "@phosphor-icons/react";
 import { createClient } from "@/lib/supabase/client";
 import { AuthLayout } from "@/components/auth-layout";
 import { Button } from "@/components/ui/button";
@@ -16,7 +16,7 @@ import { humanizeError, MSG } from "@/lib/errores";
 import { INICIO } from "@/lib/navigation";
 import { INICIO_ADMIN } from "@/lib/admin-navigation";
 
-export type AvisoLogin = "sin-acceso" | "enlace-vencido";
+export type AvisoLogin = "sin-acceso" | "enlace-vencido" | "google";
 
 const ENLACE = "font-medium text-info-text underline-offset-4 hover:underline focus-visible:underline";
 
@@ -28,19 +28,28 @@ const SIN_ACCESO: ErrorLogin = {
     "No pudimos abrir el panel con esta cuenta. Entra con la cuenta que te dio tu cooperativa; si sigue pasando, pide al administrador de tu cooperativa que te invite.",
 };
 
+const ERROR_GOOGLE: ErrorLogin = {
+  titulo: "No pudiste entrar con Google",
+  detalle: "Intenta de nuevo o usa tu correo y contraseña.",
+};
+
 export default function LoginPageClient({ aviso }: { aviso: AvisoLogin | null }) {
   const router = useRouter();
   const [supabase] = useState(() => createClient());
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState<ErrorLogin | null>(() =>
     aviso === "sin-acceso"
       ? SIN_ACCESO
-      : aviso === "enlace-vencido"
-        ? { titulo: "El enlace venció o ya se usó", conEnlace: true }
-        : null
+      : aviso === "google"
+        ? ERROR_GOOGLE
+        : aviso === "enlace-vencido"
+          ? { titulo: "El enlace venció o ya se usó", conEnlace: true }
+          : null
   );
+  const ocupado = loading || googleLoading;
 
   // PN-01: el layout trajo aquí una sesión sin acceso al panel. Se cierra solo en
   // este navegador (la cuenta puede seguir abierta en la app) y el login ya no
@@ -59,7 +68,7 @@ export default function LoginPageClient({ aviso }: { aviso: AvisoLogin | null })
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (loading) return;
+    if (ocupado) return;
     setLoading(true);
     setError(null);
     try {
@@ -104,6 +113,11 @@ export default function LoginPageClient({ aviso }: { aviso: AvisoLogin | null })
       return fallar(SIN_ACCESO, true);
     }
 
+    if (profile.role === "admin_cooperativa" && !profile.cooperativa_id) {
+      router.replace("/cooperativas/registro");
+      return;
+    }
+
     if (!profile.cooperativa_id) {
       return fallar(
         { titulo: "Tu cuenta no tiene cooperativa", detalle: "Pide al administrador de tu cooperativa que te invite." },
@@ -112,6 +126,25 @@ export default function LoginPageClient({ aviso }: { aviso: AvisoLogin | null })
     }
 
     router.replace(INICIO);
+  };
+
+  const handleGoogleSignIn = async () => {
+    if (ocupado) return;
+    setGoogleLoading(true);
+    setError(null);
+    try {
+      const { error: oauthError } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: { redirectTo: `${window.location.origin}/cooperativas/auth/callback?next=/cooperativas/dashboard` },
+      });
+      if (oauthError) {
+        setError(ERROR_GOOGLE);
+        setGoogleLoading(false);
+      }
+    } catch {
+      setError(ERROR_GOOGLE);
+      setGoogleLoading(false);
+    }
   };
 
   return (
@@ -128,7 +161,7 @@ export default function LoginPageClient({ aviso }: { aviso: AvisoLogin | null })
         </>
       }
     >
-      <form onSubmit={handleSubmit} className="flex flex-col gap-6">
+      <div className="flex flex-col gap-6">
         {error && (
           <Alert variant="destructive">
             <WarningCircle weight="fill" aria-hidden />
@@ -137,55 +170,79 @@ export default function LoginPageClient({ aviso }: { aviso: AvisoLogin | null })
               <AlertDescription>
                 {error.detalle}
                 {error.conEnlace && (
-                  <Link href="/cooperativas/recuperar" className="font-medium underline underline-offset-4">
-                    Pedir otro enlace
-                  </Link>
+                  <>
+                    {error.detalle ? " " : null}
+                    <Link href="/cooperativas/recuperar" className="font-medium underline underline-offset-4">
+                      Pedir otro enlace
+                    </Link>
+                  </>
                 )}
               </AlertDescription>
             )}
           </Alert>
         )}
 
-        <FieldGroup className="gap-5">
-          <Field>
-            <FieldLabel htmlFor="email">Correo</FieldLabel>
-            <Input
-              id="email"
-              type="email"
-              inputMode="email"
-              placeholder="Ej. tu@correo.com"
-              autoComplete="username"
-              autoCapitalize="none"
-              spellCheck={false}
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              disabled={loading}
-            />
-          </Field>
-          <Field>
-            <div className="flex items-center justify-between gap-2">
-              <FieldLabel htmlFor="password">Contraseña</FieldLabel>
-              <Link href="/cooperativas/recuperar" className={`text-sm ${ENLACE}`}>
-                ¿Olvidaste tu contraseña?
-              </Link>
-            </div>
-            <PasswordInput
-              id="password"
-              autoComplete="current-password"
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              disabled={loading}
-            />
-          </Field>
-        </FieldGroup>
+        <form onSubmit={handleSubmit} className="flex flex-col gap-6">
+          <FieldGroup className="gap-5">
+            <Field>
+              <FieldLabel htmlFor="email">Correo</FieldLabel>
+              <Input
+                id="email"
+                type="email"
+                inputMode="email"
+                placeholder="Ej. tu@correo.com"
+                autoComplete="username"
+                autoCapitalize="none"
+                spellCheck={false}
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                disabled={ocupado}
+              />
+            </Field>
+            <Field>
+              <div className="flex items-center justify-between gap-2">
+                <FieldLabel htmlFor="password">Contraseña</FieldLabel>
+                <Link href="/cooperativas/recuperar" className={`text-sm ${ENLACE}`}>
+                  ¿Olvidaste tu contraseña?
+                </Link>
+              </div>
+              <PasswordInput
+                id="password"
+                autoComplete="current-password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                disabled={ocupado}
+              />
+            </Field>
+          </FieldGroup>
 
-        <Button type="submit" size="lg" className="w-full" disabled={loading} aria-busy={loading || undefined}>
-          {loading && <Spinner size="sm" aria-hidden />}
-          {loading ? "Entrando…" : "Entrar"}
+          <Button type="submit" size="lg" className="w-full" disabled={ocupado} aria-busy={loading || undefined}>
+            {loading && <Spinner size="sm" aria-hidden />}
+            {loading ? "Entrando…" : "Entrar"}
+          </Button>
+        </form>
+
+        <div className="flex items-center gap-2" aria-hidden>
+          <span className="h-px flex-1 bg-border" />
+          <span className="px-2 text-xs text-muted-foreground">o</span>
+          <span className="h-px flex-1 bg-border" />
+        </div>
+
+        <Button
+          type="button"
+          variant="outline"
+          size="lg"
+          onClick={handleGoogleSignIn}
+          disabled={ocupado}
+          aria-busy={googleLoading || undefined}
+          className="w-full"
+        >
+          {googleLoading ? <Spinner size="sm" aria-hidden /> : <GoogleLogo aria-hidden />}
+          Continuar con Google
         </Button>
-      </form>
+      </div>
     </AuthLayout>
   );
 }

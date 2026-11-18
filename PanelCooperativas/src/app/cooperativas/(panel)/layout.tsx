@@ -20,6 +20,9 @@ export default async function PanelLayout({
   // bucle de redirecciones). El super_admin va a su panel.
   if (!user) redirect("/cooperativas/login?motivo=sin-acceso");
   if (user.role === "super_admin") redirect(INICIO_ADMIN);
+  if (user.role === "admin_cooperativa" && !user.cooperativa_id) {
+    redirect("/cooperativas/registro");
+  }
   if ((user.role !== "admin_cooperativa" && user.role !== "taquillero") || !user.cooperativa_id) {
     redirect("/cooperativas/login?motivo=sin-acceso");
   }

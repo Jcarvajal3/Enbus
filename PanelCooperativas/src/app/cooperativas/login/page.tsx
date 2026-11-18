@@ -22,9 +22,16 @@ export default async function LoginPage({ searchParams }: PageProps) {
 
   // `?motivo=sin-acceso` (o `?error=sin-acceso`): el layout del panel devolvió una
   // sesión sin rol de cooperativa; el cliente la cierra y lo explica (sin volver a
-  // redirigir). `?error=…` (otro código): el enlace del correo venció o ya se usó.
+  // redirigir). `?error=google`: falló el acceso con Google. `?error=…` (otro
+  // código): el enlace del correo venció o ya se usó.
   const aviso: AvisoLogin | null =
-    motivo || error === "sin-acceso" ? "sin-acceso" : error ? "enlace-vencido" : null;
+    motivo || error === "sin-acceso"
+      ? "sin-acceso"
+      : error === "google"
+        ? "google"
+        : error
+          ? "enlace-vencido"
+          : null;
 
   // El proxy no redirige el login con sesión (con una cuenta sin acceso eso era un
   // bucle login → panel → login): lo decide aquí el perfil verificado. Una sesión con
@@ -34,6 +41,9 @@ export default async function LoginPage({ searchParams }: PageProps) {
     if (user?.role === "super_admin") redirect(INICIO_ADMIN);
     if (user?.cooperativa_id && (user.role === "admin_cooperativa" || user.role === "taquillero")) {
       redirect(INICIO);
+    }
+    if (user?.role === "admin_cooperativa" && !user.cooperativa_id) {
+      redirect("/cooperativas/registro");
     }
   }
 

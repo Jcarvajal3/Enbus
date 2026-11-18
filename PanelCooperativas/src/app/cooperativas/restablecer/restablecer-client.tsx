@@ -71,15 +71,20 @@ export default function RestablecerPage() {
       data: { user },
     } = await supabase.auth.getUser();
     const { data: profile } = user
-      ? await supabase.from("profiles").select("role").eq("id", user.id).single()
+      ? await supabase.from("profiles").select("role, cooperativa_id").eq("id", user.id).single()
       : { data: null };
 
     setEstado("listo");
     setLoading(false);
 
     // Un momento para leer el aviso antes de entrar.
-    const esCooperativa = profile?.role === "taquillero" || profile?.role === "admin_cooperativa";
-    setTimeout(() => router.replace(esCooperativa ? INICIO : "/cooperativas/login"), 2000);
+    const destino =
+      profile?.role === "admin_cooperativa" && !profile.cooperativa_id
+        ? "/cooperativas/registro"
+        : profile?.role === "taquillero" || (profile?.role === "admin_cooperativa" && profile.cooperativa_id)
+          ? INICIO
+          : "/cooperativas/login";
+    setTimeout(() => router.replace(destino), 2000);
   };
 
   return (
