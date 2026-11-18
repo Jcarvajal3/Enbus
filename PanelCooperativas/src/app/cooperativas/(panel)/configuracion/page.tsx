@@ -25,7 +25,7 @@ export default async function ConfiguracionPage() {
       .from("metodos_pago_cooperativa")
       .select("*")
       .eq("cooperativa_id", user.cooperativa_id)
-      .order("created_at", { ascending: true }),
+      .order("created_at", { ascending: false }),
     supabase
       .from("sucursales")
       .select("*")

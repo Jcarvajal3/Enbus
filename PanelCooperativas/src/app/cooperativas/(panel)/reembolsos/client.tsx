@@ -205,7 +205,7 @@ export function ReembolsosClient({ inicial }: { inicial: ResultadoAccion<Reembol
 
   const grupos = useMemo(() => agrupar(filas), [filas]);
   const pendientes = useMemo(
-    () => grupos.filter((g) => !g.procesado).sort((a, b) => a.canceladoAt.localeCompare(b.canceladoAt)),
+    () => grupos.filter((g) => !g.procesado).sort((a, b) => b.canceladoAt.localeCompare(a.canceladoAt)),
     [grupos]
   );
   const devueltos = useMemo(

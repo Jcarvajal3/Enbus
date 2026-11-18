@@ -190,7 +190,7 @@ function Despacho() {
         .eq("estado", "PROGRAMADO")
         .gte("fecha_hora_salida", desde)
         .lte("fecha_hora_salida", hasta)
-        .order("fecha_hora_salida", { ascending: true });
+        .order("fecha_hora_salida", { ascending: false });
 
       if (error) throw error;
       setViajes((data as unknown as ViajeDespacho[]) || []);

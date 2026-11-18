@@ -94,7 +94,7 @@ const creadoMs = (b: BoletoRow) => {
 function ordenActivos(a: BoletoRow, b: BoletoRow): number {
   const sa = salidaMs(a);
   const sb = salidaMs(b);
-  if (sa !== null && sb !== null && sa !== sb) return sa - sb;
+  if (sa !== null && sb !== null && sa !== sb) return sb - sa;
   if (sa === null && sb !== null) return 1;
   if (sa !== null && sb === null) return -1;
   return creadoMs(b) - creadoMs(a);

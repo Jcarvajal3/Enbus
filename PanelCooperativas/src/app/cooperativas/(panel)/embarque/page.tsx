@@ -110,7 +110,7 @@ function Embarque() {
         .in("estado", ["PROGRAMADO", "EN_CURSO"])
         .gte("fecha_hora_salida", desde)
         .lte("fecha_hora_salida", hasta)
-        .order("fecha_hora_salida", { ascending: true });
+        .order("fecha_hora_salida", { ascending: false });
       if (error) throw error;
       const lista = (data ?? []) as unknown as ViajeHoy[];
       setViajesHoy(lista);
