@@ -26,7 +26,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { RifIncompletoBadge } from "@/components/admin/cooperativas/cooperativas-table";
 import { Dato, Vacio } from "@/components/admin/detalle";
 import { formatFechaHoraVE, formatFechaVE } from "@/lib/fechas";
-import { formatTelefono } from "@/lib/ve";
+import { telefonoOGuion } from "@/lib/mostrar";
 import type { CuentaSolicitud, SolicitudesAdmin, SolicitudPendiente } from "@/lib/types/admin-solicitudes";
 import { SolicitudAcciones } from "./solicitud-acciones";
 
@@ -46,13 +46,6 @@ function CuentaBadge({ cuenta }: { cuenta: CuentaSolicitud }) {
       {ETIQUETA_CUENTA[cuenta]}
     </Badge>
   );
-}
-
-/** Teléfono legible; si no es venezolano válido se muestra tal cual. */
-function telefonoLegible(t: string | null | undefined) {
-  if (!t) return null;
-  const f = formatTelefono(t);
-  return f === "—" ? t : f;
 }
 
 export function SolicitudesTable({ solicitudes }: SolicitudesTableProps) {
@@ -227,7 +220,7 @@ function DetalleSolicitud({
   onHecho: () => void;
   movil: boolean;
 }) {
-  const telefono = telefonoLegible(solicitud.telefono);
+  const telefono = solicitud.telefono ? telefonoOGuion(solicitud.telefono) : null;
   return (
     <SheetContent side={movil ? "bottom" : "right"}>
       <SheetHeader>

@@ -7,6 +7,7 @@ import { useTasaBCV } from '@/src/hooks/useTasaBCV';
 import { codigoEB, humanizeError, parseDetalleEB } from '@/src/utils/errores';
 import { nuevaClaveIdempotencia } from '@/src/utils/ids';
 import { formatBs, usdABs } from '@/src/utils/dinero';
+import { telefonoLegible } from '@/src/utils/validation';
 import type {
   CotizacionPago,
   Encomienda,
@@ -614,7 +615,7 @@ export function describirPunto(
   const preferida = opciones.preferidaId ? lista.find((s) => s.id === opciones.preferidaId) : null;
   const una = preferida ?? (lista.length === 1 ? lista[0] : null);
   if (una) {
-    const detalle = [una.horario, una.telefono ? `Tel. ${una.telefono}` : null].filter(Boolean).join(' · ');
+    const detalle = [una.horario, una.telefono ? `Tel. ${telefonoLegible(una.telefono)}` : null].filter(Boolean).join(' · ');
     return {
       nombre: una.nombre,
       completo: [una.nombre, una.direccion].filter(Boolean).join(' · '),

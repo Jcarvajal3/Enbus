@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
+import { Campo } from "@/components/campos";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -871,32 +871,22 @@ function FormularioInvitacion({
           </GrupoOpciones>
         </div>
 
-        <div className="grid content-start gap-2">
-          <Label htmlFor={`${uid}-email`}>Correo del empleado</Label>
-          <Input
-            id={`${uid}-email`}
-            type="email"
-            inputMode="email"
-            autoComplete="off"
-            autoCapitalize="none"
-            spellCheck={false}
-            enterKeyHint="done"
-            placeholder="Ej. empleado@correo.com"
-            value={email}
-            disabled={enviando}
-            aria-invalid={errores.email ? true : undefined}
-            aria-describedby={errores.email ? `${uid}-email-error` : undefined}
-            onChange={(e) => {
-              setEmail(e.target.value);
-              setErrores((p) => ({ ...p, email: undefined }));
-            }}
-          />
-          {errores.email && (
-            <p id={`${uid}-email-error`} className="text-[13px] text-destructive-text">
-              {errores.email}
-            </p>
-          )}
-        </div>
+        <Campo
+          id={`${uid}-email`}
+          label="Correo del empleado"
+          type="email"
+          inputMode="email"
+          maxLength={120}
+          enterKeyHint="done"
+          placeholder="Ej. empleado@correo.com"
+          value={email}
+          disabled={enviando}
+          error={errores.email}
+          onChange={(v) => {
+            setEmail(v);
+            setErrores((p) => ({ ...p, email: undefined }));
+          }}
+        />
 
         {errorGeneral && <AvisoError>{errorGeneral}</AvisoError>}
 

@@ -145,7 +145,9 @@ export default function InvitePage() {
               id="nombre"
               name="nombre"
               type="text"
-              placeholder="Ej.: Juan Pérez"
+              placeholder="Ej. Juan Pérez"
+              autoCapitalize="words"
+              maxLength={120}
               autoComplete="name"
               required
               value={nombre}

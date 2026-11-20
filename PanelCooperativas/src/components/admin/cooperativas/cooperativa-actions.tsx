@@ -19,15 +19,14 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
-import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { FieldGroup } from "@/components/ui/field";
+import { Campo, RifField } from "@/components/campos";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { AvisoError } from "@/components/aviso-error";
 import { useTasaBCVAdmin } from "@/components/admin/dashboard/use-tasa-bcv-admin";
 import { MenuMas } from "@/components/admin/menu-mas";
-import { normalizeRif, RIF_AYUDA_CORTA, RIF_PLACEHOLDER } from "@/lib/rif";
 import { humanizeError } from "@/lib/errores";
 import { avisarExito } from "@/lib/avisos";
 import { formatMoney } from "@/lib/dinero";
@@ -124,7 +123,7 @@ export function CooperativaActions({ cooperativa }: CooperativaActionsProps) {
         ]}
         motivo={{
           etiqueta: "Motivo de la suspensión",
-          placeholder: "Ej.: Comisiones de dos ciclos sin pagar.",
+          placeholder: "Ej. Comisiones de dos ciclos sin pagar.",
           chips: ["Comisiones sin pagar", "Reclamos de pasajeros", "Datos sin verificar", "Otro"],
         }}
         verbo="Suspender cooperativa"
@@ -162,7 +161,7 @@ export function CooperativaActions({ cooperativa }: CooperativaActionsProps) {
         impacto={impactoDesactivar}
         motivo={{
           etiqueta: "Motivo de la desactivación",
-          placeholder: "Ej.: La cooperativa dejó de operar.",
+          placeholder: "Ej. La cooperativa dejó de operar.",
           chips: ["La cooperativa dejó de operar", "Incumplimiento grave", "Solicitud de la cooperativa", "Otro"],
         }}
         confirmarEscribiendo={cooperativa.rif ? [cooperativa.nombre, cooperativa.rif] : cooperativa.nombre}
@@ -189,6 +188,8 @@ function EditarDialog({
   const router = useRouter();
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [nombre, setNombre] = useState(cooperativa.nombre);
+  const [rif, setRif] = useState(cooperativa.rif ?? "");
   const [comision, setComision] = useState(comisionATexto(cooperativa.comision_porcentaje));
   const [comisionError, setComisionError] = useState<string | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(cooperativa.logo_url);
@@ -201,6 +202,8 @@ function EditarDialog({
     setComisionError(null);
     if (!v) {
       setLogoPreview(cooperativa.logo_url);
+      setNombre(cooperativa.nombre);
+      setRif(cooperativa.rif ?? "");
       setComision(comisionATexto(cooperativa.comision_porcentaje));
     }
   };
@@ -279,28 +282,26 @@ function EditarDialog({
           </div>
 
           <FieldGroup className="gap-5">
-            <Field>
-              <FieldLabel htmlFor="editar-nombre">Nombre de la cooperativa</FieldLabel>
-              <Input id="editar-nombre" name="nombre" defaultValue={cooperativa.nombre} required disabled={guardando} />
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="editar-rif">RIF</FieldLabel>
-              <Input
-                id="editar-rif"
-                name="rif"
-                defaultValue={cooperativa.rif}
-                placeholder={`Ej.: ${RIF_PLACEHOLDER}`}
-                required
-                disabled={guardando}
-                autoCapitalize="characters"
-                aria-describedby="editar-rif-ayuda"
-                onBlur={(e) => {
-                  const normalizado = normalizeRif(e.target.value);
-                  if (normalizado) e.target.value = normalizado;
-                }}
-              />
-              <FieldDescription id="editar-rif-ayuda">{RIF_AYUDA_CORTA}</FieldDescription>
-            </Field>
+            <Campo
+              id="editar-nombre"
+              name="nombre"
+              label="Nombre de la cooperativa"
+              maxLength={120}
+              required
+              enterKeyHint="next"
+              value={nombre}
+              onChange={setNombre}
+              disabled={guardando}
+            />
+            <RifField
+              id="editar-rif"
+              name="rif"
+              required
+              enterKeyHint="next"
+              value={rif}
+              onChange={setRif}
+              disabled={guardando}
+            />
             <CampoComision
               valor={comision}
               name="comision_porcentaje"
@@ -342,12 +343,16 @@ function InvitarDialog({
   const [invitando, setInvitando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [inviteLink, setInviteLink] = useState<string | null>(null);
+  const [email, setEmail] = useState("");
 
   const cambiarAbierto = (v: boolean) => {
     if (invitando) return;
     onOpenChange(v);
     setError(null);
-    if (!v) setInviteLink(null);
+    if (!v) {
+      setInviteLink(null);
+      setEmail("");
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -355,7 +360,6 @@ function InvitarDialog({
     if (invitando) return;
     setError(null);
     setInvitando(true);
-    const email = String(new FormData(e.currentTarget).get("email") ?? "");
     try {
       const res = await inviteCooperativaAdmin(cooperativa.id, email);
       if (res.success && res.invite_link) setInviteLink(`${window.location.origin}${res.invite_link}`);
@@ -384,20 +388,19 @@ function InvitarDialog({
               <DialogTitle>Invitar administrador</DialogTitle>
               <DialogDescription>Te damos un enlace para que cree su cuenta en {cooperativa.nombre}.</DialogDescription>
             </DialogHeader>
-            <Field>
-              <FieldLabel htmlFor="invitar-email">Correo</FieldLabel>
-              <Input
-                id="invitar-email"
-                name="email"
-                type="email"
-                inputMode="email"
-                autoCapitalize="none"
-                autoComplete="off"
-                placeholder="Ej.: admin@cooperativa.com"
-                required
-                disabled={invitando}
-              />
-            </Field>
+            <Campo
+              id="invitar-email"
+              label="Correo"
+              type="email"
+              inputMode="email"
+              placeholder="Ej. admin@cooperativa.com"
+              maxLength={120}
+              required
+              enterKeyHint="done"
+              value={email}
+              onChange={setEmail}
+              disabled={invitando}
+            />
             {error && <AvisoError>{error}</AvisoError>}
             <DialogFooter>
               <Button size="lg" type="button" variant="outline" onClick={() => cambiarAbierto(false)} disabled={invitando}>

@@ -1,9 +1,8 @@
 "use client";
 
 import { useId } from "react";
-import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
-import { formatNumeroVE } from "@/lib/dinero";
+import { Campo } from "@/components/campos";
+import { formatNumeroVE, leerMonto } from "@/lib/dinero";
 
 // ─── Comisión de EnBus (%) (AD5-36) ─────────────────────────────────────────
 // Un solo campo en "Nueva cooperativa", "Editar cooperativa" y "Aprobar
@@ -11,10 +10,8 @@ import { formatNumeroVE } from "@/lib/dinero";
 
 /** "7,5" | "7.5" → 7.5; NaN si no es un número entre 0 y 100. */
 export function leerComision(texto: string): number {
-  const limpio = texto.trim().replace(",", ".");
-  if (!/^\d+(\.\d+)?$/.test(limpio)) return NaN;
-  const n = Number(limpio);
-  return n >= 0 && n <= 100 ? n : NaN;
+  const n = leerMonto(texto, { permitirCero: true });
+  return n !== null && n <= 100 ? n : NaN;
 }
 
 /** 7.5 → "7,5" para precargar el campo. */
@@ -44,31 +41,26 @@ export function CampoComision({
   const id = useId();
   const n = leerComision(valor);
   return (
-    <Field data-invalid={error ? true : undefined}>
-      <FieldLabel htmlFor={id}>Comisión de EnBus (%)</FieldLabel>
-      <Input
+    <>
+      <Campo
         id={id}
-        inputMode="decimal"
-        autoComplete="off"
-        placeholder="Ej.: 10"
+        label="Comisión de EnBus (%)"
         value={valor}
+        onChange={onCambio}
+        inputMode="decimal"
+        placeholder="Ej. 10"
+        sufijo="%"
+        maxLength={6}
         autoFocus={autoFocus}
         disabled={disabled}
-        aria-invalid={error ? true : undefined}
-        aria-describedby={`${id}-ayuda`}
-        onChange={(e) => onCambio(e.target.value)}
-        className="tabular-nums"
+        error={error}
+        ayuda={
+          Number.isFinite(n)
+            ? `Por cada Bs 100, EnBus recibe Bs ${formatNumeroVE(n)}.`
+            : "Se cobra sobre cada boleto y encomienda vendidos."
+        }
       />
       {name && <input type="hidden" name={name} value={Number.isFinite(n) ? String(n) : valor} />}
-      {error ? (
-        <FieldError id={`${id}-ayuda`}>{error}</FieldError>
-      ) : (
-        <FieldDescription id={`${id}-ayuda`} aria-live="polite">
-          {Number.isFinite(n)
-            ? `Por cada Bs 100, EnBus recibe Bs ${formatNumeroVE(n)}.`
-            : "Se cobra sobre cada boleto y encomienda vendidos."}
-        </FieldDescription>
-      )}
-    </Field>
+    </>
   );
 }

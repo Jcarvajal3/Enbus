@@ -21,6 +21,7 @@ import {
   crearSucursal,
   actualizarSucursal,
   cambiarActivaSucursal,
+  asignarMiSucursal,
   eliminarSucursal,
   type SucursalGuardada,
   type SucursalInput,
@@ -146,10 +147,12 @@ function formToInput(form: FormState): SucursalInput {
 
 interface SucursalesTabProps {
   sucursales: SucursalGuardada[];
+  /** Sucursal desde la que opera quien está en sesión (null = sin elegir). */
+  miSucursalId?: string | null;
   errorCarga?: string | null;
 }
 
-export function SucursalesTab({ sucursales: initialSucursales, errorCarga = null }: SucursalesTabProps) {
+export function SucursalesTab({ sucursales: initialSucursales, miSucursalId: miSucursalInicial = null, errorCarga = null }: SucursalesTabProps) {
   const router = useRouter();
   const uid = useId();
   const id = (s: string) => `${uid}-${s}`;
@@ -161,6 +164,8 @@ export function SucursalesTab({ sucursales: initialSucursales, errorCarga = null
   const [errorGeneral, setErrorGeneral] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
   const [cambiandoId, setCambiandoId] = useState<string | null>(null);
+  const [miSucursalId, setMiSucursalId] = useState<string | null>(miSucursalInicial);
+  const [guardandoMia, setGuardandoMia] = useState(false);
 
   const [aEliminar, setAEliminar] = useState<SucursalGuardada | null>(null);
   const [eliminarOpen, setEliminarOpen] = useState(false);
@@ -279,6 +284,25 @@ export function SucursalesTab({ sucursales: initialSucursales, errorCarga = null
     }
   }
 
+  async function elegirMiSucursal(valor: string | null) {
+    if (!valor || valor === miSucursalId || guardandoMia) return;
+    setGuardandoMia(true);
+    try {
+      const res = await requireOnline(() => asignarMiSucursal(valor))();
+      if (!res.ok) {
+        avisarError(res.error);
+        return;
+      }
+      setMiSucursalId(valor);
+      avisarExito("Tu sucursal quedó guardada.");
+      router.refresh();
+    } catch (err: unknown) {
+      avisarError(humanizeError(err, "guardar tu sucursal"));
+    } finally {
+      setGuardandoMia(false);
+    }
+  }
+
   function pedirEliminar(s: SucursalGuardada) {
     setConRelaciones(false);
     setAEliminar(s);
@@ -327,6 +351,29 @@ export function SucursalesTab({ sucursales: initialSucursales, errorCarga = null
             descripcion={errorCarga}
             onReintentar={() => router.refresh()}
           />
+        )}
+
+        {!showForm && sucursales.some((s) => s.activa) && (
+          <div className="flex flex-col gap-2">
+            <Label htmlFor={id("mi-sucursal")}>Mi sucursal</Label>
+            <Select value={miSucursalId ?? ""} onValueChange={(v) => void elegirMiSucursal(v)} disabled={guardandoMia}>
+              <SelectTrigger id={id("mi-sucursal")} className="w-full md:max-w-sm">
+                <SelectValue placeholder="Elige tu sucursal">
+                  {(v: string) => sucursales.find((s) => s.id === v)?.nombre ?? "Elige tu sucursal"}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {sucursales
+                  .filter((s) => s.activa)
+                  .map((s) => (
+                    <SelectItem key={s.id} value={s.id}>{s.nombre}</SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+            <p className="text-[13px] text-muted-foreground">
+              Es la sucursal donde recibes las encomiendas. Los destinos que ves salen de su ciudad.
+            </p>
+          </div>
         )}
 
         {showForm && (

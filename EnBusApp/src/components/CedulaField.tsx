@@ -8,14 +8,27 @@
  * no hay número. Validar con `cedulaValida` / `validateCedula` de
  * `src/utils/validation.ts`.
  */
-import React, { useEffect, useState, type Ref } from 'react';
-import { StyleSheet, View, type ReturnKeyTypeOptions, type TextInput } from 'react-native';
+import React, { useEffect, useRef, useState, type Ref } from 'react';
+import {
+  StyleSheet,
+  View,
+  type NativeSyntheticEvent,
+  type ReturnKeyTypeOptions,
+  type TextInput,
+  type TextInputSelectionChangeEventData,
+} from 'react-native';
 import { Field, FieldMessage, Text, type FieldTone } from '@/src/components/ui';
 import { PressableScale } from './PressableScale';
-import { cedulaParaGuardar, separarCedula, type LetraCedula } from '@/src/utils/ve.generated';
+import {
+  CEDULA_PLACEHOLDER,
+  LETRAS_PERSONA,
+  cedulaParaGuardar,
+  editarCedulaNumero,
+  mascaraCedulaNumero,
+  separarCedula,
+  type LetraCedula,
+} from '@/src/utils/ve.generated';
 import { Colors, Motion, Radius, Shadows, Sizes, Spacing } from '@/src/theme';
-
-type LetraPermitida = 'V' | 'E' | 'J' | 'P';
 
 const NOMBRE_LETRA: Record<LetraCedula, string> = {
   V: 'Venezolano',
@@ -26,9 +39,8 @@ const NOMBRE_LETRA: Record<LetraCedula, string> = {
   C: 'Comunal',
 };
 
-const MAX_DIGITOS = 10;
-/** Ancho en que caben "Ej. 12345678" y diez cifras sin recortar. */
-const NUMERO_ANCHO_MINIMO = 140;
+/** Ancho en que caben "Ej. 12.345.678" y diez cifras con puntos sin recortar. */
+const NUMERO_ANCHO_MINIMO = 160;
 
 export interface CedulaFieldProps {
   label?: string;
@@ -36,8 +48,11 @@ export interface CedulaFieldProps {
   onChangeText(v: string): void;
   error?: string | null;
   helper?: string;
-  /** Letras que se ofrecen. Por defecto `['V', 'E']`. */
-  letras?: LetraPermitida[];
+  /**
+   * Letras que se ofrecen según el contexto: `LETRAS_PERSONA` (por defecto),
+   * `LETRAS_PASAJERO`, `LETRAS_ENCOMIENDA` o `LETRAS_TITULAR` de `ve.generated`.
+   */
+  letras?: readonly LetraCedula[];
   returnKeyType?: ReturnKeyTypeOptions;
   onSubmitEditing?: () => void;
   editable?: boolean;
@@ -59,7 +74,7 @@ export function CedulaField({
   onChangeText,
   error,
   helper,
-  letras = ['V', 'E'],
+  letras = LETRAS_PERSONA,
   returnKeyType,
   onSubmitEditing,
   editable = true,
@@ -81,11 +96,53 @@ export function CedulaField({
   }, [tieneLetra, separada.letra, letraElegida]);
 
   // Una letra guardada que no está en `letras` (p. ej. "J-…") se muestra igual.
-  const opciones: LetraCedula[] = letras.includes(letra as LetraPermitida)
-    ? letras
-    : [...letras, letra];
+  const opciones: readonly LetraCedula[] = letras.includes(letra) ? letras : [...letras, letra];
 
   const emitir = (texto: string) => onChangeText(texto);
+
+  // El número se ve con puntos de miles ("12.345.678"); se guarda sin ellos.
+  const visible = mascaraCedulaNumero(separada.numero);
+
+  // Cursor: la máscara cambia el texto y en el móvil el cursor saltaría al final al
+  // escribir a medio número. Se recuerda la selección y, solo si no se escribe al
+  // final, se recoloca tras el mismo dígito.
+  const seleccionRef = useRef({ start: 0, end: 0 });
+  const [seleccion, setSeleccion] = useState<{ start: number; end: number } | undefined>(undefined);
+
+  const alCambiarSeleccion = (e: NativeSyntheticEvent<TextInputSelectionChangeEventData>) => {
+    seleccionRef.current = e.nativeEvent.selection;
+    if (seleccion && e.nativeEvent.selection.start === seleccion.start && e.nativeEvent.selection.end === seleccion.end) {
+      setSeleccion(undefined);
+    }
+  };
+
+  // Salvaguarda: si el sistema no avisa del cambio de selección, se suelta el control.
+  useEffect(() => {
+    if (!seleccion) return;
+    const t = setTimeout(() => setSeleccion(undefined), 120);
+    return () => clearTimeout(t);
+  }, [seleccion]);
+
+  const colocarCursor = (escrito: string, resultado: string) => {
+    const previa = seleccionRef.current;
+    if (previa.start !== previa.end || previa.end >= visible.length) {
+      setSeleccion(undefined);
+      return;
+    }
+    const cuenta = (t: string) => t.replace(/\D/g, '').length;
+    const cursorEscrito = Math.max(0, Math.min(escrito.length, previa.start + escrito.length - visible.length));
+    let digitosAntes = cuenta(escrito.slice(0, cursorEscrito));
+    // Se borró un punto: la máscara quitó el dígito anterior.
+    if (escrito.length === visible.length - 1 && cuenta(escrito) === cuenta(visible)) digitosAntes -= 1;
+    digitosAntes = Math.max(0, Math.min(digitosAntes, cuenta(resultado)));
+    let pos = 0;
+    let vistos = 0;
+    while (pos < resultado.length && vistos < digitosAntes) {
+      if (/\d/.test(resultado.charAt(pos))) vistos++;
+      pos++;
+    }
+    setSeleccion({ start: pos, end: pos });
+  };
 
   const elegirLetra = (nueva: LetraCedula) => {
     if (!editable) return;
@@ -103,8 +160,9 @@ export function CedulaField({
       emitir(componer(letraPegada, pegada.numero));
       return;
     }
-    const numero = texto.replace(/\D/g, '').slice(0, MAX_DIGITOS);
-    emitir(componer(letra, numero));
+    const resultado = editarCedulaNumero(visible, texto);
+    colocarCursor(texto, resultado);
+    emitir(componer(letra, resultado.replace(/\D/g, '')));
   };
 
   const nombreGrupo = `${label}: tipo de documento`;
@@ -148,9 +206,11 @@ export function CedulaField({
 
         <Field
           ref={ref}
-          value={separada.numero}
+          value={visible}
+          selection={seleccion}
+          onSelectionChange={alCambiarSeleccion}
           onChangeText={cambiarNumero}
-          placeholder="Ej. 12345678"
+          placeholder={CEDULA_PLACEHOLDER}
           keyboardType="number-pad"
           inputMode="numeric"
           autoComplete="off"

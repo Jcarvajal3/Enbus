@@ -7,7 +7,8 @@
  *   3. Single place to tighten rules (e.g. regex for cedula) in the future.
  */
 
-import { cedulaValida, telefonoValido, CEDULA_ERROR, TELEFONO_ERROR } from './ve.generated';
+import { cedulaValida, telefonoValido, CEDULA_ERROR, TELEFONO_ERROR, formatCedula, formatTelefono } from './ve.generated';
+import { leerMonto } from './dinero.generated';
 
 // ─── Sanitizers ───────────────────────────────────────────────────────────────
 
@@ -40,6 +41,17 @@ export {
   telefonoParaGuardar,
   telefonoWhatsApp,
   mascaraTelefono,
+  mostrarTelefono,
+  editarTelefono,
+  mascaraCedulaNumero,
+  editarCedulaNumero,
+  CEDULA_MAX_DIGITOS,
+  LETRAS_PERSONA,
+  LETRAS_PASAJERO,
+  LETRAS_ENCOMIENDA,
+  LETRAS_TITULAR,
+  TELEFONO_EJEMPLO,
+  CEDULA_EJEMPLO,
   CEDULA_PLACEHOLDER,
   TELEFONO_PLACEHOLDER,
   CEDULA_ERROR,
@@ -47,6 +59,26 @@ export {
 } from './ve.generated';
 export type { LetraCedula } from './ve.generated';
 export { cedulaValida, telefonoValido };
+export { leerMonto, editarMonto, MONTO_PLACEHOLDER } from './dinero.generated';
+
+/**
+ * Teléfono guardado listo para mostrar: "0414-123.45.67". Un fijo u otro valor que no
+ * pase la validación se muestra tal cual (nunca "—" si hay algo escrito).
+ */
+export function telefonoLegible(v: string | null | undefined): string {
+  const crudo = (v ?? '').trim();
+  if (!crudo || /^pendiente/i.test(crudo)) return '';
+  const f = formatTelefono(crudo);
+  return f === '—' ? crudo : f;
+}
+
+/** Cédula o RIF guardado listo para mostrar ("V-12.345.678", "J-12345678-9"); si no se reconoce, tal cual. */
+export function cedulaLegible(v: string | null | undefined): string {
+  const crudo = (v ?? '').trim();
+  if (!crudo || /^pendiente/i.test(crudo)) return '';
+  const f = formatCedula(crudo);
+  return f === '—' ? crudo : f;
+}
 
 /** Nombre que `handle_new_user` pone cuando no tiene ninguno. */
 const NOMBRE_RELLENO = 'usuario enbus';
@@ -97,17 +129,20 @@ export function validateMinLength(val: string, min: number, fieldName = 'Campo')
 /** Peso máximo por defecto de la tarifa (tarifas.peso_max_kg); el servidor valida el de la tarifa vigente. */
 export const PESO_MAX_KG = 25;
 
-/** "2,5" o "2.5" → 2.5. Acepta coma decimal (teclado en español). */
-function parseDecimal(val: string): number {
-  const t = val.trim();
-  return Number(t.includes(',') ? t.replace(/\./g, '').replace(',', '.') : t);
+/**
+ * Lee un número decimal escrito como en Venezuela ("2,5", "1.250,50", "12.5") con el
+ * lector único de `shared` (`leerMonto`): null si no es un número mayor que 0 con
+ * hasta 2 decimales. Vale para pesos y montos.
+ */
+export function leerDecimal(val: string | null | undefined, opciones?: { permitirCero?: boolean }): number | null {
+  return leerMonto(val, opciones);
 }
 
 export function validatePeso(val: string): ValidationResult {
   if (!val.trim()) return { valid: true }; // peso is optional
-  const n = parseDecimal(val);
-  if (isNaN(n) || n <= 0) {
-    return { valid: false, message: 'El peso debe ser un número mayor que 0' };
+  const n = leerDecimal(val);
+  if (n === null) {
+    return { valid: false, message: 'Escribe el peso en kg, por ejemplo 2,5.' };
   }
   if (n > PESO_MAX_KG) {
     return {
@@ -118,12 +153,11 @@ export function validatePeso(val: string): ValidationResult {
   return { valid: true };
 }
 
-/** Validates a positive numeric currency value */
+/** Valida un monto opcional (vacío es válido; 0 sí). */
 export function validateMonto(val: string): ValidationResult {
-  if (!val.trim()) return { valid: true }; // optional
-  const n = parseDecimal(val);
-  if (isNaN(n) || n < 0) {
-    return { valid: false, message: 'El valor debe ser un número positivo' };
+  if (!val.trim()) return { valid: true };
+  if (leerDecimal(val, { permitirCero: true }) === null) {
+    return { valid: false, message: 'Escribe un monto válido, por ejemplo 50 o 1.250,00.' };
   }
   return { valid: true };
 }

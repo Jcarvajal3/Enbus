@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requireSuperAdmin, esUuid } from "@/lib/data/admin-auth";
 import { revalidatePath } from "next/cache";
 import { humanizeError, parseDetalleEB } from "@/lib/errores";
-import { formatNumeroVE } from "@/lib/dinero";
+import { DECIMALES_TASA, formatNumeroVE, leerMonto } from "@/lib/dinero";
 import { fechaHoraVEaISO, hoyVE, sumarDiasVE } from "@/lib/fechas";
 import { LIMITES_TARIFA, type CreateTarifaInput, type ResultadoPublicarTarifa } from "@/lib/types/admin-tarifas";
 
@@ -217,15 +217,10 @@ export type RegistrarTasaManualResult = {
   campo?: string;
 };
 
-/** "1.234,56" -> 1234.56 · "100,81" -> 100.81 · "100.81" -> 100.81 */
+/** "1.234,56" -> 1234.56 · "100,81" -> 100.81 (lector único de montos; NaN si no es válido). */
 function parseTasa(valor: string | number): number {
   if (typeof valor === "number") return valor;
-  const texto = valor.trim().replace(/\s/g, "");
-  if (!texto) return NaN;
-  // El último separador es el decimal: "1.234,56" y "1,234.56" -> 1234.56.
-  const normalizado =
-    texto.lastIndexOf(",") > texto.lastIndexOf(".") ? texto.replace(/\./g, "").replace(",", ".") : texto.replace(/,/g, "");
-  return /^\d+(\.\d+)?$/.test(normalizado) ? Number(normalizado) : NaN;
+  return leerMonto(valor, { decimales: DECIMALES_TASA }) ?? NaN;
 }
 
 export async function registrarTasaManual(

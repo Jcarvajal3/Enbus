@@ -22,6 +22,12 @@ export const RUTAS_LEGALES = {
   eliminarCuenta: "/eliminar-cuenta",
 } as const;
 
+/** Páginas públicas del sitio (además de la portada y las legales). */
+export const RUTAS_SITIO = {
+  /** Página para cooperativas (B2B). El resto de /cooperativas/* es el panel. */
+  cooperativas: "/cooperativas",
+} as const;
+
 /** Rutas del panel que se anuncian en el sitio. */
 export const RUTAS_PANEL = {
   registro: "/cooperativas/registro",

@@ -4,8 +4,6 @@ import { useId, useRef, useState, useTransition, useEffect, type FormEvent } fro
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Upload, Buildings, Lock, WhatsappLogo } from "@phosphor-icons/react";
 import { AvisoError } from "@/components/aviso-error";
 import { Spinner } from "@/components/ui/spinner";
@@ -15,7 +13,8 @@ import { actualizarDatosCooperativa, uploadLogo } from "@/app/cooperativas/(pane
 import type { CooperativaData } from "@/lib/types/configuracion";
 import { requireOnline } from "@/components/connectivity-banner";
 import { humanizeError } from "@/lib/errores";
-import { normalizeRif, RIF_AYUDA, RIF_AYUDA_CORTA, RIF_PLACEHOLDER } from "@/lib/rif";
+import { normalizeRif, RIF_AYUDA } from "@/lib/rif";
+import { Campo, RifField } from "@/components/campos";
 import { formatNumeroVE } from "@/lib/dinero";
 import { telefonoWhatsApp } from "@/lib/ve";
 
@@ -185,37 +184,27 @@ export function DatosCooperativaTab({ cooperativa, estado }: DatosCooperativaTab
         {editable ? (
           <form onSubmit={guardarDatos} noValidate className="flex flex-col items-start gap-5">
             <div className="grid w-full gap-5 md:grid-cols-2">
-              <div className="grid content-start gap-2">
-                <Label htmlFor={`${uid}-nombre`}>Nombre de la cooperativa</Label>
-                <Input
-                  id={`${uid}-nombre`}
-                  value={nombre}
-                  disabled={guardando}
-                  autoComplete="organization"
-                  aria-invalid={errorCampo?.campo === "nombre" ? true : undefined}
-                  onChange={(e) => setNombre(e.target.value)}
-                />
-              </div>
-              <div className="grid content-start gap-2">
-                <Label htmlFor={`${uid}-rif`}>RIF</Label>
-                <Input
-                  id={`${uid}-rif`}
-                  value={rif}
-                  placeholder={RIF_PLACEHOLDER}
-                  autoCapitalize="characters"
-                  enterKeyHint="done"
-                  disabled={guardando}
-                  aria-invalid={errorCampo?.campo === "rif" ? true : undefined}
-                  aria-describedby={`${uid}-rif-ayuda`}
-                  onChange={(e) => setRif(e.target.value)}
-                  onBlur={() => setRif((actual) => normalizeRif(actual) ?? actual)}
-                />
-                <p id={`${uid}-rif-ayuda`} className="text-[13px] text-muted-foreground">
-                  {RIF_AYUDA_CORTA}
-                </p>
-              </div>
+              <Campo
+                id={`${uid}-nombre`}
+                label="Nombre de la cooperativa"
+                value={nombre}
+                onChange={setNombre}
+                maxLength={120}
+                autoComplete="organization"
+                enterKeyHint="next"
+                disabled={guardando}
+                error={errorCampo?.campo === "nombre" ? errorCampo.mensaje : null}
+              />
+              <RifField
+                id={`${uid}-rif`}
+                value={rif}
+                onChange={setRif}
+                enterKeyHint="done"
+                disabled={guardando}
+                error={errorCampo?.campo === "rif" ? errorCampo.mensaje : null}
+              />
             </div>
-            {errorCampo && <AvisoError className="w-full">{errorCampo.mensaje}</AvisoError>}
+            {errorCampo && errorCampo.campo !== "nombre" && errorCampo.campo !== "rif" && <AvisoError className="w-full">{errorCampo.mensaje}</AvisoError>}
             <Button type="submit" className="max-md:w-full" disabled={guardando || !cambiado} aria-busy={guardando || undefined}>
               {guardando && <Spinner size="sm" aria-hidden />}
               {guardando ? "Guardando…" : "Guardar cambios"}
@@ -225,7 +214,7 @@ export function DatosCooperativaTab({ cooperativa, estado }: DatosCooperativaTab
           <div className="flex flex-col gap-3">
             <dl className="grid gap-4 md:grid-cols-2">
               <ReadOnlyField label="Nombre de la cooperativa" value={cooperativa.nombre} />
-              <ReadOnlyField label="RIF" value={cooperativa.rif ?? "—"} />
+              <ReadOnlyField label="RIF" value={cooperativa.rif ? (normalizeRif(cooperativa.rif) ?? cooperativa.rif) : "—"} />
             </dl>
             <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-muted-foreground">
               <Lock className="size-4" aria-hidden />

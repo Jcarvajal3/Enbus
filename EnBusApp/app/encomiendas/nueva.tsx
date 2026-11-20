@@ -57,11 +57,15 @@ import { MODALIDAD_PAGO } from '@/src/utils/estados';
 import { ARTICULOS_PROHIBIDOS, NOTA_ARTICULOS_PROHIBIDOS } from '@/src/utils/articulos';
 import { CIUDADES_POPULARES, Localidad, normalizeCityForDb } from '@/src/utils/venezuela';
 import {
+  LETRAS_ENCOMIENDA,
   PESO_MAX_KG,
   cedulaParaGuardar,
   formatCedula,
+  editarMonto,
   formatTelefono,
+  leerDecimal,
   sanitizeText,
+  telefonoLegible,
   telefonoParaGuardar,
   validateCedula,
   validateMinLength,
@@ -104,21 +108,8 @@ const OPCIONES_PAGO: { value: ModalidadPago; titulo: string; detalle: string }[]
   },
 ];
 
-/**
- * Lee un número escrito como en Venezuela: "2,5" → 2.5, "1.250,50" → 1250.5
- * (el teclado decimal del teléfono escribe coma). NaN si no es un número.
- */
-function leerDecimal(texto: string): number {
-  let t = texto.replace(/\s/g, '');
-  if (t.includes(',')) t = t.replace(/\./g, '').replace(',', '.');
-  return /^\d+(\.\d+)?$/.test(t) ? Number(t) : NaN;
-}
-
-/** Texto con punto decimal para los validadores (que usan `parseFloat`); vacío si no hay dato. */
-const textoDecimal = (texto: string) => (texto.trim() ? String(leerDecimal(texto)) : '');
-
-/** "2,5 kg" para mostrar lo que escribió el usuario. */
-const textoPeso = (texto: string) => `${texto.trim().replace('.', ',')} kg`;
+/** "2,5 kg" para mostrar lo que escribió el usuario (el campo ya lo deja con coma). */
+const textoPeso = (texto: string) => `${texto.trim()} kg`;
 
 /** Cotización pública (`fn_cotizar_envio_publico`, USD de referencia y Bs a la tasa BCV). Lanza si falla. */
 async function cotizar(peso: number, origen: string, destino: string): Promise<CotizacionEnvioPublica> {
@@ -331,11 +322,11 @@ export default function NuevaEncomiendaWizard() {
     const peso = leerDecimal(pesoKg);
     setErrorCosto(false);
     setAvisoPeso(
-      peso > PESO_MAX_KG
+      peso !== null && peso > PESO_MAX_KG
         ? `El peso máximo es ${PESO_MAX_KG} kg. Para paquetes más pesados, habla con la cooperativa.`
         : null
     );
-    if (Number.isNaN(peso) || peso <= 0 || peso > PESO_MAX_KG || !origen || !destino || !cooperativaId) {
+    if (peso === null || peso > PESO_MAX_KG || !origen || !destino || !cooperativaId) {
       setEstimado(null);
       setLoadingCosto(false);
       return;
@@ -417,8 +408,8 @@ export default function NuevaEncomiendaWizard() {
       ['cedula', validateCedula(cedula)],
       ['telefono', validatePhone(telefono)],
       ['descripcion', validateMinLength(descripcion, 3, 'La descripción del contenido')],
-      ['peso', validatePeso(textoDecimal(pesoKg))],
-      ['valor', validateMonto(textoDecimal(valorDeclarado))],
+      ['peso', validatePeso(pesoKg)],
+      ['valor', validateMonto(valorDeclarado)],
     ];
 
     const next: Record<string, string> = {};
@@ -477,7 +468,7 @@ export default function NuevaEncomiendaWizard() {
       };
       // Solo con foto: así un envío sin foto no depende de la columna nueva.
       if (fotoRuta) payload.foto_cliente_path = fotoRuta;
-      if (valorDeclarado.trim()) payload.valor_declarado = leerDecimal(valorDeclarado);
+      if (valorDeclarado.trim()) payload.valor_declarado = leerDecimal(valorDeclarado, { permitirCero: true });
 
       const { data: creada, error } = await supabase
         .from('encomiendas')
@@ -600,6 +591,7 @@ export default function NuevaEncomiendaWizard() {
           : null;
   const canContinue = !(step === 1 && !step1Valid) && !(step === 2 && !modalidadPago);
 
+  const valorDeclaradoNum = valorDeclarado.trim() ? leerDecimal(valorDeclarado, { permitirCero: true }) : null;
   const costoEstimadoTexto =
     estimado?.opcion
       ? formatMoney({
@@ -765,7 +757,7 @@ export default function NuevaEncomiendaWizard() {
                                       ) : null}
                                       {suc.horario || suc.telefono ? (
                                         <Text variant="caption" color="muted">
-                                          {[suc.horario, suc.telefono ? `Tel. ${suc.telefono}` : null]
+                                          {[suc.horario, suc.telefono ? `Tel. ${telefonoLegible(suc.telefono)}` : null]
                                             .filter(Boolean)
                                             .join(' · ')}
                                         </Text>
@@ -809,7 +801,7 @@ export default function NuevaEncomiendaWizard() {
                     value={cedula}
                     onChangeText={setCedula}
                     error={errors.cedula}
-                    letras={['V', 'E', 'J', 'P']}
+                    letras={LETRAS_ENCOMIENDA}
                     returnKeyType="next"
                     onSubmitEditing={() => telefonoRef.current?.focus()}
                   />
@@ -841,11 +833,11 @@ export default function NuevaEncomiendaWizard() {
                   </View>
 
                   <Field
-                    label="Peso aproximado (kg) · opcional"
+                    label="Peso aproximado en kg (opcional)"
                     placeholder="Ej. 2,5"
                     keyboardType="decimal-pad"
                     value={pesoKg}
-                    onChangeText={setPesoKg}
+                    onChangeText={(v) => setPesoKg((anterior) => editarMonto(anterior, v))}
                     error={errors.peso}
                   />
 
@@ -893,11 +885,11 @@ export default function NuevaEncomiendaWizard() {
                   ) : null}
 
                   <Field
-                    label="Valor del contenido (USD) · opcional"
-                    placeholder="Ej. 50"
+                    label="Valor del contenido en USD (opcional)"
+                    placeholder="Ej. 50,00"
                     keyboardType="decimal-pad"
                     value={valorDeclarado}
-                    onChangeText={setValorDeclarado}
+                    onChangeText={(v) => setValorDeclarado((anterior) => editarMonto(anterior, v))}
                     error={errors.valor}
                   />
 
@@ -935,7 +927,7 @@ export default function NuevaEncomiendaWizard() {
               </View>
 
               <View style={s.section}>
-                <SectionLabel>Foto · opcional</SectionLabel>
+                <SectionLabel>Foto (opcional)</SectionLabel>
                 {foto ? (
                   <Card padding="sm">
                     <Image
@@ -1015,9 +1007,7 @@ export default function NuevaEncomiendaWizard() {
                   <Text variant="caption" color="muted">
                     {[
                       pesoKg.trim() ? textoPeso(pesoKg) : 'Peso sin indicar',
-                      valorDeclarado.trim() && Number.isFinite(leerDecimal(valorDeclarado))
-                        ? `Valor ${formatUsd(leerDecimal(valorDeclarado))}`
-                        : null,
+                      valorDeclaradoNum !== null ? `Valor ${formatUsd(valorDeclaradoNum)}` : null,
                       costoEstimadoTexto ? `Costo estimado ${costoEstimadoTexto}` : null,
                     ]
                       .filter(Boolean)

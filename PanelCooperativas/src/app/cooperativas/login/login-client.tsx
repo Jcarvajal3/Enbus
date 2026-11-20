@@ -155,6 +155,7 @@ export default function LoginPageClient({ aviso }: { aviso: AvisoLogin | null })
               inputMode="email"
               placeholder="Ej. tu@correo.com"
               autoComplete="username"
+              enterKeyHint="next"
               autoCapitalize="none"
               spellCheck={false}
               required

@@ -10,7 +10,8 @@ shared/
   ve.ts           formatos venezolanos: cédula, teléfono, RIF, ciudades (y su catálogo), fechas VE, duración
   artefactos.ts   código de boleto, QR del pase, código de seguimiento, PIN de retiro
   errores.ts      catálogo común de mensajes de error (MSG, mensajeAuth, mensajePostgres)
-  dinero.ts       formato de montos: Bs, USD, tasa BCV (formatMoney)
+  dinero.ts       formato de montos: Bs, USD, tasa BCV (formatMoney) y lectura/máscara de montos escritos (leerMonto)
+  bancos.ts       lista única de bancos VE (código SUDEBAN + nombre + alias) y su búsqueda
   generar.mjs     node shared/generar.mjs [--check]   (Node ≥ 18, sin dependencias)
   tests/          pruebas de ve.ts, del catálogo de ciudades y de artefactos.ts (npm test, Node ≥ 22.6)
 ```
@@ -40,11 +41,11 @@ cambio. Edita la fuente en `shared/` y vuelve a generar.
 | Archivo | Contenido |
 |---|---|
 | `EnBusApp/src/tokens.generated.ts` | `palette` (paleta cruda de la app) y `tokens = { claro, movimiento, radio }` en camelCase. La app no tiene modo oscuro. `src/theme.ts` lo consume. |
-| `EnBusApp/src/utils/{ve,artefactos,errores,dinero}.generated.ts` | copias de los módulos de `shared/` |
+| `EnBusApp/src/utils/{ve,artefactos,errores,dinero,bancos}.generated.ts` | copias de los módulos de `shared/` |
 | `PanelCooperativas/src/app/tokens.generated.css` | `:root { … }` y `.dark { … }` con todas las variables de color, `--radius` y `--duration-*`, y `@theme { --radius-xs … --radius-3xl, --radius-full }` |
-| `PanelCooperativas/src/lib/{ve,artefactos,errores,dinero}.generated.ts` | copias |
+| `PanelCooperativas/src/lib/{ve,artefactos,errores,dinero,bancos}.generated.ts` | copias |
 | `LandingEnBus/app/tokens.generated.css` | `:root { … }` y el mismo `@theme` de radios (la landing no tiene modo oscuro) |
-| `LandingEnBus/lib/{ve,artefactos,errores,dinero}.generated.ts` | copias |
+| `LandingEnBus/lib/{ve,artefactos,errores,dinero,bancos}.generated.ts` | copias |
 
 Los proyectos importan **los módulos de siempre**, que reexportan lo generado con los
 mismos nombres y firmas:
@@ -116,7 +117,7 @@ En la app, `no-restricted-syntax` (`error`) prohíbe literales `#rgb`/`#rrggbb`/
 y `rgb(`/`rgba(` fuera de `src/theme.ts` y `src/tokens.generated.ts`: usa `Colors` y
 `alpha()`.
 
-## Módulos TS (ve, artefactos, errores, dinero)
+## Módulos TS (ve, artefactos, errores, dinero, bancos)
 
 TS puro, sin `\p{…}` ni lookbehind (Hermes no los soporta). Sin imports salvo entre
 módulos de `shared/` con `from "./ve";` (el script lo reescribe a `"./ve.generated"`
@@ -185,6 +186,26 @@ reexporta desde su `dinero.ts`.
 `PIN_RETIRO_LONGITUD`, `PIN_MAX_INTENTOS`, `PIN_VALIDACION_MINUTOS`, `pinValido`.
 Reglas de cada artefacto: `Specs/00_General/Artefactos_Compartidos.md`.
 
-Nota sobre `mascaraTelefono`: con 4 dígitos ya añade el guion ("0414" → "0414-"). Un
-campo que la use debe comparar con el valor anterior para que borrar el guion borre
-también el dígito (si no, el guion vuelve a aparecer).
+Edición de campos con máscara (web y app, funciones puras):
+
+- `editarTelefono(anterior, nuevo)` + `mostrarTelefono(valor)`: máscara "0414-123.45.67" en vivo;
+  deja el prefijo "+", "+5", "+58" a medio escribir; borrar un guion o punto borra también el
+  dígito anterior (con `mascaraTelefono` sola, el separador volvería a aparecer); al borrar no
+  deja separador al final. El campo muestra `mostrarTelefono(valor)` y emite
+  `telefonoParaGuardar(texto) ?? texto`.
+- `mascaraCedulaNumero(digitos)` ("12.345.678", máx. 10 dígitos) y `editarCedulaNumero(anterior, nuevo)`
+  (misma regla de borrado); la letra la separa `separarCedula`. Letras por contexto:
+  `LETRAS_PERSONA` (V, E), `LETRAS_PASAJERO` (V, E, P), `LETRAS_ENCOMIENDA` (V, E, J, P),
+  `LETRAS_TITULAR` (V, E, J, G, P).
+- Los placeholders llevan "Ej. ": `TELEFONO_PLACEHOLDER` ("Ej. 0414-123.45.67"), `CEDULA_PLACEHOLDER`
+  ("Ej. 12.345.678", el del número) y `MONTO_PLACEHOLDER` ("Ej. 1.250,00"); `TELEFONO_EJEMPLO` y
+  `CEDULA_EJEMPLO` son el ejemplo suelto para textos de ayuda. `RIF_PLACEHOLDER` queda sin "Ej. "
+  ("J-12345678-4", con dígito verificador válido) porque sus consumidores lo componen.
+
+`dinero.ts` también tiene `leerMonto(texto)` (coma decimal, punto de miles, "12.5" → 12.5,
+"1.250" → 1250, prefijos Bs/USD/$, máx. 2 decimales, inválido → null; las reglas están en su
+comentario) y `editarMonto(anterior, nuevo)` (máscara en vivo "1.250,50").
+
+`bancos.ts`: `BANCOS_VE`, `OTRO_BANCO`, `OPCIONES_BANCO`, `etiquetaBanco` ("0134 · Banesco", la forma
+en que se guarda), `buscarBancos(consulta)` (código, nombre o alias, sin tildes), `buscarBanco`
+(reconoce uno guardado o escrito) y `mostrarBanco`.

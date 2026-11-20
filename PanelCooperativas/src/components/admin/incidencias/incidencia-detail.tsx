@@ -362,9 +362,10 @@ function ResolverDialog({
             <FieldLabel htmlFor="resolucion">Cómo se resolvió</FieldLabel>
             <Textarea
               id="resolucion"
+              maxLength={2000}
               rows={4}
               autoFocus
-              placeholder="Ej.: La cooperativa devolvió el pago por Pago Móvil."
+              placeholder="Ej. La cooperativa devolvió el pago por Pago Móvil."
               value={texto}
               onChange={(e) => {
                 setTexto(e.target.value);

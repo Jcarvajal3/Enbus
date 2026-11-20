@@ -28,6 +28,7 @@ import {
   cedulaValida,
   nombreValido,
   telefonoValido,
+  LETRAS_PERSONA,
 } from '@/src/utils/validation';
 import type { PerfilUsuario } from '@/src/types';
 import { Colors, Layout, Radius, Spacing } from '@/src/theme';
@@ -170,6 +171,7 @@ export function CompletarPerfilSheet({
 
           <CedulaField
             ref={cedulaRef}
+            letras={LETRAS_PERSONA}
             value={cedula}
             onChangeText={(v) => {
               setCedula(v);

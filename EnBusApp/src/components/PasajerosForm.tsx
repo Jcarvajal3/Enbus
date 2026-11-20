@@ -43,6 +43,7 @@ import {
   sanitizeText,
   telefonoParaGuardar,
   telefonoValido,
+  LETRAS_PASAJERO,
 } from '@/src/utils/validation';
 import { ordenarAsientos } from '@/src/hooks/useCheckoutBoletos';
 import type { PasajeroAsiento, PerfilUsuario } from '@/src/types';
@@ -86,8 +87,6 @@ export interface PasajerosFormHandle {
 
 const AYUDA_CEDULA = 'Un menor sin cédula usa la de su representante.';
 
-/** V y E, más P para quien viaja con pasaporte (antes se podía escribir a mano). */
-const LETRAS_PASAJERO: ('V' | 'E' | 'P')[] = ['V', 'E', 'P'];
 
 /** La forma que emite `CedulaField` ("V-12345678"), o '' si no es válida. */
 const cedulaDelCampo = (v: string | null | undefined) => cedulaParaGuardar(v) ?? '';

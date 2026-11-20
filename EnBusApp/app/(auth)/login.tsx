@@ -24,6 +24,7 @@ import {
   sanitizeText,
   telefonoParaGuardar,
   telefonoValido,
+  LETRAS_PERSONA,
 } from '@/src/utils/validation';
 import { useToast } from '@/src/components/Toast';
 import { StaggerItem } from '@/src/components/StaggerItem';
@@ -308,6 +309,7 @@ export default function LoginScreen() {
                   />
                   <CedulaField
                     ref={cedulaRef}
+                    letras={LETRAS_PERSONA}
                     value={form.cedula_rif}
                     onChangeText={(v) => update('cedula_rif', v)}
                     error={errors.cedula_rif}

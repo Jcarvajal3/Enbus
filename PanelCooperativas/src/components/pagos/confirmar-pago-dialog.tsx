@@ -314,7 +314,7 @@ function Contenido({
             rows={3}
             maxLength={MAX_MOTIVO}
             disabled={enCurso}
-            placeholder="Ej.: La referencia no aparece en nuestra cuenta de Banesco."
+            placeholder="Ej. La referencia no aparece en nuestra cuenta de Banesco."
             aria-invalid={errorMotivo ? true : undefined}
             aria-describedby={errorMotivo ? id("motivo-error") : id("motivo-ayuda")}
             onChange={(e) => {

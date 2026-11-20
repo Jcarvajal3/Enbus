@@ -10,9 +10,11 @@
 //    El panel "Último escaneo" suena según el resultado (lib/sonido).
 // 3. Pasajeros del bus con su estado de embarque (`?ver=`).
 // Desde el resultado se puede cobrar una reserva, verificar el pago o vender un
-// boleto nuevo (los mismos diálogos de la Taquilla de boletos).
+// boleto nuevo: el cobro y la venta son páginas de la Taquilla de boletos (con
+// `?volver=embarque` regresan aquí, al mismo bus).
 
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { ArrowClockwise, Camera } from "@phosphor-icons/react";
 import { PageHeader } from "@/components/page-header";
 import { SectionLabel } from "@/components/section-label";
@@ -28,7 +30,7 @@ import { ScanInput } from "@/components/scan-input";
 import { CameraQRScanner } from "@/components/camera-qr-scanner";
 import { UltimoEscaneo, useUltimoEscaneo } from "@/components/ultimo-escaneo";
 import { ViajeSheet } from "@/components/viajes/viaje-sheet";
-import { VentaFlow, CobrarReservaDialog } from "@/components/boletos/venta-flow";
+import { rutaCobrar, rutaVender } from "@/components/boletos/venta/tipos";
 import {
   ResultadoEmbarqueDialog,
   asientoYPasajero,
@@ -88,6 +90,7 @@ function Embarque() {
   const { user } = useUser();
   const cooperativaId = user.cooperativa_id!;
   const supabase = useMemo(() => createClient(), []);
+  const router = useRouter();
 
   // ─── Bus de hoy ───────────────────────────────────────────────────────────
   const [viajeUrl, setViajeUrl] = useParamUrl("viaje");
@@ -212,10 +215,7 @@ function Embarque() {
   const { ultimo, registrar } = useUltimoEscaneo();
   const validandoRef = useRef(false);
 
-  // Cobro, venta y hoja del viaje desde el resultado.
-  const [reservaACobrar, setReservaACobrar] = useState<string | null>(null);
-  const [showVentaFlow, setShowVentaFlow] = useState(false);
-  const [ventaViajeInicial, setVentaViajeInicial] = useState<string | null>(null);
+  // Hoja del viaje; el cobro y la venta son páginas.
   const [viajeSheet, setViajeSheet] = useState<string | null>(null);
 
   // El React Compiler memoiza: sin useCallback manual.
@@ -289,12 +289,23 @@ function Embarque() {
     }
   };
 
-  const abrirVenta = (viajeId: string | null = null) => {
-    setVentaViajeInicial(viajeId);
-    setShowVentaFlow(true);
+  /** Vender un boleto del bus: página de venta con la salida elegida; "Listo" vuelve a este bus. */
+  const abrirVenta = (viajeId: string) => router.push(rutaVender({ viajeId, volver: "embarque" }));
+
+  /** Cobrar la reserva escaneada (el resultado trae el boleto; la página cobra la compra completa). */
+  const abrirCobro = async (boletoId: string) => {
+    try {
+      const { data, error } = await supabase.from("boletos").select("compra_id").eq("id", boletoId).single();
+      if (error) throw error;
+      const compraId = (data as { compra_id: string | null }).compra_id;
+      if (!compraId) throw new Error("boleto sin compra");
+      router.push(rutaCobrar(compraId, "embarque"));
+    } catch (err) {
+      avisarError(mensajeExcepcion(err, "abrir el cobro de la reserva"));
+    }
   };
 
-  const algunDialogo = showVentaFlow || !!escaneo || !!reservaACobrar || !!viajeSheet || camaraAbierta;
+  const algunDialogo = !!escaneo || !!viajeSheet || camaraAbierta;
   const sinViajesAun = cargandoViajesHoy && !viajesCargados;
   const escanerBloqueado = algunDialogo || validando || sinViajesAun;
   const porcentaje = confirmados > 0 ? Math.round((embarcados / confirmados) * 100) : 0;
@@ -461,9 +472,8 @@ function Embarque() {
 
       <CameraQRScanner open={camaraAbierta} onOpenChange={setCamaraAbierta} onScan={handleCodigo} />
 
-      {/* Mientras se cobra la reserva escaneada, el resultado se oculta y luego se revalida. */}
       <ResultadoEmbarqueDialog
-        escaneo={reservaACobrar ? null : escaneo}
+        escaneo={escaneo}
         viajesHoy={viajesHoy}
         viajeElegido={viajeElegido}
         confirmando={confirmando}
@@ -474,7 +484,7 @@ function Embarque() {
           revalidar();
           void fetchPasajeros();
         }}
-        onCobrar={(id) => setReservaACobrar(id)}
+        onCobrar={(id) => void abrirCobro(id)}
         onVender={(viajeId) => {
           setEscaneo(null);
           abrirVenta(viajeId);
@@ -482,29 +492,6 @@ function Embarque() {
         onCambiarBus={(viajeId) => {
           setViajeUrl(viajeId);
           if (escaneo) void validar(escaneo.codigo, viajeId, true);
-        }}
-      />
-
-      <CobrarReservaDialog
-        boletoId={reservaACobrar}
-        open={!!reservaACobrar}
-        onOpenChange={(abierto) => {
-          if (!abierto) {
-            setReservaACobrar(null);
-            // Tras cobrar se vuelve a validar para ofrecer el embarque.
-            if (escaneo) revalidar();
-          }
-        }}
-        onCobrado={() => void fetchPasajeros()}
-      />
-
-      <VentaFlow
-        isOpen={showVentaFlow}
-        viajeIdInicial={ventaViajeInicial}
-        onClose={() => {
-          setShowVentaFlow(false);
-          setVentaViajeInicial(null);
-          void fetchPasajeros();
         }}
       />
 

@@ -14,7 +14,7 @@ import { ErrorRefrescar } from "@/components/admin/error-refrescar";
 import { Dato, Vacio } from "@/components/admin/detalle";
 import { requireSuperAdmin } from "@/lib/data/admin-auth";
 import { formatFechaHoraVE } from "@/lib/fechas";
-import { formatCedula, formatTelefono } from "@/lib/ve";
+import { documentoOGuion, telefonoOGuion } from "@/lib/mostrar";
 import { MODALIDAD_PAGO } from "@/lib/estados";
 import { formatCiudad } from "@/lib/ciudades";
 import { PIN_MAX_INTENTOS } from "@/lib/artefactos.generated";
@@ -26,12 +26,6 @@ interface PageProps {
 
 const ENLACE = "font-medium text-info-text underline-offset-4 hover:underline focus-visible:underline";
 const ESTADOS_CERRADOS = ["ENTREGADA", "CANCELADA", "DEVUELTA"];
-
-function legible(valor: string | null | undefined, formato: (v: string) => string) {
-  if (!valor || valor.toUpperCase().startsWith("PENDIENTE")) return "—";
-  const f = formato(valor);
-  return f === "—" ? valor : f;
-}
 
 function ciudad(nombre: string, estado: string) {
   const c = formatCiudad(nombre) || nombre;
@@ -70,9 +64,9 @@ function Persona({
               nombre || <Vacio />
             )}
           </Dato>
-          <Dato etiqueta="Cédula">{legible(cedula, formatCedula)}</Dato>
+          <Dato etiqueta="Cédula">{documentoOGuion(cedula)}</Dato>
           <Dato etiqueta="Teléfono">
-            <span className="tabular-nums">{legible(telefono, formatTelefono)}</span>
+            <span className="tabular-nums">{telefonoOGuion(telefono)}</span>
           </Dato>
         </dl>
       </CardContent>

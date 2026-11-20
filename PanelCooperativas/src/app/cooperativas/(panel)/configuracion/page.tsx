@@ -16,7 +16,7 @@ export default async function ConfiguracionPage() {
 
   const supabase = await createClient();
 
-  const [cooperativaResult, metodosResult, sucursalesResult] = await Promise.all([
+  const [cooperativaResult, metodosResult, sucursalesResult, perfilResult] = await Promise.all([
     // RIF y comisión: por la RPC (no son legibles en la tabla).
     leerCooperativasPrivadas(supabase, (cooperativas) =>
       cooperativas.select("id, nombre, rif, logo_url, comision_porcentaje, estado").eq("id", user.cooperativa_id).single()
@@ -31,11 +31,13 @@ export default async function ConfiguracionPage() {
       .select("*")
       .eq("cooperativa_id", user.cooperativa_id)
       .order("nombre", { ascending: true }),
+    supabase.from("profiles").select("sucursal_id").eq("id", user.id).maybeSingle(),
   ]);
 
   const cooperativa = cooperativaResult.data as (CooperativaData & { estado?: string | null }) | null;
   const metodos = (metodosResult.data ?? []) as MetodoPagoCooperativa[];
   const sucursales = (sucursalesResult.data ?? []) as SucursalGuardada[];
+  const miSucursalId = (perfilResult.data?.sucursal_id as string | null | undefined) ?? null;
 
   if (cooperativaResult.error) console.error("[ConfiguracionPage] cooperativa:", cooperativaResult.error);
   if (metodosResult.error) console.error("[ConfiguracionPage] métodos de pago:", metodosResult.error);
@@ -60,6 +62,7 @@ export default async function ConfiguracionPage() {
           sucursales: (
             <SucursalesTab
               sucursales={sucursales}
+              miSucursalId={miSucursalId}
               errorCarga={sucursalesResult.error ? humanizeError(sucursalesResult.error, "cargar las sucursales") : null}
             />
           ),

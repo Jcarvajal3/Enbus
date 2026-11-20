@@ -1,7 +1,8 @@
 /**
  * TelefonoField — teléfono venezolano con máscara en vivo (APP-43, #57).
  *
- * Teclado de teléfono; mientras se escribe muestra "0414-123.45.67". Acepta
+ * Teclado de teléfono; mientras se escribe muestra "0414-123.45.67" (`editarTelefono`
+ * de `shared`, igual que el panel). Acepta
  * "+58 414 1234567" o "414…" (pegado o escrito) y lo pasa a la forma local.
  * Emite "0414-1234567" (la forma en que se guarda) cuando el número es válido;
  * mientras no, lo que se ve ("0414-123"). Validar con `telefonoValido` /
@@ -11,7 +12,12 @@ import React, { type Ref } from 'react';
 import type { ReturnKeyTypeOptions, TextInput, TextInputProps, ViewStyle } from 'react-native';
 import { Phone } from 'phosphor-react-native';
 import { Field, type FieldTone } from '@/src/components/ui';
-import { mascaraTelefono, telefonoParaGuardar } from '@/src/utils/ve.generated';
+import {
+  editarTelefono,
+  mostrarTelefono,
+  telefonoParaGuardar,
+  TELEFONO_PLACEHOLDER,
+} from '@/src/utils/ve.generated';
 
 export interface TelefonoFieldProps {
   label?: string;
@@ -33,11 +39,6 @@ export interface TelefonoFieldProps {
   containerStyle?: ViewStyle;
 }
 
-const digitos = (v: string) => v.replace(/\D/g, '');
-
-/** "+", "+5", "+58": el prefijo internacional a medio escribir se deja tal cual. */
-const prefijoEnCurso = (v: string) => /^\s*\+\s*5?8?\s*$/.test(v);
-
 export function TelefonoField({
   label = 'Teléfono',
   value,
@@ -53,22 +54,12 @@ export function TelefonoField({
   autoComplete = 'tel',
   containerStyle,
 }: TelefonoFieldProps) {
-  // Los marcadores 'PENDIENTE-…' del alta con Google no son un teléfono.
-  const crudo = /^\s*pendiente/i.test(value ?? '') ? '' : value ?? '';
-  const visible = prefijoEnCurso(crudo) ? crudo.trim() : mascaraTelefono(crudo);
+  // Los marcadores 'PENDIENTE-…' del alta con Google no son un teléfono: `mostrarTelefono`
+  // los deja vacíos. La edición (máscara, prefijo +58, borrar separadores) es de `shared`.
+  const visible = mostrarTelefono(value);
 
   const cambiar = (texto: string) => {
-    if (prefijoEnCurso(texto)) {
-      onChangeText(texto.trim());
-      return;
-    }
-    let entrada = texto;
-    // Al borrar un separador ("0414-" → "0414") la máscara lo volvería a poner:
-    // se borra también el último dígito.
-    if (texto.length < visible.length && digitos(texto) === digitos(visible)) {
-      entrada = digitos(texto).slice(0, -1);
-    }
-    const mascara = mascaraTelefono(entrada);
+    const mascara = editarTelefono(visible, texto);
     onChangeText(telefonoParaGuardar(mascara) ?? mascara);
   };
 
@@ -79,7 +70,7 @@ export function TelefonoField({
       icon={Phone}
       value={visible}
       onChangeText={cambiar}
-      placeholder="Ej. 0414-1234567"
+      placeholder={TELEFONO_PLACEHOLDER}
       keyboardType="phone-pad"
       inputMode="tel"
       textContentType="telephoneNumber"

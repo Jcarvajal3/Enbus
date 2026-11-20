@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/sidebar";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { olvidarPushDeEsteEquipo } from "@/components/push/push-navegador";
+import { limpiarBorradoresLocales } from "@/lib/borradores";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -156,6 +157,7 @@ export function MenuUsuario({
       avisarError(humanizeError(error, "cerrar la sesión"));
       return;
     }
+    limpiarBorradoresLocales();
     router.replace(login);
     router.refresh();
   };

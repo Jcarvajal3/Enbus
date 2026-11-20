@@ -10,13 +10,13 @@ import { useRouter } from "next/navigation";
 import { PencilSimple, Warning } from "@phosphor-icons/react";
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
-import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { FechaField, MontoField } from "@/components/campos";
 import { AvisoError } from "@/components/aviso-error";
 import { cn } from "@/lib/utils";
-import { fechaTasaCorta, formatNumeroVE } from "@/lib/dinero";
+import { DECIMALES_TASA, fechaTasaCorta, formatNumeroVE, leerMonto } from "@/lib/dinero";
 import { fechaVE, formatFechaVE, formatHoraVE, sumarDiasVE } from "@/lib/fechas";
 import { avisarExito } from "@/lib/avisos";
 import { esTasaDesactualizada, type TasaBCV } from "@/lib/types/pagos";
@@ -30,16 +30,6 @@ interface TasaBCVCardProps {
 }
 
 type Campo = "fecha" | "tasa" | "motivo";
-
-/** "100,81" | "100.81" | "1.234,56" -> número (NaN si no es válido). */
-function leerTasa(texto: string): number {
-  const limpio = texto.trim().replace(/\s/g, "");
-  if (!limpio) return NaN;
-  // El último separador es el decimal: "1.234,56" y "1,234.56" -> 1234.56.
-  const normalizado =
-    limpio.lastIndexOf(",") > limpio.lastIndexOf(".") ? limpio.replace(/\./g, "").replace(",", ".") : limpio.replace(/,/g, "");
-  return /^\d+(\.\d+)?$/.test(normalizado) ? Number(normalizado) : NaN;
-}
 
 function textoActualizacion(tasa: TasaBCV, hoy: string): string | null {
   if (!tasa.actualizadaAt) return null;
@@ -60,7 +50,7 @@ export function TasaBCVCard({ tasa, hoy, className }: TasaBCVCardProps) {
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<{ campo?: Campo; mensaje: string } | null>(null);
 
-  const tasaNueva = leerTasa(tasaTexto);
+  const tasaNueva = leerMonto(tasaTexto, { decimales: DECIMALES_TASA }) ?? NaN;
   const diferencia =
     tasa && Number.isFinite(tasaNueva) && tasaNueva > 0 ? Math.abs(tasaNueva - tasa.tasa) / tasa.tasa : null;
 
@@ -160,43 +150,33 @@ export function TasaBCVCard({ tasa, hoy, className }: TasaBCVCardProps) {
 
             <FieldGroup className="gap-5">
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <Field data-invalid={errorDe("fecha") ? true : undefined}>
-                  <FieldLabel htmlFor="tasa-fecha">Fecha de vigencia</FieldLabel>
-                  <Input
-                    id="tasa-fecha"
-                    type="date"
-                    value={fecha}
-                    max={sumarDiasVE(hoy, 1)}
-                    onChange={(e) => setFecha(e.target.value)}
-                    aria-invalid={errorDe("fecha") ? true : undefined}
-                    aria-describedby={errorDe("fecha") ? "tasa-fecha-error" : undefined}
-                    disabled={guardando}
-                    className="tabular-nums"
-                  />
-                  {errorDe("fecha") && <FieldError id="tasa-fecha-error">{errorDe("fecha")}</FieldError>}
-                </Field>
-                <Field data-invalid={errorDe("tasa") ? true : undefined}>
-                  <FieldLabel htmlFor="tasa-valor">Bs por 1 USD</FieldLabel>
-                  <Input
-                    id="tasa-valor"
-                    inputMode="decimal"
-                    autoComplete="off"
-                    placeholder="Ej.: 100,81"
-                    value={tasaTexto}
-                    onChange={(e) => setTasaTexto(e.target.value)}
-                    aria-invalid={errorDe("tasa") ? true : undefined}
-                    aria-describedby="tasa-valor-ayuda"
-                    disabled={guardando}
-                    className="tabular-nums"
-                  />
-                  {errorDe("tasa") ? (
-                    <FieldError id="tasa-valor-ayuda">{errorDe("tasa")}</FieldError>
-                  ) : diferencia !== null && diferencia > 0.1 ? (
-                    <FieldDescription id="tasa-valor-ayuda" className="text-warning-text">
-                      {formatNumeroVE(diferencia * 100, 0)} % distinta de la vigente. Revisa que sea Bs por 1 dólar.
-                    </FieldDescription>
-                  ) : null}
-                </Field>
+                <FechaField
+                  id="tasa-fecha"
+                  label="Fecha de vigencia"
+                  value={fecha}
+                  max={sumarDiasVE(hoy, 1)}
+                  onChange={setFecha}
+                  error={errorDe("fecha")}
+                  disabled={guardando}
+                />
+                <MontoField
+                  id="tasa-valor"
+                  label="Bs por 1 USD"
+                  moneda="Bs"
+                  decimales={DECIMALES_TASA}
+                  value={tasaTexto}
+                  onChange={setTasaTexto}
+                  error={errorDe("tasa")}
+                  ayuda={
+                    diferencia !== null && diferencia > 0.1 ? (
+                      <span className="text-warning-text">
+                        {formatNumeroVE(diferencia * 100, 0)} % distinta de la vigente. Revisa que sea Bs por 1 dólar.
+                      </span>
+                    ) : undefined
+                  }
+                  disabled={guardando}
+                  enterKeyHint="next"
+                />
               </div>
 
               <Field data-invalid={errorDe("motivo") ? true : undefined}>
@@ -204,7 +184,8 @@ export function TasaBCVCard({ tasa, hoy, className }: TasaBCVCardProps) {
                 <Textarea
                   id="tasa-motivo"
                   rows={2}
-                  placeholder="Ej.: La tarea automática no actualizó la tasa de hoy."
+                  maxLength={500}
+                  placeholder="Ej. La tarea automática no actualizó la tasa de hoy."
                   value={motivo}
                   onChange={(e) => setMotivo(e.target.value)}
                   aria-invalid={errorDe("motivo") ? true : undefined}

@@ -47,7 +47,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
+import { Campo } from "@/components/campos";
 import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
@@ -531,7 +531,6 @@ function FormularioDevolucion({
 }) {
   const uid = useId();
   const tasa = useTasaBCV();
-  const referenciaRef = useRef<HTMLInputElement>(null);
   const enviandoRef = useRef(false);
   const metodoInicial: MetodoReembolso =
     g.pagoMetodo && (METODOS_DEVOLUCION as string[]).includes(g.pagoMetodo)
@@ -559,7 +558,7 @@ function FormularioDevolucion({
     setErrorReferencia(null);
     if (metodo !== "EFECTIVO" && referencia.replace(/[^A-Za-z0-9]/g, "").length < 4) {
       setErrorReferencia("Escribe la referencia de la devolución (mínimo 4 caracteres).");
-      referenciaRef.current?.focus();
+      document.getElementById(`${uid}-referencia`)?.focus();
       return;
     }
     enviandoRef.current = true;
@@ -576,7 +575,7 @@ function FormularioDevolucion({
       if (!res.success) {
         if (res.campo === "referencia") {
           setErrorReferencia(res.error);
-          referenciaRef.current?.focus();
+          document.getElementById(`${uid}-referencia`)?.focus();
         } else {
           setError(res.error);
         }
@@ -670,33 +669,22 @@ function FormularioDevolucion({
           </GrupoOpciones>
         </div>
 
-        <div className="grid content-start gap-2">
-          <Label htmlFor={`${uid}-referencia`}>
-            Referencia de la devolución{metodo === "EFECTIVO" ? " (opcional)" : ""}
-          </Label>
-          <Input
-            id={`${uid}-referencia`}
-            ref={referenciaRef}
-            value={referencia}
-            autoComplete="off"
-            enterKeyHint="next"
-            inputMode={metodo === "ZELLE" ? "text" : "numeric"}
-            placeholder={metodo === "EFECTIVO" ? "Ej.: recibo 0012" : "Ej.: 98765432"}
-            disabled={enviando}
-            maxLength={60}
-            aria-invalid={errorReferencia ? true : undefined}
-            aria-describedby={errorReferencia ? `${uid}-referencia-error` : undefined}
-            onChange={(e) => {
-              setReferencia(e.target.value);
-              if (errorReferencia) setErrorReferencia(null);
-            }}
-          />
-          {errorReferencia && (
-            <p id={`${uid}-referencia-error`} className="text-[13px] text-destructive-text">
-              {errorReferencia}
-            </p>
-          )}
-        </div>
+        <Campo
+          id={`${uid}-referencia`}
+          label="Referencia de la devolución"
+          opcional={metodo === "EFECTIVO"}
+          value={referencia}
+          enterKeyHint="next"
+          inputMode={metodo === "ZELLE" ? "text" : "numeric"}
+          placeholder={metodo === "EFECTIVO" ? "Ej. recibo 0012" : "Ej. 98765432"}
+          disabled={enviando}
+          maxLength={60}
+          error={errorReferencia}
+          onChange={(v) => {
+            setReferencia(v);
+            if (errorReferencia) setErrorReferencia(null);
+          }}
+        />
 
         <div className="grid content-start gap-2">
           <Label htmlFor={`${uid}-nota`}>Nota (opcional)</Label>
@@ -706,7 +694,7 @@ function FormularioDevolucion({
             rows={2}
             maxLength={500}
             disabled={enviando}
-            placeholder="Ej.: Se devolvió a la cuenta del titular del pago."
+            placeholder="Ej. Se devolvió a la cuenta del titular del pago."
             onChange={(e) => setNota(e.target.value)}
           />
         </div>

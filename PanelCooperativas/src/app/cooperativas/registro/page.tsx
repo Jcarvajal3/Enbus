@@ -2,9 +2,9 @@
 
 import { useActionState, useEffect, useRef, useState, type FormEvent } from "react";
 import { registrarCooperativa, verificarCorreoRegistro, type ActionState, type CampoRegistro } from "./actions";
-import { normalizeRif, RIF_AYUDA, RIF_AYUDA_CORTA, RIF_PLACEHOLDER } from "@/lib/rif";
+import { normalizeRif, RIF_AYUDA } from "@/lib/rif";
 import { CLAVE_AYUDA, CLAVE_ERROR, CLAVE_MINIMO, telefonoValido, TELEFONO_ERROR } from "@/lib/ve";
-import { TelefonoField } from "@/components/ve-fields";
+import { RifField, TelefonoField } from "@/components/campos";
 import { AuthLayout } from "@/components/auth-layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -185,7 +185,8 @@ export default function RegistroCooperativaPage() {
                 id="nombre"
                 ref={(el) => { refs.current.nombre = el; }}
                 type="text"
-                placeholder="Ej.: Expresos Los Andes"
+                placeholder="Ej. Expresos Los Andes"
+                maxLength={120}
                 autoComplete="organization"
                 aria-invalid={errores.nombre ? true : undefined}
                 aria-describedby={ayuda("nombre")}
@@ -282,28 +283,17 @@ export default function RegistroCooperativaPage() {
           <input type="hidden" name="confirmPassword" value={confirmPassword} />
 
           <FieldGroup>
-            <Field data-invalid={errores.rif ? true : undefined}>
-              <FieldLabel htmlFor="rif">RIF de la cooperativa</FieldLabel>
-              <Input
-                id="rif"
-                ref={(el) => { refs.current.rif = el; }}
-                name="rif"
-                type="text"
-                placeholder={RIF_PLACEHOLDER}
-                autoCapitalize="characters"
-                aria-invalid={errores.rif ? true : undefined}
-                aria-describedby={errores.rif ? "rif-error" : "rif-ayuda"}
-                value={rif}
-                onChange={(e) => { setRif(e.target.value); limpiar("rif"); }}
-                onBlur={() => setRif((actual) => normalizeRif(actual) ?? actual)}
-                disabled={isPending}
-              />
-              {errores.rif ? (
-                <FieldError id="rif-error">{errores.rif}</FieldError>
-              ) : (
-                <FieldDescription id="rif-ayuda">{RIF_AYUDA_CORTA}</FieldDescription>
-              )}
-            </Field>
+            <RifField
+              id="rif"
+              name="rif"
+              label="RIF de la cooperativa"
+              value={rif}
+              onChange={(v) => { setRif(v); limpiar("rif"); }}
+              error={errores.rif}
+              required
+              enterKeyHint="next"
+              disabled={isPending}
+            />
 
             <TelefonoField
               id="telefono"
@@ -323,7 +313,9 @@ export default function RegistroCooperativaPage() {
                 ref={(el) => { refs.current.representante = el; }}
                 name="representante"
                 type="text"
-                placeholder="Ej.: Carlos Mendoza"
+                placeholder="Ej. Carlos Mendoza"
+                autoCapitalize="words"
+                maxLength={120}
                 autoComplete="name"
                 aria-invalid={errores.representante ? true : undefined}
                 aria-describedby={ayuda("representante")}
@@ -342,7 +334,7 @@ export default function RegistroCooperativaPage() {
                 name="mensaje"
                 rows={3}
                 maxLength={1000}
-                placeholder="Ej.: Caracas – Valencia"
+                placeholder="Ej. Caracas – Valencia"
                 value={mensaje}
                 onChange={(e) => setMensaje(e.target.value)}
                 disabled={isPending}

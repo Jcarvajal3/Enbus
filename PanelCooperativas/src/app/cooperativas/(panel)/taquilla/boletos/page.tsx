@@ -3,24 +3,26 @@
 // ─── Taquilla de boletos ────────────────────────────────────────────────────
 // Venta y lista de boletos (el embarque vive en su propia sección, Embarque).
 // La pestaña de estado (`?estado=`), el día (`?fecha=`), la página y el viaje
-// abierto en su hoja (`?viaje=`) viven en la URL.
+// abierto en su hoja (`?boleto=`) viven en la URL.
 
 import { Suspense, useEffect, useState, useCallback, useMemo, useRef } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { useUser } from "@/hooks/use-user";
 import { useCambiarParams, useParamUrl } from "@/hooks/use-param-url";
 import { createClient } from "@/lib/supabase/client";
 import { Plus } from "@phosphor-icons/react";
 import type { Boleto, EstadoBoleto } from "@/lib/types/boletos";
 import { getEstadoUiBoleto, type EstadoUiBoleto, type PagoResumen } from "@/lib/types/pagos";
-import { VentaFlow, CobrarReservaDialog } from "@/components/boletos/venta-flow";
-import { ViajeSheet } from "@/components/viajes/viaje-sheet";
+import { rutaCobrar, rutaVender } from "@/components/boletos/venta/tipos";
+import { BoletoSheet } from "@/components/boletos/boleto-sheet";
 import { VerificarPagoDialog } from "@/components/pagos/verificar-pago-dialog";
 import { Monto } from "@/components/monto";
 import { CeldaEnlace } from "@/components/celda-enlace";
@@ -32,6 +34,7 @@ import { IconTile, type IconTileTone } from "@/components/icon-tile";
 import { TablaSkeleton } from "@/components/tabla-skeleton";
 import { BarraFiltros, TabsUrl } from "@/components/barra-filtros";
 import { PaginacionTabla, usePaginacion } from "@/components/paginacion-tabla";
+import { avisarError } from "@/lib/avisos";
 import { humanizeError } from "@/lib/errores";
 import { etiquetaEstado } from "@/lib/estados";
 import { formatDiaVE, formatFechaHoraCortaVE, formatHoraVE, rangoDiaVE } from "@/lib/fechas";
@@ -39,7 +42,6 @@ import { ICONO_SECCION } from "@/lib/navigation";
 import { formatCiudad } from "@/lib/ciudades";
 import { formatCedula } from "@/lib/ve";
 import { formatCodigoBoleto } from "@/lib/artefactos.generated";
-import { cn } from "@/lib/utils";
 
 const LIMITE = 100;
 const COLUMNAS = 7;
@@ -130,14 +132,12 @@ function TaquillaBoletos() {
   const filtroEstado = PESTANAS_ESTADO.some((p) => p.valor === estadoUrl) ? estadoUrl : "todos";
   const [fechaUrl] = useParamUrl("fecha");
   const filtroFecha = FECHA_RE.test(fechaUrl) ? fechaUrl : "";
-  const [viajeAbierto] = useParamUrl("viaje");
+  const [boletoAbierto] = useParamUrl("boleto");
   const cambiarParams = useCambiarParams();
-  const abrirViaje = (id: string | null) => cambiarParams({ viaje: id }, { conservarPagina: true });
+  const abrirBoleto = (id: string | null) => cambiarParams({ boleto: id }, { conservarPagina: true });
 
-  const [showVentaFlow, setShowVentaFlow] = useState(false);
-  const [ventaViajeInicial, setVentaViajeInicial] = useState<string | null>(null);
+  const router = useRouter();
   const [pagoAVerificar, setPagoAVerificar] = useState<string | null>(null);
-  const [reservaACobrar, setReservaACobrar] = useState<string | null>(null);
 
   // Última carga: una respuesta vieja (otro filtro) no pisa la de una carga posterior.
   const cargaRef = useRef(0);
@@ -150,7 +150,7 @@ function TaquillaBoletos() {
         .from("boletos")
         .select(`
           id, codigo_boleto, asiento, precio, estado, created_at, compra_id, reserva_expira_at,
-          pasajero_nombre, pasajero_cedula,
+          pasajero_nombre, pasajero_cedula, pasajero_telefono, embarcado_at,
           comprador:profiles!comprador_id(nombre_completo),
           viaje:viajes!viaje_id(
             id,
@@ -212,9 +212,14 @@ function TaquillaBoletos() {
   }, [fetchBoletos]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
-  const abrirVenta = (viajeId: string | null = null) => {
-    setVentaViajeInicial(viajeId);
-    setShowVentaFlow(true);
+  /** Cobrar una reserva de la app: página propia, por la compra del boleto. */
+  const cobrarBoleto = (boletoId: string) => {
+    const compraId = boletos.find((b) => b.id === boletoId)?.compra_id;
+    if (!compraId) {
+      avisarError("No pudimos abrir el cobro de esta reserva. Actualiza la lista e inténtalo de nuevo.");
+      return;
+    }
+    router.push(rutaCobrar(compraId));
   };
 
   const { visibles, pagina, paginas, ir } = usePaginacion(boletos);
@@ -225,10 +230,10 @@ function TaquillaBoletos() {
       <PageHeader
         title="Taquilla de boletos"
         principal={
-          <Button size="lg" onClick={() => abrirVenta()}>
+          <Link href={rutaVender()} className={buttonVariants({ size: "lg", className: "max-md:w-full" })}>
             <ICONO_SECCION.taquillaBoletos aria-hidden />
             Vender boletos
-          </Button>
+          </Link>
         }
         // El embarque se mudó a su propia sección: enlace discreto para quien lo buscaba aquí.
         secundarias={[{ etiqueta: "Ir a Embarque", icono: ICONO_SECCION.embarque, href: "/cooperativas/embarque" }]}
@@ -258,10 +263,10 @@ function TaquillaBoletos() {
                       title={hayFiltros ? "No hay boletos con estos filtros" : "Todavía no hay boletos"}
                       action={
                         hayFiltros ? undefined : (
-                          <Button variant="outline" onClick={() => abrirVenta()}>
+                          <Link href={rutaVender()} className={buttonVariants({ variant: "outline" })}>
                             <Plus aria-hidden />
                             Vender boletos
-                          </Button>
+                          </Link>
                         )
                       }
                     />
@@ -283,18 +288,14 @@ function TaquillaBoletos() {
                         {items.map((boleto) => {
                           const d = datosFila(boleto);
                           return (
-                            <TableRow key={boleto.id} className={cn(d.viajeId && "relative")}>
-                              {d.viajeId ? (
-                                <CeldaEnlace
-                                  onAbrir={() => abrirViaje(d.viajeId)}
-                                  etiqueta={`Ver el viaje del boleto ${d.codigo}`}
-                                  className="font-mono text-[13px]"
-                                >
-                                  {d.codigo}
-                                </CeldaEnlace>
-                              ) : (
-                                <TableCell className="font-mono text-[13px] text-foreground">{d.codigo}</TableCell>
-                              )}
+                            <TableRow key={boleto.id} className="relative">
+                              <CeldaEnlace
+                                onAbrir={() => abrirBoleto(boleto.id)}
+                                etiqueta={`Ver el boleto ${d.codigo}`}
+                                className="font-mono text-[13px]"
+                              >
+                                {d.codigo}
+                              </CeldaEnlace>
                               <TableCell>
                                 <div className="flex flex-col">
                                   <span className="font-medium">{d.rutaString}</span>
@@ -336,9 +337,12 @@ function TaquillaBoletos() {
                                   </Button>
                                 )}
                                 {(d.ui === "RESERVA_SIN_PAGAR" || d.ui === "PAGO_RECHAZADO") && (
-                                  <Button size="sm" variant="outline" className="relative z-10" onClick={() => setReservaACobrar(boleto.id)}>
+                                  <Link
+                                    href={rutaCobrar(boleto.compra_id ?? "")}
+                                    className={buttonVariants({ size: "sm", variant: "outline", className: "relative z-10" })}
+                                  >
                                     Cobrar
-                                  </Button>
+                                  </Link>
                                 )}
                               </TableCell>
                             </TableRow>
@@ -353,8 +357,8 @@ function TaquillaBoletos() {
                     const porCobrar = d.ui === "RESERVA_SIN_PAGAR" || d.ui === "PAGO_RECHAZADO";
                     return (
                       <EntityCard
-                          onClick={d.viajeId ? () => abrirViaje(d.viajeId) : undefined}
-                          chevron={Boolean(d.viajeId)}
+                          onClick={() => abrirBoleto(boleto.id)}
+                          chevron
                           leading={<IconTile icon={ICONO_SECCION.taquillaBoletos} tone={TONO_ESTADO_UI[d.ui] ?? "sky"} />}
                           title={d.rutaString}
                           subtitle={[d.nombrePasajero, d.salida ? formatFechaHoraCortaVE(d.salida) : null].filter(Boolean).join(" · ")}
@@ -373,9 +377,9 @@ function TaquillaBoletos() {
                                 Verificar pago
                               </Button>
                             ) : porCobrar ? (
-                              <Button variant="outline" onClick={() => setReservaACobrar(boleto.id)}>
+                              <Link href={rutaCobrar(boleto.compra_id ?? "")} className={buttonVariants({ variant: "outline" })}>
                                 Cobrar
-                              </Button>
+                              </Link>
                             ) : undefined
                           }
                         />
@@ -394,23 +398,6 @@ function TaquillaBoletos() {
         )}
       </div>
 
-      <VentaFlow
-        isOpen={showVentaFlow}
-        viajeIdInicial={ventaViajeInicial}
-        onClose={() => {
-          setShowVentaFlow(false);
-          setVentaViajeInicial(null);
-          void fetchBoletos();
-        }}
-      />
-
-      <CobrarReservaDialog
-        boletoId={reservaACobrar}
-        open={!!reservaACobrar}
-        onOpenChange={(abierto) => !abierto && setReservaACobrar(null)}
-        onCobrado={() => void fetchBoletos()}
-      />
-
       {pagoAVerificar && (
         <VerificarPagoDialog
           pagoId={pagoAVerificar}
@@ -420,10 +407,11 @@ function TaquillaBoletos() {
         />
       )}
 
-      <ViajeSheet
-        viajeId={viajeAbierto || null}
-        onOpenChange={(abierto) => !abierto && abrirViaje(null)}
-        onCambio={() => void fetchBoletos()}
+      <BoletoSheet
+        boleto={boletos.find((b) => b.id === boletoAbierto) ?? null}
+        onOpenChange={(abierto) => !abierto && abrirBoleto(null)}
+        onVerificarPago={setPagoAVerificar}
+        onCobrar={cobrarBoleto}
       />
     </div>
   );

@@ -16,6 +16,17 @@ export type LetraCedula = (typeof LETRAS_CEDULA)[number];
 
 const LETRA_CEDULA_RE = /^[VEJGPC]$/;
 
+// Letras que ofrece cada campo de cédula según quién es la persona. Una cédula guardada con
+// otra letra no se pierde: el campo la añade como una opción más.
+/** Perfil, empleados, chofer. */
+export const LETRAS_PERSONA: readonly LetraCedula[] = ["V", "E"];
+/** Pasajero de un boleto. */
+export const LETRAS_PASAJERO: readonly LetraCedula[] = ["V", "E", "P"];
+/** Remitente, destinatario o quien retira una encomienda (puede ser una empresa). */
+export const LETRAS_ENCOMIENDA: readonly LetraCedula[] = ["V", "E", "J", "P"];
+/** Titular de una cuenta de pago. */
+export const LETRAS_TITULAR: readonly LetraCedula[] = ["V", "E", "J", "G", "P"];
+
 /** "v-12.345.678" → "V12345678"; "12345678" → "V12345678"; inválida o 'PENDIENTE…' → null. */
 export function normalizarCedula(v: string | null | undefined): string | null {
   const limpio = (v ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
@@ -69,7 +80,48 @@ export function separarCedula(v: string | null | undefined): { letra: LetraCedul
   return { letra, numero: limpio.replace(/[^0-9]/g, "").slice(0, 10) };
 }
 
-export const CEDULA_PLACEHOLDER = "V-12345678";
+/** Máximo de dígitos del número de una cédula (o RIF sin letra ni verificador). */
+export const CEDULA_MAX_DIGITOS = 10;
+
+/** "12345678" → "12.345.678" (solo dígitos, máx. 10; lo demás se descarta). */
+export function mascaraCedulaNumero(digitos: string | null | undefined): string {
+  const d = (digitos ?? "").replace(/[^0-9]/g, "").slice(0, CEDULA_MAX_DIGITOS);
+  return d.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+}
+
+/**
+ * Si `nuevo` es `anterior` sin un único separador (no dígito), devuelve los dígitos de
+ * `anterior` sin el dígito que precedía a ese separador; si no, null. Uso interno de los
+ * campos con máscara: sin esto, borrar un punto o un guion no hace nada (la máscara lo
+ * vuelve a poner).
+ */
+function digitosTrasBorrarSeparador(anterior: string, nuevo: string): string | null {
+  if (nuevo.length !== anterior.length - 1) return null;
+  let p = 0;
+  while (p < nuevo.length && nuevo.charAt(p) === anterior.charAt(p)) p++;
+  if (anterior.slice(0, p) + anterior.slice(p + 1) !== nuevo) return null;
+  if (/[0-9]/.test(anterior.charAt(p))) return null;
+  const antes = anterior.slice(0, p).replace(/[^0-9]/g, "");
+  const despues = anterior.slice(p + 1).replace(/[^0-9]/g, "");
+  return antes.slice(0, -1) + despues;
+}
+
+/**
+ * Edición del número de una cédula en un campo de texto. `anterior` es lo que mostraba el
+ * campo ("12.345.678") y `nuevo` lo que dejó el teclado; devuelve el número con puntos.
+ * Si se borró solo un punto, se borra también el dígito anterior (si no, la máscara lo
+ * volvería a poner y el punto no se podría borrar). La letra de un "v-12.345.678" pegado la
+ * separa `separarCedula`; aquí solo cuentan los dígitos.
+ */
+export function editarCedulaNumero(anterior: string | null | undefined, nuevo: string | null | undefined): string {
+  const digitos = digitosTrasBorrarSeparador(anterior ?? "", nuevo ?? "");
+  return mascaraCedulaNumero(digitos ?? nuevo);
+}
+
+/** Placeholder del número en un campo con chips de letra (la letra va aparte). */
+export const CEDULA_PLACEHOLDER = "Ej. 12.345.678";
+/** Cédula completa como se guarda, para textos de ayuda: "V-12345678". */
+export const CEDULA_EJEMPLO = "V-12345678";
 export const CEDULA_ERROR = "Escribe la cédula con su letra, por ejemplo V-12345678.";
 
 // ─── Teléfono ────────────────────────────────────────────────────────────────
@@ -128,8 +180,58 @@ export function mascaraTelefono(entrada: string): string {
   return salida;
 }
 
-export const TELEFONO_PLACEHOLDER = "0414-1234567";
-export const TELEFONO_ERROR = "Escribe un teléfono venezolano, por ejemplo 0414-1234567.";
+/** "+", "+5", "+58": prefijo internacional a medio escribir. */
+const PREFIJO_INTL_RE = /^\s*\+\s*(5\s*8?)?\s*$/;
+/** "5", "58" sin "+": ningún número local empieza por 5 (son 02xx y 04xx). */
+const PREFIJO_INTL_SIN_MAS_RE = /^\s*58?\s*$/;
+
+/** Marcadores 'PENDIENTE-…' (alta con Google sin teléfono): cuentan como vacío. */
+const esPendiente = (v: string) => v.trim().toUpperCase().startsWith("PENDIENTE");
+
+/**
+ * Lo que debe mostrar un campo de teléfono para un valor: guardado ("0414-1234567"),
+ * pegado ("+58 414 1234567") o a medias. Si el valor ya viene con la máscara (lo que emitió
+ * `editarTelefono`, con o sin el separador final) se respeta tal cual; el prefijo "+58" a
+ * medio escribir también.
+ */
+export function mostrarTelefono(valor: string | null | undefined): string {
+  const v = valor ?? "";
+  if (esPendiente(v)) return "";
+  if (PREFIJO_INTL_RE.test(v)) return v.replace(/\s+/g, "");
+  const conMascara = mascaraTelefono(v);
+  return v === conMascara.replace(/[-.]$/, "") ? v : conMascara;
+}
+
+/**
+ * Edición de un campo de teléfono, función pura para la web y la app. `anterior` es lo que
+ * mostraba el campo y `nuevo` lo que dejó el teclado; devuelve el texto con máscara.
+ *
+ * - Prefijo internacional a medio escribir ("+", "+5", "+58", también "5" y "58") se deja
+ *   tal cual; al seguir escribiendo pasa a la forma local ("+58 414…" → "0414-…").
+ * - Borrar solo un separador ("0414-" → "0414") borra también el dígito anterior; si no,
+ *   la máscara lo volvería a poner.
+ * - Al borrar no se deja un separador al final ("0414-1" → "0414"), para poder seguir
+ *   borrando; al escribir, el guion aparece en cuanto hay 4 dígitos.
+ * - Nunca más de 11 dígitos. Para guardar usar `telefonoParaGuardar`.
+ */
+export function editarTelefono(anterior: string | null | undefined, nuevo: string | null | undefined): string {
+  const texto = nuevo ?? "";
+  if (esPendiente(texto)) return "";
+  if (PREFIJO_INTL_RE.test(texto) || PREFIJO_INTL_SIN_MAS_RE.test(texto)) {
+    return `+${texto.replace(/[^0-9]/g, "")}`;
+  }
+  const previo = mostrarTelefono(anterior);
+  const borrando = texto.length < previo.length;
+  const digitos = borrando ? digitosTrasBorrarSeparador(previo, texto) : null;
+  const mascara = mascaraTelefono(digitos ?? texto);
+  return borrando ? mascara.replace(/[-.]$/, "") : mascara;
+}
+
+/** Placeholder del campo de teléfono. */
+export const TELEFONO_PLACEHOLDER = "Ej. 0414-123.45.67";
+/** Teléfono de ejemplo como lo muestra la app y el panel, para textos de ayuda. */
+export const TELEFONO_EJEMPLO = "0414-123.45.67";
+export const TELEFONO_ERROR = `Escribe un teléfono venezolano, por ejemplo ${TELEFONO_EJEMPLO}.`;
 
 // ─── RIF de cooperativa ──────────────────────────────────────────────────────
 // Acepta el RIF como lo escriba la persona ("j123456789", "J-12345678-9",

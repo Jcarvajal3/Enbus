@@ -72,6 +72,7 @@ import {
   nombreValido,
   validateCedula,
   validatePhone,
+  LETRAS_PERSONA,
 } from '@/src/utils/validation';
 import { Colors, Gradients, Layout, Motion, Radius, Shadows, Sizes, Spacing } from '@/src/theme';
 
@@ -355,6 +356,19 @@ export default function PerfilScreen() {
                     autoCapitalize="words"
                     returnKeyType="next"
                     submitBehavior="submit"
+                    onSubmitEditing={() => cedulaRef.current?.focus()}
+                  />
+                  <CedulaField
+                    ref={cedulaRef}
+                    letras={LETRAS_PERSONA}
+                    value={cedulaRif}
+                    onChangeText={(v) => {
+                      setCedulaRif(v);
+                      limpiarCampo('cedula');
+                    }}
+                    editable={!saving}
+                    error={errors.cedula}
+                    returnKeyType="next"
                     onSubmitEditing={() => telefonoRef.current?.focus()}
                   />
                   <TelefonoField
@@ -366,18 +380,6 @@ export default function PerfilScreen() {
                     }}
                     editable={!saving}
                     error={errors.telefono}
-                    returnKeyType="next"
-                    onSubmitEditing={() => cedulaRef.current?.focus()}
-                  />
-                  <CedulaField
-                    ref={cedulaRef}
-                    value={cedulaRif}
-                    onChangeText={(v) => {
-                      setCedulaRif(v);
-                      limpiarCampo('cedula');
-                    }}
-                    editable={!saving}
-                    error={errors.cedula}
                     returnKeyType="done"
                     onSubmitEditing={handleSave}
                   />
@@ -389,17 +391,17 @@ export default function PerfilScreen() {
                 <>
                   <ListRow icon={EnvelopeSimple} tono="sky" etiqueta="Correo" titulo={email || '—'} divided />
                   <ListRow
-                    icon={Phone}
-                    tono="sky"
-                    etiqueta="Teléfono"
-                    titulo={perfil?.telefono ? formatTelefono(perfil.telefono) : 'Sin agregar'}
-                    divided
-                  />
-                  <ListRow
                     icon={IdentificationCard}
                     tono="sky"
                     etiqueta="Cédula"
                     titulo={perfil?.cedula_rif ? formatCedula(perfil.cedula_rif) : 'Sin agregar'}
+                    divided
+                  />
+                  <ListRow
+                    icon={Phone}
+                    tono="sky"
+                    etiqueta="Teléfono"
+                    titulo={perfil?.telefono ? formatTelefono(perfil.telefono) : 'Sin agregar'}
                     divided
                   />
                 </>

@@ -41,13 +41,13 @@ import { StatusBadge } from "@/components/status-badge";
 import { avisarError, avisarExito } from "@/lib/avisos";
 import { ErrorState } from "@/components/error-state";
 import { Monto } from "@/components/monto";
-import { CedulaField } from "@/components/ve-fields";
+import { CedulaField } from "@/components/campos";
 import { formatBs, formatUsd, usdABs } from "@/lib/dinero";
 import { PIN_VALIDACION_MINUTOS } from "@/lib/artefactos.generated";
 import { humanizeError, isNetworkError } from "@/lib/errores";
 import { fechaVE, formatHoraVE, hoyVE } from "@/lib/fechas";
 import { MODALIDAD_PAGO } from "@/lib/estados";
-import { CEDULA_ERROR, cedulaValida, formatCedula, formatTelefono, telefonoWhatsApp } from "@/lib/ve";
+import { CEDULA_ERROR, cedulaValida, formatCedula, formatTelefono, LETRAS_PASAJERO, telefonoWhatsApp } from "@/lib/ve";
 import type { Encomienda } from "@/lib/types/encomiendas";
 import { cn } from "@/lib/utils";
 
@@ -548,7 +548,7 @@ export function EntregaModal({ encomiendaId, isOpen, onClose, onSuccess }: Entre
             id={id("tercero-cedula")}
             label="Cédula de quien retira"
             value={terceroCedula}
-            letras={["V", "E", "P"]}
+            letras={LETRAS_PASAJERO}
             error={errores.terceroCedula?.trim() ? errores.terceroCedula : null}
             onChange={(v) => {
               setTerceroCedula(v);

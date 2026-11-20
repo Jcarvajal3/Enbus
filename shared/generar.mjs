@@ -127,6 +127,7 @@ const ve = copia("ve.ts");
 const artefactos = copia("artefactos.ts");
 const errores = copia("errores.ts");
 const dinero = copia("dinero.ts");
+const bancos = copia("bancos.ts");
 
 const salidas = [
   ["EnBusApp/src/tokens.generated.ts", tsApp],
@@ -134,16 +135,19 @@ const salidas = [
   ["EnBusApp/src/utils/artefactos.generated.ts", artefactos],
   ["EnBusApp/src/utils/errores.generated.ts", errores],
   ["EnBusApp/src/utils/dinero.generated.ts", dinero],
+  ["EnBusApp/src/utils/bancos.generated.ts", bancos],
   ["PanelCooperativas/src/app/tokens.generated.css", cssPanel],
   ["PanelCooperativas/src/lib/ve.generated.ts", ve],
   ["PanelCooperativas/src/lib/artefactos.generated.ts", artefactos],
   ["PanelCooperativas/src/lib/errores.generated.ts", errores],
   ["PanelCooperativas/src/lib/dinero.generated.ts", dinero],
+  ["PanelCooperativas/src/lib/bancos.generated.ts", bancos],
   ["LandingEnBus/app/tokens.generated.css", cssLanding],
   ["LandingEnBus/lib/ve.generated.ts", ve],
   ["LandingEnBus/lib/artefactos.generated.ts", artefactos],
   ["LandingEnBus/lib/errores.generated.ts", errores],
   ["LandingEnBus/lib/dinero.generated.ts", dinero],
+  ["LandingEnBus/lib/bancos.generated.ts", bancos],
 ];
 
 // ─── Escribir o comprobar ────────────────────────────────────────────────────

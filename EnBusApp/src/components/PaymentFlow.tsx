@@ -79,6 +79,8 @@ import {
   tasaRefDe,
   type MonedaPago,
 } from '@/src/utils/dinero';
+import { BANCOS_VE, OTRO_BANCO, buscarBancos, etiquetaBanco } from '@/src/utils/bancos.generated';
+import { MONTO_PLACEHOLDER, cedulaLegible, editarMonto, leerMonto } from '@/src/utils/validation';
 import type { CotizacionPago, MetodoPago, PagoDeclarado } from '@/src/types';
 import type { TasaCambiada } from '@/src/hooks/useCheckoutBoletos';
 import { Colors, Layout, Motion, Radius, Shadows, Sizes, Spacing } from '@/src/theme';
@@ -87,54 +89,11 @@ export type { CotizacionPago, PagoDeclarado } from '@/src/types';
 
 // ─── Bancos de Venezuela ─────────────────────────────────────────────────────
 
-interface BancoVE {
-  /** Código SUDEBAN (los 4 primeros dígitos de la cuenta) */
-  codigo: string;
-  nombre: string;
-  /** Otros nombres con los que la gente lo busca o lo escribe */
-  alias: string[];
-}
+// La lista, su búsqueda y la etiqueta "0134 · Banesco" son de `shared` (`bancos.generated`):
+// la misma que usa el panel.
 
-/**
- * APP-27 / M-23: lista canónica SUDEBAN, sin duplicados ni métodos que no son
- * bancos (Zelle, PayPal). Los 5 más usados primero; el resto por código.
- * BOD se fusionó con BNC y Bicentenario es hoy el Banco Digital de los
- * Trabajadores: quedan como alias para que la búsqueda los encuentre.
- */
-const BANCOS_VE: BancoVE[] = [
-  { codigo: '0102', nombre: 'Banco de Venezuela', alias: ['banco de venezuela', 'bdv'] },
-  { codigo: '0134', nombre: 'Banesco', alias: ['banesco'] },
-  { codigo: '0105', nombre: 'Mercantil', alias: ['mercantil'] },
-  { codigo: '0108', nombre: 'BBVA Provincial', alias: ['provincial', 'bbva'] },
-  { codigo: '0191', nombre: 'BNC Banco Nacional de Crédito', alias: ['bnc', 'nacional de credito', 'bod'] },
-  { codigo: '0104', nombre: 'Venezolano de Crédito', alias: ['venezolano de credito'] },
-  { codigo: '0114', nombre: 'Bancaribe', alias: ['bancaribe'] },
-  { codigo: '0115', nombre: 'Banco Exterior', alias: ['exterior'] },
-  { codigo: '0128', nombre: 'Banco Caroní', alias: ['caroni'] },
-  { codigo: '0137', nombre: 'Sofitasa', alias: ['sofitasa'] },
-  { codigo: '0138', nombre: 'Banco Plaza', alias: ['plaza'] },
-  { codigo: '0146', nombre: 'Bangente', alias: ['bangente'] },
-  { codigo: '0151', nombre: 'BFC Banco Fondo Común', alias: ['bfc', 'fondo comun'] },
-  { codigo: '0156', nombre: '100% Banco', alias: ['100% banco', '100 banco'] },
-  { codigo: '0157', nombre: 'DelSur', alias: ['delsur', 'del sur'] },
-  { codigo: '0163', nombre: 'Banco del Tesoro', alias: ['tesoro'] },
-  { codigo: '0166', nombre: 'Banco Agrícola de Venezuela', alias: ['agricola'] },
-  { codigo: '0168', nombre: 'Bancrecer', alias: ['bancrecer'] },
-  { codigo: '0169', nombre: 'R4 Banco Microfinanciero', alias: ['r4', 'mi banco'] },
-  { codigo: '0171', nombre: 'Banco Activo', alias: ['banco activo'] },
-  { codigo: '0172', nombre: 'Bancamiga', alias: ['bancamiga'] },
-  { codigo: '0173', nombre: 'Banco Internacional de Desarrollo', alias: ['internacional de desarrollo'] },
-  { codigo: '0174', nombre: 'Banplus', alias: ['banplus'] },
-  { codigo: '0175', nombre: 'Banco Digital de los Trabajadores', alias: ['bicentenario', 'trabajadores'] },
-  { codigo: '0177', nombre: 'BANFANB', alias: ['banfanb', 'fuerza armada'] },
-  { codigo: '0178', nombre: 'N58 Banco Digital', alias: ['n58'] },
-];
-
-const OTRO_BANCO = 'Otro banco';
 /** Lo que dice el selector de banco sin elegir (no es un marcador de texto: abre una lista). */
 const ELEGIR_BANCO = 'Elige tu banco';
-
-const bancoLabel = (b: BancoVE) => `${b.codigo} · ${b.nombre}`;
 
 /** Lowercase, no accents — for search and name matching. */
 const normalizar = (value: string) =>
@@ -239,25 +198,6 @@ export interface PaymentFlowProps {
 
 /** "1250,00" — what a Venezuelan banking app accepts when pasted. */
 const montoParaPegar = (value: number) => value.toFixed(2).replace('.', ',');
-
-/**
- * Lee lo que el usuario escribe como monto: "1.250,50", "1250,50", "1250.50",
- * "1.250". Devuelve null si no es un número positivo.
- */
-function leerMonto(texto: string): number | null {
-  let t = texto.replace(/[\s]|Bs\.?|USD|\$/gi, '').trim();
-  if (!t) return null;
-  if (t.includes(',') && t.includes('.')) {
-    t = t.replace(/\./g, '').replace(',', '.');
-  } else if (t.includes(',')) {
-    t = t.replace(/\./g, '').replace(',', '.');
-  } else if (/^\d{1,3}(\.\d{3})+$/.test(t)) {
-    t = t.replace(/\./g, '');
-  }
-  if (!/^\d+(\.\d{1,2})?$/.test(t)) return null;
-  const n = Number(t);
-  return Number.isFinite(n) && n > 0 ? n : null;
-}
 
 const sinSeparadores = (value: string) => value.replace(/[\s.\-_/]/g, '');
 
@@ -408,7 +348,7 @@ export function PaymentFlow({
   // "Monto que pagaste" precargado con el monto exacto, salvo que el usuario lo cambie.
   useEffect(() => {
     if (montoEditado) return;
-    setMontoTexto(esperado != null && esperado > 0 ? montoParaPegar(esperado) : '');
+    setMontoTexto(esperado != null && esperado > 0 ? editarMonto('', montoParaPegar(esperado)) : '');
   }, [esperado, montoEditado]);
 
   const fechaPago = useMemo(() => {
@@ -417,13 +357,7 @@ export function PaymentFlow({
     return diasAtras(0);
   }, [fechaOpcion, fechaOtra]);
 
-  const bancosFiltrados = useMemo(() => {
-    const q = normalizar(bancoQuery);
-    if (!q) return BANCOS_VE;
-    return BANCOS_VE.filter((b) =>
-      normalizar(`${b.codigo} ${b.nombre} ${b.alias.join(' ')}`).includes(q)
-    );
-  }, [bancoQuery]);
+  const bancosFiltrados = useMemo(() => buscarBancos(bancoQuery), [bancoQuery]);
 
   const limpiarError = (campo: CampoFormulario) =>
     setErrors((prev) => (prev[campo] ? { ...prev, [campo]: undefined } : prev));
@@ -442,7 +376,7 @@ export function PaymentFlow({
     if (leerMonto(montoTexto) === null) {
       next.monto = isZelle
         ? 'Escribe el monto que enviaste, por ejemplo 12,40.'
-        : 'Escribe el monto que pagaste, por ejemplo 1250,00.';
+        : 'Escribe el monto que pagaste, por ejemplo 1.250,00.';
     }
     if (isPagoMovil && !comprobante) next.comprobante = 'Adjunta el capture del Pago Móvil.';
 
@@ -667,7 +601,7 @@ export function PaymentFlow({
           'Pago Móvil',
           bancoCuenta ? `Banco: ${bancoCuenta}` : null,
           metodo.numero_cuenta ? `Teléfono: ${metodo.numero_cuenta}` : null,
-          metodo.cedula_rif ? `C.I./RIF: ${metodo.cedula_rif}` : null,
+          metodo.cedula_rif ? `C.I./RIF: ${cedulaLegible(metodo.cedula_rif)}` : null,
           cotizacion.totalBs != null ? `Monto: ${formatBs(cotizacion.totalBs)}` : null,
         ]
           .filter(Boolean)
@@ -714,7 +648,7 @@ export function PaymentFlow({
             <AccountRow label="Correo Zelle" value={metodo.email_zelle} fondo={fondoCopiar} />
           ) : null}
           {metodo.cedula_rif ? (
-            <AccountRow label="C.I. / RIF" value={metodo.cedula_rif} fondo={fondoCopiar} />
+            <AccountRow label="C.I. / RIF" value={cedulaLegible(metodo.cedula_rif)} fondo={fondoCopiar} />
           ) : null}
           {filaMonto ? (
             <AccountRow
@@ -805,7 +739,7 @@ export function PaymentFlow({
 
         <Field
           label={`Monto que pagaste (${isZelle ? 'USD' : 'Bs'})`}
-          placeholder={isZelle ? 'Ej. 12,40' : 'Ej. 1250,00'}
+          placeholder={isZelle ? 'Ej. 12,40' : MONTO_PLACEHOLDER}
           helper="Cámbialo solo si pagaste otro monto."
           keyboardType="decimal-pad"
           autoCorrect={false}
@@ -813,7 +747,7 @@ export function PaymentFlow({
           editable={!submitting}
           value={montoTexto}
           onChangeText={(v) => {
-            setMontoTexto(v);
+            setMontoTexto((anterior) => editarMonto(anterior, v));
             setMontoEditado(true);
             limpiarError('monto');
           }}
@@ -902,7 +836,7 @@ export function PaymentFlow({
 
             {[
               ...bancosFiltrados.map((b) => ({
-                value: bancoLabel(b),
+                value: etiquetaBanco(b),
                 nombre: b.nombre,
                 codigo: b.codigo as string | null,
               })),
