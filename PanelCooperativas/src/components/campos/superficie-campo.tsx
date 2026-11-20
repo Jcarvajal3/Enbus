@@ -98,7 +98,7 @@ export function SuperficieCampo({
 
 /** Aspecto de un botón-campo (igual que `ui/input` y el trigger de `ui/select`). */
 export const CLASE_BOTON_CAMPO =
-  "flex h-12 w-full min-w-0 items-center justify-between gap-2 rounded-md border border-input-border bg-background px-4 text-left text-base outline-none transition-colors md:text-[15px] focus-visible:border-accent-strong focus-visible:ring-[3px] focus-visible:ring-accent-strong/20 aria-expanded:border-accent-strong aria-expanded:ring-[3px] aria-expanded:ring-accent-strong/20 disabled:cursor-not-allowed disabled:border-transparent disabled:bg-surface-dark disabled:text-muted-foreground aria-invalid:border-destructive aria-invalid:ring-[3px] aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0";
+  "flex h-12 w-full min-w-0 items-center justify-between gap-2 rounded-md border border-input-border bg-background px-4 text-left text-base outline-none transition-colors md:text-[15px] focus-visible:border-accent-strong dark:focus-visible:border-accent-strong focus-visible:ring-[3px] focus-visible:ring-accent-strong/20 aria-expanded:border-accent-strong dark:aria-expanded:border-accent-strong aria-expanded:ring-[3px] aria-expanded:ring-accent-strong/20 disabled:cursor-not-allowed disabled:border-transparent dark:disabled:border-transparent disabled:bg-surface-dark disabled:text-muted-foreground aria-invalid:border-destructive aria-invalid:ring-[3px] aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0";
 
 /** Variante sin valor: pozo hundido, como un input vacío. */
-export const CLASE_BOTON_CAMPO_VACIO = "border-transparent bg-surface text-muted-foreground";
+export const CLASE_BOTON_CAMPO_VACIO = "border-transparent bg-surface text-muted-foreground dark:border-border-strong/35";

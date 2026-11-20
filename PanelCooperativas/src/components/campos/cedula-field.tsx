@@ -147,12 +147,12 @@ export function CedulaField({
                 disabled={disabled}
                 onClick={() => elegir(l)}
                 className={cn(
-                  "flex h-12 min-w-12 items-center justify-center rounded-md px-3 text-[15px] font-semibold transition-colors outline-none",
+                  "flex h-12 min-w-12 items-center justify-center rounded-md border border-transparent px-3 text-[15px] font-semibold transition-colors outline-none",
                   "focus-visible:ring-[3px] focus-visible:ring-accent-strong/30",
                   "disabled:cursor-not-allowed disabled:opacity-50",
                   elegida
                     ? "bg-accent-strong text-accent-strong-foreground"
-                    : "bg-surface text-foreground hover:bg-surface-dark"
+                    : "bg-surface text-foreground hover:bg-surface-dark dark:border-border-strong/35"
                 )}
               >
                 {l}
