@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { FunnelSimple, MagnifyingGlass, X } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { FechaField } from "@/components/campos";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -295,16 +296,15 @@ function CampoFecha({
   const valor = valorControlado ?? valorUrl;
   const setValor = onCambio ?? setValorUrl;
   return (
-    <div className="flex w-full flex-col gap-2 md:w-44">
-      <Label htmlFor={id}>{etiqueta}</Label>
-      <Input
-        id={id}
-        type="date"
-        value={valor}
-        onChange={(e) => setValor(e.target.value || null)}
-        className="tabular-nums"
-      />
-    </div>
+    <FechaField
+      id={id}
+      label={etiqueta}
+      opcional
+      atajos={false}
+      value={valor}
+      onChange={(v) => setValor(v || null)}
+      className="w-full md:w-52"
+    />
   );
 }
 

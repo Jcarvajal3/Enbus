@@ -261,7 +261,7 @@ function FormularioRevision({
             rows={3}
             maxLength={1000}
             disabled={enviando}
-            placeholder="Ej.: Corregimos el RIF y agregamos el teléfono de contacto."
+            placeholder="Ej. Corregimos el RIF y agregamos el teléfono de contacto."
             onChange={(e) => setMensaje(e.target.value)}
           />
         </div>

@@ -21,7 +21,8 @@ import { FilaVacia } from "@/components/fila-vacia";
 import { useParamUrl } from "@/hooks/use-param-url";
 import { useTasaBCVAdmin } from "@/components/admin/dashboard/use-tasa-bcv-admin";
 import { CLASE_PESTANA, ConteoPestana, Dato, TarjetaTabla, Vacio } from "@/components/admin/detalle";
-import { documentoLegible, telefonoOVacio } from "@/components/admin/cooperativas/cooperativa-detail-tabs";
+import { telefonoOVacio } from "@/components/admin/cooperativas/cooperativa-detail-tabs";
+import { documentoOGuion } from "@/lib/mostrar";
 import { formatFechaHoraVE, formatFechaVE } from "@/lib/fechas";
 import { formatNumeroVE } from "@/lib/dinero";
 import { etiquetaMetodoPago, etiquetaRol } from "@/lib/estados";
@@ -154,7 +155,7 @@ function TablaEncomiendas({
                   <>
                     <span className="block">{e.receiver_nombre}</span>
                     <span className="block text-[13px] text-muted-foreground tabular-nums">
-                      {documentoLegible(e.receiver_cedula_rif)} · {telefonoOVacio(e.receiver_telefono)}
+                      {documentoOGuion(e.receiver_cedula_rif)} · {telefonoOVacio(e.receiver_telefono)}
                     </span>
                   </>
                 ) : (
@@ -244,7 +245,7 @@ export function UsuarioDetailTabs({ usuario }: UsuarioDetailTabsProps) {
                 <Dato etiqueta="Nombre y apellido">{usuario.nombre_completo}</Dato>
                 <Dato etiqueta="Correo">{usuario.email || <Vacio texto="Sin correo" />}</Dato>
                 <Dato etiqueta="Cédula">
-                  <span className="font-mono">{documentoLegible(usuario.cedula_rif)}</span>
+                  <span className="font-mono">{documentoOGuion(usuario.cedula_rif)}</span>
                 </Dato>
                 <Dato etiqueta="Teléfono">{telefonoOVacio(usuario.telefono)}</Dato>
                 <Dato etiqueta="Rol">

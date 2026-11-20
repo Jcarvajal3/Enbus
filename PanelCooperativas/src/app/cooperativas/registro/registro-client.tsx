@@ -11,10 +11,10 @@ import {
   type CampoRegistro,
 } from "./actions";
 import { createClient } from "@/lib/supabase/client";
-import { normalizeRif, RIF_AYUDA, RIF_AYUDA_CORTA, RIF_PLACEHOLDER } from "@/lib/rif";
+import { normalizeRif, RIF_AYUDA } from "@/lib/rif";
 import { CLAVE_AYUDA, CLAVE_ERROR, CLAVE_MINIMO, telefonoValido, TELEFONO_ERROR } from "@/lib/ve";
 import { MSG } from "@/lib/errores";
-import { TelefonoField } from "@/components/ve-fields";
+import { RifField, TelefonoField } from "@/components/campos";
 import { AuthLayout } from "@/components/auth-layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -518,7 +518,8 @@ export default function RegistroCooperativaClient({
                     refs.current.nombre = el;
                   }}
                   type="text"
-                  placeholder="Ej.: Expresos Los Andes"
+                  placeholder="Ej. Expresos Los Andes"
+                  maxLength={120}
                   autoComplete="organization"
                   aria-invalid={erroresOnboarding.nombre ? true : undefined}
                   aria-describedby={ayudaOnboarding("nombre")}
@@ -532,33 +533,20 @@ export default function RegistroCooperativaClient({
                 <FieldError id="nombre-error">{erroresOnboarding.nombre}</FieldError>
               </Field>
 
-              <Field data-invalid={erroresOnboarding.rif ? true : undefined}>
-                <FieldLabel htmlFor="rif">RIF de la cooperativa</FieldLabel>
-                <Input
-                  id="rif"
-                  name="rif"
-                  ref={(el) => {
-                    refs.current.rif = el;
-                  }}
-                  type="text"
-                  placeholder={RIF_PLACEHOLDER}
-                  autoCapitalize="characters"
-                  aria-invalid={erroresOnboarding.rif ? true : undefined}
-                  aria-describedby={erroresOnboarding.rif ? "rif-error" : "rif-ayuda"}
-                  value={rif}
-                  onChange={(e) => {
-                    setRif(e.target.value);
-                    limpiarOnboarding("rif");
-                  }}
-                  onBlur={() => setRif((actual) => normalizeRif(actual) ?? actual)}
-                  disabled={ocupadoPaso2}
-                />
-                {erroresOnboarding.rif ? (
-                  <FieldError id="rif-error">{erroresOnboarding.rif}</FieldError>
-                ) : (
-                  <FieldDescription id="rif-ayuda">{RIF_AYUDA_CORTA}</FieldDescription>
-                )}
-              </Field>
+              <RifField
+                id="rif"
+                name="rif"
+                label="RIF de la cooperativa"
+                value={rif}
+                onChange={(v) => {
+                  setRif(v);
+                  limpiarOnboarding("rif");
+                }}
+                error={erroresOnboarding.rif}
+                required
+                enterKeyHint="next"
+                disabled={ocupadoPaso2}
+              />
 
               <TelefonoField
                 id="telefono"
@@ -583,7 +571,9 @@ export default function RegistroCooperativaClient({
                     refs.current.representante = el;
                   }}
                   type="text"
-                  placeholder="Ej.: Carlos Mendoza"
+                  placeholder="Ej. Carlos Mendoza"
+                  autoCapitalize="words"
+                  maxLength={120}
                   autoComplete="name"
                   aria-invalid={erroresOnboarding.representante ? true : undefined}
                   aria-describedby={ayudaOnboarding("representante")}
@@ -607,7 +597,7 @@ export default function RegistroCooperativaClient({
                   }}
                   rows={3}
                   maxLength={1000}
-                  placeholder="Ej.: Caracas – Valencia"
+                  placeholder="Ej. Caracas – Valencia"
                   aria-invalid={erroresOnboarding.mensaje ? true : undefined}
                   aria-describedby={ayudaOnboarding("mensaje")}
                   value={mensaje}

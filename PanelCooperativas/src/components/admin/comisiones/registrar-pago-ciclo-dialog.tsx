@@ -4,9 +4,9 @@ import { useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
-import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Campo, FechaField } from "@/components/campos";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AvisoError } from "@/components/aviso-error";
 import { Monto } from "@/components/monto";
@@ -170,49 +170,36 @@ function Formulario({
         </Field>
 
         {conReferencia && (
-          <Field data-invalid={errorDe("referencia") ? true : undefined}>
-            <FieldLabel htmlFor={`${uid}-referencia`}>Referencia</FieldLabel>
-            <Input
-              id={`${uid}-referencia`}
-              value={referencia}
-              autoComplete="off"
-              placeholder="Ej.: 00123456"
-              inputMode="numeric"
-              onChange={(e) => {
-                setReferencia(e.target.value);
-                limpiar();
-              }}
-              disabled={guardando}
-              aria-invalid={errorDe("referencia") ? true : undefined}
-              aria-describedby={`${uid}-referencia-ayuda`}
-              className="tabular-nums"
-            />
-            {errorDe("referencia") ? (
-              <FieldError id={`${uid}-referencia-ayuda`}>{errorDe("referencia")}</FieldError>
-            ) : (
-              <FieldDescription id={`${uid}-referencia-ayuda`}>Número de la operación con que pagó.</FieldDescription>
-            )}
-          </Field>
-        )}
-
-        <Field data-invalid={errorDe("fecha") ? true : undefined}>
-          <FieldLabel htmlFor={`${uid}-fecha`}>Fecha del pago</FieldLabel>
-          <Input
-            id={`${uid}-fecha`}
-            type="date"
-            value={fecha}
-            max={hoyVE()}
-            onChange={(e) => {
-              setFecha(e.target.value);
+          <Campo
+            id={`${uid}-referencia`}
+            label="Referencia"
+            value={referencia}
+            placeholder="Ej. 00123456"
+            inputMode="numeric"
+            maxLength={40}
+            enterKeyHint="next"
+            onChange={(v) => {
+              setReferencia(v);
               limpiar();
             }}
             disabled={guardando}
-            aria-invalid={errorDe("fecha") ? true : undefined}
-            aria-describedby={errorDe("fecha") ? `${uid}-fecha-error` : undefined}
-            className="tabular-nums"
+            error={errorDe("referencia")}
+            ayuda="Número de la operación con que pagó."
           />
-          {errorDe("fecha") && <FieldError id={`${uid}-fecha-error`}>{errorDe("fecha")}</FieldError>}
-        </Field>
+        )}
+
+        <FechaField
+          id={`${uid}-fecha`}
+          label="Fecha del pago"
+          value={fecha}
+          max={hoyVE()}
+          onChange={(v) => {
+            setFecha(v);
+            limpiar();
+          }}
+          disabled={guardando}
+          error={errorDe("fecha")}
+        />
       </FieldGroup>
 
       {error && <AvisoError>{error}</AvisoError>}

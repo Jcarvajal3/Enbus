@@ -1282,6 +1282,7 @@ export function ViajesClient({
       />
 
       <ViajeSheet
+        enViajes
         viajeId={viajeAbierto || null}
         onOpenChange={(abierto) => !abierto && abrirViaje(null)}
         onCambio={() => router.refresh()}

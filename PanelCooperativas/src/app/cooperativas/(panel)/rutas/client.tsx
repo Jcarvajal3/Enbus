@@ -7,7 +7,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -29,14 +28,14 @@ import { EntityCard } from "@/components/entity-card";
 import { IconTile } from "@/components/icon-tile";
 import { ListaResponsive } from "@/components/lista-responsive";
 import { PaginacionTabla, usePaginacion } from "@/components/paginacion-tabla";
-import { ESTADOS_VENEZUELA, CIUDADES_POR_ESTADO } from "@/lib/data/venezuela";
+import { Campo, CiudadField, MontoField, type ValorCiudad } from "@/components/campos";
 import { guardarRuta, toggleActivaRuta, checkDesactivarRuta } from "./actions";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
 import { requireOnline } from "@/components/connectivity-banner";
 import { Monto } from "@/components/monto";
 import { useTasaBCV } from "@/components/tasa-bcv-provider";
-import { formatBs, formatUsd, usdABs } from "@/lib/dinero";
+import { formatBs, formatNumeroVE, formatUsd, leerMonto, usdABs } from "@/lib/dinero";
 import { avisarError, avisarExito } from "@/lib/avisos";
 import { humanizeError } from "@/lib/errores";
 import { formatDuracion } from "@/lib/fechas";
@@ -92,14 +91,9 @@ function errorDuracion(horas: string, minutos: string): string | null {
 /** Por encima de este precio (USD) se pide confirmar que no se escribió en bolívares. */
 const PRECIO_ALTO_USD = 500;
 
-/** "15,50" | "15.50" | "1.250,00" -> número (NaN si no es válido). */
+/** Precio en USD: el lector único de montos (coma decimal); NaN si no es válido. */
 function leerPrecio(texto: string): number {
-  const limpio = texto.trim().replace(/\s/g, "");
-  if (!limpio) return NaN;
-  // El último separador es el decimal: "1.234,56" y "1,234.56" -> 1234.56.
-  const normalizado =
-    limpio.lastIndexOf(",") > limpio.lastIndexOf(".") ? limpio.replace(/\./g, "").replace(",", ".") : limpio.replace(/,/g, "");
-  return /^\d+(\.\d+)?$/.test(normalizado) ? Number(normalizado) : NaN;
+  return leerMonto(texto) ?? NaN;
 }
 
 /**
@@ -247,15 +241,17 @@ export function RutasClient({ rutas, errorCarga }: { rutas: Ruta[]; errorCarga: 
   }
 
   // Si la ciudad tiene un solo terminal, ya viene elegido; si no, se elige a mano.
-  function elegirCiudadOrigen(ciudad: string) {
+  function elegirOrigen({ estado, ciudad }: ValorCiudad) {
+    setEstadoOrigen(estado);
     setCiudadOrigen(ciudad);
-    setTerminal(terminalPorDefecto(ciudad, estadoOrigen));
+    setTerminal(terminalPorDefecto(ciudad, estado));
     limpiarError("destino", "terminal");
   }
 
-  function elegirCiudadDestino(ciudad: string) {
+  function elegirDestino({ estado, ciudad }: ValorCiudad) {
+    setEstadoDestino(estado);
     setCiudadDestino(ciudad);
-    setTerminalDestino(terminalPorDefecto(ciudad, estadoDestino));
+    setTerminalDestino(terminalPorDefecto(ciudad, estado));
     limpiarError("destino", "terminal_destino");
   }
 
@@ -284,7 +280,7 @@ export function RutasClient({ rutas, errorCarga }: { rutas: Ruta[]; errorCarga: 
     setEstadoDestino(ruta.estado_destino);
     setCiudadDestino(ruta.ciudad_destino);
     setTerminalDestino(terminalVE(ruta.terminal_destino)?.clave ?? SIN_TERMINAL);
-    setPrecioTexto(ruta.precio_pasaje != null ? String(ruta.precio_pasaje) : "");
+    setPrecioTexto(ruta.precio_pasaje != null && Number.isFinite(Number(ruta.precio_pasaje)) ? formatNumeroVE(Number(ruta.precio_pasaje)) : "");
     const total = Number(ruta.duracion_estimada_min) || 0;
     setHoras(total > 0 ? String(Math.floor(total / 60)) : "");
     setMinutos(total > 0 ? String(total % 60) : "");
@@ -372,7 +368,13 @@ export function RutasClient({ rutas, errorCarga }: { rutas: Ruta[]; errorCarga: 
   function handleSubmit(formData: FormData) {
     setFormError(null);
     setErrorCampo(null);
-    if (ciudadOrigen && ciudadDestino && mismaCiudad(ciudadOrigen, ciudadDestino)) {
+    if (!ciudadOrigen || !ciudadDestino) {
+      setFormError("Elige la ciudad de origen y la de destino.");
+      setErrorCampo("destino");
+      document.getElementById(`${uid}-${ciudadOrigen ? "ciudad-destino" : "ciudad-origen"}`)?.focus();
+      return;
+    }
+    if (mismaCiudad(ciudadOrigen, ciudadDestino)) {
       setFormError(MSG_MISMA_CIUDAD);
       setErrorCampo("destino");
       return;
@@ -533,27 +535,17 @@ export function RutasClient({ rutas, errorCarga }: { rutas: Ruta[]; errorCarga: 
             className="flex flex-col gap-6"
           >
             <div className="grid gap-4">
-              {formError && <AvisoError>{formError}</AvisoError>}
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <div className="grid content-start gap-2">
-                  <Label htmlFor={`${uid}-estado-origen`}>Estado de origen</Label>
-                  <Select name="estado_origen" value={estadoOrigen} onValueChange={(val) => { setEstadoOrigen(val ?? ""); setCiudadOrigen(""); setTerminal(SIN_TERMINAL); }} required>
-                    <SelectTrigger id={`${uid}-estado-origen`} className="w-full"><SelectValue placeholder="Elige el estado" /></SelectTrigger>
-                    <SelectContent>
-                      {ESTADOS_VENEZUELA.map(e => <SelectItem key={e.value} value={e.value}>{e.label}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="grid content-start gap-2">
-                  <Label htmlFor={`${uid}-ciudad-origen`}>Ciudad de origen</Label>
-                  <Select name="ciudad_origen" value={ciudadOrigen} onValueChange={(val) => elegirCiudadOrigen(val ?? "")} disabled={!estadoOrigen} required>
-                    <SelectTrigger id={`${uid}-ciudad-origen`} className="w-full"><SelectValue placeholder="Elige la ciudad" /></SelectTrigger>
-                    <SelectContent>
-                      {estadoOrigen && CIUDADES_POR_ESTADO[estadoOrigen]?.map(c => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
+              {formError && errorCampo !== "duracion" && <AvisoError>{formError}</AvisoError>}
+              <CiudadField
+                id={`${uid}-ciudad-origen`}
+                label="Ciudad de origen"
+                required
+                value={{ estado: estadoOrigen, ciudad: ciudadOrigen }}
+                onChange={elegirOrigen}
+                disabled={isPending}
+              />
+              <input type="hidden" name="estado_origen" value={estadoOrigen} />
+              <input type="hidden" name="ciudad_origen" value={ciudadOrigen} />
 
               {ciudadOrigen && (
                 <SelectorTerminal
@@ -570,38 +562,18 @@ export function RutasClient({ rutas, errorCarga }: { rutas: Ruta[]; errorCarga: 
                 />
               )}
 
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <div className="grid content-start gap-2">
-                  <Label htmlFor={`${uid}-estado-destino`}>Estado de destino</Label>
-                  <Select name="estado_destino" value={estadoDestino} onValueChange={(val) => { setEstadoDestino(val ?? ""); setCiudadDestino(""); setTerminalDestino(SIN_TERMINAL); }} required>
-                    <SelectTrigger id={`${uid}-estado-destino`} className="w-full"><SelectValue placeholder="Elige el estado" /></SelectTrigger>
-                    <SelectContent>
-                      {ESTADOS_VENEZUELA.map(e => <SelectItem key={e.value} value={e.value}>{e.label}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="grid content-start gap-2">
-                  <Label htmlFor={`${uid}-ciudad-destino`}>Ciudad de destino</Label>
-                  <Select name="ciudad_destino" value={ciudadDestino} onValueChange={(val) => elegirCiudadDestino(val ?? "")} disabled={!estadoDestino} required>
-                    <SelectTrigger
-                      id={`${uid}-ciudad-destino`}
-                      className="w-full"
-                      aria-invalid={mismaSeleccion || errorCampo === "destino" ? true : undefined}
-                      aria-describedby={mismaSeleccion ? `${uid}-misma-ciudad` : undefined}
-                    >
-                      <SelectValue placeholder="Elige la ciudad" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {estadoDestino && CIUDADES_POR_ESTADO[estadoDestino]?.map(c => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-                {mismaSeleccion && (
-                  <p id={`${uid}-misma-ciudad`} className="md:col-span-2 text-[13px] text-destructive-text">
-                    {MSG_MISMA_CIUDAD}
-                  </p>
-                )}
-              </div>
+              <CiudadField
+                id={`${uid}-ciudad-destino`}
+                label="Ciudad de destino"
+                required
+                value={{ estado: estadoDestino, ciudad: ciudadDestino }}
+                onChange={elegirDestino}
+                excluir={ciudadOrigen ? [ciudadOrigen] : undefined}
+                error={mismaSeleccion ? MSG_MISMA_CIUDAD : null}
+                disabled={isPending}
+              />
+              <input type="hidden" name="estado_destino" value={estadoDestino} />
+              <input type="hidden" name="ciudad_destino" value={ciudadDestino} />
 
               {ciudadDestino && !mismaSeleccion && (
                 <SelectorTerminal
@@ -621,62 +593,60 @@ export function RutasClient({ rutas, errorCarga }: { rutas: Ruta[]; errorCarga: 
               <fieldset className="grid gap-2">
                 <legend className="mb-2 text-[13px] font-medium text-foreground">Duración del viaje</legend>
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="grid content-start gap-2">
-                    <Label htmlFor={`${uid}-horas`}>Horas</Label>
-                    <Input
-                      id={`${uid}-horas`}
-                      type="number"
-                      inputMode="numeric"
-                      name="duracion_horas"
-                      min={0}
-                      max={48}
-                      placeholder="Ej.: 8"
-                      value={horas}
-                      onChange={(e) => { setHoras(e.target.value); if (errorCampo === "duracion") { setFormError(null); setErrorCampo(null); } }}
-                      aria-invalid={errorCampo === "duracion" ? true : undefined}
-                    />
-                  </div>
-                  <div className="grid content-start gap-2">
-                    <Label htmlFor={`${uid}-minutos`}>Minutos</Label>
-                    <Input
-                      id={`${uid}-minutos`}
-                      type="number"
-                      inputMode="numeric"
-                      name="duracion_minutos"
-                      min={0}
-                      max={59}
-                      placeholder="Ej.: 30"
-                      value={minutos}
-                      onChange={(e) => { setMinutos(e.target.value); if (errorCampo === "duracion") { setFormError(null); setErrorCampo(null); } }}
-                      aria-invalid={errorCampo === "duracion" ? true : undefined}
-                    />
-                  </div>
+                  <Campo
+                    id={`${uid}-horas`}
+                    name="duracion_horas"
+                    label="Horas"
+                    inputMode="numeric"
+                    maxLength={2}
+                    placeholder="Ej. 8"
+                    enterKeyHint="next"
+                    value={horas}
+                    onChange={(v) => {
+                      setHoras(v.replace(/\D/g, ""));
+                      limpiarError("duracion");
+                    }}
+                    error={errorCampo === "duracion" ? formError : null}
+                    disabled={isPending}
+                  />
+                  <Campo
+                    id={`${uid}-minutos`}
+                    name="duracion_minutos"
+                    label="Minutos"
+                    inputMode="numeric"
+                    maxLength={2}
+                    placeholder="Ej. 30"
+                    enterKeyHint="next"
+                    value={minutos}
+                    onChange={(v) => {
+                      setMinutos(v.replace(/\D/g, ""));
+                      limpiarError("duracion");
+                    }}
+                    disabled={isPending}
+                  />
                 </div>
               </fieldset>
 
-              <div className="grid content-start gap-2">
-                <Label htmlFor={`${uid}-precio`}>Precio del pasaje (USD)</Label>
-                <Input
-                  id={`${uid}-precio`}
-                  type="text"
-                  inputMode="decimal"
-                  autoComplete="off"
-                  name="precio_pasaje"
-                  placeholder="Ej.: 15,00"
-                  value={precioTexto}
-                  onChange={(e) => setPrecioTexto(e.target.value)}
-                  aria-describedby={`${uid}-precio-ayuda`}
-                  required
-                />
-                <p id={`${uid}-precio-ayuda`} className="text-[13px] text-muted-foreground">
-                  El pasajero paga en Bs a la tasa BCV del día
-                  {tasa && precioValido
-                    ? ` (hoy ≈ ${formatBs(usdABs(precioUsd, tasa.tasa))}).`
-                    : tasa
-                      ? "."
-                      : " (hoy no hay tasa registrada)."}
-                </p>
-              </div>
+              <MontoField
+                id={`${uid}-precio`}
+                name="precio_pasaje"
+                label="Precio del pasaje (USD)"
+                moneda="USD"
+                required
+                enterKeyHint="done"
+                value={precioTexto}
+                onChange={setPrecioTexto}
+                disabled={isPending}
+                ayuda={
+                  `El pasajero paga en Bs a la tasa BCV del día${
+                    tasa && precioValido
+                      ? ` (hoy ≈ ${formatBs(usdABs(precioUsd, tasa.tasa))}).`
+                      : tasa
+                        ? "."
+                        : " (hoy no hay tasa registrada)."
+                  }`
+                }
+              />
 
               <div className="flex items-center justify-between gap-4 rounded-md bg-surface p-4">
                 <div className="flex flex-col gap-0.5">

@@ -9,5 +9,9 @@ export {
   fechaTasaCorta,
   usdABs,
   formatMoney,
+  leerMonto,
+  editarMonto,
+  MONTO_PLACEHOLDER,
+  DECIMALES_TASA,
 } from "./dinero.generated";
 export type { TasaRef, MonedaPago, MontoFormateado } from "./dinero.generated";

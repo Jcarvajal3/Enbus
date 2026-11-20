@@ -15,8 +15,7 @@ import { PageHeader } from "@/components/page-header";
 import { IconTile } from "@/components/icon-tile";
 import { SectionLabel } from "@/components/section-label";
 import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { FechaField } from "@/components/campos";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AvisoError } from "@/components/aviso-error";
@@ -192,7 +191,7 @@ function Despacho() {
         .eq("estado", "PROGRAMADO")
         .gte("fecha_hora_salida", desde)
         .lte("fecha_hora_salida", hasta)
-        .order("fecha_hora_salida", { ascending: true });
+        .order("fecha_hora_salida", { ascending: false });
 
       if (error) throw error;
       setViajes((data as unknown as ViajeDespacho[]) || []);
@@ -370,16 +369,13 @@ function Despacho() {
             1. Elige el viaje
           </SectionLabel>
           <Card className="gap-5 p-5">
-            <div className="flex flex-col gap-2 md:w-56">
-              <Label htmlFor="despacho-fecha-viaje">Fecha del viaje</Label>
-              <Input
-                id="despacho-fecha-viaje"
-                type="date"
-                className="tabular-nums"
-                value={fecha}
-                onChange={(e) => setFechaUrl(e.target.value || null)}
-              />
-            </div>
+            <FechaField
+              id="despacho-fecha-viaje"
+              label="Fecha del viaje"
+              value={fecha}
+              onChange={(v) => setFechaUrl(v || null)}
+              className="md:w-56"
+            />
 
             {loadingViajes ? (
               <div className="flex flex-col gap-2" role="status" aria-label="Cargando los viajes">

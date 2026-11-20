@@ -17,9 +17,9 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { Field, FieldLabel } from "@/components/ui/field";
+import { FechaField } from "@/components/campos";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AvisoError } from "@/components/aviso-error";
@@ -197,30 +197,24 @@ export function GenerarCicloDialog({ cooperativas, tasa: tasaServidor }: Generar
             </DialogHeader>
 
             <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-              <Field>
-                <FieldLabel htmlFor="periodo_inicio">Desde</FieldLabel>
-                <Input
-                  id="periodo_inicio"
-                  type="date"
-                  value={periodoInicio}
-                  max={periodoFin || undefined}
-                  disabled={ocupado}
-                  onChange={(e) => cambiar(() => setPeriodoInicio(e.target.value))}
-                  className="tabular-nums"
-                />
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="periodo_fin">Hasta</FieldLabel>
-                <Input
-                  id="periodo_fin"
-                  type="date"
-                  value={periodoFin}
-                  min={periodoInicio || undefined}
-                  disabled={ocupado}
-                  onChange={(e) => cambiar(() => setPeriodoFin(e.target.value))}
-                  className="tabular-nums"
-                />
-              </Field>
+              <FechaField
+                id="periodo_inicio"
+                label="Desde"
+                value={periodoInicio}
+                max={periodoFin || undefined}
+                atajos={false}
+                disabled={ocupado}
+                onChange={(v) => cambiar(() => setPeriodoInicio(v))}
+              />
+              <FechaField
+                id="periodo_fin"
+                label="Hasta"
+                value={periodoFin}
+                min={periodoInicio || undefined}
+                atajos={false}
+                disabled={ocupado}
+                onChange={(v) => cambiar(() => setPeriodoFin(v))}
+              />
               <Field>
                 <FieldLabel htmlFor="cooperativa_id">Cooperativa</FieldLabel>
                 <Select

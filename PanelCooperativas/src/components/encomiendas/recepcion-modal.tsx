@@ -7,12 +7,10 @@
 // Sin ruta activa hacia el destino (EB_SIN_RUTA) el modal sigue abierto y ofrece
 // "Crear ruta" (administrador) o "No recibir la encomienda".
 
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useId, useMemo, useRef } from "react";
 import Link from "next/link";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogFooterFila, DialogDescription } from "@/components/ui/dialog";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
@@ -23,7 +21,8 @@ import { Prohibit, WarningCircle } from "@phosphor-icons/react";
 import { createClient } from "@/lib/supabase/client";
 import type { Encomienda } from "@/lib/types/encomiendas";
 import type { CotizacionEncomienda, RecepcionOrigen } from "@/lib/types/pagos";
-import type { TasaRef } from "@/lib/dinero";
+import { leerMonto, type TasaRef } from "@/lib/dinero";
+import { Campo } from "@/components/campos";
 import { codigoEB, humanizeError, parseDetalleEB } from "@/lib/errores";
 import { confirmarRecepcion } from "@/app/cooperativas/(panel)/taquilla/encomiendas/actions";
 import { MSG_VENTANA_BLOQUEADA, printGuiaEncomienda } from "@/lib/printing/print-helpers";
@@ -49,14 +48,6 @@ interface RecepcionModalProps {
 
 const ESTADOS_RECIBIBLES = ["PENDIENTE_DE_ESCANEO", "EN_RECEPCION"];
 
-/** "2,5" o "2.5" -> 2.5; null si no es un número. */
-function parsePeso(texto: string): number | null {
-  const t = texto.trim().replace(",", ".");
-  if (!t) return null;
-  const n = Number(t);
-  return Number.isFinite(n) ? n : null;
-}
-
 function tasaDe(tasa: number | null | undefined, fecha: string | null | undefined): TasaRef | null {
   return tasa && fecha ? { tasa: Number(tasa), fecha } : null;
 }
@@ -69,6 +60,7 @@ function abrirPdf(url: string) {
 
 export function RecepcionModal({ encomienda, isOpen, onClose, onSuccess, onRechazada }: RecepcionModalProps) {
   const supabase = useMemo(() => createClient(), []);
+  const uid = useId();
   const { user } = useUser();
   const esAdmin = user.role === "admin_cooperativa";
   // La cooperativa no tiene ruta activa hacia el destino (EB_SIN_RUTA).
@@ -116,7 +108,8 @@ export function RecepcionModal({ encomienda, isOpen, onClose, onSuccess, onRecha
   }, [isOpen]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
-  const pesoNum = parsePeso(peso);
+  // El peso se escribe con coma decimal ("2,5"); `leerMonto` es el único lector de números.
+  const pesoNum = leerMonto(peso);
 
   // Vista previa del costo (servidor), con espera de 500 ms mientras se escribe.
   /* eslint-disable react-hooks/set-state-in-effect */
@@ -324,33 +317,27 @@ export function RecepcionModal({ encomienda, isOpen, onClose, onSuccess, onRecha
 
           <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-2">
             {/* Peso */}
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="peso">Peso (kg)</Label>
-              <Input
-                id="peso"
-                inputMode="decimal"
-                autoComplete="off"
-                placeholder="Ej.: 2,5"
-                enterKeyHint="done"
+            <form
+              noValidate
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (listoParaConfirmar) void handleSubmit();
+              }}
+            >
+              <Campo
+                id={`${uid}-peso`}
+                label="Peso"
                 value={peso}
+                onChange={(v) => setPeso(v.replace(/[^\d.,]/g, ""))}
+                inputMode="decimal"
+                sufijo="kg"
+                placeholder="Ej. 2,5"
+                enterKeyHint="done"
                 autoFocus
-                onChange={(e) => setPeso(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && listoParaConfirmar) void handleSubmit();
-                }}
-                aria-invalid={pesoError ? true : undefined}
-                aria-describedby={pesoError ? "peso-error" : "peso-ayuda"}
+                error={pesoError || null}
+                ayuda={pesoMax != null ? `Máximo ${pesoMax} kg.` : "En kilos."}
               />
-              {pesoError ? (
-                <p id="peso-error" className="text-[13px] text-destructive-text">
-                  {pesoError}
-                </p>
-              ) : (
-                <p id="peso-ayuda" className="text-[13px] text-muted-foreground">
-                  {pesoMax != null ? `Máximo ${pesoMax} kg.` : "En kilos."}
-                </p>
-              )}
-            </div>
+            </form>
 
             {/* Costo */}
             <div aria-live="polite" className="flex min-h-24 flex-col justify-center gap-1 rounded-xl bg-surface p-5">

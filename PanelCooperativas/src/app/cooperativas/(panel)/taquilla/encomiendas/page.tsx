@@ -3,11 +3,12 @@
 // ─── Taquilla de encomiendas ────────────────────────────────────────────────
 // Orden en el mostrador: recepción (pesar) → foto del paquete → cobro (solo si
 // paga quien envía). Lo mismo para el alta de un cliente sin la app
-// ("Nueva encomienda"). La pestaña de estado (`?estado=`, p. ej. PAGADA = "Lista
+// ("Nueva encomienda" es la página /nueva, con su propia foto y cobro). La pestaña de estado (`?estado=`, p. ej. PAGADA = "Lista
 // para despacho"), la página y la encomienda abierta en su detalle
 // (`?encomienda=<id>`) viven en la URL.
 
 import { Suspense, useEffect, useRef, useState, useCallback, useMemo } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Package, Plus, Printer } from "@phosphor-icons/react";
 import { PageHeader } from "@/components/page-header";
@@ -25,7 +26,7 @@ import { BarraAccionFija } from "@/components/barra-accion-fija";
 import { TablaSkeleton } from "@/components/tabla-skeleton";
 import { TabsUrl } from "@/components/barra-filtros";
 import { PaginacionTabla, usePaginacion } from "@/components/paginacion-tabla";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
@@ -40,7 +41,6 @@ import { RecepcionModal } from "@/components/encomiendas/recepcion-modal";
 import { PagoModal } from "@/components/encomiendas/pago-modal";
 import { PhotoCaptureModal } from "@/components/encomiendas/photo-capture-modal";
 import { DetalleSheet, faltaFoto, remitenteDe } from "@/components/encomiendas/detalle-sheet";
-import { NuevaEncomiendaDialog } from "@/components/encomiendas/nueva-encomienda-dialog";
 import { RechazarEncomiendaDialog } from "@/components/encomiendas/rechazar-encomienda-dialog";
 import { Monto } from "@/components/monto";
 import { useEncomiendasRealtime } from "@/hooks/use-encomiendas-realtime";
@@ -74,8 +74,10 @@ type ModalState =
   | { type: "foto"; encomienda: Encomienda; luego: DespuesDeFoto }
   | { type: "pago"; encomienda: Encomienda }
   | { type: "detail"; encomienda: Encomienda }
-  | { type: "nueva" }
   | { type: "rechazar"; encomienda: Encomienda };
+
+/** Alta de un cliente sin la app: página propia (no diálogo). */
+const URL_NUEVA = "/cooperativas/taquilla/encomiendas/nueva";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -286,10 +288,10 @@ function TaquillaEncomiendas() {
   return (
     <div className="flex flex-col gap-8">
       <PageHeader title="Taquilla de encomiendas">
-        <Button size="lg" className="max-md:hidden" onClick={() => cambiarModal({ type: "nueva" })}>
+        <Link href={URL_NUEVA} className={buttonVariants({ size: "lg", className: "max-md:hidden" })}>
           <Plus aria-hidden />
           Nueva encomienda
-        </Button>
+        </Link>
       </PageHeader>
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
@@ -440,10 +442,10 @@ function TaquillaEncomiendas() {
       </section>
 
       <BarraAccionFija escritorio="oculta">
-        <Button size="xl" onClick={() => cambiarModal({ type: "nueva" })}>
+        <Link href={URL_NUEVA} className={buttonVariants({ size: "xl" })}>
           <Plus aria-hidden />
           Nueva encomienda
-        </Button>
+        </Link>
       </BarraAccionFija>
 
       {modalState.type === "recepcion" && (
@@ -489,15 +491,6 @@ function TaquillaEncomiendas() {
           onRechazar={() => cambiarModal({ type: "rechazar", encomienda: modalState.encomienda })}
         />
       )}
-
-      <NuevaEncomiendaDialog
-        open={modalState.type === "nueva"}
-        onOpenChange={(abierto) => {
-          if (!abierto) cerrarModal();
-        }}
-        onRegistrada={() => void fetchEncomiendas()}
-        onContinuar={pedirFoto}
-      />
 
       <RechazarEncomiendaDialog
         encomienda={modalState.type === "rechazar" ? modalState.encomienda : null}

@@ -7,7 +7,6 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { BarraAccionFija } from "@/components/barra-accion-fija";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
@@ -31,9 +30,10 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { ErrorState } from "@/components/error-state";
 import { humanizeError } from "@/lib/errores";
 import { METODO_PAGO } from "@/lib/estados";
-import { buscarBanco, mostrarBanco, OPCIONES_BANCO, OTRO_BANCO } from "@/lib/bancos";
-import { cedulaValida, formatCedula, formatTelefono, telefonoValido, TELEFONO_ERROR } from "@/lib/ve";
-import { CedulaField, TelefonoField } from "@/components/ve-fields";
+import { buscarBanco, mostrarBanco } from "@/lib/bancos";
+import { cedulaValida, formatTelefono, LETRAS_TITULAR, telefonoValido, TELEFONO_ERROR } from "@/lib/ve";
+import { documentoOGuion } from "@/lib/mostrar";
+import { BancoField, Campo, CedulaField, TelefonoField } from "@/components/campos";
 import { normalizeRif } from "@/lib/rif";
 import { cn } from "@/lib/utils";
 
@@ -52,10 +52,8 @@ const AYUDA_TIPO: Record<TipoMetodoPago, string> = {
 
 interface FormState {
   tipo: TipoMetodoPago;
-  /** Etiqueta "0134 · Banesco" o OTRO_BANCO. */
-  bancoOpcion: string;
-  /** Nombre escrito cuando se elige "Otro banco". */
-  bancoOtro: string;
+  /** Como lo guarda `BancoField`: "0134 · Banesco" o el nombre escrito con "Otro banco". */
+  banco: string;
   titular: string;
   numero_cuenta: string;
   cedula_rif: string;
@@ -65,8 +63,7 @@ interface FormState {
 
 const EMPTY_FORM: FormState = {
   tipo: "PAGO_MOVIL",
-  bancoOpcion: "",
-  bancoOtro: "",
+  banco: "",
   titular: "",
   numero_cuenta: "",
   cedula_rif: "",
@@ -79,8 +76,7 @@ type Errores = Partial<Record<"tipo" | "banco" | "titular" | "numero_cuenta" | "
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function bancoDelForm(form: FormState): string | null {
-  if (form.bancoOpcion === OTRO_BANCO) return form.bancoOtro.trim() || null;
-  return form.bancoOpcion || null;
+  return form.banco.trim() || null;
 }
 
 function documentoValido(v: string) {
@@ -92,7 +88,7 @@ function validar(form: FormState): Errores {
   const e: Errores = {};
   const titular = form.titular.trim();
   if (form.tipo === "PAGO_MOVIL" || form.tipo === "TRANSFERENCIA_BANCARIA") {
-    if (!bancoDelForm(form)) e.banco = form.bancoOpcion === OTRO_BANCO ? "Escribe el nombre del banco." : "Elige el banco.";
+    if (!bancoDelForm(form)) e.banco = "Elige el banco.";
     if (!documentoValido(form.cedula_rif)) e.cedula_rif = "Escribe la cédula o el RIF del titular, por ejemplo V-12345678.";
     if (titular.length < 3) e.titular = "Escribe el nombre del titular.";
   }
@@ -136,11 +132,6 @@ function formatCuenta(v: string | null | undefined) {
   return d.length === 20 ? `${d.slice(0, 4)}-${d.slice(4, 8)}-${d.slice(8, 10)}-${d.slice(10)}` : v ?? "";
 }
 
-function formatDocumento(v: string | null | undefined) {
-  if (!v) return "";
-  return normalizeRif(v) ?? (formatCedula(v) !== "—" ? formatCedula(v) : v);
-}
-
 /** Filas tal como las ve el pasajero al pagar (mismo orden que PaymentFlow de la app). */
 function filasPasajero(m: {
   tipo: TipoMetodoPago;
@@ -161,7 +152,7 @@ function filasPasajero(m: {
     filas.push({ etiqueta: "Nro. de cuenta", valor: formatCuenta(m.numero_cuenta) });
   }
   if (m.tipo === "ZELLE" && m.email_zelle) filas.push({ etiqueta: "Correo Zelle", valor: m.email_zelle });
-  if (m.cedula_rif) filas.push({ etiqueta: "C.I. / RIF", valor: formatDocumento(m.cedula_rif) });
+  if (m.cedula_rif) filas.push({ etiqueta: "C.I. / RIF", valor: documentoOGuion(m.cedula_rif) });
   return filas;
 }
 
@@ -195,10 +186,9 @@ export function MetodosPagoTab({ metodos: initialMetodos, errorCarga = null }: M
   const setField = (key: keyof FormState, value: string) => {
     setForm((prev) => ({ ...prev, [key]: value }));
     setErrores((prev) => {
-      const campo = key === "bancoOpcion" || key === "bancoOtro" ? "banco" : key;
-      if (!(campo in prev)) return prev;
+      if (!(key in prev)) return prev;
       const siguiente = { ...prev };
-      delete siguiente[campo as keyof Errores];
+      delete siguiente[key as keyof Errores];
       return siguiente;
     });
   };
@@ -212,13 +202,10 @@ export function MetodosPagoTab({ metodos: initialMetodos, errorCarga = null }: M
   }
 
   function openEdit(m: MetodoPagoCooperativa) {
-    const etiqueta = m.banco ? mostrarBanco(m.banco) : "";
-    const enLista = OPCIONES_BANCO.includes(etiqueta);
     setEditingId(m.id);
     setForm({
       tipo: m.tipo,
-      bancoOpcion: m.banco ? (enLista ? etiqueta : OTRO_BANCO) : "",
-      bancoOtro: m.banco && !enLista ? m.banco : "",
+      banco: m.banco ? mostrarBanco(m.banco) : "",
       titular: m.titular,
       numero_cuenta:
         m.tipo === "PAGO_MOVIL" && telefonoValido(m.numero_cuenta ?? "")
@@ -380,39 +367,15 @@ export function MetodosPagoTab({ metodos: initialMetodos, errorCarga = null }: M
                 </div>
 
                 {pideBanco && (
-                  <div className="flex flex-col gap-2 md:col-span-2">
-                    <Label htmlFor={id("banco")}>Banco</Label>
-                    <Select
-                      value={form.bancoOpcion}
-                      onValueChange={(v) => setField("bancoOpcion", v ?? "")}
-                      disabled={guardando}
-                    >
-                      <SelectTrigger
-                        id={id("banco")}
-                        className="w-full"
-                        aria-invalid={errores.banco && form.bancoOpcion !== OTRO_BANCO ? true : undefined}
-                      >
-                        <SelectValue placeholder="Elige el banco" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {OPCIONES_BANCO.map((b) => (
-                          <SelectItem key={b} value={b}>{b}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    {form.bancoOpcion === OTRO_BANCO && (
-                      <Input
-                        id={id("banco-otro")}
-                        aria-label="Nombre del banco"
-                        placeholder="Ej. Banco del Tesoro"
-                        value={form.bancoOtro}
-                        disabled={guardando}
-                        aria-invalid={errores.banco ? true : undefined}
-                        onChange={(e) => setField("bancoOtro", e.target.value)}
-                      />
-                    )}
-                    <ErrorCampo id={id("banco-error")} texto={errores.banco} />
-                  </div>
+                  <BancoField
+                    id={id("banco")}
+                    label="Banco"
+                    value={form.banco}
+                    onChange={(v) => setField("banco", v)}
+                    error={errores.banco}
+                    disabled={guardando}
+                    className="md:col-span-2"
+                  />
                 )}
 
                 {form.tipo === "PAGO_MOVIL" && (
@@ -433,7 +396,8 @@ export function MetodosPagoTab({ metodos: initialMetodos, errorCarga = null }: M
                     value={form.numero_cuenta}
                     onChange={(v) => setField("numero_cuenta", v)}
                     inputMode="numeric"
-                    placeholder="Ej.: 01340000000000000000"
+                    placeholder="Ej. 01340000000000000000"
+                    maxLength={30}
                     ayuda={
                       form.numero_cuenta.replace(/\D/g, "").length > 0
                         ? `${form.numero_cuenta.replace(/\D/g, "").length} de 20 dígitos`
@@ -453,7 +417,8 @@ export function MetodosPagoTab({ metodos: initialMetodos, errorCarga = null }: M
                     onChange={(v) => setField("email_zelle", v)}
                     type="email"
                     inputMode="email"
-                    placeholder="Ej.: pagos@tucooperativa.com"
+                    placeholder="Ej. pagos@tucooperativa.com"
+                    maxLength={120}
                     error={errores.email_zelle}
                     disabled={guardando}
                   />
@@ -465,7 +430,7 @@ export function MetodosPagoTab({ metodos: initialMetodos, errorCarga = null }: M
                     label="Cédula o RIF del titular"
                     value={form.cedula_rif}
                     onChange={(v) => setField("cedula_rif", v)}
-                    letras={["V", "E", "J", "G", "P"]}
+                    letras={LETRAS_TITULAR}
                     error={errores.cedula_rif}
                     disabled={guardando}
                   />
@@ -477,7 +442,8 @@ export function MetodosPagoTab({ metodos: initialMetodos, errorCarga = null }: M
                     label="Titular"
                     value={form.titular}
                     onChange={(v) => setField("titular", v)}
-                    placeholder="Ej.: Transporte Los Andes C.A."
+                    placeholder="Ej. Transporte Los Andes C.A."
+                    maxLength={120}
                     error={errores.titular}
                     disabled={guardando}
                     className={form.tipo === "ZELLE" ? "" : "md:col-span-2"}
@@ -497,8 +463,8 @@ export function MetodosPagoTab({ metodos: initialMetodos, errorCarga = null }: M
                     disabled={guardando}
                     placeholder={
                       form.tipo === "EFECTIVO"
-                        ? "Ej.: Paga en la taquilla antes de abordar."
-                        : "Ej.: En el concepto escribe tu número de boleto."
+                        ? "Ej. Paga en la taquilla antes de abordar."
+                        : "Ej. En el concepto escribe tu número de boleto."
                     }
                   />
                 </div>
@@ -655,55 +621,5 @@ export function MetodosPagoTab({ metodos: initialMetodos, errorCarga = null }: M
         onConfirm={confirmarEliminar}
       />
     </Card>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-
-function ErrorCampo({ id, texto }: { id: string; texto?: string }) {
-  if (!texto) return null;
-  return (
-    <p id={id} className="text-[13px] text-destructive-text">
-      {texto}
-    </p>
-  );
-}
-
-function Campo({
-  id, label, value, onChange, type = "text", inputMode, placeholder, error, ayuda, disabled, className,
-}: {
-  id: string;
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  type?: string;
-  inputMode?: React.HTMLAttributes<HTMLInputElement>["inputMode"];
-  placeholder?: string;
-  error?: string;
-  ayuda?: string;
-  disabled?: boolean;
-  className?: string;
-}) {
-  const descrito = error ? `${id}-error` : ayuda ? `${id}-ayuda` : undefined;
-  return (
-    <div className={cn("flex flex-col gap-2", className)}>
-      <Label htmlFor={id}>{label}</Label>
-      <Input
-        id={id}
-        type={type}
-        inputMode={inputMode}
-        value={value}
-        placeholder={placeholder}
-        disabled={disabled}
-        aria-invalid={error ? true : undefined}
-        aria-describedby={descrito}
-        onChange={(e) => onChange(e.target.value)}
-      />
-      {error ? (
-        <ErrorCampo id={`${id}-error`} texto={error} />
-      ) : ayuda ? (
-        <p id={`${id}-ayuda`} className="text-[13px] text-muted-foreground">{ayuda}</p>
-      ) : null}
-    </div>
   );
 }

@@ -14,13 +14,12 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
-import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { FieldGroup } from "@/components/ui/field";
+import { Campo, RifField } from "@/components/campos";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { AvisoError } from "@/components/aviso-error";
 import { createCooperativa } from "@/app/admin/(panel)/cooperativas/actions";
-import { normalizeRif, RIF_AYUDA_CORTA, RIF_PLACEHOLDER } from "@/lib/rif";
 import { humanizeError } from "@/lib/errores";
 import { avisarExito } from "@/lib/avisos";
 import { CampoComision, ERROR_COMISION, leerComision } from "./campo-comision";
@@ -93,7 +92,11 @@ export function CreateCooperativaDialog() {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [nombre, setNombre] = useState("");
+  const [nombreError, setNombreError] = useState<string | null>(null);
+  const [rif, setRif] = useState("");
   const [rifError, setRifError] = useState<string | null>(null);
+  const [emailAdmin, setEmailAdmin] = useState("");
   const [comision, setComision] = useState("10");
   const [comisionError, setComisionError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -104,7 +107,11 @@ export function CreateCooperativaDialog() {
   const resetForm = () => {
     setLogoPreview(null);
     setInviteLink(null);
+    setNombre("");
+    setNombreError(null);
+    setRif("");
     setRifError(null);
+    setEmailAdmin("");
     setComision("10");
     setComisionError(null);
     setError(null);
@@ -133,7 +140,13 @@ export function CreateCooperativaDialog() {
     e.preventDefault();
     if (loading) return;
     setRifError(null);
+    setNombreError(null);
     setError(null);
+    if (!nombre.trim()) {
+      setNombreError("Escribe el nombre de la cooperativa.");
+      document.getElementById("nombre")?.focus();
+      return;
+    }
     if (!Number.isFinite(leerComision(comision))) {
       setComisionError(ERROR_COMISION);
       return;
@@ -227,34 +240,36 @@ export function CreateCooperativaDialog() {
             </div>
 
             <FieldGroup className="gap-5">
-              <Field>
-                <FieldLabel htmlFor="nombre">Nombre de la cooperativa</FieldLabel>
-                <Input id="nombre" name="nombre" placeholder="Ej.: Expresos del Táchira" required disabled={loading} />
-              </Field>
+              <Campo
+                id="nombre"
+                name="nombre"
+                label="Nombre de la cooperativa"
+                placeholder="Ej. Expresos del Táchira"
+                maxLength={120}
+                required
+                enterKeyHint="next"
+                value={nombre}
+                onChange={(v) => {
+                  setNombre(v);
+                  if (nombreError) setNombreError(null);
+                }}
+                error={nombreError}
+                disabled={loading}
+              />
 
-              <Field data-invalid={rifError ? true : undefined}>
-                <FieldLabel htmlFor="rif">RIF</FieldLabel>
-                <Input
-                  id="rif"
-                  name="rif"
-                  placeholder={`Ej.: ${RIF_PLACEHOLDER}`}
-                  required
-                  disabled={loading}
-                  autoCapitalize="characters"
-                  aria-invalid={rifError ? true : undefined}
-                  aria-describedby="rif-ayuda"
-                  onBlur={(e) => {
-                    const normalizado = normalizeRif(e.target.value);
-                    if (normalizado) e.target.value = normalizado;
-                  }}
-                  onChange={() => rifError && setRifError(null)}
-                />
-                {rifError ? (
-                  <FieldError id="rif-ayuda">{rifError}</FieldError>
-                ) : (
-                  <FieldDescription id="rif-ayuda">{RIF_AYUDA_CORTA}</FieldDescription>
-                )}
-              </Field>
+              <RifField
+                id="rif"
+                name="rif"
+                required
+                enterKeyHint="next"
+                value={rif}
+                onChange={(v) => {
+                  setRif(v);
+                  if (rifError) setRifError(null);
+                }}
+                error={rifError}
+                disabled={loading}
+              />
 
               <CampoComision
                 valor={comision}
@@ -267,12 +282,20 @@ export function CreateCooperativaDialog() {
                 }}
               />
 
-              <Field>
-                <FieldLabel htmlFor="email_admin">
-                  Correo del administrador <span className="font-normal text-muted-foreground">(opcional)</span>
-                </FieldLabel>
-                <Input id="email_admin" name="email_admin" type="email" inputMode="email" autoComplete="off" autoCapitalize="none" placeholder="Ej.: admin@cooperativa.com" disabled={loading} />
-              </Field>
+              <Campo
+                id="email_admin"
+                name="email_admin"
+                label="Correo del administrador"
+                opcional
+                type="email"
+                inputMode="email"
+                placeholder="Ej. admin@cooperativa.com"
+                maxLength={120}
+                enterKeyHint="done"
+                value={emailAdmin}
+                onChange={setEmailAdmin}
+                disabled={loading}
+              />
             </FieldGroup>
 
             {error && <AvisoError>{error}</AvisoError>}

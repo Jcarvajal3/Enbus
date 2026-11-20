@@ -1,6 +1,6 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { getUserProfile } from "@/lib/supabase/cached";
 import { revalidatePath } from "next/cache";
 import { codigoEB, humanizeError } from "@/lib/errores";
@@ -501,6 +501,47 @@ export async function actualizarSucursal(id: string, input: SucursalInput): Prom
   revalidatePath("/cooperativas/configuracion");
   revalidatePath("/cooperativas/empleados");
   return { ok: true, data: data as SucursalGuardada };
+}
+
+/**
+ * Sucursal desde la que opera el administrador (la que usa por defecto al recibir encomiendas).
+ * `profiles.sucursal_id` está protegido contra cambios directos del usuario (trigger
+ * aa_proteger_perfil), por eso se escribe con el cliente de servicio tras validarlo todo aquí.
+ */
+export async function asignarMiSucursal(sucursalId: string): Promise<ResultadoConfig> {
+  const admin = await requireAdmin();
+  if (!admin.ok) return admin;
+  if (!UUID_RE.test(sucursalId ?? "")) return { ok: false, error: "Elige una sucursal de la lista." };
+
+  const user = await getUserProfile();
+  if (!user) return { ok: false, error: "Tu sesión expiró. Inicia sesión de nuevo para continuar." };
+
+  const supabase = await createClient();
+  const { data: sucursal, error: lecturaError } = await supabase
+    .from("sucursales")
+    .select("id, activa")
+    .eq("id", sucursalId)
+    .eq("cooperativa_id", admin.cooperativaId)
+    .maybeSingle();
+  if (lecturaError) {
+    console.error("[asignarMiSucursal] Error al leer la sucursal:", lecturaError);
+    return fallo(lecturaError, "guardar tu sucursal");
+  }
+  if (!sucursal) return { ok: false, error: "No encontramos esa sucursal en tu cooperativa. Actualiza la página." };
+  if (!sucursal.activa) return { ok: false, error: "Esa sucursal está desactivada. Actívala o elige otra." };
+
+  const { error } = await createAdminClient()
+    .from("profiles")
+    .update({ sucursal_id: sucursalId })
+    .eq("id", user.id)
+    .eq("cooperativa_id", admin.cooperativaId);
+  if (error) {
+    console.error("[asignarMiSucursal] Error:", error);
+    return fallo(error, "guardar tu sucursal");
+  }
+
+  revalidatePath("/cooperativas", "layout");
+  return { ok: true, data: null };
 }
 
 export async function cambiarActivaSucursal(id: string, activa: boolean): Promise<ResultadoConfig> {

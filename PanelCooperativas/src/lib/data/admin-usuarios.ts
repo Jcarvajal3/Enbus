@@ -88,7 +88,7 @@ export async function fetchUsuarios(filtros: FiltrosUsuarios = {}): Promise<Pagi
     .from("bajas_cuenta")
     .select("usuario_id", { count: "exact" })
     .is("auth_eliminada_at", null)
-    .order("solicitada_at", { ascending: true })
+    .order("solicitada_at", { ascending: false })
     .limit(300);
   if (bajasError && !faltaTablaBajas(bajasError)) {
     console.error("Error fetching bajas_cuenta:", bajasError);

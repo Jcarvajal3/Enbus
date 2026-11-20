@@ -158,7 +158,7 @@ function Entrega() {
         `)
         .eq("cooperativa_id", cooperativaId)
         .eq("estado", "EN_OFICINA_DESTINO")
-        .order("updated_at", { ascending: true }) // Más antiguas primero
+        .order("updated_at", { ascending: false }) // Más recientes primero
         // Tope explícito (PostgREST corta en 1000). Las que no se listen se abren escaneando.
         .limit(1000);
 

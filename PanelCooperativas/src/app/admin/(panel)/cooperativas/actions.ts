@@ -34,6 +34,7 @@ import { revalidatePath } from "next/cache";
 import { ESTADOS_CON_MOTIVO, type EstadoCooperativa } from "@/lib/types/admin-cooperativas";
 import { normalizeRif, RIF_ERROR } from "@/lib/rif";
 import { humanizeError } from "@/lib/errores";
+import { leerMonto } from "@/lib/dinero";
 
 export async function createCooperativa(formData: FormData) {
   try {
@@ -64,8 +65,8 @@ export async function createCooperativa(formData: FormData) {
       return { success: false, error: RIF_ERROR, campo: "rif" as const };
     }
 
-    const comision = Number(comisionStr.replace(",", "."));
-    if (!Number.isFinite(comision) || comision < 0 || comision > 100) {
+    const comision = leerMonto(comisionStr, { permitirCero: true });
+    if (comision === null || comision > 100) {
       return { success: false, error: "La comisión debe ser un número entre 0 y 100." };
     }
 
@@ -271,8 +272,8 @@ export async function updateCooperativa(id: string, formData: FormData) {
       }
     }
 
-    const comision = Number(comisionStr.replace(",", "."));
-    if (!Number.isFinite(comision) || comision < 0 || comision > 100) {
+    const comision = leerMonto(comisionStr, { permitirCero: true });
+    if (comision === null || comision > 100) {
       return { success: false, error: "La comisión debe ser un número entre 0 y 100." };
     }
 

@@ -9,7 +9,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { DotsThree, PencilSimple, Printer, XCircle } from "@phosphor-icons/react";
+import { ArrowSquareOut, DotsThree, PencilSimple, Printer, XCircle } from "@phosphor-icons/react";
+import { DiagramaAsientos } from "./diagrama-asientos";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
@@ -135,6 +136,7 @@ export function ViajeSheet({
   cancelando = false,
   recarga = 0,
   desdeEmbarque = false,
+  enViajes = false,
 }: {
   viajeId: string | null;
   onOpenChange(o: boolean): void;
@@ -149,6 +151,8 @@ export function ViajeSheet({
   recarga?: number;
   /** Abierta desde Embarque: no ofrece "Ir a Embarque". */
   desdeEmbarque?: boolean;
+  /** Abierta desde Viajes: muestra el diagrama de asientos. */
+  enViajes?: boolean;
 }) {
   const supabase = useMemo(() => createClient(), []);
   const { user } = useUser();
@@ -360,6 +364,26 @@ export function ViajeSheet({
                   </DropdownMenu>
                 )}
               </div>
+
+              {enViajes && (
+                <section aria-labelledby="viaje-asientos" className="flex flex-col gap-4">
+                  <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+                    <h3 id="viaje-asientos" className="text-[17px] font-semibold tracking-tight">
+                      Asientos
+                    </h3>
+                    <a
+                      href={`/cooperativas/diagrama/${viaje.id}`}
+                      target="_blank"
+                      rel="noopener"
+                      className={buttonVariants({ variant: "outline" })}
+                    >
+                      <ArrowSquareOut aria-hidden />
+                      Abrir en pantalla
+                    </a>
+                  </div>
+                  <DiagramaAsientos key={`${viaje.id}:${boletos.length}`} viajeId={viaje.id} totalAsientos={viaje.asientos_totales} />
+                </section>
+              )}
 
               <section aria-labelledby="viaje-pasajeros" className="flex flex-col gap-4">
                 <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">

@@ -55,14 +55,14 @@ export default async function ViajesPage({
       return base()
         .gte("fecha_hora_salida", r.desde)
         .lte("fecha_hora_salida", r.hasta)
-        .order("fecha_hora_salida", { ascending: true })
+        .order("fecha_hora_salida", { ascending: false })
         .limit(LIMITE_LISTA);
     }
     if (vista === "proximos") {
       return base()
         .gt("fecha_hora_salida", rangoHoy.hasta)
         .lte("fecha_hora_salida", finProximos)
-        .order("fecha_hora_salida", { ascending: true })
+        .order("fecha_hora_salida", { ascending: false })
         .limit(LIMITE_LISTA);
     }
     if (vista === "historial") {
@@ -71,7 +71,7 @@ export default async function ViajesPage({
         .order("fecha_hora_salida", { ascending: false })
         .limit(LIMITE_HISTORIAL);
     }
-    return base().or(filtroHoy).order("fecha_hora_salida", { ascending: true }).limit(LIMITE_LISTA);
+    return base().or(filtroHoy).order("fecha_hora_salida", { ascending: false }).limit(LIMITE_LISTA);
   };
 
   const esAdmin = user.role === "admin_cooperativa";

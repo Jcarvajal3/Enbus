@@ -1,18 +1,15 @@
 "use client";
 
 // ─── Día de salida (venta en taquilla) ──────────────────────────────────────
-// Atajos "Hoy" y "Mañana" (control segmentado, D19) y un campo de fecha para
-// cualquier otro día. Los días son 'YYYY-MM-DD' en hora de Venezuela (UTC-4):
-// nunca se usa la zona del navegador. No se venden boletos de días pasados.
+// Atajos "Hoy" y "Mañana" (control segmentado, D19) y un `FechaField` (calendario
+// propio) para cualquier otro día. Los días son 'YYYY-MM-DD' en hora de Venezuela
+// (UTC-4): nunca se usa la zona del navegador. No se venden boletos de días pasados.
 
-import { useId, useState } from "react";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { useId } from "react";
+import { FechaField } from "@/components/campos";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatDiaVE, hoyVE, sumarDiasVE } from "@/lib/fechas";
 import { cn } from "@/lib/utils";
-
-const FECHA_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 /** "Hoy", "Mañana" o "jue. 12 nov." para un día 'YYYY-MM-DD'. */
 export function nombreDia(dia: string) {
@@ -46,21 +43,12 @@ export function SelectorDia({
   // Con otro día elegido, ninguno de los atajos queda activo.
   const atajo = dia === hoy ? "hoy" : dia === manana ? "manana" : null;
 
-  // El campo lleva su propio texto: al teclear la fecha por partes pasa por días
-  // incompletos o pasados que no se aplican (y no deben borrar lo tecleado).
-  const [texto, setTexto] = useState(dia ?? "");
-  const [diaPrevio, setDiaPrevio] = useState(dia);
-  if (dia !== diaPrevio) {
-    setDiaPrevio(dia);
-    setTexto(dia ?? "");
-  }
-
   return (
     <div role="group" aria-labelledby={`${id}-etiqueta`} className={cn("flex flex-col gap-2", className)}>
       <span id={`${id}-etiqueta`} className="text-[13px] leading-none font-medium text-foreground select-none">
         Día de salida
       </span>
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-start gap-2">
         <Tabs value={atajo} onValueChange={(v) => onCambio(v === "manana" ? manana : hoy)}>
           <TabsList aria-label="Atajos de día">
             <TabsTrigger value="hoy" disabled={disabled} className="flex-none px-4">
@@ -71,24 +59,18 @@ export function SelectorDia({
             </TabsTrigger>
           </TabsList>
         </Tabs>
-        <Label htmlFor={`${id}-fecha`} className="sr-only">
-          Otra fecha
-        </Label>
-        <Input
+        {/* No se venden salidas pasadas: el calendario arranca hoy. */}
+        <FechaField
           id={`${id}-fecha`}
-          type="date"
+          label="Otra fecha"
+          value={dia ?? ""}
+          onChange={onCambio}
           min={hoy}
-          value={texto}
           disabled={disabled}
-          aria-invalid={texto !== "" && FECHA_RE.test(texto) && texto < hoy ? true : undefined}
-          onChange={(e) => {
-            const valor = e.target.value;
-            setTexto(valor);
-            if (FECHA_RE.test(valor) && valor >= hoy) onCambio(valor);
-          }}
-          // Al salir con una fecha incompleta o pasada, vuelve al día elegido.
-          onBlur={() => setTexto(dia ?? "")}
-          className="w-auto min-w-0 flex-1 tabular-nums md:w-44 md:flex-none"
+          atajos={false}
+          placeholder="Otra fecha"
+          titulo="Día de salida"
+          className="w-full min-w-0 flex-1 md:w-56 md:flex-none [&_label]:sr-only"
         />
       </div>
     </div>

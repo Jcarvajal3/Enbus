@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { humanizeError } from "@/lib/errores";
+import { leerMonto } from "@/lib/dinero";
 import { formatCiudad, mismaCiudad, terminalVE, terminalesParaSalir } from "@/lib/ciudades";
 
 const MSG_MISMA_CIUDAD = "El origen y el destino deben ser ciudades distintas.";
@@ -25,14 +26,9 @@ function leerDuracion(formData: FormData): number {
   return parseInt(String(formData.get("duracion_estimada_min") ?? ""), 10);
 }
 
-/** "15,50" | "15.50" | "1.250,00" -> número (NaN si no es válido). */
+/** "15,50" | "15.50" | "1.250,00" -> número (lector único de montos; NaN si no es válido). */
 function parsePrecio(valor: FormDataEntryValue | null): number {
-  const texto = String(valor ?? "").trim().replace(/\s/g, "");
-  if (!texto) return NaN;
-  // El último separador es el decimal: "1.234,56" y "1,234.56" -> 1234.56.
-  const normalizado =
-    texto.lastIndexOf(",") > texto.lastIndexOf(".") ? texto.replace(/\./g, "").replace(",", ".") : texto.replace(/,/g, "");
-  return /^\d+(\.\d+)?$/.test(normalizado) ? Number(normalizado) : NaN;
+  return leerMonto(String(valor ?? "")) ?? NaN;
 }
 
 /**

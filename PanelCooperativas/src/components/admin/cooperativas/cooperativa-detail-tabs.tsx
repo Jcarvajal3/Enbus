@@ -22,8 +22,7 @@ import { useParamUrl } from "@/hooks/use-param-url";
 import { useTasaBCVAdmin } from "@/components/admin/dashboard/use-tasa-bcv-admin";
 import { CLASE_PESTANA, ConteoPestana, Dato, Vacio } from "@/components/admin/detalle";
 import { formatDuracion, formatFechaVE } from "@/lib/fechas";
-import { formatCedula, formatTelefono } from "@/lib/ve";
-import { isValidRif, normalizeRif } from "@/lib/rif";
+import { documentoOGuion, SIN_DATO, telefonoOGuion } from "@/lib/mostrar";
 import { claveReputacion, etiquetaMetodoPago, etiquetaRol } from "@/lib/estados";
 import { formatCiudad } from "@/lib/ciudades";
 import { formatNumeroVE } from "@/lib/dinero";
@@ -38,16 +37,8 @@ interface CooperativaDetailTabsProps {
 
 /** Teléfono legible o "—" (SY-29). */
 export function telefonoOVacio(v: string | null | undefined) {
-  const f = v ? formatTelefono(v) : "—";
-  return f === "—" ? <Vacio /> : <span className="tabular-nums">{f}</span>;
-}
-
-/** Cédula ("V-30.000.001") o RIF ("J-12345678-9") legibles; si no se reconocen, el texto guardado. */
-export function documentoLegible(v: string | null | undefined): string {
-  if (!v || v.toUpperCase().startsWith("PENDIENTE")) return "—";
-  if (/^[JGC]/i.test(v.trim()) && isValidRif(v)) return normalizeRif(v) ?? v;
-  const c = formatCedula(v);
-  return c === "—" ? v : c;
+  const f = telefonoOGuion(v);
+  return f === SIN_DATO ? <Vacio /> : <span className="tabular-nums">{f}</span>;
 }
 
 function Estrellas({ n, className }: { n: number; className?: string }) {
@@ -219,12 +210,12 @@ export function CooperativaDetailTabs({ cooperativa }: CooperativaDetailTabsProp
                     <Dato etiqueta="Titular">{metodo.titular}</Dato>
                     {metodo.numero_cuenta && (
                       <Dato etiqueta="Número de cuenta">
-                        <span className="font-mono">{metodo.numero_cuenta}</span>
+                        <span className="font-mono">{metodo.tipo === "PAGO_MOVIL" ? telefonoOGuion(metodo.numero_cuenta) : metodo.numero_cuenta}</span>
                       </Dato>
                     )}
                     {metodo.cedula_rif && (
                       <Dato etiqueta="Cédula o RIF">
-                        <span className="font-mono">{documentoLegible(metodo.cedula_rif)}</span>
+                        <span className="font-mono">{documentoOGuion(metodo.cedula_rif)}</span>
                       </Dato>
                     )}
                     {metodo.email_zelle && <Dato etiqueta="Correo Zelle">{metodo.email_zelle}</Dato>}
@@ -353,7 +344,7 @@ export function CooperativaDetailTabs({ cooperativa }: CooperativaDetailTabsProp
                       <span className="block font-medium">{emp.nombre_completo}</span>
                       <span className="block text-[13px] text-muted-foreground">{emp.email || "Sin correo"}</span>
                     </TableCell>
-                    <TableCell className="hidden font-mono text-[13px] lg:table-cell">{documentoLegible(emp.cedula_rif)}</TableCell>
+                    <TableCell className="hidden font-mono text-[13px] lg:table-cell">{documentoOGuion(emp.cedula_rif)}</TableCell>
                     <TableCell className="hidden md:table-cell">{telefonoOVacio(emp.telefono)}</TableCell>
                     <TableCell>
                       <TonoBadge tono="neutro">{etiquetaRol(emp.role)}</TonoBadge>

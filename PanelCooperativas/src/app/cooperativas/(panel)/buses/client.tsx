@@ -23,7 +23,7 @@ import { PaginacionTabla, usePaginacion } from "@/components/paginacion-tabla";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
 import { CeldaEnlace } from "@/components/celda-enlace";
-import { TelefonoField } from "@/components/ve-fields";
+import { Campo, TelefonoField } from "@/components/campos";
 import { requireOnline } from "@/components/connectivity-banner";
 import { avisarError, avisarExito } from "@/lib/avisos";
 import { humanizeError } from "@/lib/errores";
@@ -34,6 +34,9 @@ import { cn } from "@/lib/utils";
 import { cambiarActivoBus, eliminarBus, guardarBus, revisarViajesBus, type CampoBus } from "./actions";
 
 const ASIENTOS_MAX = 80;
+
+/** Campos que muestran su propio error bajo el campo (el resto va en el aviso de arriba). */
+const CAMPOS_CON_ERROR_PROPIO: readonly string[] = ["unidad", "placa", "asientos", "telefono"];
 
 /** Nombre del bus en títulos y avisos: su número de unidad. */
 function nombreBus(bus: Pick<Bus, "numero_unidad">) {
@@ -381,70 +384,60 @@ export function BusesClient({ buses, errorCarga }: { buses: Bus[]; errorCarga: s
             className="flex flex-col gap-6"
           >
             <div className="grid gap-4">
-              {/* El error del teléfono se ve bajo su campo. */}
-              {formError && errorCampo !== "telefono" && <AvisoError>{formError}</AvisoError>}
+              {/* El error de cada campo con componente propio se ve bajo su campo. */}
+              {formError && !(errorCampo && CAMPOS_CON_ERROR_PROPIO.includes(errorCampo)) && <AvisoError>{formError}</AvisoError>}
 
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <div className="grid content-start gap-2">
-                  <Label htmlFor={`${uid}-unidad`}>Unidad</Label>
-                  <Input
-                    id={`${uid}-unidad`}
-                    name="numero_unidad"
-                    autoComplete="off"
-                    maxLength={40}
-                    placeholder="Ej.: Unidad 12"
-                    value={unidad}
-                    onChange={(e) => {
-                      setUnidad(e.target.value);
-                      limpiarError("unidad");
-                    }}
-                    aria-invalid={invalido("unidad")}
-                    required
-                  />
-                </div>
-                <div className="grid content-start gap-2">
-                  <Label htmlFor={`${uid}-placa`}>Placa (opcional)</Label>
-                  <Input
-                    id={`${uid}-placa`}
-                    name="placa"
-                    autoComplete="off"
-                    autoCapitalize="characters"
-                    maxLength={12}
-                    placeholder="Ej.: AB123CD"
-                    className="uppercase placeholder:normal-case"
-                    value={placa}
-                    onChange={(e) => {
-                      setPlaca(e.target.value);
-                      limpiarError("placa");
-                    }}
-                    aria-invalid={invalido("placa")}
-                  />
-                </div>
+                <Campo
+                  id={`${uid}-unidad`}
+                  name="numero_unidad"
+                  label="Unidad"
+                  maxLength={40}
+                  placeholder="Ej. Unidad 12"
+                  required
+                  enterKeyHint="next"
+                  value={unidad}
+                  onChange={(v) => {
+                    setUnidad(v);
+                    limpiarError("unidad");
+                  }}
+                  error={errorCampo === "unidad" ? formError : null}
+                />
+                <Campo
+                  id={`${uid}-placa`}
+                  name="placa"
+                  label="Placa"
+                  opcional
+                  mayusculas
+                  maxLength={12}
+                  placeholder="Ej. AB123CD"
+                  enterKeyHint="next"
+                  value={placa}
+                  onChange={(v) => {
+                    setPlaca(v);
+                    limpiarError("placa");
+                  }}
+                  error={errorCampo === "placa" ? formError : null}
+                />
               </div>
 
-              <div className="grid content-start gap-2">
-                <Label htmlFor={`${uid}-asientos`}>Asientos</Label>
-                <Input
-                  id={`${uid}-asientos`}
-                  name="asientos"
-                  type="number"
-                  inputMode="numeric"
-                  min={1}
-                  max={ASIENTOS_MAX}
-                  placeholder="Ej.: 42"
-                  value={asientos}
-                  onChange={(e) => {
-                    setAsientos(e.target.value);
-                    limpiarError("asientos");
-                  }}
-                  aria-invalid={invalido("asientos")}
-                  aria-describedby={`${uid}-asientos-ayuda`}
-                  required
-                />
-                <p id={`${uid}-asientos-ayuda`} className="text-[13px] text-muted-foreground">
-                  Los que se venden en cada viaje de este bus (1 a {ASIENTOS_MAX}).
-                </p>
-              </div>
+              <Campo
+                id={`${uid}-asientos`}
+                name="asientos"
+                label="Asientos"
+                inputMode="numeric"
+                maxLength={String(ASIENTOS_MAX).length}
+                placeholder="Ej. 42"
+                required
+                enterKeyHint="next"
+                value={asientos}
+                onChange={(v) => {
+                  setAsientos(v.replace(/\D/g, ""));
+                  limpiarError("asientos");
+                }}
+                error={errorCampo === "asientos" ? formError : null}
+                ayuda={`Los que se venden en cada viaje de este bus (1 a ${ASIENTOS_MAX}).`}
+              />
 
               <fieldset className="grid gap-4">
                 <legend className="mb-2 text-[13px] font-medium text-foreground">Chofer asignado (opcional)</legend>

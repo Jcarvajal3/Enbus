@@ -19,17 +19,17 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Field, FieldDescription, FieldError, FieldLabel, FieldSet, FieldLegend } from "@/components/ui/field";
+import { Field, FieldDescription, FieldLabel, FieldSet, FieldLegend } from "@/components/ui/field";
+import { Campo, FechaField, HoraField, MontoField } from "@/components/campos";
 import { AvisoError } from "@/components/aviso-error";
 import { avisarExito } from "@/lib/avisos";
 import { createTarifa } from "@/app/admin/(panel)/tarifas/actions";
 import { humanizeError } from "@/lib/errores";
-import { formatNumeroVE, formatUsd } from "@/lib/dinero";
+import { formatNumeroVE, formatUsd, leerMonto } from "@/lib/dinero";
 import { fechaHoraVEaISO, hoyVE } from "@/lib/fechas";
 import { formatCiudad } from "@/lib/ciudades";
 import {
@@ -41,24 +41,36 @@ import {
   type Tarifa,
 } from "@/lib/types/admin-tarifas";
 
-type Campo = keyof ParametrosTarifa | "vigente_desde";
-type Errores = Partial<Record<Campo, string>>;
+type CampoTarifa = keyof ParametrosTarifa | "vigente_desde";
+type Errores = Partial<Record<CampoTarifa, string>>;
 
 const PESOS_EJEMPLO = [1, 5, 10];
 const MINUTOS_EJEMPLO = 8 * 60;
 
-/** "2,50" | "2.50" | "1.234,5" → número (NaN si no es válido). */
-function leerDecimal(texto: string): number {
-  const limpio = texto.trim().replace(/\s/g, "");
-  if (!limpio) return NaN;
-  const normalizado =
-    limpio.lastIndexOf(",") > limpio.lastIndexOf(".")
-      ? limpio.replace(/\./g, "").replace(",", ".")
-      : limpio.replace(/,/g, "");
-  return /^\d+(\.\d+)?$/.test(normalizado) ? Number(normalizado) : NaN;
+/** Precio y pesos: el lector único de montos (coma decimal); NaN si no es válido. */
+function leerNumero(texto: string): number {
+  return leerMonto(texto) ?? NaN;
 }
 
-/** 2.5 → "2,5" para precargar el formulario con la tarifa vigente. */
+/** Recargo por minuto ("0,0010"): lleva hasta 6 decimales, más que un monto (`leerMonto` admite 2). */
+function leerFactor(texto: string): number {
+  const t = texto.trim();
+  return /^\d+([.,]\d{1,6})?$/.test(t) ? Number(t.replace(",", ".")) : NaN;
+}
+
+/** Medida en cm: solo un entero. */
+function leerEntero(texto: string): number {
+  const t = texto.trim();
+  return /^\d+$/.test(t) ? Number(t) : NaN;
+}
+
+/** 2.5 → "2,50" (monto con la máscara) para precargar el formulario con la tarifa vigente. */
+function montoATexto(n: number | null | undefined): string {
+  if (n === null || n === undefined || !Number.isFinite(n)) return "";
+  return Number(n.toFixed(2)) === n ? formatNumeroVE(n) : String(n).replace(".", ",");
+}
+
+/** 0.001 → "0,001" (sin máscara de miles). */
 function aTexto(n: number | null | undefined): string {
   return n === null || n === undefined || !Number.isFinite(n) ? "" : String(n).replace(".", ",");
 }
@@ -158,9 +170,9 @@ function Formulario({
   const enCurso = useRef(false);
 
   const [paso, setPaso] = useState<1 | 2>(1);
-  const [porKg, setPorKg] = useState(aTexto(vigente?.tarifa_por_kg));
+  const [porKg, setPorKg] = useState(montoATexto(vigente?.tarifa_por_kg));
   const [factor, setFactor] = useState(aTexto(vigente?.factor_distancia_por_min));
-  const [pesoMax, setPesoMax] = useState(aTexto(vigente?.peso_max_kg));
+  const [pesoMax, setPesoMax] = useState(montoATexto(vigente?.peso_max_kg));
   const [medidaMax, setMedidaMax] = useState(aTexto(vigente?.dimensiones_max_cm));
   const [cuando, setCuando] = useState<"ahora" | "programar">("ahora");
   const [fecha, setFecha] = useState(hoyVE());
@@ -170,17 +182,17 @@ function Formulario({
   const [errorGeneral, setErrorGeneral] = useState<string | null>(null);
 
   const nueva: ParametrosTarifa = {
-    tarifa_por_kg: leerDecimal(porKg),
-    factor_distancia_por_min: leerDecimal(factor),
-    peso_max_kg: leerDecimal(pesoMax),
-    dimensiones_max_cm: leerDecimal(medidaMax),
+    tarifa_por_kg: leerNumero(porKg),
+    factor_distancia_por_min: leerFactor(factor),
+    peso_max_kg: leerNumero(pesoMax),
+    dimensiones_max_cm: leerEntero(medidaMax),
   };
   const recargo8h = Number.isFinite(nueva.factor_distancia_por_min)
     ? recargoPorcentaje(nueva.factor_distancia_por_min, MINUTOS_EJEMPLO)
     : null;
   const ejemplos = useMemo(() => rutasDeEjemplo(rutas), [rutas]);
 
-  const limpiarError = (campo: Campo) => {
+  const limpiarError = (campo: CampoTarifa) => {
     if (errores[campo]) setErrores((e) => ({ ...e, [campo]: undefined }));
     setErrorGeneral(null);
   };
@@ -208,7 +220,7 @@ function Formulario({
       }
     }
     setErrores(e);
-    const primero = (["tarifa_por_kg", "factor_distancia_por_min", "peso_max_kg", "dimensiones_max_cm", "vigente_desde"] as Campo[]).find(
+    const primero = (["tarifa_por_kg", "factor_distancia_por_min", "peso_max_kg", "dimensiones_max_cm", "vigente_desde"] as CampoTarifa[]).find(
       (c) => e[c]
     );
     if (primero) document.getElementById(id(primero))?.focus();
@@ -232,7 +244,7 @@ function Formulario({
         nota: nota.trim() || null,
       });
       if (!res.success) {
-        const campo = res.campo as Campo | undefined;
+        const campo = res.campo as CampoTarifa | undefined;
         if (campo && ["tarifa_por_kg", "factor_distancia_por_min", "peso_max_kg", "dimensiones_max_cm", "vigente_desde"].includes(campo)) {
           setErrores({ [campo]: res.error });
           setPaso(1);
@@ -401,48 +413,8 @@ function Formulario({
     );
   }
 
-  const campoProps = (campo: Campo, ayudaId?: string) => ({
-    id: id(campo),
-    "aria-invalid": errores[campo] ? true : undefined,
-    "aria-describedby": errores[campo] ? id(`${campo}-error`) : ayudaId,
-    disabled: publicando,
-  });
-
-  const errorCampo = (campo: Campo) =>
-    errores[campo] ? <FieldError id={id(`${campo}-error`)}>{errores[campo]}</FieldError> : null;
-
-  const campoNumero = (
-    campo: Exclude<Campo, "vigente_desde">,
-    etiqueta: string,
-    valor: string,
-    setValor: (v: string) => void,
-    placeholder: string,
-    ayuda?: string,
-    inputMode: "decimal" | "numeric" = "decimal"
-  ) => (
-    <Field data-invalid={errores[campo] ? true : undefined}>
-      <FieldLabel htmlFor={id(campo)}>{etiqueta}</FieldLabel>
-      <Input
-        {...campoProps(campo, ayuda ? id(`${campo}-ayuda`) : undefined)}
-        inputMode={inputMode}
-        autoComplete="off"
-        placeholder={placeholder}
-        value={valor}
-        onChange={(e) => {
-          setValor(e.target.value);
-          limpiarError(campo);
-        }}
-        className="tabular-nums"
-      />
-      {errores[campo]
-        ? errorCampo(campo)
-        : ayuda && (
-            <FieldDescription id={id(`${campo}-ayuda`)} aria-live="polite">
-              {ayuda}
-            </FieldDescription>
-          )}
-    </Field>
-  );
+  /** Lo común de cada campo del formulario: id, error y bloqueo mientras se publica. */
+  const comun = (campo: CampoTarifa) => ({ id: id(campo), error: errores[campo], disabled: publicando });
 
   return (
     <form onSubmit={irARevision} noValidate className="flex flex-col gap-6">
@@ -453,25 +425,57 @@ function Formulario({
       </DialogHeader>
 
       <div className="grid gap-5 md:grid-cols-2">
-        {campoNumero("tarifa_por_kg", "Precio por kilo (USD)", porKg, setPorKg, "Ej.: 2,50")}
-        {campoNumero(
-          "factor_distancia_por_min",
-          "Recargo por minuto de viaje",
-          factor,
-          setFactor,
-          "Ej.: 0,0010",
-          recargo8h === null ? "Se suma por cada minuto de viaje." : `Viaje de 8 h: +${formatNumeroVE(recargo8h, 0)} %`
-        )}
-        {campoNumero("peso_max_kg", "Peso máximo (kg)", pesoMax, setPesoMax, "Ej.: 25")}
-        {campoNumero(
-          "dimensiones_max_cm",
-          "Medida máxima (cm)",
-          medidaMax,
-          setMedidaMax,
-          "Ej.: 50",
-          "El lado más largo del paquete.",
-          "numeric"
-        )}
+        <MontoField
+          {...comun("tarifa_por_kg")}
+          label="Precio por kilo (USD)"
+          moneda="USD"
+          value={porKg}
+          onChange={(v) => {
+            setPorKg(v);
+            limpiarError("tarifa_por_kg");
+          }}
+          enterKeyHint="next"
+        />
+        <Campo
+          {...comun("factor_distancia_por_min")}
+          label="Recargo por minuto de viaje"
+          inputMode="decimal"
+          placeholder="Ej. 0,0010"
+          value={factor}
+          onChange={(v) => {
+            setFactor(v);
+            limpiarError("factor_distancia_por_min");
+          }}
+          ayuda={recargo8h === null ? "Se suma por cada minuto de viaje." : `Viaje de 8 h: +${formatNumeroVE(recargo8h, 0)} %`}
+          enterKeyHint="next"
+        />
+        <Campo
+          {...comun("peso_max_kg")}
+          label="Peso máximo"
+          sufijo="kg"
+          inputMode="decimal"
+          placeholder="Ej. 25"
+          value={pesoMax}
+          onChange={(v) => {
+            setPesoMax(v);
+            limpiarError("peso_max_kg");
+          }}
+          enterKeyHint="next"
+        />
+        <Campo
+          {...comun("dimensiones_max_cm")}
+          label="Medida máxima"
+          sufijo="cm"
+          inputMode="numeric"
+          placeholder="Ej. 50"
+          value={medidaMax}
+          onChange={(v) => {
+            setMedidaMax(v.replace(/\D/g, ""));
+            limpiarError("dimensiones_max_cm");
+          }}
+          ayuda="El lado más largo del paquete."
+          maxLength={3}
+        />
       </div>
 
       <FieldSet className="gap-3">
@@ -494,46 +498,33 @@ function Formulario({
         </Tabs>
         {cuando === "programar" && (
           <div className="grid gap-4 md:grid-cols-2">
-            <Field data-invalid={errores.vigente_desde ? true : undefined}>
-              <FieldLabel htmlFor={id("vigente_desde")}>Fecha</FieldLabel>
-              <Input
-                {...campoProps("vigente_desde", id("programar-ayuda"))}
-                type="date"
-                min={hoyVE()}
-                value={fecha}
-                onChange={(e) => {
-                  setFecha(e.target.value);
-                  limpiarError("vigente_desde");
-                }}
-                className="tabular-nums"
-              />
-            </Field>
-            <Field data-invalid={errores.vigente_desde ? true : undefined}>
-              <FieldLabel htmlFor={id("hora")}>Hora (Venezuela)</FieldLabel>
-              <Input
-                id={id("hora")}
-                type="time"
-                step={300}
-                value={hora}
-                aria-invalid={errores.vigente_desde ? true : undefined}
-                aria-describedby={errores.vigente_desde ? id("vigente_desde-error") : id("programar-ayuda")}
-                disabled={publicando}
-                onChange={(e) => {
-                  setHora(e.target.value);
-                  limpiarError("vigente_desde");
-                }}
-                className="tabular-nums"
-              />
-            </Field>
-            <div className="md:col-span-2">
-              {errores.vigente_desde
-                ? errorCampo("vigente_desde")
-                : programada && (
-                    <FieldDescription id={id("programar-ayuda")}>
-                      Empieza a regir el {sinPunto(programada)}. Hasta entonces se cobra la vigente.
-                    </FieldDescription>
-                  )}
-            </div>
+            <FechaField
+              {...comun("vigente_desde")}
+              label="Fecha"
+              min={hoyVE()}
+              atajos={false}
+              value={fecha}
+              onChange={(v) => {
+                setFecha(v);
+                limpiarError("vigente_desde");
+              }}
+            />
+            <HoraField
+              id={id("hora")}
+              label="Hora (Venezuela)"
+              paso={300}
+              value={hora}
+              disabled={publicando}
+              onChange={(v) => {
+                setHora(v);
+                limpiarError("vigente_desde");
+              }}
+            />
+            {!errores.vigente_desde && programada && (
+              <FieldDescription id={id("programar-ayuda")} className="md:col-span-2">
+                Empieza a regir el {sinPunto(programada)}. Hasta entonces se cobra la vigente.
+              </FieldDescription>
+            )}
           </div>
         )}
       </FieldSet>
@@ -546,7 +537,7 @@ function Formulario({
           id={id("nota")}
           rows={2}
           maxLength={300}
-          placeholder="Ej.: Ajuste por el aumento del combustible."
+          placeholder="Ej. Ajuste por el aumento del combustible."
           value={nota}
           onChange={(e) => setNota(e.target.value)}
           disabled={publicando}
