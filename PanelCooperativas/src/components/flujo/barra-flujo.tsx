@@ -64,11 +64,11 @@ export function BarraFlujo({
       data-slot="barra-flujo"
       className={cn(
         // Pegada al fondo del contenido: `-mx/-mb` contrarrestan el relleno del shell (p-5 / lg:p-8).
-        "sticky bottom-[max(var(--alto-pestanas,0px),env(safe-area-inset-bottom))] z-20 mt-auto -mx-5 -mb-5 border-t border-border bg-card shadow-overlay lg:-mx-8 lg:-mb-8 md:rounded-b-md",
+        "sticky bottom-(--alto-pestanas) z-20 mt-auto -mx-5 -mb-5 border-t border-border bg-card shadow-overlay lg:-mx-8 lg:-mb-8 md:rounded-b-md",
         className
       )}
     >
-      <div className="mx-auto flex w-full max-w-2xl flex-col gap-2 px-5 pt-3 pb-3 lg:px-0 md:pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+      <div className="mx-auto flex w-full max-w-2xl flex-col gap-2 px-5 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:px-0">
         {/* Siempre montada para que los lectores de pantalla anuncien los cambios. */}
         <div
           aria-live="polite"

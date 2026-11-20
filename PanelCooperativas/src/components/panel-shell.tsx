@@ -115,6 +115,19 @@ export function BarraSuperior({
 /** Clases del <main> en móvil: deja libre la barra de pestañas flotante (`--alto-pestanas`, globals.css). */
 export const CLASE_MAIN_MOVIL = "max-md:pb-[calc(var(--alto-pestanas)+1rem)]";
 
+/** Flujos de pantalla completa (venta/cobro de boletos y alta de encomienda): ocultan las pestañas inferiores en móvil. */
+const RUTAS_SIN_BARRA_INFERIOR = [
+  "/cooperativas/taquilla/boletos/vender",
+  "/cooperativas/taquilla/boletos/cobrar/",
+  "/cooperativas/taquilla/encomiendas/nueva",
+];
+
+function ocultaBarraInferior(pathname: string): boolean {
+  return RUTAS_SIN_BARRA_INFERIOR.some((prefijo) =>
+    prefijo.endsWith("/") ? pathname.startsWith(prefijo) : pathname === prefijo || pathname.startsWith(`${prefijo}/`)
+  );
+}
+
 function CabeceraMovilPanel({ headerExtra }: { headerExtra?: React.ReactNode }) {
   const { user } = useUser();
   return (
@@ -151,6 +164,7 @@ export function PanelShell({
   const pathname = usePathname();
   const menu = useMenuLateral(menuAbierto);
   const movil = useIsMobile();
+  const sinBarraInferior = ocultaBarraInferior(pathname);
 
   return (
     <UserProvider initialUser={user}>
@@ -159,7 +173,7 @@ export function PanelShell({
       <MigaObjetoProvider>
         <SidebarProvider open={menu.open} onOpenChange={menu.onOpenChange}>
           {!movil && <AppSidebar />}
-          <SidebarInset className={cn("min-w-0 bg-canvas", CLASE_MAIN_MOVIL)}>
+          <SidebarInset className={cn("min-w-0 bg-canvas", !sinBarraInferior && CLASE_MAIN_MOVIL)}>
             {/* Conectividad: siempre arriba, sobre la barra */}
             <ConnectivityBanner />
             {/* Estado de la cooperativa (en revisión, rechazada, suspendida o desactivada): no se puede cerrar */}
@@ -170,7 +184,7 @@ export function PanelShell({
               {children}
             </div>
           </SidebarInset>
-          {movil && <BarraPestanasPanel />}
+          {movil && !sinBarraInferior && <BarraPestanasPanel />}
         </SidebarProvider>
       </MigaObjetoProvider>
     </UserProvider>
