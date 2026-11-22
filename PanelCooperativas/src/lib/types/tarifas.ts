@@ -12,6 +12,7 @@ export const ETIQUETA_ESTADO_TARIFA: Record<EstadoTarifa, string> = {
 
 export interface Tarifa {
   id: string;
+  cooperativa_id?: string | null;
   tarifa_por_kg: number;
   factor_distancia_por_min: number;
   dimensiones_max_cm: number;
@@ -29,6 +30,24 @@ export interface Tarifa {
   estado: EstadoTarifa;
 }
 
+/** Fila cruda de `public.tarifas` (con join opcional al perfil del creador). */
+export type FilaTarifa = Record<string, unknown> & {
+  id: string;
+  cooperativa_id?: string | null;
+  tarifa_por_kg: number | string;
+  factor_distancia_por_min: number | string;
+  dimensiones_max_cm: number;
+  peso_max_kg: number | string;
+  vigente_desde: string;
+  activa: boolean;
+  creada_por: string;
+  created_at: string;
+  publicada_at?: string | null;
+  reemplazada_at?: string | null;
+  nota?: string | null;
+  profiles?: { nombre_completo?: string | null } | null;
+};
+
 /** Estado de una fila de `tarifas` (columnas de 20260721000002). */
 export function estadoDeTarifa(t: {
   activa: boolean;
@@ -38,6 +57,27 @@ export function estadoDeTarifa(t: {
   if (t.activa) return "VIGENTE";
   if (t.publicada_at && !t.reemplazada_at) return "PROGRAMADA";
   return "ANTERIOR";
+}
+
+/** Convierte una fila de Supabase en el tipo `Tarifa` usado por UI y páginas. */
+export function aTarifa(row: FilaTarifa): Tarifa {
+  return {
+    id: row.id,
+    cooperativa_id: row.cooperativa_id ?? null,
+    tarifa_por_kg: Number(row.tarifa_por_kg),
+    factor_distancia_por_min: Number(row.factor_distancia_por_min),
+    dimensiones_max_cm: row.dimensiones_max_cm,
+    peso_max_kg: Number(row.peso_max_kg),
+    vigente_desde: row.vigente_desde,
+    activa: row.activa,
+    creada_por: row.creada_por,
+    created_at: row.created_at,
+    creador_nombre: row.profiles?.nombre_completo || null,
+    publicada_at: row.publicada_at ?? null,
+    reemplazada_at: row.reemplazada_at ?? null,
+    nota: row.nota ?? null,
+    estado: estadoDeTarifa(row),
+  };
 }
 
 /** Límites de fn_publicar_tarifa (el servidor vuelve a validarlos). */
@@ -77,7 +117,7 @@ export interface RouteOption {
   estado_destino: string;
   ciudad_destino: string;
   duracion_estimada_min: number;
-  cooperativa_nombre: string;
+  cooperativa_nombre?: string;
 }
 
 export interface SimuladorInput {

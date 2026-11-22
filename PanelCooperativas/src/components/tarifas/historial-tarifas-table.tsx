@@ -7,7 +7,7 @@ import { EntityCard } from "@/components/entity-card";
 import { IconTile } from "@/components/icon-tile";
 import { ListaResponsive } from "@/components/lista-responsive";
 import { TarjetaTabla } from "@/components/admin/detalle";
-import type { Tarifa } from "@/lib/types/admin-tarifas";
+import type { Tarifa } from "@/lib/types/tarifas";
 import { formatNumeroVE, formatUsd } from "@/lib/dinero";
 import { formatFechaHoraVE } from "@/lib/fechas";
 import { ClockCounterClockwise, CurrencyDollar } from "@phosphor-icons/react";

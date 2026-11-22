@@ -35,7 +35,7 @@ export const ADMIN_NAV_GRUPOS: AdminNavGrupo[] = [
       { title: "Solicitudes", href: "/admin/solicitudes", icon: ClipboardText, contador: "solicitudes" },
       { title: "Cooperativas", href: "/admin/cooperativas", icon: Buildings },
       { title: "Comisiones", href: "/admin/comisiones", icon: Receipt },
-      { title: "Tarifas", href: "/admin/tarifas", icon: CurrencyDollar },
+      { title: "Tasa BCV", href: "/admin/tasa-bcv", icon: CurrencyDollar },
     ],
   },
   {

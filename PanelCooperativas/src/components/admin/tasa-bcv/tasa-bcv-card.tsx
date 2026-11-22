@@ -1,6 +1,6 @@
 "use client";
 
-// ─── Tasa BCV vigente (Tarifas, `#tasa-bcv`) ────────────────────────────────
+// ─── Tasa BCV vigente (`/admin/tasa-bcv#tasa-bcv`) ──────────────────────────
 // Tasa con la que se cobran en Bs los precios de referencia en USD, con el
 // formulario "Cargar tasa manual" (respaldo cuando la tarea programada falla).
 // El chip de la barra superior enlaza aquí.
@@ -20,7 +20,7 @@ import { DECIMALES_TASA, fechaTasaCorta, formatNumeroVE, leerMonto } from "@/lib
 import { fechaVE, formatFechaVE, formatHoraVE, sumarDiasVE } from "@/lib/fechas";
 import { avisarExito } from "@/lib/avisos";
 import { esTasaDesactualizada, type TasaBCV } from "@/lib/types/pagos";
-import { registrarTasaManual } from "@/app/admin/(panel)/tarifas/actions";
+import { registrarTasaManual } from "@/app/admin/(panel)/tasa-bcv/actions";
 
 interface TasaBCVCardProps {
   tasa: TasaBCV | null;

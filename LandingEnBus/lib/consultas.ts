@@ -39,6 +39,8 @@ export interface OpcionCotizacion {
   duracion_min: number | null;
   costo_usd: number;
   costo_bs: number | null;
+  peso_max_kg: number | null;
+  dimensiones_max_cm: number | null;
 }
 
 export interface Cotizacion {
@@ -222,6 +224,8 @@ export async function cotizar(
             duracion_min: numero(o.duracion_min),
             costo_usd: numero(o.costo_usd) ?? NaN,
             costo_bs: numero(o.costo_bs),
+            peso_max_kg: numero(o.peso_max_kg),
+            dimensiones_max_cm: numero(o.dimensiones_max_cm),
           }))
           .filter((o) => Number.isFinite(o.costo_usd)),
       },
@@ -284,21 +288,33 @@ export async function estadisticas(): Promise<Estadisticas | null> {
 }
 
 /**
- * Orígenes y destinos con ruta activa de una cooperativa activa, para los selectores
- * de la calculadora. [] sin configuración o ante un error (la calculadora se oculta).
+ * Orígenes y destinos con ruta activa de una cooperativa activa con tarifa vigente,
+ * para los selectores de la calculadora. [] sin configuración o ante un error (la calculadora se oculta).
  */
 export async function origenesConDestinos(): Promise<OrigenConDestinos[]> {
   const supabase = obtenerSupabaseAdmin();
   if (!supabase) return [];
   try {
+    // Solo cooperativas con tarifa activa para encomiendas (si la migración aún no se aplica,
+    // el query puede fallar por columna ausente y se mantiene el listado sin filtrar).
+    const { data: tarifasActivas, error: errorTarifas } = await supabase
+      .from("tarifas")
+      .select("cooperativa_id")
+      .eq("activa", true)
+      .not("cooperativa_id", "is", null);
+    const coopsConTarifa =
+      !errorTarifas && tarifasActivas
+        ? new Set(tarifasActivas.map((t) => String(t.cooperativa_id ?? "")).filter(Boolean))
+        : null;
+
     // Filtro por la cooperativa con un join (`!inner`): con `.in(ids)` la URL crece con cada
     // cooperativa activa hasta pasar el límite del servidor. PostgREST devuelve como mucho
     // `max_rows` (1000) filas por petición: se pagina hasta MAX_RUTAS.
-    const rutas: { ciudad_origen: unknown; ciudad_destino: unknown }[] = [];
+    const rutas: { cooperativa_id: unknown; ciudad_origen: unknown; ciudad_destino: unknown }[] = [];
     for (let desde = 0; desde < MAX_RUTAS; desde += PAGINA_RUTAS) {
       const { data, error: errorRutas } = await supabase
         .from("rutas")
-        .select("ciudad_origen, ciudad_destino, cooperativas!inner(estado)")
+        .select("cooperativa_id, ciudad_origen, ciudad_destino, cooperativas!inner(estado)")
         .eq("activa", true)
         .eq("cooperativas.estado", "ACTIVA")
         .order("id")
@@ -314,6 +330,7 @@ export async function origenesConDestinos(): Promise<OrigenConDestinos[]> {
     // Agrupa por ciudad sin distinguir tildes ni mayúsculas (como normalizar_localidad).
     const mapa = new Map<string, { origen: string; destinos: Map<string, string> }>();
     for (const r of rutas) {
+      if (coopsConTarifa && !coopsConTarifa.has(String(r.cooperativa_id ?? ""))) continue;
       const origen = String(r.ciudad_origen ?? "").trim();
       const destino = String(r.ciudad_destino ?? "").trim();
       if (!origen || !destino) continue;

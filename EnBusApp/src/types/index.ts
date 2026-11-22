@@ -653,11 +653,13 @@ export interface OpcionCotizacionEnvio {
   costo_usd: number;
   /** `null` si no hay tasa BCV vigente */
   costo_bs: number | null;
+  peso_max_kg?: number | null;
+  dimensiones_max_cm?: number | null;
 }
 
 /** `fn_cotizar_envio_publico(peso, origen, destino)` (opciones de menor a mayor costo). */
 export interface CotizacionEnvioPublica {
-  peso_max_kg: number;
+  peso_max_kg: number | null;
   tasa_bcv: number | null;
   /** 'YYYY-MM-DD' */
   tasa_bcv_fecha: string | null;

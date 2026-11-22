@@ -26,9 +26,11 @@ import { documentoOGuion, SIN_DATO, telefonoOGuion } from "@/lib/mostrar";
 import { claveReputacion, etiquetaMetodoPago, etiquetaRol } from "@/lib/estados";
 import { formatCiudad } from "@/lib/ciudades";
 import { formatNumeroVE } from "@/lib/dinero";
+import { TarifaVigenteCard } from "@/components/tarifas/tarifa-vigente-card";
+import { HistorialTarifasTable } from "@/components/tarifas/historial-tarifas-table";
 import { Calificacion, RifIncompletoBadge, formatPorcentaje } from "./cooperativas-table";
 
-const PESTANAS = ["general", "sucursales", "metodos", "rutas", "empleados", "calificaciones", "balance"] as const;
+const PESTANAS = ["general", "sucursales", "metodos", "rutas", "tarifas", "empleados", "calificaciones", "balance"] as const;
 type Pestana = (typeof PESTANAS)[number];
 
 interface CooperativaDetailTabsProps {
@@ -62,6 +64,8 @@ export function CooperativaDetailTabs({ cooperativa }: CooperativaDetailTabsProp
   const tab: Pestana = (PESTANAS as readonly string[]).includes(valorTab) ? (valorTab as Pestana) : "general";
   const pendiente = Number(cooperativa.comisiones_pendientes ?? 0);
   const promedio = Number(cooperativa.calificacion_promedio);
+  const vigente = cooperativa.tarifas.find((t) => t.estado === "VIGENTE") ?? null;
+  const programada = cooperativa.tarifas.find((t) => t.estado === "PROGRAMADA") ?? null;
 
   return (
     <Tabs value={tab} onValueChange={(v) => setTab(String(v))} className="gap-4">
@@ -75,6 +79,9 @@ export function CooperativaDetailTabs({ cooperativa }: CooperativaDetailTabsProp
         </TabsTrigger>
         <TabsTrigger value="rutas" className={CLASE_PESTANA}>
           Rutas <ConteoPestana n={cooperativa.rutas.length} />
+        </TabsTrigger>
+        <TabsTrigger value="tarifas" className={CLASE_PESTANA}>
+          Tarifas <ConteoPestana n={cooperativa.tarifas.length} />
         </TabsTrigger>
         <TabsTrigger value="empleados" className={CLASE_PESTANA}>
           Empleados <ConteoPestana n={cooperativa.empleados.length} />
@@ -299,6 +306,18 @@ export function CooperativaDetailTabs({ cooperativa }: CooperativaDetailTabsProp
             )}
           />
         </Card>
+      </TabsContent>
+
+      {/* Tarifas */}
+      <TabsContent value="tarifas">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+          <div className="lg:col-span-5">
+            <TarifaVigenteCard tarifa={vigente} programada={programada} soloLectura />
+          </div>
+          <div className="lg:col-span-7">
+            <HistorialTarifasTable tarifas={cooperativa.tarifas} />
+          </div>
+        </div>
       </TabsContent>
 
       {/* Empleados */}

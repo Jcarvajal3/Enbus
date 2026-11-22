@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Clock, Spinner, Star, WarningCircle } from "@phosphor-icons/react"
+import { Clock, Package, Spinner, Star, WarningCircle } from "@phosphor-icons/react"
 
 import { buttonVariants } from "@/components/ui/button"
 import { formatMoney, formatNumeroVE } from "@/lib/dinero"
@@ -186,7 +186,7 @@ export function Calculadora({ origenes }: { origenes: OrigenConDestinos[] }) {
 
             {resultado.opciones.length === 0 ? (
               <p className="mt-2 text-sm text-muted-foreground">
-                Ninguna cooperativa tiene esta ruta activa por ahora. Prueba con una ciudad cercana.
+                Ninguna cooperativa tiene envíos disponibles en esta ruta por ahora. Prueba con una ciudad cercana.
               </p>
             ) : (
               <ul className="mt-3 divide-y divide-border">
@@ -215,6 +215,13 @@ export function Calculadora({ origenes }: { origenes: OrigenConDestinos[] }) {
                               {tiempo}
                             </span>
                           )}
+                          {o.peso_max_kg !== null && (
+                            <span className="inline-flex items-center gap-1">
+                              <Package className="size-3.5" aria-hidden />
+                              <span className="sr-only">Peso máximo </span>
+                              {`Hasta ${pesoTexto(o.peso_max_kg)} kg`}
+                            </span>
+                          )}
                         </span>
                       </div>
                       <div className="flex flex-col sm:items-end">
@@ -235,8 +242,7 @@ export function Calculadora({ origenes }: { origenes: OrigenConDestinos[] }) {
             )}
 
             <p className="campo-ayuda mt-3">
-              Precio referencial; la taquilla confirma el costo al pesar el paquete.
-              {resultado.peso_max_kg ? ` Peso máximo por envío: ${formatNumeroVE(resultado.peso_max_kg, 0)} kg.` : ""}
+              Precio referencial según la tarifa de cada cooperativa; la taquilla confirma el costo al pesar el paquete.
             </p>
           </div>
         )}

@@ -5,21 +5,24 @@ import { useRouter } from "next/navigation";
 import { CalendarCheck, XCircle } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/confirm-dialog";
-import { cancelarTarifaProgramada } from "@/app/admin/(panel)/tarifas/actions";
+import { cancelarTarifaProgramada } from "@/app/cooperativas/(panel)/tarifas/actions";
 import { avisarExito } from "@/lib/avisos";
 import { formatNumeroVE, formatUsd } from "@/lib/dinero";
-import { formatFechaProgramada, type Tarifa } from "@/lib/types/admin-tarifas";
+import { formatFechaProgramada, type Tarifa } from "@/lib/types/tarifas";
 import { cn } from "@/lib/utils";
 
 /** "Programada para el 05/10 a las 6:00 a. m." con "Cancelar programación" (fn_cancelar_tarifa_programada). */
 export function TarifaProgramadaAviso({
   tarifa,
   actual = null,
+  soloLectura = false,
   className,
 }: {
   tarifa: Tarifa;
   /** Tarifa vigente, para resumir qué cambia. */
   actual?: Tarifa | null;
+  /** En vistas de solo lectura (como admin), oculta la acción de cancelar. */
+  soloLectura?: boolean;
   className?: string;
 }) {
   const router = useRouter();
@@ -44,30 +47,34 @@ export function TarifaProgramadaAviso({
           {vencida && <p className="font-medium">Su hora ya llegó: se activará en los próximos minutos.</p>}
         </div>
       </div>
-      <Button type="button" variant="outline" onClick={() => setOpen(true)} className="self-start">
-        <XCircle aria-hidden /> Cancelar programación
-      </Button>
+      {!soloLectura && (
+        <>
+          <Button type="button" variant="outline" onClick={() => setOpen(true)} className="self-start">
+            <XCircle aria-hidden /> Cancelar programación
+          </Button>
 
-      <ConfirmDialog
-        open={open}
-        onOpenChange={setOpen}
-        titulo="¿Cancelar la tarifa programada?"
-        descripcion={`La tarifa que iba a empezar el ${cuando} no entrará en vigor.`}
-        impacto={[
-          actual ? "Se sigue cobrando la tarifa vigente." : "Seguirá sin haber una tarifa vigente.",
-          "Queda en el historial como «Anterior».",
-        ]}
-        verbo="Cancelar programación"
-        verboCargando="Cancelando…"
-        tono="destructive"
-        onConfirm={async () => {
-          const res = await cancelarTarifaProgramada(tarifa.id);
-          if (!res.success) return { ok: false, error: res.error };
-          avisarExito("Cancelamos la tarifa programada.");
-          router.refresh();
-          return { ok: true };
-        }}
-      />
+          <ConfirmDialog
+            open={open}
+            onOpenChange={setOpen}
+            titulo="¿Cancelar la tarifa programada?"
+            descripcion={`La tarifa que iba a empezar el ${cuando} no entrará en vigor.`}
+            impacto={[
+              actual ? "Se sigue cobrando la tarifa vigente." : "Seguirá sin haber una tarifa vigente.",
+              "Queda en el historial como «Anterior».",
+            ]}
+            verbo="Cancelar programación"
+            verboCargando="Cancelando…"
+            tono="destructive"
+            onConfirm={async () => {
+              const res = await cancelarTarifaProgramada(tarifa.id);
+              if (!res.success) return { ok: false, error: res.error };
+              avisarExito("Cancelamos la tarifa programada.");
+              router.refresh();
+              return { ok: true };
+            }}
+          />
+        </>
+      )}
     </div>
   );
 }

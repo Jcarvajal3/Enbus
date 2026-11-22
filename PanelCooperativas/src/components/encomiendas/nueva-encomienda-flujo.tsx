@@ -232,8 +232,10 @@ export function NuevaEncomiendaFlujo() {
     [datos]
   );
 
-  const destinoValido = !!sucursal && !!ruta;
+  const destinoValido = !!sucursal && !!ruta && !!datos?.tarifa;
   const pesoNum = leerMonto(peso);
+  const pesoMaxTarifa = datos?.tarifa?.peso_max_kg ?? null;
+  const dimMaxTarifa = datos?.tarifa?.dimensiones_max_cm ?? null;
   const trayecto = sucursal && ruta ? `${formatCiudad(sucursal.ciudad)} → ${formatCiudad(ruta.ciudad_destino)}` : null;
 
   // ── Estimado del peso escrito (debounce) ──
@@ -325,9 +327,9 @@ export function NuevaEncomiendaFlujo() {
     if (d.cedula) marcar("des-cedula", d.cedula);
     if (d.telefono) marcar("des-telefono", d.telefono);
     if (contenido.trim().length < 3) marcar("contenido", "Describe el contenido del paquete (mínimo 3 letras).");
-    const max = estimadoVigente?.max;
+    const max = estimadoVigente?.max ?? pesoMaxTarifa ?? undefined;
     if (pesoNum == null || pesoNum <= 0) marcar("peso", "Escribe el peso en kilos, por ejemplo 2,5.");
-    else if (max && pesoNum > max) marcar("peso", `El peso máximo es ${max} kg.`);
+    else if (max && pesoNum > max) marcar("peso", `El peso máximo es ${max.toLocaleString("es-VE")} kg.`);
     if (valor.trim() && leerMonto(valor, { permitirCero: true }) == null) {
       marcar("valor", "Escribe el valor en dólares, por ejemplo 40,00.");
     }
@@ -927,7 +929,11 @@ export function NuevaEncomiendaFlujo() {
                   limpiar("peso");
                 }}
                 error={errores.peso}
-                ayuda={estimadoVigente?.max ? `Máximo ${estimadoVigente.max} kg.` : "Pesa el paquete y escribe el peso."}
+                ayuda={
+                  (estimadoVigente?.max ?? pesoMaxTarifa)
+                    ? `Máximo ${(estimadoVigente?.max ?? pesoMaxTarifa)!.toLocaleString("es-VE")} kg.`
+                    : "Pesa el paquete y escribe el peso."
+                }
                 inputMode="decimal"
                 sufijo="kg"
                 placeholder="Ej. 2,5"
@@ -960,10 +966,12 @@ export function NuevaEncomiendaFlujo() {
                   <p className="text-muted-foreground">{estimadoVigente.mensaje}</p>
                 )}
               </div>
-              <p className="flex items-start gap-2 text-[13px] text-muted-foreground md:col-span-2">
-                <Warning aria-hidden className="mt-0.5 size-4 shrink-0" />
-                Máximo {estimadoVigente?.max ?? 50} kg y 50 × 50 × 50 cm.
-              </p>
+              {(estimadoVigente?.max ?? pesoMaxTarifa) != null && dimMaxTarifa != null && (
+                <p className="flex items-start gap-2 text-[13px] text-muted-foreground md:col-span-2">
+                  <Warning aria-hidden className="mt-0.5 size-4 shrink-0" />
+                  Máximo {(estimadoVigente?.max ?? pesoMaxTarifa)!.toLocaleString("es-VE")} kg y {dimMaxTarifa} × {dimMaxTarifa} × {dimMaxTarifa} cm.
+                </p>
+              )}
             </Seccion>
 
             <Seccion titulo="¿Quién paga?" id={id("seccion-paga")} unaColumna>
@@ -1146,6 +1154,20 @@ function PasoDestino({
           </Link>
         ) : (
           "Pídele al administrador que cree una sucursal."
+        )}
+      </p>
+    );
+  }
+  if (!datos.tarifa) {
+    return (
+      <p className="rounded-md bg-surface p-4 text-[15px] text-muted-foreground">
+        Tu cooperativa todavía no tiene una tarifa activa para calcular encomiendas.{" "}
+        {esAdmin ? (
+          <Link href="/cooperativas/tarifas" className="font-medium text-info-text underline underline-offset-4">
+            Configurar tarifas
+          </Link>
+        ) : (
+          "Pídele al administrador que configure las tarifas."
         )}
       </p>
     );

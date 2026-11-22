@@ -17,6 +17,8 @@ export type ChecklistCooperativa = {
   metodos_pago: number;
   metodos_digitales: number;
   rutas: number;
+  /** Tarifas activas de la cooperativa. */
+  tarifas_activas?: number;
   /** Buses activos (desde 20261109000001; ausente si la migración no está aplicada). */
   buses?: number;
   viajes_proximos: number;
@@ -45,6 +47,12 @@ function pasos(c: ChecklistCooperativa): Paso[] {
       ayuda: "El precio va en USD; el pasajero paga en Bs a la tasa BCV del día.",
       href: "/cooperativas/rutas",
       hecho: Number(c.rutas) > 0,
+    },
+    {
+      titulo: "Configura tus tarifas de encomiendas",
+      ayuda: "Precio por kilo, recargo por distancia, peso y medida máxima.",
+      href: "/cooperativas/tarifas",
+      hecho: typeof c.tarifas_activas !== "number" || c.tarifas_activas > 0,
     },
     {
       titulo: "Registra tus buses",

@@ -27,7 +27,7 @@ import { Field, FieldDescription, FieldLabel, FieldSet, FieldLegend } from "@/co
 import { Campo, FechaField, HoraField, MontoField } from "@/components/campos";
 import { AvisoError } from "@/components/aviso-error";
 import { avisarExito } from "@/lib/avisos";
-import { createTarifa } from "@/app/admin/(panel)/tarifas/actions";
+import { createTarifa } from "@/app/cooperativas/(panel)/tarifas/actions";
 import { humanizeError } from "@/lib/errores";
 import { formatNumeroVE, formatUsd, leerMonto } from "@/lib/dinero";
 import { fechaHoraVEaISO, hoyVE } from "@/lib/fechas";
@@ -35,11 +35,12 @@ import { formatCiudad } from "@/lib/ciudades";
 import {
   costoEncomiendaUsd,
   formatFechaProgramada,
+  LIMITES_TARIFA,
   recargoPorcentaje,
   type ParametrosTarifa,
   type RouteOption,
   type Tarifa,
-} from "@/lib/types/admin-tarifas";
+} from "@/lib/types/tarifas";
 
 type CampoTarifa = keyof ParametrosTarifa | "vigente_desde";
 type Errores = Partial<Record<CampoTarifa, string>>;
@@ -200,17 +201,33 @@ function Formulario({
   /** Misma validación que fn_publicar_tarifa; el foco va al primer campo con error. */
   const validar = (): boolean => {
     const e: Errores = {};
-    if (!Number.isFinite(nueva.tarifa_por_kg) || nueva.tarifa_por_kg <= 0 || nueva.tarifa_por_kg > 1000) {
+    if (
+      !Number.isFinite(nueva.tarifa_por_kg) ||
+      nueva.tarifa_por_kg < LIMITES_TARIFA.tarifa_por_kg.min ||
+      nueva.tarifa_por_kg > LIMITES_TARIFA.tarifa_por_kg.max
+    ) {
       e.tarifa_por_kg = "Escribe el precio por kilo en USD, mayor que 0 (por ejemplo 2,50).";
     }
-    if (!Number.isFinite(nueva.factor_distancia_por_min) || nueva.factor_distancia_por_min < 0 || nueva.factor_distancia_por_min > 1) {
+    if (
+      !Number.isFinite(nueva.factor_distancia_por_min) ||
+      nueva.factor_distancia_por_min < LIMITES_TARIFA.factor_distancia_por_min.min ||
+      nueva.factor_distancia_por_min > LIMITES_TARIFA.factor_distancia_por_min.max
+    ) {
       e.factor_distancia_por_min = "El recargo por minuto de viaje debe estar entre 0 y 1 (por ejemplo 0,0010).";
     }
-    if (!Number.isFinite(nueva.peso_max_kg) || nueva.peso_max_kg < 1 || nueva.peso_max_kg > 100) {
-      e.peso_max_kg = "El peso máximo debe estar entre 1 y 100 kg.";
+    if (
+      !Number.isFinite(nueva.peso_max_kg) ||
+      nueva.peso_max_kg < LIMITES_TARIFA.peso_max_kg.min ||
+      nueva.peso_max_kg > LIMITES_TARIFA.peso_max_kg.max
+    ) {
+      e.peso_max_kg = `El peso máximo debe estar entre ${LIMITES_TARIFA.peso_max_kg.min} y ${LIMITES_TARIFA.peso_max_kg.max} kg.`;
     }
-    if (!Number.isInteger(nueva.dimensiones_max_cm) || nueva.dimensiones_max_cm < 10 || nueva.dimensiones_max_cm > 300) {
-      e.dimensiones_max_cm = "La medida máxima debe ser un número entero entre 10 y 300 cm.";
+    if (
+      !Number.isInteger(nueva.dimensiones_max_cm) ||
+      nueva.dimensiones_max_cm < LIMITES_TARIFA.dimensiones_max_cm.min ||
+      nueva.dimensiones_max_cm > LIMITES_TARIFA.dimensiones_max_cm.max
+    ) {
+      e.dimensiones_max_cm = `La medida máxima debe ser un número entero entre ${LIMITES_TARIFA.dimensiones_max_cm.min} y ${LIMITES_TARIFA.dimensiones_max_cm.max} cm.`;
     }
     if (cuando === "programar") {
       if (!fecha || !hora) {
@@ -298,7 +315,7 @@ function Formulario({
               ? `Empieza a regir el ${sinPunto(programada)}. Hasta entonces se cobra la vigente.`
               : vigente
                 ? "Reemplaza a la vigente al publicarla; la actual pasa a «Anterior»."
-                : "Será la primera tarifa: las cooperativas podrán cobrar encomiendas al publicarla."}
+                : "Será la primera tarifa: tu cooperativa podrá cobrar encomiendas al publicarla."}
           </DialogDescription>
         </DialogHeader>
 
@@ -335,7 +352,7 @@ function Formulario({
             Ejemplos
           </h3>
           {ejemplos.length === 0 ? (
-            <p className="text-[15px] text-muted-foreground">No hay rutas activas para mostrar ejemplos.</p>
+            <p className="text-[15px] text-muted-foreground">No tienes rutas activas para mostrar ejemplos.</p>
           ) : (
             ejemplos.map((r) => (
               <div key={r.id} className="overflow-hidden rounded-md bg-surface">
@@ -421,7 +438,7 @@ function Formulario({
       <DialogHeader>
         <Paso n={1} />
         <DialogTitle>Nueva tarifa</DialogTitle>
-        <DialogDescription>Precio de las encomiendas para todas las cooperativas, en USD de referencia.</DialogDescription>
+        <DialogDescription>Precio de las encomiendas de tu cooperativa, en USD de referencia.</DialogDescription>
       </DialogHeader>
 
       <div className="grid gap-5 md:grid-cols-2">

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState, useMemo } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -7,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { AvisoError } from "@/components/aviso-error";
 import { formatDuracion } from "@/lib/fechas";
-import { costoEncomiendaUsd, type Tarifa, type RouteOption } from "@/lib/types/admin-tarifas";
+import { costoEncomiendaUsd, type Tarifa, type RouteOption } from "@/lib/types/tarifas";
 import { formatCiudad } from "@/lib/ciudades";
 import { formatNumeroVE, formatUsd } from "@/lib/dinero";
 import type { TasaBCV } from "@/lib/types/pagos";
@@ -22,7 +23,7 @@ interface SimuladorProps {
 
 export function Simulador({ tarifa, rutas, tasa = null }: SimuladorProps) {
   const [selectedRutaId, setSelectedRutaId] = useState<string>("");
-  const [peso, setPeso] = useState<number>(5); // default 5kg
+  const [peso, setPeso] = useState<number>(() => Math.min(5, tarifa?.peso_max_kg ?? 25));
 
   // Get selected route details
   const selectedRoute = useMemo(() => {
@@ -55,7 +56,7 @@ export function Simulador({ tarifa, rutas, tasa = null }: SimuladorProps) {
       costo_distancia,
       costo_total,
       formula,
-      exceedsLimit
+      exceedsLimit,
     };
   }, [tarifa, selectedRoute, peso]);
 
@@ -83,6 +84,14 @@ export function Simulador({ tarifa, rutas, tasa = null }: SimuladorProps) {
       <CardContent className="flex flex-col gap-4">
         {!tarifa ? (
           <p className="text-[15px] text-muted-foreground">Publica una tarifa con «Nueva tarifa» para usar el simulador.</p>
+        ) : rutas.length === 0 ? (
+          <p className="text-[15px] text-muted-foreground">
+            No tienes rutas activas para simular.{" "}
+            <Link href="/cooperativas/rutas" className="font-medium text-foreground underline underline-offset-4">
+              Crea una ruta en Rutas
+            </Link>{" "}
+            y vuelve aquí para probar el cálculo.
+          </p>
         ) : (
           <>
             <Field>
@@ -92,19 +101,25 @@ export function Simulador({ tarifa, rutas, tasa = null }: SimuladorProps) {
                 onValueChange={(val) => setSelectedRutaId(val ?? "")}
                 // Etiqueta de la ruta elegida: sin `items`, el Select mostraría su id.
                 items={Object.fromEntries(
-                  rutas.map((r) => [r.id, `${formatCiudad(r.ciudad_origen)} → ${formatCiudad(r.ciudad_destino)} (${r.cooperativa_nombre})`])
+                  rutas.map((r) => [
+                    r.id,
+                    `${formatCiudad(r.ciudad_origen)} → ${formatCiudad(r.ciudad_destino)} (${r.cooperativa_nombre ?? formatDuracion(r.duracion_estimada_min)})`,
+                  ])
                 )}
               >
                 <SelectTrigger id="sim-ruta" className="w-full">
                   <SelectValue placeholder="Elige una ruta activa" />
                 </SelectTrigger>
                 <SelectContent className="max-h-56">
-                  {rutas.map((ruta) => (
-                    <SelectItem key={ruta.id} value={ruta.id}>
-                      {formatCiudad(ruta.ciudad_origen)} → {formatCiudad(ruta.ciudad_destino)}
-                      <span className="text-muted-foreground">({ruta.cooperativa_nombre})</span>
-                    </SelectItem>
-                  ))}
+                  {rutas.map((ruta) => {
+                    const detalle = ruta.cooperativa_nombre ?? formatDuracion(ruta.duracion_estimada_min);
+                    return (
+                      <SelectItem key={ruta.id} value={ruta.id}>
+                        {formatCiudad(ruta.ciudad_origen)} → {formatCiudad(ruta.ciudad_destino)}{" "}
+                        <span className="text-muted-foreground">({detalle})</span>
+                      </SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
             </Field>

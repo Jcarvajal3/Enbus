@@ -31,6 +31,7 @@ import type {
   RecepcionOrigen,
   TipoMetodoPago,
 } from "@/lib/types/pagos";
+import type { ParametrosTarifa } from "@/lib/types/tarifas";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const FECHA_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -265,15 +266,21 @@ export type RutaAlta = {
   duracion_estimada_min: number | null;
 };
 
+export type TarifaActivaTaquilla = Pick<
+  ParametrosTarifa,
+  "tarifa_por_kg" | "factor_distancia_por_min" | "peso_max_kg" | "dimensiones_max_cm"
+>;
+
 export type DatosAltaEncomienda = {
   /** Sucursal asignada al usuario (null: debe elegir dónde recibe). */
   sucursalUsuarioId: string | null;
   sucursales: SucursalAlta[];
   /** Rutas activas de la cooperativa (el cliente filtra las que salen de la sucursal). */
   rutas: RutaAlta[];
+  tarifa: TarifaActivaTaquilla | null;
 };
 
-/** Sucursales activas y rutas activas para el formulario de alta presencial. */
+/** Sucursales activas, rutas activas y tarifa vigente para el formulario de alta presencial. */
 export async function datosNuevaEncomienda(): Promise<ResultadoTaquilla<DatosAltaEncomienda>> {
   const supabase = await createClient();
   const {
@@ -294,7 +301,7 @@ export async function datosNuevaEncomienda(): Promise<ResultadoTaquilla<DatosAlt
     return { success: false, error: "Tu usuario no está asociado a una cooperativa. Avísale al administrador." };
   }
 
-  const [sucursales, rutas] = await Promise.all([
+  const [sucursales, rutas, tarifaRes] = await Promise.all([
     supabase
       .from("sucursales")
       .select("id, nombre, ciudad, estado_geografico")
@@ -307,18 +314,37 @@ export async function datosNuevaEncomienda(): Promise<ResultadoTaquilla<DatosAlt
       .eq("cooperativa_id", perfil.cooperativa_id)
       .eq("activa", true)
       .order("ciudad_destino", { ascending: true }),
+    supabase
+      .from("tarifas")
+      .select("tarifa_por_kg, factor_distancia_por_min, peso_max_kg, dimensiones_max_cm")
+      .eq("cooperativa_id", perfil.cooperativa_id)
+      .eq("activa", true)
+      .maybeSingle(),
   ]);
   if (sucursales.error || rutas.error) {
     const error = sucursales.error ?? rutas.error;
     console.error("Error al cargar sucursales y rutas para el alta:", error);
     return fallo(error, "cargar las sucursales y las rutas");
   }
+  if (tarifaRes.error) {
+    console.error("Error al cargar la tarifa vigente para el alta:", tarifaRes.error);
+    return fallo(tarifaRes.error, "cargar la tarifa vigente");
+  }
+
+  const tarifa: TarifaActivaTaquilla | null = tarifaRes.data
+    ? {
+        tarifa_por_kg: Number(tarifaRes.data.tarifa_por_kg),
+        factor_distancia_por_min: Number(tarifaRes.data.factor_distancia_por_min),
+        peso_max_kg: Number(tarifaRes.data.peso_max_kg),
+        dimensiones_max_cm: Number(tarifaRes.data.dimensiones_max_cm),
+      }
+    : null;
 
   const lista = (sucursales.data ?? []) as SucursalAlta[];
   const propia = perfil.sucursal_id && lista.some((s) => s.id === perfil.sucursal_id) ? perfil.sucursal_id : null;
   return {
     success: true,
-    data: { sucursalUsuarioId: propia, sucursales: lista, rutas: (rutas.data ?? []) as RutaAlta[] },
+    data: { sucursalUsuarioId: propia, sucursales: lista, rutas: (rutas.data ?? []) as RutaAlta[], tarifa },
   };
 }
 

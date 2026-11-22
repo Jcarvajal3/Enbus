@@ -60,6 +60,7 @@ import {
   PESO_MAX_KG,
   cedulaParaGuardar,
   formatCedula,
+  formatPesoKg,
   formatTelefono,
   sanitizeText,
   telefonoParaGuardar,
@@ -232,12 +233,21 @@ export default function NuevaEncomiendaWizard() {
 
   const cooperativaId = ruta?.cooperativas?.id ?? null;
   const nombreCoop = ruta?.cooperativas?.nombre ?? 'la cooperativa';
+  const tarifaCoop = cooperativaId ? desde[cooperativaId] : undefined;
+  const pesoMaxCoop =
+    tarifaCoop?.peso_max_kg && tarifaCoop.peso_max_kg > 0 ? Number(tarifaCoop.peso_max_kg) : PESO_MAX_KG;
+  const dimMaxCoop =
+    tarifaCoop?.dimensiones_max_cm && tarifaCoop.dimensiones_max_cm > 0
+      ? Number(tarifaCoop.dimensiones_max_cm)
+      : 50;
 
-  // ── Rutas activas para el trayecto ───────────────────────────────────────
+  // ── Rutas activas para el trayecto y tarifa inicial (1 kg) ───────────────
   useEffect(() => {
     if (!origen || !destino) {
       setRutas([]);
       setRuta(null);
+      setDesde({});
+      setTasaDesde({ tasa: null, fecha: null });
       return;
     }
 
@@ -246,7 +256,10 @@ export default function NuevaEncomiendaWizard() {
       try {
         setLoadingRutas(true);
         setErrorRutas(null);
-        const { data, error } = await supabase
+        setRuta(null);
+        setDesde({});
+
+        const rutaPromise = supabase
           .from('rutas')
           .select('id, precio_pasaje, cooperativa_id, cooperativas!inner ( id, nombre, calificacion_promedio, logo_url )')
           .eq('ciudad_origen', normalizeCityForDb(origen.ciudad))
@@ -256,16 +269,40 @@ export default function NuevaEncomiendaWizard() {
           .eq('cooperativas.estado', 'ACTIVA')
           .limit(50);
 
-        if (error) throw error;
-        if (isMounted) {
-          setRutas((data ?? []) as unknown as RutaDisponible[]);
-          setRuta(null);
+        const [rutasRes, cotizRes] = await Promise.allSettled([
+          rutaPromise,
+          cotizar(1, origen.ciudad, destino.ciudad),
+        ]);
+        if (!isMounted) return;
+
+        if (rutasRes.status === 'rejected') throw rutasRes.reason;
+        if (rutasRes.value.error) throw rutasRes.value.error;
+
+        let rutasCargadas = (rutasRes.value.data ?? []) as unknown as RutaDisponible[];
+
+        if (cotizRes.status === 'fulfilled') {
+          const c = cotizRes.value;
+          const mapa: Record<string, OpcionCotizacionEnvio> = {};
+          for (const o of c.opciones ?? []) mapa[o.cooperativa_id] = o;
+          setDesde(mapa);
+          setTasaDesde({ tasa: c.tasa_bcv, fecha: c.tasa_bcv_fecha });
+          // Las cooperativas sin tarifa activa no pueden aceptar encomiendas (`EB_TARIFA_NO_DISPONIBLE`).
+          rutasCargadas = rutasCargadas.filter((option) =>
+            Boolean(option.cooperativas?.id && Object.prototype.hasOwnProperty.call(mapa, option.cooperativas.id))
+          );
+        } else {
+          // Es solo una referencia: ante error de red/RPC se conservan las rutas sin filtrar.
+          setDesde({});
         }
+
+        setRutas(rutasCargadas);
+        setRuta(null);
       } catch (err) {
         if (__DEV__) console.warn('[nueva] Error cargando rutas:', err);
         // M-45: sin red no es lo mismo que "ninguna cooperativa cubre la ruta".
         if (isMounted) {
           setRutas([]);
+          setDesde({});
           setErrorRutas(humanizeError(err, 'carga'));
         }
       } finally {
@@ -276,28 +313,6 @@ export default function NuevaEncomiendaWizard() {
     fetchRutas();
     return () => {
       isMounted = false;
-    };
-  }, [origen, destino, reintentoRutas]);
-
-  // ── "Desde Bs X (1 kg)" por cooperativa ──────────────────────────────────
-  useEffect(() => {
-    setDesde({});
-    if (!origen || !destino) return;
-    let vigente = true;
-    cotizar(1, origen.ciudad, destino.ciudad)
-      .then((c) => {
-        if (!vigente) return;
-        const mapa: Record<string, OpcionCotizacionEnvio> = {};
-        for (const o of c.opciones ?? []) mapa[o.cooperativa_id] = o;
-        setDesde(mapa);
-        setTasaDesde({ tasa: c.tasa_bcv, fecha: c.tasa_bcv_fecha });
-      })
-      .catch(() => {
-        // Es solo una referencia: sin ella la tarjeta dice que lo calcula la taquilla.
-        if (vigente) setDesde({});
-      });
-    return () => {
-      vigente = false;
     };
   }, [origen, destino, reintentoRutas]);
 
@@ -331,11 +346,11 @@ export default function NuevaEncomiendaWizard() {
     const peso = leerDecimal(pesoKg);
     setErrorCosto(false);
     setAvisoPeso(
-      peso > PESO_MAX_KG
-        ? `El peso máximo es ${PESO_MAX_KG} kg. Para paquetes más pesados, habla con la cooperativa.`
+      peso > pesoMaxCoop
+        ? `El peso máximo es ${formatPesoKg(pesoMaxCoop)} kg. Para paquetes más pesados, habla con la cooperativa.`
         : null
     );
-    if (Number.isNaN(peso) || peso <= 0 || peso > PESO_MAX_KG || !origen || !destino || !cooperativaId) {
+    if (Number.isNaN(peso) || peso <= 0 || peso > pesoMaxCoop || !origen || !destino || !cooperativaId) {
       setEstimado(null);
       setLoadingCosto(false);
       return;
@@ -370,7 +385,7 @@ export default function NuevaEncomiendaWizard() {
       vigente = false;
       clearTimeout(timer);
     };
-  }, [pesoKg, origen, destino, cooperativaId, reintentoCosto]);
+  }, [pesoKg, origen, destino, cooperativaId, pesoMaxCoop, reintentoCosto]);
 
   // ── Fotos ────────────────────────────────────────────────────────────────
   const pickPhoto = async (source: 'camera' | 'library') => {
@@ -417,7 +432,7 @@ export default function NuevaEncomiendaWizard() {
       ['cedula', validateCedula(cedula)],
       ['telefono', validatePhone(telefono)],
       ['descripcion', validateMinLength(descripcion, 3, 'La descripción del contenido')],
-      ['peso', validatePeso(textoDecimal(pesoKg))],
+      ['peso', validatePeso(textoDecimal(pesoKg), pesoMaxCoop)],
       ['valor', validateMonto(textoDecimal(valorDeclarado))],
     ];
 
@@ -429,7 +444,7 @@ export default function NuevaEncomiendaWizard() {
 
     setErrors(next);
     return Object.keys(next).length === 0;
-  }, [nombre, cedula, telefono, descripcion, pesoKg, valorDeclarado, modalidadPago]);
+  }, [nombre, cedula, telefono, descripcion, pesoKg, valorDeclarado, modalidadPago, pesoMaxCoop]);
 
   const step1Valid = !!origen && !!destino && !!ruta;
 
@@ -682,7 +697,7 @@ export default function NuevaEncomiendaWizard() {
                   ) : rutas.length === 0 ? (
                     <EmptyState
                       icon={Package}
-                      title="Sin cooperativas en esta ruta"
+                      title="Sin cooperativas disponibles en esta ruta"
                       description="Prueba con otro destino."
                       compact
                     />
@@ -712,7 +727,15 @@ export default function NuevaEncomiendaWizard() {
                               <EntityCard
                                 selectable
                                 selected={ruta?.id === option.id}
-                                onPress={() => setRuta(option)}
+                                onPress={() => {
+                                  setRuta(option);
+                                  setErrors((prev) => {
+                                    if (!prev.peso) return prev;
+                                    const resto = { ...prev };
+                                    delete resto.peso;
+                                    return resto;
+                                  });
+                                }}
                                 leading={
                                   <LogoCooperativa
                                     nombre={nombreOpcion}
@@ -845,7 +868,15 @@ export default function NuevaEncomiendaWizard() {
                     placeholder="Ej. 2,5"
                     keyboardType="decimal-pad"
                     value={pesoKg}
-                    onChangeText={setPesoKg}
+                    onChangeText={(v) => {
+                      setPesoKg(v);
+                      setErrors((prev) => {
+                        if (!prev.peso) return prev;
+                        const resto = { ...prev };
+                        delete resto.peso;
+                        return resto;
+                      });
+                    }}
                     error={errors.peso}
                   />
 
@@ -902,7 +933,11 @@ export default function NuevaEncomiendaWizard() {
                   />
 
                   {/* La única mención del límite. */}
-                  <Aviso tono="warning" icon={Warning} texto={`Máximo ${PESO_MAX_KG} kg y 50 × 50 × 50 cm.`} />
+                  <Aviso
+                    tono="warning"
+                    icon={Warning}
+                    texto={`Máximo ${formatPesoKg(pesoMaxCoop)} kg y ${dimMaxCoop} × ${dimMaxCoop} × ${dimMaxCoop} cm.`}
+                  />
                 </Card>
               </View>
 

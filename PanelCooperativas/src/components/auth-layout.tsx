@@ -41,7 +41,7 @@ const MARCA: Record<Zona, { antetitulo: string; titular: string; texto: string; 
     puntos: [
       { icono: ClipboardText, titulo: "Solicitudes", detalle: "Revisa y aprueba las cooperativas que se registran." },
       { icono: Buildings, titulo: "Cooperativas y usuarios", detalle: "Gestiona cuentas, accesos e incidencias." },
-      { icono: Receipt, titulo: "Comisiones y tarifas", detalle: "Configura lo que cobra la plataforma." },
+      { icono: Receipt, titulo: "Comisiones y tasa BCV", detalle: "Controla comisiones y la tasa oficial BCV." },
     ],
   },
 };

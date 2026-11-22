@@ -43,6 +43,10 @@ VALUES ((SELECT v FROM fx WHERE k = 'SUC_A_ORIG'), (SELECT v FROM fx WHERE k = '
 INSERT INTO public.tasas_bcv (fecha, tasa, fuente, motivo)
 VALUES ((now() AT TIME ZONE 'America/Caracas')::date, 100, 'manual', 'prueba de robustez')
 ON CONFLICT (fecha) DO NOTHING;
+INSERT INTO public.tarifas (cooperativa_id, tarifa_por_kg, factor_distancia_por_min, dimensiones_max_cm,
+                            peso_max_kg, activa, creada_por, publicada_at)
+VALUES ((SELECT v FROM fx WHERE k = 'COOP_A'), 2.00, 0.0010, 50, 25, true, (SELECT v FROM fx WHERE k = 'AA'), now()),
+       ((SELECT v FROM fx WHERE k = 'COOP_B'), 4.00, 0.0020, 80, 40, true, (SELECT v FROM fx WHERE k = 'AB'), now());
 
 ALTER TABLE public.profiles DISABLE TRIGGER aa_proteger_perfil;
 UPDATE public.profiles SET role = 'taquillero', cooperativa_id = (SELECT v FROM fx WHERE k = 'COOP_A'),

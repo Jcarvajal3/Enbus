@@ -11,6 +11,8 @@ interface Opcion {
   cooperativa: string;
   calificacion: number | null;
   duracion_min: number;
+  peso_max_kg?: number;
+  dimensiones_max_cm?: number;
   costo_usd: number;
   costo_bs: number | null;
 }
@@ -46,10 +48,10 @@ Deno.serve(async (req) => {
       throw new Error(`fn_cotizar_envio_publico: ${error.message}`);
     }
 
-    const cot = data as { peso_max_kg: number; tasa_bcv: number | null; tasa_bcv_fecha: string | null; opciones: Opcion[] };
+    const cot = data as { peso_max_kg: number | null; tasa_bcv: number | null; tasa_bcv_fecha: string | null; opciones: Opcion[] };
     const opciones = Array.isArray(cot?.opciones) ? cot.opciones : [];
     if (opciones.length === 0) {
-      return fallar(404, 'EB_SIN_RUTA', 'Todavía no hay cooperativas que hagan envíos entre esas ciudades.');
+      return fallar(404, 'EB_SIN_RUTA', 'Todavía no hay cooperativas con envíos disponibles entre esas ciudades.');
     }
     const mejor = opciones[0]; // la RPC ordena por costo
     // Las tarifas son USD de referencia; se cobra en Bs a la tasa BCV del día.

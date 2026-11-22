@@ -7,6 +7,7 @@
  *   3. Single place to tighten rules (e.g. regex for cedula) in the future.
  */
 
+import { formatNumeroVE } from '@/src/utils/dinero';
 import { cedulaValida, telefonoValido, CEDULA_ERROR, TELEFONO_ERROR } from './ve.generated';
 
 // ─── Sanitizers ───────────────────────────────────────────────────────────────
@@ -103,16 +104,21 @@ function parseDecimal(val: string): number {
   return Number(t.includes(',') ? t.replace(/\./g, '').replace(',', '.') : t);
 }
 
-export function validatePeso(val: string): ValidationResult {
+/** Formatea un peso en kg con hasta 2 decimales sin ceros sobrantes ("25", "25,5"). */
+export function formatPesoKg(kg: number): string {
+  return formatNumeroVE(kg, 2).replace(/,?0+$/, '');
+}
+
+export function validatePeso(val: string, pesoMaxKg: number = PESO_MAX_KG): ValidationResult {
   if (!val.trim()) return { valid: true }; // peso is optional
   const n = parseDecimal(val);
   if (isNaN(n) || n <= 0) {
     return { valid: false, message: 'El peso debe ser un número mayor que 0' };
   }
-  if (n > PESO_MAX_KG) {
+  if (n > pesoMaxKg) {
     return {
       valid: false,
-      message: `El peso máximo es ${PESO_MAX_KG} kg. Para paquetes más pesados, habla con la cooperativa.`,
+      message: `El peso máximo es ${formatPesoKg(pesoMaxKg)} kg. Para paquetes más pesados, habla con la cooperativa.`,
     };
   }
   return { valid: true };

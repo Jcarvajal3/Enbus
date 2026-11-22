@@ -1,3 +1,5 @@
+import type { Tarifa } from "@/lib/types/tarifas";
+
 /** RECHAZADA es reversible (vuelve a PENDIENTE); DESACTIVADA es terminal. */
 export type EstadoCooperativa = "PENDIENTE" | "RECHAZADA" | "ACTIVA" | "SUSPENDIDA" | "DESACTIVADA";
 
@@ -103,6 +105,7 @@ export interface CooperativaDetalle extends Cooperativa {
   sucursales: Sucursal[];
   metodos_pago: MetodoPago[];
   rutas: Ruta[];
+  tarifas: Tarifa[];
   empleados: Empleado[];
   calificaciones: Calificacion[];
   comisiones_pendientes: number;

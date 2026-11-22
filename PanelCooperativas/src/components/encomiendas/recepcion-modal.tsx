@@ -21,7 +21,7 @@ import { Prohibit, WarningCircle } from "@phosphor-icons/react";
 import { createClient } from "@/lib/supabase/client";
 import type { Encomienda } from "@/lib/types/encomiendas";
 import type { CotizacionEncomienda, RecepcionOrigen } from "@/lib/types/pagos";
-import { leerMonto, type TasaRef } from "@/lib/dinero";
+import { formatNumeroVE, leerMonto, type TasaRef } from "@/lib/dinero";
 import { Campo } from "@/components/campos";
 import { codigoEB, humanizeError, parseDetalleEB } from "@/lib/errores";
 import { confirmarRecepcion } from "@/app/cooperativas/(panel)/taquilla/encomiendas/actions";
@@ -65,6 +65,9 @@ export function RecepcionModal({ encomienda, isOpen, onClose, onSuccess, onRecha
   const esAdmin = user.role === "admin_cooperativa";
   // La cooperativa no tiene ruta activa hacia el destino (EB_SIN_RUTA).
   const [sinRuta, setSinRuta] = useState(false);
+  // La cooperativa no tiene tarifa activa (EB_TARIFA_NO_DISPONIBLE).
+  const [sinTarifa, setSinTarifa] = useState(false);
+  const [dimMax, setDimMax] = useState<number | null>(null);
   const [rechazarOpen, setRechazarOpen] = useState(false);
 
   const [peso, setPeso] = useState<string>("");
@@ -72,7 +75,7 @@ export function RecepcionModal({ encomienda, isOpen, onClose, onSuccess, onRecha
   const [pesoMax, setPesoMaxEstado] = useState<number | null>(null);
   // Copia para el efecto de cotización: conocer el máximo no debe volver a cotizar.
   const pesoMaxRef = useRef<number | null>(null);
-  const setPesoMax = (valor: number) => {
+  const setPesoMax = (valor: number | null) => {
     pesoMaxRef.current = valor;
     setPesoMaxEstado(valor);
   };
@@ -103,7 +106,13 @@ export function RecepcionModal({ encomienda, isOpen, onClose, onSuccess, onRecha
       setPeso("");
       setPesoError("");
       setCotizacion(null);
+      setPesoCotizado(null);
       setErrorCotizacion(null);
+      setErrorEnvio(null);
+      setSinRuta(false);
+      setSinTarifa(false);
+      setDimMax(null);
+      setPesoMax(null);
     }
   }, [isOpen]);
   /* eslint-enable react-hooks/set-state-in-effect */
@@ -111,10 +120,35 @@ export function RecepcionModal({ encomienda, isOpen, onClose, onSuccess, onRecha
   // El peso se escribe con coma decimal ("2,5"); `leerMonto` es el único lector de números.
   const pesoNum = leerMonto(peso);
 
+  // Precargar la tarifa activa de la cooperativa al abrir para mostrar límites y avisar si falta.
+  useEffect(() => {
+    if (!isOpen || !recibible || !user.cooperativa_id) return;
+    let vigente = true;
+    void (async () => {
+      const { data, error } = await supabase
+        .from("tarifas")
+        .select("peso_max_kg, dimensiones_max_cm")
+        .eq("cooperativa_id", user.cooperativa_id)
+        .eq("activa", true)
+        .maybeSingle();
+      if (!vigente || error) return;
+      if (!data) {
+        setSinTarifa(true);
+        return;
+      }
+      setSinTarifa(false);
+      if (data.peso_max_kg != null) setPesoMax(Number(data.peso_max_kg));
+      if (data.dimensiones_max_cm != null) setDimMax(Number(data.dimensiones_max_cm));
+    })();
+    return () => {
+      vigente = false;
+    };
+  }, [isOpen, recibible, user.cooperativa_id, supabase]);
+
   // Vista previa del costo (servidor), con espera de 500 ms mientras se escribe.
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
-    if (!isOpen || !recibible) return;
+    if (!isOpen || !recibible || sinTarifa) return;
     if (pesoNum == null || pesoNum <= 0) {
       setCotizacion(null);
       setPesoError(peso.trim() && pesoNum == null ? "Escribe el peso en kilos, por ejemplo 2,5." : "");
@@ -122,7 +156,7 @@ export function RecepcionModal({ encomienda, isOpen, onClose, onSuccess, onRecha
     }
     const maximo = pesoMaxRef.current;
     if (maximo != null && pesoNum > maximo) {
-      setPesoError(`El peso máximo es ${maximo} kg.`);
+      setPesoError(`El peso máximo es ${formatNumeroVE(maximo, 1)} kg.`);
       setCotizacion(null);
       return;
     }
@@ -147,6 +181,8 @@ export function RecepcionModal({ encomienda, isOpen, onClose, onSuccess, onRecha
             setPesoError(humanizeError(error, "calcular el costo"));
           } else if (codigo === "EB_SIN_RUTA") {
             setSinRuta(true);
+          } else if (codigo === "EB_TARIFA_NO_DISPONIBLE") {
+            setSinTarifa(true);
           } else {
             setErrorCotizacion(humanizeError(error, "calcular el costo"));
           }
@@ -154,13 +190,19 @@ export function RecepcionModal({ encomienda, isOpen, onClose, onSuccess, onRecha
         }
         const c = data as CotizacionEncomienda;
         setErrorCotizacion(null);
+        setSinTarifa(false);
         if (typeof c?.peso_max_kg === "number") setPesoMax(Number(c.peso_max_kg));
+        if (c?.dimensiones_max_cm != null) setDimMax(Number(c.dimensiones_max_cm));
         setCotizacion(c && Number(c.costo_usd) > 0 ? c : null);
         setPesoCotizado(pesoNum);
       } catch (err) {
         if (!vigente) return;
         setCotizacion(null);
-        setErrorCotizacion(humanizeError(err, "calcular el costo"));
+        if (codigoEB(err) === "EB_TARIFA_NO_DISPONIBLE") {
+          setSinTarifa(true);
+        } else {
+          setErrorCotizacion(humanizeError(err, "calcular el costo"));
+        }
       } finally {
         if (vigente) setCalculating(false);
       }
@@ -170,12 +212,12 @@ export function RecepcionModal({ encomienda, isOpen, onClose, onSuccess, onRecha
       vigente = false;
       clearTimeout(timer);
     };
-  }, [isOpen, recibible, peso, pesoNum, encomienda.id, supabase]);
+  }, [isOpen, recibible, sinTarifa, peso, pesoNum, encomienda.id, supabase]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   // Solo vale la cotización del peso escrito ahora (mientras se escribe, la anterior caduca).
   const cotizacionVigente = cotizacion && pesoCotizado === pesoNum ? cotizacion : null;
-  const listoParaConfirmar = !!cotizacionVigente && !pesoError && !calculating && !submitting;
+  const listoParaConfirmar = !!cotizacionVigente && !pesoError && !calculating && !submitting && !sinTarifa;
 
   const handleSubmit = async () => {
     if (pesoNum == null || pesoNum <= 0 || !listoParaConfirmar) return;
@@ -191,6 +233,8 @@ export function RecepcionModal({ encomienda, isOpen, onClose, onSuccess, onRecha
           setPesoError(res.error);
         } else if (res.codigo === "EB_SIN_RUTA") {
           setSinRuta(true);
+        } else if (res.codigo === "EB_TARIFA_NO_DISPONIBLE") {
+          setSinTarifa(true);
         } else {
           setErrorEnvio(res.error);
         }
@@ -229,7 +273,11 @@ export function RecepcionModal({ encomienda, isOpen, onClose, onSuccess, onRecha
 
       onSuccess(recepcion, pesoNum);
     } catch (err) {
-      setErrorEnvio(humanizeError(err, "recibir la encomienda"));
+      if (codigoEB(err) === "EB_TARIFA_NO_DISPONIBLE") {
+        setSinTarifa(true);
+      } else {
+        setErrorEnvio(humanizeError(err, "recibir la encomienda"));
+      }
     } finally {
       setSubmitting(false);
     }
@@ -244,7 +292,7 @@ export function RecepcionModal({ encomienda, isOpen, onClose, onSuccess, onRecha
     ? tasaDe(cotizacionVigente.tasa_bcv, cotizacionVigente.tasa_bcv_fecha)
     : null;
   const esperandoCotizacion =
-    pesoNum != null && pesoNum > 0 && !pesoError && !errorCotizacion && !cotizacionVigente;
+    pesoNum != null && pesoNum > 0 && !pesoError && !errorCotizacion && !cotizacionVigente && !sinRuta && !sinTarifa;
 
   return (
     <Dialog open={isOpen && recibible} onOpenChange={handleOpenChange}>
@@ -253,7 +301,11 @@ export function RecepcionModal({ encomienda, isOpen, onClose, onSuccess, onRecha
           <DialogTitle>
             Recibir <span className="font-mono">{encomienda.tracking_id}</span>
           </DialogTitle>
-          <DialogDescription>Revisa el paquete (máx. 50 × 50 × 50 cm) y escribe el peso.</DialogDescription>
+          <DialogDescription>
+            {dimMax != null
+              ? `Revisa el paquete (máx. ${dimMax} × ${dimMax} × ${dimMax} cm) y escribe el peso.`
+              : "Revisa el paquete y escribe el peso."}
+          </DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-5">
@@ -263,6 +315,23 @@ export function RecepcionModal({ encomienda, isOpen, onClose, onSuccess, onRecha
               <AlertTitle>Quedó a medio recibir</AlertTitle>
               <AlertDescription>Pésala de nuevo para terminar la recepción.</AlertDescription>
             </Alert>
+          )}
+
+          {sinTarifa && (
+            <AvisoError>
+              <div className="flex flex-col gap-3">
+                <p>
+                  Tu cooperativa no tiene una tarifa activa para encomiendas.{" "}
+                  {esAdmin ? (
+                    <Link href="/cooperativas/tarifas" className="font-medium underline underline-offset-4">
+                      Configurar tarifas
+                    </Link>
+                  ) : (
+                    "Pídele al administrador que la configure."
+                  )}
+                </p>
+              </div>
+            </AvisoError>
           )}
 
           {sinRuta && (
@@ -335,7 +404,8 @@ export function RecepcionModal({ encomienda, isOpen, onClose, onSuccess, onRecha
                 enterKeyHint="done"
                 autoFocus
                 error={pesoError || null}
-                ayuda={pesoMax != null ? `Máximo ${pesoMax} kg.` : "En kilos."}
+                disabled={sinTarifa || submitting}
+                ayuda={pesoMax != null ? `Máximo ${formatNumeroVE(pesoMax, 1)} kg.` : "En kilos."}
               />
             </form>
 
@@ -353,6 +423,8 @@ export function RecepcionModal({ encomienda, isOpen, onClose, onSuccess, onRecha
                 />
               ) : errorCotizacion ? (
                 <p className="text-[13px] text-destructive-text">{errorCotizacion}</p>
+              ) : sinTarifa ? (
+                <p className="text-[13px] text-muted-foreground">Sin tarifa activa para calcularlo.</p>
               ) : (
                 <p className="text-[13px] text-muted-foreground">Escribe el peso para calcularlo.</p>
               )}

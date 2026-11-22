@@ -44,7 +44,7 @@ export default async function AdminPanelLayout({
   return (
     // Tasa BCV de hoy para los montos de referencia en Bs (useTasaBCVAdmin la toma del contexto).
     <TasaBCVProvider tasaInicial={tasa}>
-      <AdminShell user={user} menuAbierto={menuAbierto} headerExtra={<TasaBCVChip href="/admin/tarifas#tasa-bcv" />}>
+      <AdminShell user={user} menuAbierto={menuAbierto} headerExtra={<TasaBCVChip href="/admin/tasa-bcv#tasa-bcv" />}>
         {children}
       </AdminShell>
     </TasaBCVProvider>

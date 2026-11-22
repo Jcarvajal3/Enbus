@@ -12,6 +12,7 @@ import type {
   Empleado, 
   Calificacion 
 } from "@/lib/types/admin-cooperativas";
+import { aTarifa, type FilaTarifa } from "@/lib/types/tarifas";
 
 export async function fetchCooperativas(filters?: { estado?: string; search?: string }): Promise<Cooperativa[]> {
   await requireSuperAdmin();
@@ -67,6 +68,7 @@ export async function fetchCooperativaById(id: string): Promise<CooperativaDetal
     sucursalesResult,
     metodosResult,
     rutasResult,
+    tarifasResult,
     profilesResult,
     calificacionesResult,
     comisionesResult,
@@ -76,6 +78,12 @@ export async function fetchCooperativaById(id: string): Promise<CooperativaDetal
     // Use adminSupabase to bypass RLS activo=true filter — super admin needs to see ALL methods
     adminSupabase.from("metodos_pago_cooperativa").select("*").eq("cooperativa_id", id).order("created_at", { ascending: true }),
     supabase.from("rutas").select("*").eq("cooperativa_id", id).order("created_at", { ascending: false }),
+    supabase
+      .from("tarifas")
+      .select("*, profiles:creada_por(nombre_completo)")
+      .eq("cooperativa_id", id)
+      .order("created_at", { ascending: false })
+      .limit(50),
     supabase.from("profiles").select("id, nombre_completo, role, cooperativa_id, telefono, cedula_rif, created_at").eq("cooperativa_id", id).order("created_at", { ascending: false }),
     supabase
       .from("calificaciones")
@@ -94,6 +102,7 @@ export async function fetchCooperativaById(id: string): Promise<CooperativaDetal
   if (sucursalesResult.error) console.error("Error sucursales:", sucursalesResult.error);
   if (metodosResult.error) console.error("Error metodos:", metodosResult.error);
   if (rutasResult.error) console.error("Error rutas:", rutasResult.error);
+  if (tarifasResult.error) console.error("Error tarifas:", tarifasResult.error);
   if (profilesResult.error) console.error("Error profiles:", profilesResult.error);
   if (calificacionesResult.error) console.error("Error calificaciones:", calificacionesResult.error);
   if (comisionesResult.error) console.error("Error comisiones:", comisionesResult.error);
@@ -102,6 +111,7 @@ export async function fetchCooperativaById(id: string): Promise<CooperativaDetal
   const sucursales = (sucursalesResult.data || []) as Sucursal[];
   const metodos_pago = (metodosResult.data || []) as MetodoPago[];
   const rutas = (rutasResult.data || []) as Ruta[];
+  const tarifas = ((tarifasResult.data || []) as unknown as FilaTarifa[]).map(aTarifa);
 
   // Fetch auth user data only for the profiles we already have (targeted lookup, not full listUsers)
   const profileIds = (profilesResult.data || []).map((p) => p.id);
@@ -169,6 +179,7 @@ export async function fetchCooperativaById(id: string): Promise<CooperativaDetal
     sucursales,
     metodos_pago,
     rutas,
+    tarifas,
     empleados,
     calificaciones,
     comisiones_pendientes,

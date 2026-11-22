@@ -2,7 +2,7 @@ import {
   ChartBar, Package, Ticket, TruckTrailer,
   MapTrifold, Users, Gear, CalendarBlank,
   DownloadSimple, Handshake, Receipt, ArrowCounterClockwise, Printer,
-  Bus, QrCode, UserCheck, Buildings,
+  Bus, QrCode, UserCheck, Buildings, CurrencyDollar,
 } from "@phosphor-icons/react/dist/ssr";
 // Iconos de la entrada SSR: este módulo lo importan el proxy y los Server Components,
 // donde la entrada normal (con React context) no se puede evaluar.
@@ -64,6 +64,7 @@ export const ICONO_SECCION = {
   escanear: QrCode,
   embarque: UserCheck,
   buses: Bus,
+  tarifas: CurrencyDollar,
 } satisfies Record<string, Icon>;
 
 const AMBOS: RolPanel[] = ["admin_cooperativa", "taquillero"];
@@ -111,6 +112,7 @@ export const NAV_GRUPOS: NavGrupo[] = [
     items: [
       { title: "Buses", href: "/cooperativas/buses", icon: ICONO_SECCION.buses, roles: ADMIN },
       { title: "Rutas", href: "/cooperativas/rutas", icon: ICONO_SECCION.rutas, roles: ADMIN },
+      { title: "Tarifas", href: "/cooperativas/tarifas", icon: ICONO_SECCION.tarifas, roles: ADMIN },
       { title: "Empleados", href: "/cooperativas/empleados", icon: ICONO_SECCION.empleados, roles: ADMIN },
       // En el menú es "Cooperativa" (el grupo ya dice "Configuración"); la página sigue
       // titulándose "Configuración" en su H1 y en la pestaña del navegador.

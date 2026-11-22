@@ -393,6 +393,7 @@ export type CotizacionEncomienda = {
   costo_usd: number;
   costo_bs: number | null;
   peso_max_kg: number;
+  dimensiones_max_cm?: number | null;
   tasa_bcv: number | null;
   tasa_bcv_fecha: string | null;
 };
@@ -474,11 +475,13 @@ export type OpcionCotizacionEnvio = {
   duracion_min: number | null;
   costo_usd: number;
   costo_bs: number | null;
+  peso_max_kg?: number | null;
+  dimensiones_max_cm?: number | null;
 };
 
 /** `fn_cotizar_envio_publico(p_peso_kg, p_ciudad_origen, p_ciudad_destino)` */
 export type CotizacionEnvioPublica = {
-  peso_max_kg: number;
+  peso_max_kg: number | null;
   tasa_bcv: number | null;
   tasa_bcv_fecha: string | null;
   opciones: OpcionCotizacionEnvio[];

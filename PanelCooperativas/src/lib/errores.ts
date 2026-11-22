@@ -111,7 +111,7 @@ export type CodigoEB =
 const TEXTOS_EB: Partial<Record<CodigoEB, string>> = {
   EB_PAGO_YA_RESUELTO: "Otro compañero ya resolvió este pago. Actualiza la lista.",
   EB_TASA_NO_DISPONIBLE:
-    "No hay tasa BCV registrada hoy. Pídele al administrador que la cargue en Tarifas.",
+    "No hay tasa BCV registrada hoy. Pídele al administrador de EnBus que la cargue en Tasa BCV.",
   EB_PAGOS_PENDIENTES:
     "Primero resuelve los pagos por verificar de este viaje (apruébalos o recházalos) y vuelve a cancelarlo.",
   EB_PIN_NO_VALIDADO: "Vuelve a validar el PIN de retiro: la validación vence a los 15 minutos.",
