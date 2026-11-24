@@ -26,8 +26,9 @@ export default function RecuperarPage() {
     setError(null);
     setSuccess(false);
 
-    const origin = typeof window !== "undefined" ? window.location.origin : "";
-    const redirectTo = `${origin}/cooperativas/auth/callback?next=/cooperativas/restablecer`;
+    const callbackUrl = new URL("/cooperativas/auth/callback", window.location.origin);
+    callbackUrl.searchParams.set("next", "/cooperativas/restablecer");
+    const redirectTo = callbackUrl.toString();
 
     const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
 

@@ -16,8 +16,19 @@ function sanitizeNext(raw: string | null, fallback: string): string {
   return fallback;
 }
 
+function resolveOrigin(request: Request, fallbackOrigin: string): string {
+  const forwardedHost = request.headers.get("x-forwarded-host")?.split(",")[0]?.trim();
+  if (process.env.NODE_ENV !== "development" && forwardedHost && /^[a-z0-9.-]+(:\d+)?$/i.test(forwardedHost)) {
+    const rawProto = request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim();
+    const proto = rawProto === "http" || rawProto === "https" ? rawProto : "https";
+    return `${proto}://${forwardedHost}`;
+  }
+  return fallbackOrigin;
+}
+
 export async function GET(request: Request) {
-  const { searchParams, origin } = new URL(request.url);
+  const { searchParams, origin: requestOrigin } = new URL(request.url);
+  const origin = resolveOrigin(request, requestOrigin);
   const code = searchParams.get("code");
   // Sanitize to prevent open redirect attacks
   const next = sanitizeNext(searchParams.get("next"), "/admin/dashboard");

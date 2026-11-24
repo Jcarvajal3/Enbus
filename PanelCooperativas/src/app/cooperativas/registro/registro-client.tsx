@@ -260,10 +260,14 @@ export default function RegistroCooperativaClient({
     setGoogleError(null);
     setSesionExpiradaMsg(null);
     try {
+      // Codificar `next` (%2F): GoTrue rechaza `/` sin codificar en la query cuando
+      // la Redirect URL de Supabase no termina en wildcard (`/**`).
+      const callbackUrl = new URL("/cooperativas/auth/callback", window.location.origin);
+      callbackUrl.searchParams.set("next", "/cooperativas/registro");
       const { error: oauthError } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: `${window.location.origin}/cooperativas/auth/callback?next=/cooperativas/registro`,
+          redirectTo: callbackUrl.toString(),
         },
       });
       if (oauthError) {

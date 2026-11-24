@@ -133,9 +133,13 @@ export default function LoginPageClient({ aviso }: { aviso: AvisoLogin | null })
     setGoogleLoading(true);
     setError(null);
     try {
+      // Codificar `next` (%2F): GoTrue rechaza `/` sin codificar en la query cuando
+      // la Redirect URL de Supabase no termina en wildcard (`/**`).
+      const callbackUrl = new URL("/cooperativas/auth/callback", window.location.origin);
+      callbackUrl.searchParams.set("next", "/cooperativas/dashboard");
       const { error: oauthError } = await supabase.auth.signInWithOAuth({
         provider: "google",
-        options: { redirectTo: `${window.location.origin}/cooperativas/auth/callback?next=/cooperativas/dashboard` },
+        options: { redirectTo: callbackUrl.toString() },
       });
       if (oauthError) {
         setError(ERROR_GOOGLE);
