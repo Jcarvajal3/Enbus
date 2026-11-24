@@ -1,6 +1,6 @@
 import {
   ChartBar, Buildings, CurrencyDollar,
-  Receipt, Warning, Users, ClipboardText, Package, Briefcase, ListChecks,
+  Warning, Users, ClipboardText, Package, Briefcase, ListChecks,
 } from "@phosphor-icons/react/dist/ssr";
 // Iconos de la entrada SSR: este módulo lo importan el proxy y los Server Components,
 // donde la entrada normal (con React context) no se puede evaluar.
@@ -34,7 +34,6 @@ export const ADMIN_NAV_GRUPOS: AdminNavGrupo[] = [
     items: [
       { title: "Solicitudes", href: "/admin/solicitudes", icon: ClipboardText, contador: "solicitudes" },
       { title: "Cooperativas", href: "/admin/cooperativas", icon: Buildings },
-      { title: "Comisiones", href: "/admin/comisiones", icon: Receipt },
       { title: "Tasa BCV", href: "/admin/tasa-bcv", icon: CurrencyDollar },
     ],
   },

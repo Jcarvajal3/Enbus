@@ -4,14 +4,13 @@
 // Pestañas en `?tab=` con el contador en la pestaña. Cada pestaña es su propia
 // tarjeta o tabla (sin título que repita la pestaña). Estados con `StatusBadge`.
 
-import { Coins, CreditCard, MapPin, Path, Receipt, Star, User } from "@phosphor-icons/react";
+import { CreditCard, MapPin, Path, Star, User } from "@phosphor-icons/react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import type { CooperativaDetalle } from "@/lib/types/admin-cooperativas";
 import { Monto } from "@/components/monto";
-import { KpiCard } from "@/components/kpi-card";
 import { EmptyState } from "@/components/empty-state";
 import { EntityCard } from "@/components/entity-card";
 import { IconTile } from "@/components/icon-tile";
@@ -28,9 +27,9 @@ import { formatCiudad } from "@/lib/ciudades";
 import { formatNumeroVE } from "@/lib/dinero";
 import { TarifaVigenteCard } from "@/components/tarifas/tarifa-vigente-card";
 import { HistorialTarifasTable } from "@/components/tarifas/historial-tarifas-table";
-import { Calificacion, RifIncompletoBadge, formatPorcentaje } from "./cooperativas-table";
+import { Calificacion, RifIncompletoBadge } from "./cooperativas-table";
 
-const PESTANAS = ["general", "sucursales", "metodos", "rutas", "tarifas", "empleados", "calificaciones", "balance"] as const;
+const PESTANAS = ["general", "sucursales", "metodos", "rutas", "tarifas", "empleados", "calificaciones"] as const;
 type Pestana = (typeof PESTANAS)[number];
 
 interface CooperativaDetailTabsProps {
@@ -62,7 +61,6 @@ export function CooperativaDetailTabs({ cooperativa }: CooperativaDetailTabsProp
   const tasa = useTasaBCVAdmin();
   const [valorTab, setTab] = useParamUrl("tab", "general");
   const tab: Pestana = (PESTANAS as readonly string[]).includes(valorTab) ? (valorTab as Pestana) : "general";
-  const pendiente = Number(cooperativa.comisiones_pendientes ?? 0);
   const promedio = Number(cooperativa.calificacion_promedio);
   const vigente = cooperativa.tarifas.find((t) => t.estado === "VIGENTE") ?? null;
   const programada = cooperativa.tarifas.find((t) => t.estado === "PROGRAMADA") ?? null;
@@ -90,7 +88,6 @@ export function CooperativaDetailTabs({ cooperativa }: CooperativaDetailTabsProp
           Calificaciones{" "}
           <ConteoPestana n={Math.max(cooperativa.total_calificaciones ?? 0, cooperativa.calificaciones.length)} />
         </TabsTrigger>
-        <TabsTrigger value="balance" className={CLASE_PESTANA}>Balance</TabsTrigger>
       </TabsList>
 
       {/* General */}
@@ -113,9 +110,6 @@ export function CooperativaDetailTabs({ cooperativa }: CooperativaDetailTabsProp
                   <span className="font-mono">{cooperativa.rif}</span>
                   <RifIncompletoBadge rif={cooperativa.rif} />
                 </span>
-              </Dato>
-              <Dato etiqueta="Comisión de EnBus">
-                <span className="tabular-nums">{formatPorcentaje(cooperativa.comision_porcentaje)}</span>
               </Dato>
               <Dato etiqueta="Representante legal">{cooperativa.representante || <Vacio />}</Dato>
               <Dato etiqueta="Correo">{cooperativa.email || <Vacio texto="Sin correo" />}</Dato>
@@ -444,27 +438,6 @@ export function CooperativaDetailTabs({ cooperativa }: CooperativaDetailTabsProp
             )}
           </Card>
         )}
-      </TabsContent>
-
-      {/* Balance */}
-      <TabsContent value="balance">
-        <div className="grid gap-4 md:grid-cols-2">
-          <KpiCard
-            title="Comisiones pendientes"
-            value={<Monto usd={pendiente} tasa={tasa} moneda="USD" size="lg" />}
-            icon={Coins}
-            variant={pendiente > 0 ? "warning" : "default"}
-            href={`/admin/comisiones?cooperativa=${cooperativa.id}&estado=pendiente`}
-            accion="Ver ciclos pendientes"
-          />
-          <KpiCard
-            title="Ciclos sin pagar"
-            value={formatNumeroVE(cooperativa.ciclos_sin_pagar, 0)}
-            icon={Receipt}
-            variant={cooperativa.ciclos_sin_pagar >= 2 ? "warning" : "default"}
-            description={cooperativa.ciclos_sin_pagar === 0 ? "Al día con EnBus" : undefined}
-          />
-        </div>
       </TabsContent>
     </Tabs>
   );

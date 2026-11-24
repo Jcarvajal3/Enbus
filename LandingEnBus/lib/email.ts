@@ -53,7 +53,7 @@ export async function sendInvitationEmail({
             Hemos registrado a la cooperativa <strong>${nombre}</strong> en nuestra plataforma en estado pendiente de aprobación.
           </p>
           <p style="color: #475569; font-size: 16px; line-height: 24px;">
-            Mientras nuestro equipo de administración revisa tu solicitud y define tu comisión, puedes completar el registro de tu cuenta de administrador y configurar tu panel (sucursales, rutas, métodos de pago, etc.).
+            Mientras nuestro equipo de administración revisa tu solicitud, puedes completar el registro de tu cuenta de administrador y configurar tu panel (sucursales, rutas, métodos de pago, etc.).
           </p>
           <div style="margin: 32px 0; text-align: center;">
             <a href="${enlace}" style="background-color: #f59e0b; color: #000000; padding: 12px 24px; font-weight: bold; text-decoration: none; border-radius: 6px; display: inline-block;">

@@ -34,7 +34,6 @@ import { revalidatePath } from "next/cache";
 import { ESTADOS_CON_MOTIVO, type EstadoCooperativa } from "@/lib/types/admin-cooperativas";
 import { normalizeRif, RIF_ERROR } from "@/lib/rif";
 import { humanizeError } from "@/lib/errores";
-import { leerMonto } from "@/lib/dinero";
 
 export async function createCooperativa(formData: FormData) {
   try {
@@ -44,13 +43,12 @@ export async function createCooperativa(formData: FormData) {
 
     const nombre = campo(formData, "nombre");
     const rifInput = campo(formData, "rif");
-    const comisionStr = campo(formData, "comision_porcentaje");
     const emailAdmin = campo(formData, "email_admin").toLowerCase();
     const logo = formData.get("logo");
     const logoFile = logo instanceof File ? logo : null;
 
-    if (!nombre || !rifInput || !comisionStr) {
-      return { success: false, error: "Completa el nombre, el RIF y la comisión." };
+    if (!nombre || !rifInput) {
+      return { success: false, error: "Completa el nombre y el RIF." };
     }
     if (nombre.length > MAX_NOMBRE) {
       return { success: false, error: `El nombre no puede pasar de ${MAX_NOMBRE} caracteres.` };
@@ -63,11 +61,6 @@ export async function createCooperativa(formData: FormData) {
     const rif = normalizeRif(rifInput);
     if (!rif) {
       return { success: false, error: RIF_ERROR, campo: "rif" as const };
-    }
-
-    const comision = leerMonto(comisionStr, { permitirCero: true });
-    if (comision === null || comision > 100) {
-      return { success: false, error: "La comisión debe ser un número entre 0 y 100." };
     }
 
     // Validar el logo antes de crear la cooperativa, para no dejarla creada si el logo se rechaza.
@@ -90,7 +83,8 @@ export async function createCooperativa(formData: FormData) {
       .insert({
         nombre,
         rif,
-        comision_porcentaje: comision,
+        // Modelo de comisiones en pausa (operación gratuita): la columna es obligatoria, va en 0.
+        comision_porcentaje: 0,
         estado: "ACTIVA"
       })
       // Solo columnas legibles (20261109000009): .select() pediría todas y respondería 42501.
@@ -247,12 +241,11 @@ export async function updateCooperativa(id: string, formData: FormData) {
 
     const nombre = campo(formData, "nombre");
     const rifInput = campo(formData, "rif");
-    const comisionStr = campo(formData, "comision_porcentaje");
     const logo = formData.get("logo");
     const logoFile = logo instanceof File ? logo : null;
 
-    if (!nombre || !rifInput || !comisionStr) {
-      return { success: false, error: "Completa el nombre, el RIF y la comisión." };
+    if (!nombre || !rifInput) {
+      return { success: false, error: "Completa el nombre y el RIF." };
     }
     if (nombre.length > MAX_NOMBRE) {
       return { success: false, error: `El nombre no puede pasar de ${MAX_NOMBRE} caracteres.` };
@@ -272,21 +265,14 @@ export async function updateCooperativa(id: string, formData: FormData) {
       }
     }
 
-    const comision = leerMonto(comisionStr, { permitirCero: true });
-    if (comision === null || comision > 100) {
-      return { success: false, error: "La comisión debe ser un número entre 0 y 100." };
-    }
-
     const updates: {
       nombre: string;
       rif: string;
-      comision_porcentaje: number;
       updated_at: string;
       logo_url?: string;
     } = {
       nombre,
       rif,
-      comision_porcentaje: comision,
       updated_at: new Date().toISOString()
     };
 

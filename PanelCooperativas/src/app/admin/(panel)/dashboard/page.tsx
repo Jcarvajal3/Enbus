@@ -1,12 +1,11 @@
 import { PageHeader } from "@/components/page-header";
-import { Package, Ticket, CurrencyDollar, Receipt, Buildings, Warning, ClipboardText } from "@phosphor-icons/react/dist/ssr";
+import { Package, Ticket, CurrencyDollar, Buildings, Warning, ClipboardText } from "@phosphor-icons/react/dist/ssr";
 import {
   fetchDashboardKPIs,
   fetchActivityLast30Days,
   fetchTop5Cooperativas,
   fetchRutasPopulares,
   fetchIncidenciasRecientes,
-  fetchCooperativasConBalance,
 } from "@/lib/data/admin-dashboard";
 import { calcularDelta, formatIngresos, type IngresosResumen } from "@/lib/types/admin-dashboard";
 import { formatNumeroVE } from "@/lib/dinero";
@@ -17,7 +16,6 @@ import { obtenerTasaBCV } from "@/lib/tasa-bcv";
 import { ErrorRefrescar } from "@/components/admin/error-refrescar";
 import { DashboardCharts } from "@/components/admin/dashboard/dashboard-charts";
 import { IncidenciasRecientesTable } from "@/components/admin/dashboard/incidencias-recientes-table";
-import { CooperativasBalanceTable } from "@/components/admin/dashboard/cooperativas-balance-table";
 
 export const dynamic = "force-dynamic";
 
@@ -28,31 +26,25 @@ export default async function AdminDashboardPage() {
   // La tasa se lee primero: los KPIs la usan para convertir a Bs los pagos antiguos.
   const tasa = await obtenerTasaBCV();
 
-  const [kpis, activityData, topCooperativas, rutasPopulares, incidencias, cooperativasBalance] = await Promise.all([
+  const [kpis, activityData, topCooperativas, rutasPopulares, incidencias] = await Promise.all([
     fetchDashboardKPIs(tasa?.tasa ?? null),
     fetchActivityLast30Days(),
     fetchTop5Cooperativas(),
     fetchRutasPopulares(),
     fetchIncidenciasRecientes(),
-    fetchCooperativasConBalance(),
   ]);
 
   const ingresos = formatIngresos(kpis.ingresos_hoy);
-  const comisiones = formatIngresos(kpis.comisiones_hoy);
   // El delta de los montos compara el USD de referencia (no depende de la tasa de cada día).
   const deltaIngresos =
     kpis.ingresos_hoy.error || kpis.ayer.ingresos.error ? null : calcularDelta(kpis.ingresos_hoy.usd, kpis.ayer.ingresos.usd);
-  const deltaComisiones =
-    kpis.comisiones_hoy.error || kpis.ayer.comisiones.error
-      ? null
-      : calcularDelta(kpis.comisiones_hoy.usd, kpis.ayer.comisiones.usd);
 
   const solicitudes = kpis.solicitudes_pendientes;
   const alertas = kpis.alertas_amarillas_abiertas;
 
   return (
     <div className="flex flex-col gap-8">
-      <PageHeader title="Resumen" description="Actividad y finanzas de EnBus hoy (hora de Venezuela)." />
+      <PageHeader title="Resumen" description="Actividad de EnBus hoy (hora de Venezuela)." />
 
       {/* Lo urgente primero: lo que espera una respuesta del equipo. */}
       <section aria-labelledby="dash-revisar" className="flex flex-col gap-4">
@@ -82,7 +74,7 @@ export default async function AdminDashboardPage() {
       {/* Finanzas de hoy (montos en Bs con su referencia en USD). */}
       <section aria-labelledby="dash-finanzas" className="flex flex-col gap-4">
         <SectionLabel id="dash-finanzas">Finanzas de hoy</SectionLabel>
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4">
           <KpiCard
             grande
             title="Ingresos brutos"
@@ -92,16 +84,6 @@ export default async function AdminDashboardPage() {
             icon={CurrencyDollar}
             tono="mint"
             description="Pagos aprobados hoy"
-          />
-          <KpiCard
-            grande
-            title="Comisiones estimadas"
-            value={<MontoKPI resumen={kpis.comisiones_hoy} texto={comisiones} />}
-            detail={kpis.comisiones_hoy.error ? comisiones.secundario : null}
-            delta={deltaComisiones}
-            icon={Receipt}
-            tono="brand"
-            description="Parte de EnBus en los pagos de hoy"
           />
         </div>
       </section>
@@ -149,11 +131,7 @@ export default async function AdminDashboardPage() {
         <DashboardCharts activityData={activityData} topCooperativas={topCooperativas} rutasPopulares={rutasPopulares} />
       </div>
 
-      {/* Dos tablas lado a lado solo con ancho de sobra: a 1024–1440 se cortaban columnas. */}
-      <div className="grid grid-cols-1 gap-4 2xl:grid-cols-2">
-        <IncidenciasRecientesTable data={incidencias} />
-        <CooperativasBalanceTable data={cooperativasBalance} tasa={tasa} />
-      </div>
+      <IncidenciasRecientesTable data={incidencias} />
     </div>
   );
 }

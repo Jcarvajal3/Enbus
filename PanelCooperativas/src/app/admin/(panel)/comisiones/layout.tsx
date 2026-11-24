@@ -1,9 +1,7 @@
-import type { Metadata } from "next";
-import { tituloSeccionAdmin } from "@/lib/admin-navigation";
+import { notFound } from "next/navigation";
 
-// Pestaña del navegador: "<Sección> · EnBus" (plantilla "%s · EnBus" del layout superior).
-export const metadata: Metadata = { title: tituloSeccionAdmin("/admin/comisiones") };
-
-export default function Layout({ children }: { children: React.ReactNode }) {
-  return children;
+// Modelo de comisiones en pausa: mientras EnBus opera gratis la sección no existe (ni menú ni URL).
+// El código del módulo se conserva para retomarlo cuando se defina el modelo de negocio.
+export default function Layout() {
+  notFound();
 }

@@ -25,18 +25,15 @@ import { Campo, RifField } from "@/components/campos";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { AvisoError } from "@/components/aviso-error";
-import { useTasaBCVAdmin } from "@/components/admin/dashboard/use-tasa-bcv-admin";
 import { MenuMas } from "@/components/admin/menu-mas";
 import { humanizeError } from "@/lib/errores";
 import { avisarExito } from "@/lib/avisos";
-import { formatMoney } from "@/lib/dinero";
 import {
   changeCooperativaEstado,
   inviteCooperativaAdmin,
   updateCooperativa,
 } from "@/app/admin/(panel)/cooperativas/actions";
 import type { CooperativaDetalle, EstadoCooperativa } from "@/lib/types/admin-cooperativas";
-import { CampoComision, comisionATexto, ERROR_COMISION, leerComision } from "./campo-comision";
 import { EnlaceInvitacion, ExitoDialogo } from "./create-cooperativa-dialog";
 
 interface CooperativaActionsProps {
@@ -51,7 +48,6 @@ function plural(n: number, uno: string, varios: string) {
 
 export function CooperativaActions({ cooperativa }: CooperativaActionsProps) {
   const router = useRouter();
-  const tasa = useTasaBCVAdmin();
 
   const [editOpen, setEditOpen] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -69,17 +65,12 @@ export function CooperativaActions({ cooperativa }: CooperativaActionsProps) {
   const activa = cooperativa.estado === "ACTIVA";
   const suspendida = cooperativa.estado === "SUSPENDIDA";
 
-  const pendiente = Number(cooperativa.comisiones_pendientes ?? 0);
-  const montoPendiente = formatMoney({ usd: pendiente, tasa, moneda: "USD" });
   const impactoDesactivar = [
     "Deja de aparecer en la app: los pasajeros no podrán comprarle boletos ni enviar encomiendas.",
     "Sus empleados no podrán vender ni recibir desde el panel.",
     cooperativa.encomiendas_en_curso > 0
       ? `${plural(cooperativa.encomiendas_en_curso, "encomienda sigue", "encomiendas siguen")} en curso: coordina su entrega o devolución.`
       : "No tiene encomiendas en curso.",
-    cooperativa.ciclos_sin_pagar > 0
-      ? `${plural(cooperativa.ciclos_sin_pagar, "ciclo de comisiones sin pagar", "ciclos de comisiones sin pagar")} (${montoPendiente.principal}${montoPendiente.secundario ? `, ${montoPendiente.secundario}` : ""}): seguirán pendientes en Comisiones.`
-      : "No tiene comisiones pendientes.",
     "No se puede deshacer: una cooperativa desactivada no se puede reactivar.",
   ];
 
@@ -123,8 +114,8 @@ export function CooperativaActions({ cooperativa }: CooperativaActionsProps) {
         ]}
         motivo={{
           etiqueta: "Motivo de la suspensión",
-          placeholder: "Ej. Comisiones de dos ciclos sin pagar.",
-          chips: ["Comisiones sin pagar", "Reclamos de pasajeros", "Datos sin verificar", "Otro"],
+          placeholder: "Ej. Reclamos de pasajeros sin resolver.",
+          chips: ["Reclamos de pasajeros", "Datos sin verificar", "Otro"],
         }}
         verbo="Suspender cooperativa"
         verboCargando="Suspendiendo…"
@@ -190,8 +181,6 @@ function EditarDialog({
   const [error, setError] = useState<string | null>(null);
   const [nombre, setNombre] = useState(cooperativa.nombre);
   const [rif, setRif] = useState(cooperativa.rif ?? "");
-  const [comision, setComision] = useState(comisionATexto(cooperativa.comision_porcentaje));
-  const [comisionError, setComisionError] = useState<string | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(cooperativa.logo_url);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -199,12 +188,10 @@ function EditarDialog({
     if (guardando) return;
     onOpenChange(v);
     setError(null);
-    setComisionError(null);
     if (!v) {
       setLogoPreview(cooperativa.logo_url);
       setNombre(cooperativa.nombre);
       setRif(cooperativa.rif ?? "");
-      setComision(comisionATexto(cooperativa.comision_porcentaje));
     }
   };
 
@@ -226,10 +213,6 @@ function EditarDialog({
     e.preventDefault();
     if (guardando) return;
     setError(null);
-    if (!Number.isFinite(leerComision(comision))) {
-      setComisionError(ERROR_COMISION);
-      return;
-    }
     setGuardando(true);
     try {
       const res = await updateCooperativa(cooperativa.id, new FormData(e.currentTarget));
@@ -254,7 +237,7 @@ function EditarDialog({
         <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-6">
           <DialogHeader>
             <DialogTitle>Editar cooperativa</DialogTitle>
-            <DialogDescription>Nombre, RIF, comisión y logo.</DialogDescription>
+            <DialogDescription>Nombre, RIF y logo.</DialogDescription>
           </DialogHeader>
 
           <div className="flex items-center gap-4">
@@ -301,16 +284,6 @@ function EditarDialog({
               value={rif}
               onChange={setRif}
               disabled={guardando}
-            />
-            <CampoComision
-              valor={comision}
-              name="comision_porcentaje"
-              disabled={guardando}
-              error={comisionError}
-              onCambio={(v) => {
-                setComision(v);
-                setComisionError(null);
-              }}
             />
           </FieldGroup>
 

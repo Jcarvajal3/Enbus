@@ -130,7 +130,6 @@ export function CooperativasTable({ initialCooperativas, estado = "", q = "" }: 
               leading={<IconTile icon={Buildings} tone={TONO_ESTADO[coop.estado] ?? "neutral"} />}
               title={coop.nombre}
               subtitle={coop.rif}
-              adorno={formatPorcentaje(coop.comision_porcentaje)}
               badge={<StatusBadge status={coop.estado} dominio="cooperativa" />}
               meta={formatFechaVE(coop.created_at)}
             />
@@ -142,7 +141,6 @@ export function CooperativasTable({ initialCooperativas, estado = "", q = "" }: 
                   <TableHead>Nombre</TableHead>
                   <TableHead className="hidden md:table-cell">RIF</TableHead>
                   <TableHead>Estado</TableHead>
-                  <TableHead className="hidden text-right md:table-cell">Comisión</TableHead>
                   <TableHead className="hidden lg:table-cell">Calificación</TableHead>
                   <TableHead className="hidden lg:table-cell">Registro</TableHead>
                 </TableRow>
@@ -169,9 +167,6 @@ export function CooperativasTable({ initialCooperativas, estado = "", q = "" }: 
                     </TableCell>
                     <TableCell>
                       <StatusBadge status={coop.estado} dominio="cooperativa" />
-                    </TableCell>
-                    <TableCell className="hidden text-right tabular-nums md:table-cell">
-                      {formatPorcentaje(coop.comision_porcentaje)}
                     </TableCell>
                     <TableCell className="hidden lg:table-cell">
                       <Calificacion promedio={coop.calificacion_promedio} total={coop.total_calificaciones} />

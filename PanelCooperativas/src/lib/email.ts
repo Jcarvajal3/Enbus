@@ -40,11 +40,6 @@ function escaparHtml(texto: string): string {
     .replace(/'/g, "&#39;");
 }
 
-/** "10" → "10", "7.5" → "7,5" (formato venezolano). */
-function porcentaje(n: number): string {
-  return n.toLocaleString("es-VE", { maximumFractionDigits: 2 });
-}
-
 function plantilla(contenido: string): string {
   return `
     <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;">
@@ -93,13 +88,11 @@ async function enviar(para: string, asunto: string, html: string, contexto: stri
 interface SendApprovalEmailParams {
   email: string;
   cooperativaNombre: string;
-  comisionPorcentaje: number;
 }
 
 export async function sendApprovalEmail({
   email,
   cooperativaNombre,
-  comisionPorcentaje,
 }: SendApprovalEmailParams): Promise<ResultadoCorreo> {
   const nombre = escaparHtml(cooperativaNombre);
   const panel = urlPanel();
@@ -107,10 +100,6 @@ export async function sendApprovalEmail({
     <h2 style="color: #047857; margin-bottom: 16px;">Tu cooperativa ya está activa en EnBus</h2>
     <p style="color: #334155; font-size: 16px; line-height: 24px;">
       Revisamos la solicitud de <strong>${nombre}</strong> y la aprobamos. Desde ahora tus salidas y rutas se ven en la app de EnBus.
-    </p>
-    <p style="color: #334155; font-size: 16px; line-height: 24px;">
-      La comisión de EnBus es de <strong>${porcentaje(comisionPorcentaje)} %</strong> por cada boleto o encomienda vendidos en la plataforma
-      (por cada Bs 100 vendidos, EnBus recibe Bs ${porcentaje(comisionPorcentaje)}).
     </p>
     ${panel ? boton(`${panel}/cooperativas/login`, "Entrar a mi panel") : ""}
   `);

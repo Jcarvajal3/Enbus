@@ -15,7 +15,6 @@ import { requireOnline } from "@/components/connectivity-banner";
 import { humanizeError } from "@/lib/errores";
 import { normalizeRif, RIF_AYUDA } from "@/lib/rif";
 import { Campo, RifField } from "@/components/campos";
-import { formatNumeroVE } from "@/lib/dinero";
 import { telefonoWhatsApp } from "@/lib/ve";
 
 interface DatosCooperativaTabProps {
@@ -233,17 +232,6 @@ export function DatosCooperativaTab({ cooperativa, estado }: DatosCooperativaTab
             </p>
           </div>
         )}
-
-        <dl className="grid gap-4 md:grid-cols-2">
-          <ReadOnlyField
-            label="Comisión de EnBus"
-            value={
-              cooperativa.comision_porcentaje == null || (editable && Number(cooperativa.comision_porcentaje) === 0)
-                ? "La define EnBus al aprobar tu solicitud"
-                : `${formatNumeroVE(Number(cooperativa.comision_porcentaje))} % por venta`
-            }
-          />
-        </dl>
       </CardContent>
     </Card>
   );

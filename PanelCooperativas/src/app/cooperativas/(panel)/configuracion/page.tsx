@@ -17,9 +17,9 @@ export default async function ConfiguracionPage() {
   const supabase = await createClient();
 
   const [cooperativaResult, metodosResult, sucursalesResult, perfilResult] = await Promise.all([
-    // RIF y comisión: por la RPC (no son legibles en la tabla).
+    // RIF: por la RPC (no es legible en la tabla).
     leerCooperativasPrivadas(supabase, (cooperativas) =>
-      cooperativas.select("id, nombre, rif, logo_url, comision_porcentaje, estado").eq("id", user.cooperativa_id).single()
+      cooperativas.select("id, nombre, rif, logo_url, estado").eq("id", user.cooperativa_id).single()
     ),
     supabase
       .from("metodos_pago_cooperativa")

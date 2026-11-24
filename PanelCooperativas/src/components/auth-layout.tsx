@@ -37,11 +37,11 @@ const MARCA: Record<Zona, { antetitulo: string; titular: string; texto: string; 
   admin: {
     antetitulo: "Administración EnBus",
     titular: "Toda la red de cooperativas, en un solo panel.",
-    texto: "Solicitudes, cuentas y cobros de la plataforma, para el equipo de EnBus.",
+    texto: "Solicitudes, cuentas y operación de la plataforma, para el equipo de EnBus.",
     puntos: [
       { icono: ClipboardText, titulo: "Solicitudes", detalle: "Revisa y aprueba las cooperativas que se registran." },
       { icono: Buildings, titulo: "Cooperativas y usuarios", detalle: "Gestiona cuentas, accesos e incidencias." },
-      { icono: Receipt, titulo: "Comisiones y tasa BCV", detalle: "Controla comisiones y la tasa oficial BCV." },
+      { icono: Receipt, titulo: "Tasa BCV", detalle: "Controla la tasa oficial BCV." },
     ],
   },
 };

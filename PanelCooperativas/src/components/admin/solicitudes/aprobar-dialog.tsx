@@ -15,11 +15,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { AvisoError } from "@/components/aviso-error";
-import { CampoComision, ERROR_COMISION, leerComision } from "@/components/admin/cooperativas/campo-comision";
 import { aprobarSolicitud } from "@/app/admin/(panel)/solicitudes/actions";
 import { humanizeError } from "@/lib/errores";
 import { avisarError, avisarExito } from "@/lib/avisos";
-import { formatNumeroVE } from "@/lib/dinero";
 
 interface AprobarDialogProps {
   cooperativaId: string;
@@ -52,22 +50,15 @@ export function AprobarDialog({ cooperativaId, nombre, rif, trigger, onHecho }: 
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [comision, setComision] = useState("10");
-  const [errorCampo, setErrorCampo] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (loading) return;
-    const comisionNum = leerComision(comision);
-    if (!Number.isFinite(comisionNum)) {
-      setErrorCampo(ERROR_COMISION);
-      return;
-    }
     setError(null);
     setLoading(true);
     try {
-      const res = await aprobarSolicitud(cooperativaId, comisionNum);
+      const res = await aprobarSolicitud(cooperativaId);
       if (!res.success) {
         setError(res.error || "No pudimos aprobar la solicitud. Intenta de nuevo.");
         return;
@@ -79,7 +70,7 @@ export function AprobarDialog({ cooperativaId, nombre, rif, trigger, onHecho }: 
           res.email
             ? `${nombre} quedó activa, pero no pudimos enviar el correo a ${res.email}. Avísale por otro medio.`
             : `${nombre} quedó activa, pero no tiene correo registrado. Avísale por otro medio.`,
-          `Hola. Aprobamos a ${nombre} en EnBus con una comisión de ${formatNumeroVE(comisionNum)} %. Ya puedes vender desde tu panel.`
+          `Hola. Aprobamos a ${nombre} en EnBus. Ya puedes vender desde tu panel.`
         );
       }
       setOpen(false);
@@ -98,10 +89,7 @@ export function AprobarDialog({ cooperativaId, nombre, rif, trigger, onHecho }: 
       onOpenChange={(v) => {
         if (loading) return;
         setOpen(v);
-        if (v) {
-          setError(null);
-          setErrorCampo(null);
-        }
+        if (v) setError(null);
       }}
     >
       <DialogTrigger asChild>{trigger}</DialogTrigger>
@@ -122,18 +110,6 @@ export function AprobarDialog({ cooperativaId, nombre, rif, trigger, onHecho }: 
               <dd className="font-mono font-medium">{rif}</dd>
             </div>
           </dl>
-
-          <CampoComision
-            valor={comision}
-            autoFocus
-            disabled={loading}
-            error={errorCampo}
-            onCambio={(v) => {
-              setComision(v);
-              setErrorCampo(null);
-              setError(null);
-            }}
-          />
 
           {error && <AvisoError>{error}</AvisoError>}
 

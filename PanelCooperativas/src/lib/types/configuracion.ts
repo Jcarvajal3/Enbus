@@ -52,7 +52,6 @@ export interface CooperativaData {
   nombre: string;
   rif: string | null;
   logo_url: string | null;
-  comision_porcentaje: number | null;
   /** PENDIENTE | RECHAZADA | ACTIVA | SUSPENDIDA | INACTIVA */
   estado?: string | null;
 }

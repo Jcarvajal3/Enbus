@@ -55,16 +55,11 @@ async function cambiarEstado(
   });
 }
 
-export async function aprobarSolicitud(cooperativaId: string, comisionPorcentaje: number): Promise<ResultadoSolicitud> {
+export async function aprobarSolicitud(cooperativaId: string): Promise<ResultadoSolicitud> {
   try {
     await requireSuperAdmin();
     if (!esUuid(cooperativaId)) return { success: false, error: NO_ENCONTRADA };
     const supabase = await createClient();
-
-    comisionPorcentaje = Number(comisionPorcentaje);
-    if (!Number.isFinite(comisionPorcentaje) || comisionPorcentaje < 0 || comisionPorcentaje > 100) {
-      return { success: false, error: "La comisión debe ser un número entre 0 y 100." };
-    }
 
     // El correo se lee por la RPC: no es legible en la tabla.
     const { data: cooperativa, error: fetchError } = await leerCooperativasPrivadas(supabase, (c) =>
@@ -75,15 +70,14 @@ export async function aprobarSolicitud(cooperativaId: string, comisionPorcentaje
       console.error("[aprobarSolicitud] cooperativa:", fetchError);
       return { success: false, error: fetchError ? humanizeError(fetchError, "cargar la solicitud") : NO_ENCONTRADA };
     }
-    // Otra pestaña u otro admin ya la resolvió: no se toca la comisión ni se repite el correo.
+    // Otra pestaña u otro admin ya la resolvió: no se repite el correo.
     if (cooperativa.estado !== "PENDIENTE") {
       return { success: false, error: SOLICITUD_YA_RESUELTA };
     }
 
     // 1. Estado primero: la RPC bloquea la fila (FOR UPDATE) y, si dos admins aprueban a
     // la vez, al segundo le responde ya_procesado. Así solo quien aprobó de verdad
-    // guarda su comisión y envía el correo (antes los dos escribían la comisión y los
-    // dos mandaban el correo, cada uno con su porcentaje).
+    // envía el correo.
     const { data: estadoData, error: estadoError } = await cambiarEstado(supabase, cooperativaId, "ACTIVA");
     if (estadoError) {
       if (!rpcNoDisponible(estadoError)) {
@@ -106,27 +100,12 @@ export async function aprobarSolicitud(cooperativaId: string, comisionPorcentaje
       return { success: false, error: SOLICITUD_YA_RESUELTA };
     }
 
-    // 2. Comisión acordada (los ciclos se calculan con el porcentaje vigente al generarlos).
-    const { error: comisionError } = await supabase
-      .from("cooperativas")
-      .update({ comision_porcentaje: comisionPorcentaje, updated_at: new Date().toISOString() })
-      .eq("id", cooperativaId);
-    if (comisionError) {
-      console.error("[aprobarSolicitud] comisión:", comisionError);
-      revalidarSolicitudes(cooperativaId);
-      return {
-        success: false,
-        error: "Aprobamos la cooperativa, pero no pudimos guardar la comisión. Corrígela desde «Editar datos» antes de generar ciclos.",
-      };
-    }
-
-    // 3. Correo: emailEnviado = false si no hay correo o si el envío falló (la UI avisa al admin).
+    // 2. Correo: emailEnviado = false si no hay correo o si el envío falló (la UI avisa al admin).
     let emailEnviado = false;
     if (cooperativa.email) {
       const emailResult = await sendApprovalEmail({
         email: cooperativa.email,
         cooperativaNombre: cooperativa.nombre,
-        comisionPorcentaje,
       });
       emailEnviado = emailResult.success;
     }

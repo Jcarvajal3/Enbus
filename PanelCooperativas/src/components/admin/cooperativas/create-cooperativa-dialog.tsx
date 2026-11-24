@@ -22,7 +22,6 @@ import { AvisoError } from "@/components/aviso-error";
 import { createCooperativa } from "@/app/admin/(panel)/cooperativas/actions";
 import { humanizeError } from "@/lib/errores";
 import { avisarExito } from "@/lib/avisos";
-import { CampoComision, ERROR_COMISION, leerComision } from "./campo-comision";
 
 const LOGO_MAX_BYTES = 2 * 1024 * 1024;
 
@@ -97,8 +96,6 @@ export function CreateCooperativaDialog() {
   const [rif, setRif] = useState("");
   const [rifError, setRifError] = useState<string | null>(null);
   const [emailAdmin, setEmailAdmin] = useState("");
-  const [comision, setComision] = useState("10");
-  const [comisionError, setComisionError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [inviteLink, setInviteLink] = useState<string | null>(null);
@@ -112,8 +109,6 @@ export function CreateCooperativaDialog() {
     setRif("");
     setRifError(null);
     setEmailAdmin("");
-    setComision("10");
-    setComisionError(null);
     setError(null);
   };
 
@@ -145,10 +140,6 @@ export function CreateCooperativaDialog() {
     if (!nombre.trim()) {
       setNombreError("Escribe el nombre de la cooperativa.");
       document.getElementById("nombre")?.focus();
-      return;
-    }
-    if (!Number.isFinite(leerComision(comision))) {
-      setComisionError(ERROR_COMISION);
       return;
     }
     setLoading(true);
@@ -269,17 +260,6 @@ export function CreateCooperativaDialog() {
                 }}
                 error={rifError}
                 disabled={loading}
-              />
-
-              <CampoComision
-                valor={comision}
-                name="comision_porcentaje"
-                disabled={loading}
-                error={comisionError}
-                onCambio={(v) => {
-                  setComision(v);
-                  setComisionError(null);
-                }}
               />
 
               <Campo
