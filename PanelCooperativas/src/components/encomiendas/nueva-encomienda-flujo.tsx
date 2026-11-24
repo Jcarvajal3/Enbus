@@ -7,9 +7,12 @@
 //   1. ¿A dónde la envías?        sucursal (si no tiene una asignada) + destino
 //   2. Detalles de la encomienda  quien envía, quien recibe, contenido, quién paga
 //   3. Revisa y registra          resumen por bloques con "Editar" (AN-20)
-//   4. Foto del paquete           toma/carga o "Hacerlo después"
-//   5. Cobro del envío            solo ORIGEN + POR_PAGAR (4 pasos en DESTINO)
-//   Pantalla final (sin número):  Encomienda registrada → la lista con la encomienda abierta.
+//   4. Cobro del envío            solo ORIGEN + POR_PAGAR (4 pasos en DESTINO)
+//   5. Foto del paquete           toma/carga o "Hacerlo después"; solo tras cobrar
+//   Pantalla final (sin número):  Encomienda registrada (PIN) → la lista con la encomienda abierta.
+//
+// El orden es cobro → foto → PIN: la foto no se guarda si el cliente no paga. Con "Cobrar
+// después" (ORIGEN sin cobrar) se salta la foto y se va directo a la pantalla final.
 //
 // - El paso/fase vive en `?paso=` (`usePasoEnUrl`): atrás del navegador = paso anterior.
 // - Mientras se escriben datos y hasta registrar, salir pide confirmación (`useSalidaProtegida`).
@@ -68,20 +71,19 @@ import { CobroEncomiendaContenido } from "./cobro-encomienda";
 
 // ─── Pasos y fases ──────────────────────────────────────────────────────────
 
-const PASOS = ["destino", "detalles", "revisar", "foto", "cobro", "registrada"] as const;
+const PASOS = ["destino", "detalles", "revisar", "cobro", "foto", "registrada"] as const;
 type Paso = (typeof PASOS)[number];
 /** Índices 0..2 son pre-registro (destino, detalles, revisar); >= 3 requieren `resultado`. */
 const PASOS_PRE_REGISTRO = 3;
-/** Numeración mostrada tras registrar: la foto sigue a los pasos de datos y el cobro a la foto. */
-const NUMERO_PASO_FOTO = PASOS_PRE_REGISTRO + 1;
-const NUMERO_PASO_COBRO = NUMERO_PASO_FOTO + 1;
+/** Numeración mostrada tras registrar: el cobro sigue a los pasos de datos y la foto al cobro (si hay cobro). */
+const NUMERO_PASO_COBRO = PASOS_PRE_REGISTRO + 1;
 
 const TITULOS: Record<Paso, string> = {
   destino: "¿A dónde la envías?",
   detalles: "Detalles de la encomienda",
   revisar: "Revisa y registra",
-  foto: "Foto del paquete",
   cobro: "Cobro del envío",
+  foto: "Foto del paquete",
   registrada: "Encomienda registrada",
 };
 
@@ -365,6 +367,8 @@ export function NuevaEncomiendaFlujo() {
         if (i < PASOS_PRE_REGISTRO) return false;
         const cobrar = resultado.encomienda.modalidad_pago === "ORIGEN" && resultado.encomienda.estado === "POR_PAGAR";
         if (p === "cobro") return cobrar;
+        // La foto va después del cobro: sin pago no se guarda ninguna imagen.
+        if (p === "foto") return !cobrar;
         return true;
       }
       if (i >= PASOS_PRE_REGISTRO) return false;
@@ -377,8 +381,9 @@ export function NuevaEncomiendaFlujo() {
   const { paso, indice, ir } = url;
   const enPreRegistro = indice < PASOS_PRE_REGISTRO;
   const modalidadEfectiva = resultado?.encomienda.modalidad_pago ?? modalidad;
-  // El cobro es un paso más solo cuando paga quien envía (ORIGEN).
-  const totalPasos = modalidadEfectiva === "ORIGEN" ? NUMERO_PASO_COBRO : NUMERO_PASO_FOTO;
+  // El cobro es un paso más solo cuando paga quien envía (ORIGEN): cobro → foto.
+  const hayCobro = modalidadEfectiva === "ORIGEN";
+  const totalPasos = hayCobro ? NUMERO_PASO_COBRO + 1 : NUMERO_PASO_COBRO;
 
   const sucio =
     rutaId !== "" ||
@@ -461,11 +466,12 @@ export function NuevaEncomiendaFlujo() {
     if (!hidratado || !resultado) return;
     const cobrarAun = resultado.encomienda.modalidad_pago === "ORIGEN" && resultado.encomienda.estado === "POR_PAGAR";
     if (indice < PASOS_PRE_REGISTRO) {
-      ir("foto", { reemplazar: true });
+      ir(cobrarAun ? "cobro" : "foto", { reemplazar: true });
       return;
     }
+    // Ya pagada (p. ej. "atrás" desde la foto): se sigue con la foto.
     if (paso === "cobro" && !cobrarAun) {
-      ir("registrada", { reemplazar: true });
+      ir("foto", { reemplazar: true });
     }
   }, [hidratado, resultado, indice, paso, ir]);
 
@@ -696,7 +702,9 @@ export function NuevaEncomiendaFlujo() {
       };
       setResultado({ registro: r, encomienda });
       setEditando(false);
-      url.ir("foto", { reemplazar: true });
+      // Paga quien envía: primero el cobro; la foto solo se toma una vez pagado.
+      const porCobrar = (r.modalidad_pago ?? modalidad) === "ORIGEN" && (r.estado ?? "POR_PAGAR") === "POR_PAGAR";
+      url.ir(porCobrar ? "cobro" : "foto", { reemplazar: true });
       if (r.repetido) avisarInfo("Esta encomienda ya estaba registrada: no se creó otra.");
     } catch (err) {
       setErrorGeneral(humanizeError(err, "registrar la encomienda"));
@@ -711,36 +719,18 @@ export function NuevaEncomiendaFlujo() {
     const { registro, encomienda } = resultado;
     // Solo se cobra si sigue por pagar (un alta repetida puede venir ya pagada).
     const cobrar = encomienda.modalidad_pago === "ORIGEN" && encomienda.estado === "POR_PAGAR";
-    const despuesDeFoto = () => (cobrar ? url.ir("cobro") : url.ir("registrada", { reemplazar: true }));
     const irARegistrada = () => url.ir("registrada", { reemplazar: true });
+    // Cobrado: ahora sí se toma la foto (cobro → foto → PIN).
     const alCobrar = () => {
       setResultado((prev) => (prev ? { ...prev, encomienda: { ...prev.encomienda, estado: "PAGADA" } } : prev));
-      url.ir("registrada", { reemplazar: true });
+      url.ir("foto", { reemplazar: true });
     };
+    // Con cobro, la foto es el paso siguiente al cobro; sin cobro (paga quien recibe) es el primero.
+    const numeroFoto = hayCobro ? NUMERO_PASO_COBRO + 1 : NUMERO_PASO_COBRO;
 
     return (
       <>
         {dialogo}
-        {paso === "foto" && (
-          <FlujoPagina
-            titulo={tituloFoto(modoFoto)}
-            paso={NUMERO_PASO_FOTO}
-            total={totalPasos}
-            descripcion={descripcionFoto(modoFoto, encomienda.tracking_id)}
-          >
-            <FotoPaquete
-              encomiendaId={encomienda.id}
-              siguiente={cobrar ? "Después: cobrar el envío." : undefined}
-              onListo={despuesDeFoto}
-              onModo={setModoFoto}
-              onOcupado={setFotoOcupada}
-            />
-            <Button variant="ghost" size="lg" className="self-start" disabled={fotoOcupada} onClick={despuesDeFoto}>
-              Hacerlo después
-            </Button>
-          </FlujoPagina>
-        )}
-
         {paso === "cobro" && cobrar && (
           <FlujoPagina
             titulo={TITULOS.cobro}
@@ -751,6 +741,26 @@ export function NuevaEncomiendaFlujo() {
             <CobroEncomiendaContenido encomienda={encomienda} onSuccess={alCobrar} onCerrar={irARegistrada} />
             <Button variant="ghost" size="lg" className="self-start" onClick={irARegistrada}>
               Cobrar después
+            </Button>
+          </FlujoPagina>
+        )}
+
+        {paso === "foto" && !cobrar && (
+          <FlujoPagina
+            titulo={tituloFoto(modoFoto)}
+            paso={numeroFoto}
+            total={totalPasos}
+            descripcion={descripcionFoto(modoFoto, encomienda.tracking_id)}
+          >
+            <FotoPaquete
+              encomiendaId={encomienda.id}
+              siguiente="Después: el PIN de retiro."
+              onListo={irARegistrada}
+              onModo={setModoFoto}
+              onOcupado={setFotoOcupada}
+            />
+            <Button variant="ghost" size="lg" className="self-start" disabled={fotoOcupada} onClick={irARegistrada}>
+              Hacerlo después
             </Button>
           </FlujoPagina>
         )}
@@ -771,7 +781,7 @@ export function NuevaEncomiendaFlujo() {
                   encomienda.estado === "PAGADA"
                     ? "Pagada y lista para despacho."
                     : cobrar
-                      ? "Falta cobrar el envío: hazlo desde su detalle."
+                      ? "Falta cobrar el envío y tomar la foto: hazlo desde su detalle."
                       : "Lista para despacho · se cobra al retirar."
                 }
                 principal={{ etiqueta: "Ver encomienda", onClick: () => terminar(encomienda.id) }}
