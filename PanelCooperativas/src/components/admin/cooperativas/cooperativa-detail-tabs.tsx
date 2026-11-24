@@ -17,7 +17,7 @@ import { IconTile } from "@/components/icon-tile";
 import { ListaResponsive } from "@/components/lista-responsive";
 import { FilaVacia } from "@/components/fila-vacia";
 import { StatusBadge, TonoBadge } from "@/components/status-badge";
-import { useParamUrl } from "@/hooks/use-param-url";
+import { useCambiarParams, useParamUrl } from "@/hooks/use-param-url";
 import { useTasaBCVAdmin } from "@/components/admin/dashboard/use-tasa-bcv-admin";
 import { CLASE_PESTANA, ConteoPestana, Dato, Vacio } from "@/components/admin/detalle";
 import { formatDuracion, formatFechaVE } from "@/lib/fechas";
@@ -28,18 +28,51 @@ import { formatNumeroVE } from "@/lib/dinero";
 import { TarifaVigenteCard } from "@/components/tarifas/tarifa-vigente-card";
 import { HistorialTarifasTable } from "@/components/tarifas/historial-tarifas-table";
 import { Calificacion, RifIncompletoBadge } from "./cooperativas-table";
+import { ActividadCooperativa, ResumenActividadCards } from "./cooperativa-actividad";
+import {
+  PESTANAS_ACTIVIDAD,
+  type ActividadPestana,
+  type PestanaActividad,
+  type ResumenActividad,
+} from "@/lib/types/admin-cooperativa-actividad";
 
-const PESTANAS = ["general", "sucursales", "metodos", "rutas", "tarifas", "empleados", "calificaciones"] as const;
+const PESTANAS = [
+  "general",
+  ...PESTANAS_ACTIVIDAD,
+  "sucursales",
+  "metodos",
+  "rutas",
+  "tarifas",
+  "empleados",
+  "calificaciones",
+] as const;
 type Pestana = (typeof PESTANAS)[number];
 
 interface CooperativaDetailTabsProps {
   cooperativa: CooperativaDetalle;
+  /** Cifras de la cabecera y contadores de las pestañas de actividad. */
+  resumen: ResumenActividad;
+  /** Lista de la pestaña de actividad abierta (null en las demás). */
+  actividad: ActividadPestana | null;
 }
+
+/** Filtros de una lista de actividad: no pasan de una pestaña a otra. */
+const PARAMS_FILTRO = { estado: null, desde: null, hasta: null } as const;
 
 /** Teléfono legible o "—" (SY-29). */
 export function telefonoOVacio(v: string | null | undefined) {
   const f = telefonoOGuion(v);
   return f === SIN_DATO ? <Vacio /> : <span className="tabular-nums">{f}</span>;
+}
+
+/** "Sale de Terminal La Bandera · Llega a Terminal de Maracaibo" (o la mitad que haya); "" si no eligió ninguno. */
+function textoTerminales(ruta: { terminal_origen?: string | null; terminal_destino?: string | null }): string {
+  return [
+    ruta.terminal_origen ? `Sale de ${ruta.terminal_origen}` : null,
+    ruta.terminal_destino ? `Llega a ${ruta.terminal_destino}` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 }
 
 function Estrellas({ n, className }: { n: number; className?: string }) {
@@ -56,10 +89,12 @@ function Estrellas({ n, className }: { n: number; className?: string }) {
   );
 }
 
-export function CooperativaDetailTabs({ cooperativa }: CooperativaDetailTabsProps) {
+export function CooperativaDetailTabs({ cooperativa, resumen, actividad }: CooperativaDetailTabsProps) {
   // Montos en USD de referencia, con el equivalente en Bs a la tasa BCV de hoy.
   const tasa = useTasaBCVAdmin();
-  const [valorTab, setTab] = useParamUrl("tab", "general");
+  const [valorTab] = useParamUrl("tab", "general");
+  const cambiarParams = useCambiarParams();
+  const setTab = (v: string) => cambiarParams({ tab: v === "general" ? null : v, ...PARAMS_FILTRO });
   const tab: Pestana = (PESTANAS as readonly string[]).includes(valorTab) ? (valorTab as Pestana) : "general";
   const promedio = Number(cooperativa.calificacion_promedio);
   const vigente = cooperativa.tarifas.find((t) => t.estado === "VIGENTE") ?? null;
@@ -69,6 +104,18 @@ export function CooperativaDetailTabs({ cooperativa }: CooperativaDetailTabsProp
     <Tabs value={tab} onValueChange={(v) => setTab(String(v))} className="gap-4">
       <TabsList aria-label="Secciones de la cooperativa">
         <TabsTrigger value="general" className={CLASE_PESTANA}>General</TabsTrigger>
+        <TabsTrigger value="viajes" className={CLASE_PESTANA}>
+          Viajes <ConteoPestana n={resumen.viajes_total ?? 0} />
+        </TabsTrigger>
+        <TabsTrigger value="boletos" className={CLASE_PESTANA}>
+          Boletos <ConteoPestana n={resumen.boletos_vendidos ?? 0} />
+        </TabsTrigger>
+        <TabsTrigger value="encomiendas" className={CLASE_PESTANA}>
+          Encomiendas <ConteoPestana n={resumen.encomiendas_total ?? 0} />
+        </TabsTrigger>
+        <TabsTrigger value="pagos" className={CLASE_PESTANA}>
+          Pagos <ConteoPestana n={resumen.pagos_total ?? 0} />
+        </TabsTrigger>
         <TabsTrigger value="sucursales" className={CLASE_PESTANA}>
           Sucursales <ConteoPestana n={cooperativa.sucursales.length} />
         </TabsTrigger>
@@ -91,7 +138,8 @@ export function CooperativaDetailTabs({ cooperativa }: CooperativaDetailTabsProp
       </TabsList>
 
       {/* General */}
-      <TabsContent value="general">
+      <TabsContent value="general" className="flex flex-col gap-4">
+        <ResumenActividadCards resumen={resumen} />
         <Card>
           <CardHeader className="flex flex-row items-center gap-3">
             <Avatar className="size-12">
@@ -129,6 +177,13 @@ export function CooperativaDetailTabs({ cooperativa }: CooperativaDetailTabsProp
           </CardContent>
         </Card>
       </TabsContent>
+
+      {/* Actividad: viajes, boletos, encomiendas y pagos (la lista llega ya paginada del servidor) */}
+      {PESTANAS_ACTIVIDAD.map((p: PestanaActividad) => (
+        <TabsContent key={p} value={p}>
+          {actividad?.tab === p ? <ActividadCooperativa actividad={actividad} /> : null}
+        </TabsContent>
+      ))}
 
       {/* Sucursales */}
       <TabsContent value="sucursales">
@@ -249,7 +304,10 @@ export function CooperativaDetailTabs({ cooperativa }: CooperativaDetailTabsProp
               <EntityCard
                 leading={<IconTile icon={Path} tone={ruta.activa ? "sky" : "neutral"} />}
                 title={`${formatCiudad(ruta.ciudad_origen)} → ${formatCiudad(ruta.ciudad_destino)}`}
-                subtitle={formatDuracion(ruta.duracion_estimada_min)}
+                subtitle={[ruta.duracion_estimada_min ? formatDuracion(ruta.duracion_estimada_min) : "Falta la duración", textoTerminales(ruta)]
+                  .filter(Boolean)
+                  .join(" · ")}
+                lineasSubtitulo={3}
                 adorno={
                   ruta.precio_pasaje === null || ruta.precio_pasaje === undefined ? undefined : (
                     <Monto usd={Number(ruta.precio_pasaje)} tasa={tasa} moneda="USD" size="sm" align="right" />
@@ -275,13 +333,25 @@ export function CooperativaDetailTabs({ cooperativa }: CooperativaDetailTabsProp
                     <TableCell>
                       <span className="font-medium">{formatCiudad(ruta.ciudad_origen)}</span>
                       <span className="block text-[13px] text-muted-foreground">{formatCiudad(ruta.estado_origen) || ruta.estado_origen}</span>
+                      <span className="mt-1 block text-[13px]">
+                        <span className="text-muted-foreground">Sale de: </span>
+                        {ruta.terminal_origen || <Vacio texto="Terminal sin indicar" />}
+                      </span>
                     </TableCell>
                     <TableCell>
                       <span className="font-medium">{formatCiudad(ruta.ciudad_destino)}</span>
                       <span className="block text-[13px] text-muted-foreground">{formatCiudad(ruta.estado_destino) || ruta.estado_destino}</span>
+                      <span className="mt-1 block text-[13px]">
+                        <span className="text-muted-foreground">Llega a: </span>
+                        {ruta.terminal_destino || <Vacio texto="Terminal sin indicar" />}
+                      </span>
                     </TableCell>
                     <TableCell className="hidden text-right tabular-nums md:table-cell">
-                      {formatDuracion(ruta.duracion_estimada_min)}
+                      {ruta.duracion_estimada_min ? (
+                        formatDuracion(ruta.duracion_estimada_min)
+                      ) : (
+                        <TonoBadge tono="pendiente">Falta la duración</TonoBadge>
+                      )}
                     </TableCell>
                     <TableCell className="text-right">
                       {ruta.precio_pasaje === null || ruta.precio_pasaje === undefined ? (

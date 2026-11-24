@@ -2,6 +2,12 @@ export const dynamic = "force-dynamic";
 
 import { notFound } from "next/navigation";
 import { fetchCooperativaById } from "@/lib/data/admin-cooperativas";
+import {
+  esPestanaActividad,
+  fetchActividadPestana,
+  fetchResumenActividad,
+  leerFiltrosActividad,
+} from "@/lib/data/admin-cooperativa-actividad";
 import { CooperativaDetailTabs } from "@/components/admin/cooperativas/cooperativa-detail-tabs";
 import { CooperativaActions } from "@/components/admin/cooperativas/cooperativa-actions";
 import { SolicitudAcciones } from "@/components/admin/solicitudes/solicitud-acciones";
@@ -12,11 +18,20 @@ import { formatFechaVE } from "@/lib/fechas";
 
 interface PageProps {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ tab?: string; estado?: string; desde?: string; hasta?: string; pagina?: string }>;
 }
 
-export default async function CooperativaDetailPage({ params }: PageProps) {
+export default async function CooperativaDetailPage({ params, searchParams }: PageProps) {
   const { id } = await params;
-  const cooperativa = await fetchCooperativaById(id);
+  const { tab = "", ...filtrosUrl } = await searchParams;
+  const pestana = esPestanaActividad(tab) ? tab : null;
+
+  // La ficha, las cifras de la cabecera y, solo si hay una lista abierta, su página, en paralelo.
+  const [cooperativa, resumen, actividad] = await Promise.all([
+    fetchCooperativaById(id),
+    fetchResumenActividad(id),
+    pestana ? fetchActividadPestana(id, pestana, leerFiltrosActividad(pestana, filtrosUrl)) : null,
+  ]);
 
   if (!cooperativa) {
     notFound();
@@ -48,7 +63,7 @@ export default async function CooperativaDetailPage({ params }: PageProps) {
         )}
       </PageHeader>
 
-      <CooperativaDetailTabs cooperativa={cooperativa} />
+      <CooperativaDetailTabs cooperativa={cooperativa} resumen={resumen} actividad={actividad} />
     </div>
   );
 }

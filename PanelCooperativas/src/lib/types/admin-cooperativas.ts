@@ -72,8 +72,13 @@ export interface Ruta {
   ciudad_origen: string;
   estado_destino: string;
   ciudad_destino: string;
-  duracion_estimada_min: number;
+  /** null mientras la ruta está en borrador (inactiva y sin duración todavía). */
+  duracion_estimada_min: number | null;
   precio_pasaje: number | null;
+  /** Terminal o parada de salida que eligió la cooperativa; null si no lo indicó. */
+  terminal_origen?: string | null;
+  /** Terminal o parada de llegada que eligió la cooperativa; null si no lo indicó. */
+  terminal_destino?: string | null;
   activa: boolean;
   created_at: string;
 }
