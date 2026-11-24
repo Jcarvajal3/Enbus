@@ -1,95 +1,112 @@
 import Link from "next/link";
+import { ArrowUp, EnvelopeSimple, WhatsappLogo } from "@phosphor-icons/react/dist/ssr";
 
-import { correoSoporte, RUTAS_LEGALES, RUTAS_PANEL, soporteWhatsApp } from "@/lib/sitio/urls";
+import { correoSoporte, RUTAS_LEGALES, RUTAS_PANEL, RUTAS_SITIO, soporteWhatsApp } from "@/lib/sitio/urls";
 import { CREDITOS_FOTOS } from "./fotos";
+import estilos from "./pie.module.css";
 
-/** El reverso del boleto: la marca a todo lo ancho, los caminos para llegar y los créditos. */
+const COLUMNAS = [
+  {
+    id: "pie-viajar",
+    titulo: "Viajar",
+    enlaces: [
+      { href: "/#como-funciona", texto: "Cómo funciona" },
+      { href: "/#rutas", texto: "Rutas" },
+      { href: "/#preguntas", texto: "Preguntas" },
+      { href: "/#descargar", texto: "Descargar la app" },
+    ],
+  },
+  {
+    id: "pie-enviar",
+    titulo: "Enviar",
+    enlaces: [
+      { href: "/#encomiendas", texto: "Encomiendas" },
+      { href: "/#rastrear", texto: "Rastrear envío" },
+    ],
+  },
+  {
+    id: "pie-cooperativas",
+    titulo: "Cooperativas",
+    enlaces: [
+      { href: RUTAS_SITIO.cooperativas, texto: "EnBus para cooperativas" },
+      { href: RUTAS_PANEL.registro, texto: "Registrar mi cooperativa" },
+      { href: RUTAS_PANEL.login, texto: "Entrar al panel" },
+    ],
+  },
+  {
+    id: "pie-legal",
+    titulo: "Legal",
+    enlaces: [
+      { href: RUTAS_LEGALES.terminos, texto: "Términos" },
+      { href: RUTAS_LEGALES.privacidad, texto: "Privacidad" },
+      { href: RUTAS_LEGALES.eliminarCuenta, texto: "Eliminar cuenta" },
+    ],
+  },
+] as const;
+
+/** Pie del sitio: continúa la banda de noche de la descarga. */
 export function Pie() {
   const whatsapp = soporteWhatsApp("Hola, tengo una pregunta sobre EnBus.");
   const correo = correoSoporte();
   const anio = new Date().getFullYear();
 
   return (
-    <footer className="s-pie">
+    <footer className={estilos.pie}>
       <div className="s-marco">
-        <p className="s-pie__marca" aria-hidden>
-          EnBus
-        </p>
-        <div className="s-pie__fila">
-          <ul className="s-pie__lugares">
-            <li>
-              <Link href="/#rastrear">Rastrear un envío</Link>
-            </li>
-            <li>
-              <Link href={RUTAS_PANEL.registro}>Registrar una cooperativa</Link>
-            </li>
-            {whatsapp && (
-              <li>
-                <a href={whatsapp} target="_blank" rel="noopener noreferrer">
-                  Escríbenos por WhatsApp
-                </a>
-              </li>
-            )}
-            {correo && (
-              <li>
-                <a href={`mailto:${correo}`}>{correo}</a>
-              </li>
-            )}
-          </ul>
-
-          <div className="s-pie__columnas">
-            <nav aria-labelledby="pie-viajar">
-              <h2 id="pie-viajar">Viajar</h2>
-              <ul>
-                <li>
-                  <Link href="/#rutas">Rutas</Link>
-                </li>
-                <li>
-                  <Link href="/#como-funciona">Cómo funciona</Link>
-                </li>
-                <li>
-                  <Link href="/#preguntas">Preguntas</Link>
-                </li>
-              </ul>
-            </nav>
-            <nav aria-labelledby="pie-enviar">
-              <h2 id="pie-enviar">Enviar</h2>
-              <ul>
-                <li>
-                  <Link href="/#encomiendas">Encomiendas</Link>
-                </li>
-                <li>
-                  <Link href="/#rastrear">Rastreo</Link>
-                </li>
-                <li>
-                  <Link href={RUTAS_PANEL.login}>Panel de cooperativas</Link>
-                </li>
-              </ul>
-            </nav>
-            <nav aria-labelledby="pie-legal">
-              <h2 id="pie-legal">Legal</h2>
-              <ul>
-                <li>
-                  <Link href={RUTAS_LEGALES.terminos}>Términos</Link>
-                </li>
-                <li>
-                  <Link href={RUTAS_LEGALES.privacidad}>Privacidad</Link>
-                </li>
-                <li>
-                  <Link href={RUTAS_LEGALES.eliminarCuenta}>Eliminar cuenta</Link>
-                </li>
-              </ul>
-            </nav>
+        <div className={estilos.superior}>
+          <div className={estilos.marcaBloque}>
+            <Link href="/" className={estilos.marca} aria-label="EnBus, inicio">
+              En<span>Bus</span>
+            </Link>
+            <p>Pasajes de bus y encomiendas con cooperativas verificadas de Venezuela.</p>
           </div>
+          {(whatsapp || correo) && (
+            <ul className={estilos.contacto} aria-label="Contacto">
+              {whatsapp && (
+                <li>
+                  <a href={whatsapp} target="_blank" rel="noopener noreferrer">
+                    <WhatsappLogo weight="regular" aria-hidden />
+                    Escríbenos por WhatsApp
+                  </a>
+                </li>
+              )}
+              {correo && (
+                <li>
+                  <a href={`mailto:${correo}`}>
+                    <EnvelopeSimple weight="regular" aria-hidden />
+                    {correo}
+                  </a>
+                </li>
+              )}
+            </ul>
+          )}
         </div>
 
-        <div className="s-pie__final">
-          <p>© {anio} EnBus · Boletos y encomiendas con cooperativas de Venezuela</p>
-          <a href="#contenido" className="s-enlace">
+        <div className={estilos.columnas}>
+          {COLUMNAS.map((c) => (
+            <nav key={c.id} aria-labelledby={c.id}>
+              <h2 id={c.id}>{c.titulo}</h2>
+              <ul>
+                {c.enlaces.map((e) => (
+                  <li key={e.href}>
+                    <Link href={e.href}>{e.texto}</Link>
+                  </li>
+                ))}
+              </ul>
+            </nav>
+          ))}
+        </div>
+
+        <div className={estilos.final}>
+          <p>© {anio} EnBus</p>
+          <p>Hecho en Venezuela</p>
+          <a href="#contenido" className={estilos.arriba}>
             Volver arriba
+            <ArrowUp weight="bold" aria-hidden />
           </a>
         </div>
-        <p className="s-pie__creditos">
+
+        <p className={estilos.creditos}>
           Fotos de Wikimedia Commons:{" "}
           {CREDITOS_FOTOS.map((c, i) => (
             <span key={c.pagina}>

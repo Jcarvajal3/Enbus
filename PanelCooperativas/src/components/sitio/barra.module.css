@@ -1,0 +1,212 @@
+.barra {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  border-bottom: 1px solid transparent;
+  transition:
+    border-color var(--dur) ease,
+    box-shadow var(--dur) ease;
+}
+/* El desenfoque va en un pseudo-elemento: un backdrop-filter en el propio header
+   volvería su contenedor al panel `fixed` del menú móvil. */
+.barra::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: color-mix(in srgb, var(--s-canvas) 86%, transparent);
+  -webkit-backdrop-filter: saturate(160%) blur(14px);
+  backdrop-filter: saturate(160%) blur(14px);
+}
+.barra[data-scroll="true"],
+.barra[data-abierto="true"] {
+  border-bottom-color: var(--s-line);
+  box-shadow: var(--sh-1);
+}
+.barra[data-abierto="true"]::before {
+  background: var(--s-canvas);
+}
+
+.fila {
+  min-height: 72px;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.marca {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  text-decoration: none;
+  color: var(--s-ink);
+  margin-right: auto;
+}
+.marca span {
+  color: var(--s-cielo-deep);
+}
+
+.centro {
+  display: none;
+}
+.centro ul,
+.panelNav ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.enlace {
+  white-space: nowrap;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 4px;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--s-ink);
+  text-decoration: none;
+}
+.enlace::after {
+  content: "";
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  bottom: 8px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--s-cielo-deep);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform var(--dur) var(--ease);
+}
+.enlace:hover::after {
+  transform: scaleX(1);
+}
+
+.derecha {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.coop {
+  display: none;
+}
+
+.hamburguesa {
+  display: none;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border: 1px solid var(--s-line-2);
+  border-radius: var(--r-full);
+  background: var(--s-paper);
+  color: var(--s-ink);
+  cursor: pointer;
+  transition: border-color var(--dur) ease;
+}
+.hamburguesa:hover {
+  border-color: var(--s-ink);
+}
+
+/* Sin JS: los enlaces quedan en filas bajo la marca, siempre accesibles. */
+.panel {
+  border-top: 1px solid var(--s-line);
+}
+.panelNav {
+  width: var(--ancho);
+  margin-inline: auto;
+  padding-bottom: 8px;
+}
+.panelNav ul,
+.panelPie {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 20px;
+}
+.panelEnlace {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  font-weight: 500;
+  font-size: 15px;
+  text-decoration: none;
+  color: var(--s-ink);
+}
+
+/* Con JS en móvil/tablet: hoja a pantalla completa bajo la barra. */
+@media (max-width: 1179.98px) and (scripting: enabled) {
+  .barra .hamburguesa {
+    display: inline-grid;
+  }
+  .barra .fila {
+    height: 72px;
+  }
+  .barra .panel {
+    position: fixed;
+    inset: 72px 0 0 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    background: var(--s-canvas);
+    padding-block: 8px 32px;
+  }
+  .barra:not([data-abierto="true"]) .panel {
+    display: none;
+  }
+  .barra .panelNav ul,
+  .barra .panelPie {
+    display: block;
+  }
+  .barra .panelEnlace {
+    min-height: 56px;
+    font-size: 20px;
+    font-weight: 600;
+    letter-spacing: -0.015em;
+    border-bottom: 1px solid var(--s-line);
+  }
+  .barra .panelPie {
+    margin-top: 16px;
+  }
+  .barra .panelPie .panelEnlace:last-child {
+    color: var(--s-cielo-deep);
+  }
+}
+
+@media (max-width: 380px) {
+  .derecha :global(.s-boton) {
+    padding: 0 12px;
+  }
+}
+
+@media (min-width: 1180px) {
+  .centro {
+    display: block;
+  }
+  .centro ul {
+    display: flex;
+    gap: 20px;
+  }
+  .marca {
+    margin-right: 0;
+  }
+  .derecha {
+    margin-left: auto;
+    gap: 20px;
+  }
+  .coop {
+    display: inline-flex;
+  }
+  .panel {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .enlace::after {
+    transition: none;
+  }
+}

@@ -25,7 +25,6 @@ export default function SitioLayout({ children }: { children: React.ReactNode })
       <Barra />
       <main id="contenido" className="s-principal" tabIndex={-1}>
         {children}
-        <div className="s-final-hueco" aria-hidden />
       </main>
       <Pie />
     </div>

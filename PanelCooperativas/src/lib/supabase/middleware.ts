@@ -84,7 +84,12 @@ export async function updateSession(request: NextRequest) {
     const publica = PUBLICAS_ADMIN.some((p) => dentroDe(pathname, p));
     if (!autenticado && !publica) return redirigir(request, supabaseResponse, "/admin/login");
   } else {
-    const publica = PUBLICAS_COOPERATIVAS.some((p) => dentroDe(pathname, p));
+    // "/cooperativas" EXACTO es la página pública para captar cooperativas (app/(sitio)/cooperativas);
+    // sus subrutas siguen siendo el panel y exigen sesión salvo las de PUBLICAS_COOPERATIVAS.
+    const publica =
+      pathname === "/cooperativas" ||
+      pathname === "/cooperativas/" ||
+      PUBLICAS_COOPERATIVAS.some((p) => dentroDe(pathname, p));
     if (!autenticado && !publica) return redirigir(request, supabaseResponse, "/cooperativas/login");
 
     // Secciones solo del administrador de la cooperativa: el taquillero que llega por URL

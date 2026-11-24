@@ -1,0 +1,265 @@
+.seccion {
+  /* El pie continúa la noche: menos aire abajo. */
+  padding-bottom: clamp(48px, 6vw, 80px);
+}
+
+.panel {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  display: grid;
+  gap: 40px;
+  border-radius: var(--r-xl);
+  background: var(--s-ink-2);
+  box-shadow: inset 0 0 0 1px var(--s-ink-3);
+  padding: clamp(28px, 5vw, 72px) clamp(24px, 5vw, 72px) 0;
+}
+/* Glow tenue de sol y cielo */
+.panel::before,
+.panel::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  border-radius: 50%;
+  pointer-events: none;
+}
+.panel::before {
+  width: 560px;
+  height: 560px;
+  right: -120px;
+  top: -160px;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--s-sol) 20%, transparent), transparent);
+}
+.panel::after {
+  width: 520px;
+  height: 520px;
+  left: -160px;
+  bottom: -220px;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--s-cielo-deep) 28%, transparent), transparent);
+}
+
+.texto {
+  display: grid;
+  gap: 20px;
+  align-content: start;
+  justify-items: start;
+  padding-bottom: 8px;
+}
+.etiqueta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--t-small);
+  font-weight: 600;
+  color: var(--s-sol);
+}
+.etiqueta::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.texto h2 {
+  font-size: var(--t-h2);
+  letter-spacing: -0.03em;
+  color: var(--s-on-night);
+}
+.bajada {
+  font-size: var(--t-lead);
+  color: var(--s-on-night-muted);
+  max-width: 44ch;
+}
+.puntos {
+  list-style: none;
+  margin: 4px 0 8px;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+}
+.puntos li {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  color: var(--s-on-night);
+}
+.puntos svg {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  margin-top: 1px;
+  color: var(--s-sol);
+}
+
+/* El teléfono asoma por el borde inferior del panel */
+.escena {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  height: 340px;
+  overflow: hidden;
+}
+.telefono {
+  transform: rotate(-3deg);
+  transform-origin: 50% 100%;
+  margin-top: 8px;
+}
+
+/* ── Maqueta de la app ── */
+.app {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 44px 14px 14px;
+  color: var(--s-ink);
+}
+.appCabeza {
+  display: grid;
+  gap: 2px;
+  padding: 0 4px;
+}
+.appHola {
+  font-size: 12px;
+  color: var(--s-muted);
+}
+.appTitulo {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+}
+.appBuscador {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border-radius: var(--r-md);
+  background: var(--s-paper);
+  box-shadow: var(--sh-2);
+}
+.campo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--r-sm);
+  background: var(--s-canvas);
+}
+.campo svg {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  color: var(--s-cielo-deep);
+}
+.campo span {
+  display: grid;
+  line-height: 1.2;
+}
+.campo small {
+  font-size: 11px;
+  color: var(--s-muted);
+}
+.campo strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+.appBoton {
+  display: grid;
+  place-items: center;
+  min-height: 40px;
+  border-radius: var(--r-full);
+  background: var(--s-sol);
+  font-size: 13px;
+  font-weight: 700;
+}
+.appRotulo {
+  padding: 4px 4px 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--s-muted);
+}
+.viaje {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border-radius: var(--r-md);
+  background: var(--s-paper);
+  box-shadow: var(--sh-1);
+}
+.viajeIcono {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  flex: none;
+  border-radius: 10px;
+  background: var(--s-sol-soft);
+  color: var(--s-sol-deep);
+}
+.viajeIcono svg {
+  width: 20px;
+  height: 20px;
+}
+.viajeTexto {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  line-height: 1.25;
+}
+.viajeTexto strong {
+  font-size: 13px;
+}
+.viajeTexto small {
+  font-size: 11px;
+  color: var(--s-muted);
+}
+.viajeQr {
+  width: 32px;
+  height: 32px;
+  flex: none;
+}
+
+/* ── Tarjeta secundaria ── */
+.coop {
+  margin-top: 24px;
+  display: grid;
+  gap: 20px;
+  align-items: center;
+  padding: clamp(24px, 3vw, 32px);
+  border-radius: var(--r-lg);
+  background: var(--s-ink-2);
+  box-shadow: inset 0 0 0 1px var(--s-ink-3);
+}
+.coop h3 {
+  font-size: var(--t-h3);
+  color: var(--s-on-night);
+}
+.coop p {
+  margin-top: 6px;
+  color: var(--s-on-night-muted);
+  max-width: 58ch;
+}
+.coop :global(.s-boton) {
+  justify-self: start;
+  white-space: normal;
+  text-align: left;
+}
+
+@media (min-width: 900px) {
+  .panel {
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+    align-items: center;
+    gap: 24px;
+  }
+  .texto {
+    padding-block: 0 clamp(28px, 5vw, 72px);
+  }
+  .escena {
+    height: 420px;
+    align-self: end;
+  }
+  .coop {
+    grid-template-columns: 1fr auto;
+    gap: 32px;
+  }
+}

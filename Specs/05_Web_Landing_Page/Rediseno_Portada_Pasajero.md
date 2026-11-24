@@ -61,7 +61,7 @@ Componentes compartidos (`src/components/sitio/ui/`):
 Reglas de estilo:
 - Frase normal en etiquetas y títulos: **nunca `text-transform: uppercase`** ni letras diminutas espaciadas.
 - Iconos: `@phosphor-icons/react/dist/ssr` en server components; `@phosphor-icons/react` en client
-  components. Peso `regular` o `duotone` consistente por sección; tamaño 20–24 px.
+  components. Peso `regular` (el lint del proyecto prohíbe `duotone`, regla D21); `fill` solo para iconos de estado. Tamaño 20–24 px.
 - Nada de hex/rgba sueltos en los módulos salvo transparencias de blanco/noche sobre fondos oscuros;
   todo color sale de los tokens.
 - Contraste ≥ 4,5:1 en texto; foco visible; objetivos táctiles ≥ 44 px.
@@ -108,8 +108,10 @@ No inventar cifras, testimonios, logos de cooperativas, premios ni funciones. So
   (administrador y taquilleros), sucursales e impresora térmica / lector de QR**.
 - **Mismo mapa de asientos** para taquilla y app: un puesto no se vende dos veces.
 - Los pasajeros **pagan directo a las cuentas de la cooperativa**; la cooperativa verifica cada referencia.
-- Modelo: **comisión por cada boleto o encomienda vendida a través de EnBus**, liquidada por ciclo.
-  Sin mensualidad (no se mencionan otros cargos). Precios estandarizados definidos por EnBus.
+- **Modelo de cobro: NO se menciona.** Desde el 2026-11-23 el modelo de comisiones está oculto y
+  desactivado (EnBus opera gratis mientras se define el negocio). Ninguna página dice "comisión",
+  "mensualidad", "gratis para siempre", precios ni planes. Si hace falta, solo: "Registrarse no tiene
+  costo" (es cierto: la solicitud es gratuita).
 - Alta: **solicitud en línea → revisión y aprobación por EnBus → configuras rutas, buses, métodos de
   pago y empleados → empiezas a vender**.
 - Funciona con conexión inestable (modo sin conexión para escanear y consultar).
@@ -143,8 +145,8 @@ subrutas siguen protegidas). `robots.ts`: permitir `/cooperativas` exacto; `site
 
 Secciones: hero B2B (H1, bajada, CTA "Registrar mi cooperativa" `--sol` + "Entrar al panel"), maqueta
 del panel; problemas que resuelve → beneficios; módulos del panel (rejilla de 8–9); cómo empezar en 4
-pasos; modelo comercial transparente (comisión por venta, sin mensualidad, pagos directo a tu cuenta);
-FAQ de cooperativas; CTA final. Metadata y canonical propios.
+pasos; "tu dinero es tuyo" (los pasajeros pagan directo a tus cuentas; tú verificas cada referencia);
+FAQ de cooperativas (sin preguntas de precios/comisiones); CTA final. Metadata y canonical propios.
 
 ## 7. Reparto de trabajo
 

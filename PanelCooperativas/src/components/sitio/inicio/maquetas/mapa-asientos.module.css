@@ -1,0 +1,39 @@
+.mapa {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr) 14px repeat(2, 1fr);
+  gap: 6px;
+  width: 100%;
+  max-width: 220px;
+}
+.asiento {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1 / 0.92;
+  border-radius: 8px 8px 5px 5px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--s-ink);
+  border: 1px solid transparent;
+}
+.libre {
+  background: var(--s-paper);
+  border-color: var(--s-line-2);
+}
+.ocupado {
+  background: var(--s-canvas-2);
+  border-color: var(--s-canvas-2);
+}
+.elegido {
+  background: var(--s-sol);
+  border-color: var(--s-sol);
+  box-shadow: var(--sh-sol);
+}
+.compacto {
+  gap: 4px;
+  max-width: 128px;
+  grid-template-columns: repeat(2, 1fr) 8px repeat(2, 1fr);
+}
+.compacto .asiento {
+  font-size: 9px;
+  border-radius: 6px 6px 4px 4px;
+}
