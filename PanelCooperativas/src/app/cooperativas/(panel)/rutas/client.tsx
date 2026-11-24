@@ -23,7 +23,7 @@ import { Switch } from "@/components/ui/switch";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { AvisoError } from "@/components/aviso-error";
 import { ErrorState } from "@/components/error-state";
-import { StatusBadge } from "@/components/status-badge";
+import { StatusBadge, TonoBadge } from "@/components/status-badge";
 import { EntityCard } from "@/components/entity-card";
 import { IconTile } from "@/components/icon-tile";
 import { ListaResponsive } from "@/components/lista-responsive";
@@ -38,6 +38,7 @@ import { useTasaBCV } from "@/components/tasa-bcv-provider";
 import { formatBs, formatNumeroVE, formatUsd, leerMonto, usdABs } from "@/lib/dinero";
 import { avisarError, avisarExito } from "@/lib/avisos";
 import { humanizeError } from "@/lib/errores";
+import { datosFaltantesRuta } from "@/lib/rutas";
 import { formatDuracion } from "@/lib/fechas";
 import { formatCiudad, mismaCiudad, terminalVE, terminalesParaSalir } from "@/lib/ciudades";
 import { ICONO_SECCION } from "@/lib/navigation";
@@ -179,6 +180,21 @@ function textoTerminales(ruta: Pick<Ruta, "terminal_origen" | "terminal_destino"
     .join(" · ");
 }
 
+/** Duración legible, o el aviso de que falta (una ruta en borrador no la tiene todavía). */
+function DuracionRuta({ ruta }: { ruta: Ruta }) {
+  const min = Number(ruta.duracion_estimada_min);
+  return min > 0 ? <>{formatDuracion(min)}</> : <TonoBadge tono="pendiente">Falta la duración</TonoBadge>;
+}
+
+/** Precio en USD, o "—" si todavía no se indicó. */
+function PrecioRuta({ ruta }: { ruta: Ruta }) {
+  return Number(ruta.precio_pasaje) > 0 ? (
+    <Monto usd={Number(ruta.precio_pasaje)} size="sm" align="right" />
+  ) : (
+    <span className="text-muted-foreground">—</span>
+  );
+}
+
 function NombreRuta({ ruta }: { ruta: Ruta }) {
   return (
     <span className="flex flex-col">
@@ -272,7 +288,8 @@ export function RutasClient({ rutas, errorCarga }: { rutas: Ruta[]; errorCarga: 
     setIsModalOpen(true);
   }
 
-  function openEditModal(ruta: Ruta) {
+  /** `activar`: se abrió para completar los datos que faltan y activarla (el interruptor viene encendido). */
+  function openEditModal(ruta: Ruta, activar = false) {
     setEditingRuta(ruta);
     setEstadoOrigen(ruta.estado_origen);
     setCiudadOrigen(ruta.ciudad_origen);
@@ -286,7 +303,7 @@ export function RutasClient({ rutas, errorCarga }: { rutas: Ruta[]; errorCarga: 
     setMinutos(total > 0 ? String(total % 60) : "");
     setFormError(null);
     setErrorCampo(null);
-    setActivaSwitch(ruta.activa);
+    setActivaSwitch(activar || ruta.activa);
     setIsModalOpen(true);
   }
 
@@ -317,6 +334,9 @@ export function RutasClient({ rutas, errorCarga }: { rutas: Ruta[]; errorCarga: 
           avisarError(humanizeError(err, "desactivar la ruta"));
         }
       });
+    } else if (datosFaltantesRuta(ruta).length > 0) {
+      // Borrador: no se activa a ciegas, se abre el formulario para completar lo que falta.
+      openEditModal(ruta, true);
     } else {
       // reactivar
       startTransition(async () => {
@@ -379,7 +399,9 @@ export function RutasClient({ rutas, errorCarga }: { rutas: Ruta[]; errorCarga: 
       setErrorCampo("destino");
       return;
     }
-    const errDur = errorDuracion(horas, minutos);
+    // La duración es obligatoria para activar; en una ruta inactiva se puede dejar en blanco.
+    const hayDuracion = horas.trim() !== "" || minutos.trim() !== "";
+    const errDur = hayDuracion || activaSwitch ? errorDuracion(horas, minutos) : null;
     if (errDur) {
       setFormError(errDur);
       setErrorCampo("duracion");
@@ -451,9 +473,14 @@ export function RutasClient({ rutas, errorCarga }: { rutas: Ruta[]; errorCarga: 
                 etiqueta={`Editar ruta ${nombreRuta(ruta)}`}
                 leading={<IconTile icon={ICONO_SECCION.rutas} tone={ruta.activa ? "sky" : "neutral"} />}
                 title={nombreRuta(ruta)}
-                subtitle={[formatDuracion(Number(ruta.duracion_estimada_min) || 0), textoTerminales(ruta)].filter(Boolean).join(" · ")}
+                subtitle={[
+                  Number(ruta.duracion_estimada_min) > 0 ? formatDuracion(Number(ruta.duracion_estimada_min)) : "Falta la duración",
+                  textoTerminales(ruta),
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
                 lineasSubtitulo={2}
-                adorno={formatUsd(Number(ruta.precio_pasaje))}
+                adorno={Number(ruta.precio_pasaje) > 0 ? formatUsd(Number(ruta.precio_pasaje)) : undefined}
                 badge={<StatusBadge status={ruta.activa ? "ACTIVO" : "INACTIVO"} dominio="recurso" />}
               />
             )}
@@ -480,9 +507,11 @@ export function RutasClient({ rutas, errorCarga }: { rutas: Ruta[]; errorCarga: 
                   >
                     <NombreRuta ruta={ruta} />
                   </CeldaEnlace>
-                  <TableCell className="tabular-nums">{formatDuracion(Number(ruta.duracion_estimada_min) || 0)}</TableCell>
+                  <TableCell className="tabular-nums">
+                    <DuracionRuta ruta={ruta} />
+                  </TableCell>
                   <TableCell className="text-right">
-                    <Monto usd={Number(ruta.precio_pasaje)} size="sm" align="right" />
+                    <PrecioRuta ruta={ruta} />
                   </TableCell>
                   <TableCell>
                     <StatusBadge status={ruta.activa ? "ACTIVO" : "INACTIVO"} dominio="recurso" />
@@ -505,7 +534,7 @@ export function RutasClient({ rutas, errorCarga }: { rutas: Ruta[]; errorCarga: 
                           className={ruta.activa ? "text-destructive-text focus:text-destructive-text" : undefined}
                         >
                           {ruta.activa ? <Prohibit aria-hidden /> : <ArrowCounterClockwise aria-hidden />}
-                          {ruta.activa ? "Desactivar ruta" : "Reactivar ruta"}
+                          {ruta.activa ? "Desactivar ruta" : datosFaltantesRuta(ruta).length > 0 ? "Completar y activar" : "Reactivar ruta"}
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
@@ -536,6 +565,11 @@ export function RutasClient({ rutas, errorCarga }: { rutas: Ruta[]; errorCarga: 
           >
             <div className="grid gap-4">
               {formError && errorCampo !== "duracion" && <AvisoError>{formError}</AvisoError>}
+              {editingRuta && !editingRuta.activa && datosFaltantesRuta(editingRuta).length > 0 && (
+                <p className="rounded-md bg-warning-light p-3 text-[13px] text-warning-deep">
+                  Esta ruta está en borrador: para activarla falta {datosFaltantesRuta(editingRuta).join(" y ")}.
+                </p>
+              )}
               <CiudadField
                 id={`${uid}-ciudad-origen`}
                 label="Ciudad de origen"
@@ -591,7 +625,9 @@ export function RutasClient({ rutas, errorCarga }: { rutas: Ruta[]; errorCarga: 
               )}
 
               <fieldset className="grid gap-2">
-                <legend className="mb-2 text-[13px] font-medium text-foreground">Duración del viaje</legend>
+                <legend className="mb-2 text-[13px] font-medium text-foreground">
+                  Duración del viaje{activaSwitch ? "" : " (opcional mientras esté inactiva)"}
+                </legend>
                 <div className="grid grid-cols-2 gap-4">
                   <Campo
                     id={`${uid}-horas`}
@@ -632,7 +668,7 @@ export function RutasClient({ rutas, errorCarga }: { rutas: Ruta[]; errorCarga: 
                 name="precio_pasaje"
                 label="Precio del pasaje (USD)"
                 moneda="USD"
-                required
+                required={activaSwitch}
                 enterKeyHint="done"
                 value={precioTexto}
                 onChange={setPrecioTexto}
@@ -651,7 +687,9 @@ export function RutasClient({ rutas, errorCarga }: { rutas: Ruta[]; errorCarga: 
               <div className="flex items-center justify-between gap-4 rounded-md bg-surface p-4">
                 <div className="flex flex-col gap-0.5">
                   <Label htmlFor={`${uid}-activa`}>Ruta activa</Label>
-                  <p className="text-[13px] text-muted-foreground">Solo las activas se pueden programar.</p>
+                  <p className="text-[13px] text-muted-foreground">
+                    Solo las activas se pueden programar. Para activarla hacen falta la duración y el precio.
+                  </p>
                 </div>
                 <Switch
                   id={`${uid}-activa`}
@@ -675,7 +713,7 @@ export function RutasClient({ rutas, errorCarga }: { rutas: Ruta[]; errorCarga: 
                 }}
               >
                 {editingRuta.activa ? <Prohibit aria-hidden /> : <ArrowCounterClockwise aria-hidden />}
-                {editingRuta.activa ? "Desactivar ruta" : "Reactivar ruta"}
+                {editingRuta.activa ? "Desactivar ruta" : datosFaltantesRuta(editingRuta).length > 0 ? "Completar y activar" : "Reactivar ruta"}
               </Button>
             )}
 

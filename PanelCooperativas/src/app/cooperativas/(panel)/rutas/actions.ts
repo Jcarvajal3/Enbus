@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { humanizeError } from "@/lib/errores";
 import { leerMonto } from "@/lib/dinero";
 import { formatCiudad, mismaCiudad, terminalVE, terminalesParaSalir } from "@/lib/ciudades";
+import { datosFaltantesRuta } from "@/lib/rutas";
 
 const MSG_MISMA_CIUDAD = "El origen y el destino deben ser ciudades distintas.";
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -12,19 +13,27 @@ const MSG_RUTA_NO_ENCONTRADA = "No encontramos esa ruta en tu cooperativa. Actua
 /** Tope razonable del pasaje en USD (evita un error de tipeo como 1500 en vez de 15,00). */
 const PRECIO_MAXIMO_USD = 1000;
 
-/** Duración en minutos: "Horas" (0–48) + "Minutos" (0–59), o el campo antiguo en minutos. */
-function leerDuracion(formData: FormData): number {
+/**
+ * Duración en minutos: "Horas" (0–48) + "Minutos" (0–59), o el campo antiguo en minutos.
+ * `null` si se dejó en blanco (una ruta inactiva puede no tenerla todavía); NaN si no es válida.
+ */
+function leerDuracion(formData: FormData): number | null {
   const horasTxt = formData.get("duracion_horas");
   const minutosTxt = formData.get("duracion_minutos");
   if (horasTxt !== null || minutosTxt !== null) {
-    const horas = String(horasTxt ?? "").trim() === "" ? 0 : Number(horasTxt);
-    const minutos = String(minutosTxt ?? "").trim() === "" ? 0 : Number(minutosTxt);
+    const h = String(horasTxt ?? "").trim();
+    const m = String(minutosTxt ?? "").trim();
+    if (h === "" && m === "") return null;
+    const horas = h === "" ? 0 : Number(h);
+    const minutos = m === "" ? 0 : Number(m);
     if (!Number.isInteger(horas) || horas < 0 || horas > 48) return NaN;
     if (!Number.isInteger(minutos) || minutos < 0 || minutos > 59) return NaN;
     return horas * 60 + minutos;
   }
-  return parseInt(String(formData.get("duracion_estimada_min") ?? ""), 10);
+  const antiguo = String(formData.get("duracion_estimada_min") ?? "").trim();
+  return antiguo === "" ? null : parseInt(antiguo, 10);
 }
+
 
 /** "15,50" | "15.50" | "1.250,00" -> número (lector único de montos; NaN si no es válido). */
 function parsePrecio(valor: FormDataEntryValue | null): number {
@@ -63,19 +72,31 @@ export async function guardarRuta(formData: FormData, rutaId?: string) {
   const ciudad_destino = clave("ciudad_destino");
   const duracion_estimada_min = leerDuracion(formData);
   // Precio de referencia en USD: el pasajero paga en Bs a la tasa BCV del día.
-  const precio_pasaje = Math.round(parsePrecio(formData.get("precio_pasaje")) * 100) / 100;
+  // En blanco = sin precio todavía (solo vale mientras la ruta está inactiva).
+  const precioTexto = String(formData.get("precio_pasaje") ?? "").trim();
+  const precio_pasaje = precioTexto === "" ? null : Math.round(parsePrecio(precioTexto) * 100) / 100;
   const activa = formData.get("activa") === "on";
 
   if (!estado_origen || !ciudad_origen || !estado_destino || !ciudad_destino) {
     return { error: "Elige el estado y la ciudad de origen y de destino." };
   }
-  if (isNaN(duracion_estimada_min) || duracion_estimada_min <= 0) {
+  // Una ruta inactiva se puede guardar sin duración ni precio (borrador); para activarla, los dos son obligatorios.
+  if (duracion_estimada_min === null) {
+    if (activa) {
+      return {
+        error: "Para activar la ruta escribe cuánto dura el viaje (por ejemplo, 8 h 30 min), o déjala inactiva.",
+        campo: "duracion" as const,
+      };
+    }
+  } else if (isNaN(duracion_estimada_min) || duracion_estimada_min <= 0) {
     return {
       error: "Escribe cuánto dura el viaje: horas de 0 a 48 y minutos de 0 a 59 (por ejemplo, 8 h 30 min).",
       campo: "duracion" as const,
     };
   }
-  if (isNaN(precio_pasaje) || precio_pasaje <= 0 || precio_pasaje > PRECIO_MAXIMO_USD) {
+  if (precio_pasaje === null) {
+    if (activa) return { error: "Para activar la ruta escribe el precio del pasaje en dólares, o déjala inactiva." };
+  } else if (isNaN(precio_pasaje) || precio_pasaje <= 0 || precio_pasaje > PRECIO_MAXIMO_USD) {
     return { error: "Escribe el precio del pasaje en dólares, por ejemplo 15 o 15,50." };
   }
   if (mismaCiudad(ciudad_origen, ciudad_destino)) {
@@ -161,6 +182,25 @@ export async function toggleActivaRuta(rutaId: string, activa: boolean) {
   const { data: profile } = await supabase.from("profiles").select("cooperativa_id, role").eq("id", user.id).single();
   if (!profile || profile.role !== "admin_cooperativa") {
     return { error: "Solo el administrador de la cooperativa puede activar o desactivar rutas." };
+  }
+
+  // Activar exige los datos completos: una ruta en borrador no se puede publicar sin duración ni precio.
+  if (activa === true) {
+    const { data: ruta, error: errorRuta } = await supabase
+      .from("rutas")
+      .select("duracion_estimada_min, precio_pasaje")
+      .eq("id", rutaId)
+      .eq("cooperativa_id", profile.cooperativa_id)
+      .maybeSingle();
+    if (errorRuta) return { error: humanizeError(errorRuta, "revisar la ruta") };
+    if (!ruta) return { error: MSG_RUTA_NO_ENCONTRADA };
+    const faltan = datosFaltantesRuta(ruta);
+    if (faltan.length > 0) {
+      return {
+        error: `Para activar esta ruta falta ${faltan.join(" y ")}. Edítala y complétalo.`,
+        incompleta: true as const,
+      };
+    }
   }
 
   const { data: filas, error } = await supabase
