@@ -29,3 +29,19 @@ export function useAnchoMinimo(px: number, servidor = false): boolean {
 export function useIsMobile() {
   return !useAnchoMinimo(MOBILE_BREAKPOINT, true)
 }
+
+const CONSULTA_DISPOSITIVO_MOVIL = "(max-width: 767px), (hover: none) and (pointer: coarse)"
+const suscribirDispositivoMovil = suscribirMedia(CONSULTA_DISPOSITIVO_MOVIL)
+
+/**
+ * true en teléfonos (< 768px) o dispositivos táctiles sin puntero fino
+ * (`(hover: none) and (pointer: coarse)`). En escritorio (mouse/desktop) es false.
+ * SSR-safe (devuelve false en servidor para evitar hydration mismatch).
+ */
+export function useEsDispositivoMovil(): boolean {
+  return React.useSyncExternalStore(
+    suscribirDispositivoMovil,
+    () => window.matchMedia(CONSULTA_DISPOSITIVO_MOVIL).matches,
+    () => false
+  )
+}

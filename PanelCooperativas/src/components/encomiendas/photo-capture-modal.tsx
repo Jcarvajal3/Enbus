@@ -3,8 +3,10 @@
 // ─── Foto del paquete en un diálogo (P-35, PC-30) ───────────────────────────
 // Envoltorio de diálogo de `FotoPaquete`: lo usan la recepción de encomiendas
 // creadas en la app y "Agregar foto" del detalle. La nueva encomienda de
-// taquilla usa el mismo contenido como fase de página. Se puede cerrar (la
-// encomienda queda "Falta foto"), salvo mientras sube la foto.
+// taquilla usa el mismo contenido como fase de página. En escritorio permite
+// elegir o arrastrar una imagen; en móvil permite usar cámara o galería. Se
+// puede cerrar (la encomienda queda "Falta foto"), salvo mientras procesa o
+// sube la foto.
 
 import { useState } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -24,7 +26,7 @@ interface PhotoCaptureModalProps {
 }
 
 export function PhotoCaptureModal({ encomiendaId, trackingId, isOpen, onClose, onListo, siguiente }: PhotoCaptureModalProps) {
-  const [modo, setModo] = useState<ModoFoto>("camara");
+  const [modo, setModo] = useState<ModoFoto>("seleccion");
   const [ocupado, setOcupado] = useState(false);
 
   const cerrar = () => {
@@ -39,7 +41,7 @@ export function PhotoCaptureModal({ encomiendaId, trackingId, isOpen, onClose, o
           <DialogTitle>{tituloFoto(modo)}</DialogTitle>
           <DialogDescription>{descripcionFoto(modo, trackingId)}</DialogDescription>
         </DialogHeader>
-        {/* Montado solo con el diálogo abierto: la cámara se apaga al cerrar. */}
+        {/* Montado solo con el diálogo abierto: reinicia la selección y libera la vista previa al cerrar. */}
         {isOpen && (
           <FotoPaquete
             encomiendaId={encomiendaId}

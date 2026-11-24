@@ -546,10 +546,15 @@ export function CobroEncomiendaContenido({ encomienda, onSuccess, onCerrar }: Co
     cuerpo = <ErrorState compacto titulo="No pudimos revisar el pago" descripcion={errorCarga} onReintentar={cargar} />;
   } else if (cobro?.aprobado) {
     cuerpo = (
-      <p role="status" className="flex items-start gap-2 rounded-md bg-success-light p-4 text-[15px] text-success-deep">
-        <CheckCircle className="mt-0.5 size-4 shrink-0 text-success-text" weight="fill" aria-hidden />
-        Ya está pagada.
-      </p>
+      <div className="flex flex-col gap-3">
+        <p role="status" className="flex items-start gap-2 rounded-md bg-success-light p-4 text-[15px] text-success-deep">
+          <CheckCircle className="mt-0.5 size-4 shrink-0 text-success-text" weight="fill" aria-hidden />
+          Ya está pagada.
+        </p>
+        <Button type="button" size="lg" onClick={() => onSuccess(encomienda.id)}>
+          Continuar
+        </Button>
+      </div>
     );
   } else if (cobro?.pendiente) {
     cuerpo = (

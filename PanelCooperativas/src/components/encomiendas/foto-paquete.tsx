@@ -3,50 +3,50 @@
 // ─── Foto del paquete en la taquilla (P-35, PC-30) ──────────────────────────
 // Contenido reutilizable: lo usan la fase "Foto del paquete" de la página de
 // nueva encomienda y `PhotoCaptureModal` (recepción de encomiendas de la app y
-// "Agregar foto" del detalle). Tres salidas: "Tomar foto" (cámara del equipo),
-// "Subir archivo" (en el teléfono abre la cámara trasera) u "Omitir por ahora"
-// con un motivo; la encomienda queda marcada "Falta foto" y se agrega desde el
-// detalle. La foto va al bucket privado en "<encomiendaId>/<ts>.jpg" y se guarda
-// la RUTA. Se guarda entera, con la proporción que tenga (sin recortes): solo se
-// reduce a 1600 px por el lado mayor y se comprime en JPEG para que suba rápido.
+// "Agregar foto" del detalle). En escritorio ofrece selección desde archivos o
+// arrastrar y soltar; en móvil ofrece "Tomar foto" (cámara trasera nativa) y
+// "Galería" sin recorte. También permite "Omitir por ahora" con un motivo.
 //
 // No pinta título ni cierre: quien lo monta pone el título (`tituloFoto(modo)`)
 // y la descripción (`descripcionFoto(modo, trackingId)`), y se entera del modo
-// con `onModo` y de que hay una subida en curso con `onOcupado`.
+// con `onModo` y de que hay procesamiento o subida en curso con `onOcupado`.
 
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
-import { ArrowUUpLeft, Camera, CameraSlash, Check, FastForward, UploadSimple } from "@phosphor-icons/react";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { Camera, Check, FastForward, Image as ImageIcon, UploadSimple } from "@phosphor-icons/react";
+import { guardarFotoEncomienda } from "@/app/cooperativas/(panel)/taquilla/encomiendas/actions";
+import { AvisoError } from "@/components/aviso-error";
+import { SelectorFotoPaquete } from "@/components/encomiendas/selector-foto-paquete";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
-import { createClient } from "@/lib/supabase/client";
-import { BUCKET_FOTOS, rutaNuevaFoto } from "@/lib/fotos";
-import { humanizeError, isNetworkError } from "@/lib/errores";
-import { guardarFotoEncomienda } from "@/app/cooperativas/(panel)/taquilla/encomiendas/actions";
-import { cn } from "@/lib/utils";
-import { AvisoError } from "@/components/aviso-error";
+import { useBlobPreviewUrl } from "@/hooks/use-blob-preview";
+import { useEsDispositivoMovil } from "@/hooks/use-mobile";
 import { avisarExito, avisarInfo } from "@/lib/avisos";
+import { humanizeError } from "@/lib/errores";
+import {
+  prepararImagenArchivo,
+  subirYGuardarFotoEncomienda,
+  type CacheSubidaFoto,
+} from "@/lib/fotos-archivo";
+import { createClient } from "@/lib/supabase/client";
+import { cn } from "@/lib/utils";
 
-const MSG_ERROR_SUBIDA = "No pudimos subir la foto. Intenta de nuevo o súbela después desde el detalle.";
 const MOTIVOS_OMITIR = ["La cámara no funciona", "El cliente tiene prisa", "Otro"];
-const MAX_BYTES = 10 * 1024 * 1024;
-const LADO_MAXIMO = 1600;
 
-export type ModoFoto = "camara" | "vista" | "omitir";
+export type ModoFoto = "seleccion" | "vista" | "omitir";
 
 export interface FotoPaqueteProps {
   encomiendaId: string;
   /** Código de seguimiento, para la descripción. */
   trackingId?: string;
   /** Se guardó la foto o el motivo para omitirla. */
-  onListo: (resultado: "foto" | "omitida") => void;
+  onListo: (resultado: "foto" | "omitida", ruta?: string) => void;
   /** Texto del paso siguiente, p. ej. "Después: cobrar el envío". */
   siguiente?: string;
-  /** Cambia entre cámara, vista previa y "omitir" (para el título de quien lo monta). */
+  /** Cambia entre selección, vista previa y "omitir" (para el título de quien lo monta). */
   onModo?: (modo: ModoFoto) => void;
-  /** Hay una subida o un guardado en curso (quien lo monta no debe cerrar). */
+  /** Hay una preparación, subida o guardado en curso (quien lo monta no debe cerrar). */
   onOcupado?: (ocupado: boolean) => void;
   className?: string;
 }
@@ -61,215 +61,98 @@ export function descripcionFoto(modo: ModoFoto, trackingId?: string): string {
     : `Con la guía visible${trackingId ? ` (${trackingId})` : ""}. Sirve de prueba si hay un reclamo.`;
 }
 
-/**
- * Cámara trasera con su cuadro nativo. Pedir un tamaño fijo (p. ej. 1280×720)
- * hacía que el navegador recortara la imagen del sensor a 16:9; con
- * `resizeMode: "none"` solo se usan los modos reales de la cámara, y las
- * preferencias de tamaño solo eligen el de mejor resolución.
- */
-const VIDEO_CAMARA: MediaTrackConstraints & { resizeMode?: "none" | "crop-and-scale" } = {
-  facingMode: "environment",
-  width: { ideal: 1920 },
-  height: { ideal: 1440 },
-  resizeMode: "none",
-};
-
-/**
- * Reduce la foto a 1600 px por el lado mayor (JPEG 80 %) para que suba rápido,
- * con su misma proporción: nunca recorta. Si falla, deja la original.
- */
-async function prepararImagen(archivo: Blob): Promise<Blob> {
-  if (typeof createImageBitmap !== "function") return archivo;
-  try {
-    const bitmap = await createImageBitmap(archivo);
-    const escala = Math.min(1, LADO_MAXIMO / Math.max(bitmap.width, bitmap.height));
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.max(1, Math.round(bitmap.width * escala));
-    canvas.height = Math.max(1, Math.round(bitmap.height * escala));
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return archivo;
-    ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-    bitmap.close();
-    return await new Promise<Blob>((resolve) => canvas.toBlob((b) => resolve(b ?? archivo), "image/jpeg", 0.8));
-  } catch {
-    return archivo;
-  }
-}
-
-function extensionDe(tipo: string): string {
-  if (tipo === "image/png") return "png";
-  if (tipo === "image/webp") return "webp";
-  return "jpg";
-}
-
-function mensajeCamara(err: unknown): string {
-  const nombre = (err as { name?: string })?.name;
-  if (nombre === "NotAllowedError" || nombre === "SecurityError") {
-    return "El navegador no dio permiso para usar la cámara. Sube la foto desde un archivo o permite la cámara en la barra de direcciones.";
-  }
-  if (nombre === "NotFoundError" || nombre === "OverconstrainedError") {
-    return "Este equipo no tiene cámara. Sube la foto desde un archivo u omítela por ahora.";
-  }
-  if (nombre === "NotReadableError") {
-    return "Otra aplicación está usando la cámara. Ciérrala, o sube la foto desde un archivo.";
-  }
-  return "No pudimos encender la cámara. Sube la foto desde un archivo u omítela por ahora.";
-}
-
-export function FotoPaquete({ encomiendaId, siguiente, onListo, onModo, onOcupado, className }: FotoPaqueteProps) {
+export function FotoPaquete({
+  encomiendaId,
+  onListo,
+  siguiente,
+  onModo,
+  onOcupado,
+  className,
+}: FotoPaqueteProps): React.JSX.Element {
   const supabase = useMemo(() => createClient(), []);
   const uid = useId();
+  const esMovil = useEsDispositivoMovil();
 
-  const [modo, setModo] = useState<ModoFoto>("camara");
-  const [stream, setStream] = useState<MediaStream | null>(null);
-  const [cameraError, setCameraError] = useState<string | null>(null);
   const [foto, setFoto] = useState<Blob | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [modo, setModo] = useState<ModoFoto>("seleccion");
+  const [procesando, setProcesando] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [chip, setChip] = useState<string | null>(null);
   const [motivoOtro, setMotivoOtro] = useState("");
   const [errorMotivo, setErrorMotivo] = useState<string | null>(null);
 
-  const streamRef = useRef<MediaStream | null>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const archivoRef = useRef<HTMLInputElement>(null);
+  const previewUrl = useBlobPreviewUrl(foto);
+
+  const galeriaRef = useRef<HTMLInputElement>(null);
+  const camaraRef = useRef<HTMLInputElement>(null);
   const motivoRef = useRef<HTMLTextAreaElement>(null);
+  const solicitudRef = useRef(0);
   /** Última foto ya subida al bucket (para reintentar solo el guardado). */
-  const subida = useRef<{ foto: Blob; ruta: string } | null>(null);
+  const cacheRef = useRef<CacheSubidaFoto | null>(null);
+
+  const ocupado = guardando || procesando;
 
   useEffect(() => {
     onModo?.(modo);
   }, [modo, onModo]);
-  useEffect(() => {
-    onOcupado?.(guardando);
-  }, [guardando, onOcupado]);
 
-  const apagarCamara = useCallback(() => {
-    streamRef.current?.getTracks().forEach((t) => t.stop());
-    streamRef.current = null;
-    setStream(null);
+  useEffect(() => {
+    onOcupado?.(ocupado);
+  }, [ocupado, onOcupado]);
+
+  useEffect(() => {
+    return () => {
+      solicitudRef.current += 1;
+    };
   }, []);
 
-  // Cámara encendida solo mientras se está en "Tomar foto".
-  useEffect(() => {
-    if (modo !== "camara") return;
-    if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- sin API de cámara: aviso inmediato
-      setCameraError("Este navegador no permite usar la cámara aquí. Sube la foto desde un archivo u omítela por ahora.");
-      return;
-    }
-    let vigente = true;
-    navigator.mediaDevices
-      .getUserMedia({ video: VIDEO_CAMARA })
-      .then((s) => {
-        if (!vigente) {
-          s.getTracks().forEach((t) => t.stop());
-          return;
-        }
-        streamRef.current = s;
-        setStream(s);
-        setCameraError(null);
-      })
-      .catch((err: unknown) => {
-        if (vigente) setCameraError(mensajeCamara(err));
-      });
-    return () => {
-      vigente = false;
-      apagarCamara();
-    };
-  }, [modo, apagarCamara]);
-
-  // El video siempre está montado: se le asigna la cámara cuando llega.
-  useEffect(() => {
-    if (videoRef.current) videoRef.current.srcObject = stream;
-  }, [stream]);
-
-  // Liberar la vista previa anterior.
-  useEffect(() => {
-    return () => {
-      if (previewUrl) URL.revokeObjectURL(previewUrl);
-    };
-  }, [previewUrl]);
-
-  const mostrarFoto = (blob: Blob) => {
-    setFoto(blob);
-    setPreviewUrl(URL.createObjectURL(blob));
+  const procesarNuevaFoto = async (archivo: File | undefined) => {
+    if (!archivo || guardando) return;
+    const idSolicitud = ++solicitudRef.current;
     setError(null);
-    setModo("vista");
-  };
+    setProcesando(true);
 
-  const capturar = () => {
-    const video = videoRef.current;
-    if (!video || !video.videoWidth) return;
-    const canvas = document.createElement("canvas");
-    const escala = Math.min(1, LADO_MAXIMO / Math.max(video.videoWidth, video.videoHeight));
-    canvas.width = Math.round(video.videoWidth * escala);
-    canvas.height = Math.round(video.videoHeight * escala);
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    canvas.toBlob(
-      (blob) => {
-        if (!blob) {
-          setError("No pudimos tomar la foto. Intenta de nuevo o súbela desde un archivo.");
-          return;
-        }
-        apagarCamara();
-        mostrarFoto(blob);
-      },
-      "image/jpeg",
-      0.8
-    );
-  };
-
-  const elegirArchivo = async (archivo: File | undefined) => {
-    if (!archivo) return;
-    if (!archivo.type.startsWith("image/")) {
-      setError("Elige una imagen (JPG o PNG).");
-      return;
+    try {
+      const resultado = await prepararImagenArchivo(archivo);
+      if (solicitudRef.current !== idSolicitud) return;
+      if (!resultado.ok) {
+        setError(resultado.error);
+        return;
+      }
+      setFoto(resultado.blob);
+    } finally {
+      if (solicitudRef.current === idSolicitud) {
+        setProcesando(false);
+      }
     }
-    const lista = await prepararImagen(archivo);
-    if (lista.size > MAX_BYTES) {
-      setError("La foto pesa más de 10 MB. Toma otra o elige una más liviana.");
-      return;
-    }
-    apagarCamara();
-    mostrarFoto(lista);
   };
 
-  const otraFoto = () => {
-    setFoto(null);
-    setPreviewUrl(null);
-    setError(null);
-    setModo("camara");
+  const manejarCambioInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const archivo = e.target.files?.[0];
+    e.target.value = "";
+    if (archivo) {
+      void procesarNuevaFoto(archivo);
+    }
   };
 
   const guardarFoto = async () => {
-    if (!foto || guardando) return;
+    if (!foto || ocupado) return;
     setGuardando(true);
     setError(null);
     try {
-      // Si la foto ya subió y lo que falló fue guardarla en la encomienda, el
-      // reintento reutiliza ese archivo (no deja copias huérfanas en el bucket).
-      let ruta = subida.current?.foto === foto ? subida.current.ruta : null;
-      if (!ruta) {
-        const tipo = foto.type || "image/jpeg";
-        const nueva = rutaNuevaFoto(encomiendaId, extensionDe(tipo));
-        const { error: errorSubida } = await supabase.storage.from(BUCKET_FOTOS).upload(nueva, foto, { contentType: tipo });
-        if (errorSubida) throw errorSubida;
-        subida.current = { foto, ruta: nueva };
-        ruta = nueva;
-      }
-      const res = await guardarFotoEncomienda(encomiendaId, { ruta });
-      if (!res.success) {
+      const res = await subirYGuardarFotoEncomienda({
+        supabase,
+        encomiendaId,
+        foto,
+        cacheRef,
+      });
+      if (!res.ok) {
         setError(res.error);
         return;
       }
       avisarExito("Foto guardada.");
-      onListo("foto");
-    } catch (err) {
-      setError(isNetworkError(err) ? humanizeError(err) : MSG_ERROR_SUBIDA);
+      onListo("foto", res.ruta);
     } finally {
       setGuardando(false);
     }
@@ -278,7 +161,7 @@ export function FotoPaquete({ encomiendaId, siguiente, onListo, onModo, onOcupad
   const motivoFinal = chip && chip !== "Otro" ? chip : motivoOtro.trim();
 
   const omitir = async () => {
-    if (guardando) return;
+    if (ocupado) return;
     if (motivoFinal.length < 3) {
       setErrorMotivo("Elige un motivo o escríbelo.");
       if (chip === "Otro") motivoRef.current?.focus();
@@ -303,83 +186,137 @@ export function FotoPaquete({ encomiendaId, siguiente, onListo, onModo, onOcupad
 
   return (
     <div className={cn("flex flex-col gap-4", className)}>
-      <input
-        ref={archivoRef}
-        id={`${uid}-archivo`}
-        type="file"
-        accept="image/*"
-        capture="environment"
-        className="sr-only"
-        tabIndex={-1}
-        aria-hidden
-        onChange={(e) => {
-          void elegirArchivo(e.target.files?.[0]);
-          e.target.value = "";
-        }}
-      />
-
-      {modo === "camara" && (
-        <div className="flex flex-col gap-4">
-          {cameraError ? (
-            <Alert>
-              <CameraSlash aria-hidden />
-              <AlertTitle>No se puede usar la cámara</AlertTitle>
-              <AlertDescription>{cameraError}</AlertDescription>
-            </Alert>
-          ) : (
-            <div className="relative flex aspect-[3/4] w-full items-center md:aspect-video justify-center overflow-hidden rounded-md bg-black">
-              {/* Se ve el cuadro completo que se guardará: object-contain, sin recortar los bordes. */}
-              <video
-                ref={videoRef}
-                autoPlay
-                playsInline
-                muted
-                aria-label="Vista de la cámara"
-                className={cn("size-full object-contain", !stream && "invisible")}
-              />
-              {!stream && (
-                <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-white/80">
-                  <Spinner size="md" />
-                  <span className="text-[15px]">Encendiendo la cámara…</span>
-                </div>
-              )}
-            </div>
-          )}
-
-          <div className="grid gap-3 md:grid-cols-2">
-            <Button size="xl" onClick={capturar} disabled={!stream || guardando}>
-              <Camera aria-hidden />
-              Tomar foto
-            </Button>
-            <Button size="lg" variant="outline" onClick={() => archivoRef.current?.click()} disabled={guardando}>
-              <UploadSimple aria-hidden />
-              Subir archivo
-            </Button>
-          </div>
-        </div>
+      {modo === "seleccion" && (
+        <SelectorFotoPaquete
+          value={null}
+          onChange={(blob) => {
+            if (blob) {
+              setFoto(blob);
+              setError(null);
+              setModo("vista");
+            }
+          }}
+          disabled={guardando}
+          onProcesando={setProcesando}
+        />
       )}
 
-      {modo === "vista" && previewUrl && (
+      {modo === "vista" && (
         <div className="flex flex-col gap-4">
-          {/* Con su proporción (vertical u horizontal): la foto se guarda tal cual. */}
-          <div className="flex w-full justify-center overflow-hidden rounded-md bg-black">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={previewUrl}
-              alt="Vista previa de la foto del paquete"
-              className="h-auto max-h-[min(60vh,28rem)] w-auto max-w-full object-contain"
+          {/* Inputs para reemplazar la foto directamente desde `modo === "vista"`. */}
+          <input
+            ref={galeriaRef}
+            id={`${uid}-galeria`}
+            type="file"
+            accept="image/*"
+            className="sr-only"
+            tabIndex={-1}
+            aria-hidden
+            disabled={ocupado}
+            onChange={manejarCambioInput}
+          />
+          {esMovil && (
+            <input
+              ref={camaraRef}
+              id={`${uid}-camara`}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="sr-only"
+              tabIndex={-1}
+              aria-hidden
+              disabled={ocupado}
+              onChange={manejarCambioInput}
             />
+          )}
+
+          {/* Con su proporción (vertical u horizontal): la foto se guarda tal cual. */}
+          <div className="relative flex w-full items-center justify-center overflow-hidden rounded-lg border border-border bg-surface">
+            {previewUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={previewUrl}
+                alt="Vista previa de la foto del paquete"
+                className="h-auto max-h-[min(50vh,22rem)] w-auto max-w-full object-contain"
+              />
+            ) : (
+              <div className="flex h-48 w-full items-center justify-center">
+                <Spinner size="md" />
+              </div>
+            )}
+
+            {procesando && (
+              <div
+                className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-night/60 text-white"
+                role="status"
+              >
+                <Spinner size="md" />
+                <span className="text-[15px] font-medium">Preparando foto…</span>
+              </div>
+            )}
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <Button size="lg" variant="outline" onClick={otraFoto} disabled={guardando}>
-              <ArrowUUpLeft aria-hidden />
-              Tomar otra
-            </Button>
-            <Button size="lg" onClick={() => void guardarFoto()} disabled={guardando} aria-busy={guardando || undefined} autoFocus>
-              {guardando ? <Spinner size="sm" /> : <Check aria-hidden />}
-              {guardando ? "Subiendo…" : "Guardar foto"}
-            </Button>
-          </div>
+
+          {esMovil ? (
+            <div className="flex flex-col gap-3">
+              <div className="grid grid-cols-2 gap-3">
+                <Button
+                  type="button"
+                  size="lg"
+                  variant="outline"
+                  onClick={() => camaraRef.current?.click()}
+                  disabled={ocupado}
+                >
+                  <Camera aria-hidden />
+                  Tomar otra
+                </Button>
+                <Button
+                  type="button"
+                  size="lg"
+                  variant="outline"
+                  onClick={() => galeriaRef.current?.click()}
+                  disabled={ocupado}
+                >
+                  <ImageIcon aria-hidden />
+                  Galería
+                </Button>
+              </div>
+              <Button
+                type="button"
+                size="lg"
+                onClick={() => void guardarFoto()}
+                disabled={ocupado || !foto}
+                aria-busy={guardando || undefined}
+                autoFocus
+              >
+                {guardando ? <Spinner size="sm" /> : <Check aria-hidden />}
+                {guardando ? "Subiendo…" : "Guardar foto"}
+              </Button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-3">
+              <Button
+                type="button"
+                size="lg"
+                variant="outline"
+                onClick={() => galeriaRef.current?.click()}
+                disabled={ocupado}
+              >
+                <UploadSimple aria-hidden />
+                Cambiar foto
+              </Button>
+              <Button
+                type="button"
+                size="lg"
+                onClick={() => void guardarFoto()}
+                disabled={ocupado || !foto}
+                aria-busy={guardando || undefined}
+                autoFocus
+              >
+                {guardando ? <Spinner size="sm" /> : <Check aria-hidden />}
+                {guardando ? "Subiendo…" : "Guardar foto"}
+              </Button>
+            </div>
+          )}
         </div>
       )}
 
@@ -402,7 +339,7 @@ export function FotoPaquete({ encomiendaId, siguiente, onListo, onModo, onOcupad
                   chip === m && "border-accent-strong bg-accent-strong text-accent-strong-foreground hover:bg-accent-strong/90"
                 )}
                 aria-pressed={chip === m}
-                disabled={guardando}
+                disabled={ocupado}
                 onClick={() => {
                   setChip(m);
                   setErrorMotivo(null);
@@ -422,7 +359,7 @@ export function FotoPaquete({ encomiendaId, siguiente, onListo, onModo, onOcupad
                 rows={2}
                 maxLength={300}
                 value={motivoOtro}
-                disabled={guardando}
+                disabled={ocupado}
                 aria-invalid={errorMotivo ? true : undefined}
                 aria-describedby={errorMotivo ? `${uid}-motivo-error` : undefined}
                 onChange={(e) => {
@@ -438,10 +375,19 @@ export function FotoPaquete({ encomiendaId, siguiente, onListo, onModo, onOcupad
             </p>
           )}
           <div className="mt-2 flex flex-col-reverse gap-3 md:flex-row md:items-center md:justify-between">
-            <Button type="button" variant="outline" size="lg" onClick={() => setModo("camara")} disabled={guardando}>
+            <Button
+              type="button"
+              variant="outline"
+              size="lg"
+              onClick={() => {
+                setError(null);
+                setModo(foto ? "vista" : "seleccion");
+              }}
+              disabled={ocupado}
+            >
               Atrás
             </Button>
-            <Button type="submit" size="lg" disabled={guardando} aria-busy={guardando || undefined}>
+            <Button type="submit" size="lg" disabled={ocupado} aria-busy={guardando || undefined}>
               {guardando && <Spinner size="sm" />}
               {guardando ? "Guardando…" : "Omitir por ahora"}
             </Button>
@@ -454,13 +400,13 @@ export function FotoPaquete({ encomiendaId, siguiente, onListo, onModo, onOcupad
       {modo !== "omitir" && (
         <div className="flex flex-col-reverse gap-3 pt-2 md:flex-row md:items-center md:justify-between">
           <Button
+            type="button"
             variant="outline"
             onClick={() => {
-              apagarCamara();
               setError(null);
               setModo("omitir");
             }}
-            disabled={guardando}
+            disabled={ocupado}
           >
             <FastForward aria-hidden />
             Omitir por ahora

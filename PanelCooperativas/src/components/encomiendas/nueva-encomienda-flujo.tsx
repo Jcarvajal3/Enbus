@@ -7,8 +7,9 @@
 //   1. ¿A dónde la envías?        sucursal (si no tiene una asignada) + destino
 //   2. Detalles de la encomienda  quien envía, quien recibe, contenido, quién paga
 //   3. Revisa y registra          resumen por bloques con "Editar" (AN-20)
-//   Fases tras registrar (sin número): Encomienda registrada → Foto del paquete →
-//   Cobro (solo ORIGEN + POR_PAGAR) → la lista con la encomienda abierta.
+//   4. Foto del paquete           toma/carga o "Hacerlo después"
+//   5. Cobro del envío            solo ORIGEN + POR_PAGAR (4 pasos en DESTINO)
+//   Pantalla final (sin número):  Encomienda registrada → la lista con la encomienda abierta.
 //
 // - El paso/fase vive en `?paso=` (`usePasoEnUrl`): atrás del navegador = paso anterior.
 // - Mientras se escriben datos y hasta registrar, salir pide confirmación (`useSalidaProtegida`).
@@ -66,18 +67,18 @@ import { CobroEncomiendaContenido } from "./cobro-encomienda";
 
 // ─── Pasos y fases ──────────────────────────────────────────────────────────
 
-const PASOS = ["destino", "detalles", "revisar", "registrada", "foto", "cobro"] as const;
+const PASOS = ["destino", "detalles", "revisar", "foto", "cobro", "registrada"] as const;
 type Paso = (typeof PASOS)[number];
-/** Los tres primeros llevan "Paso n de 3"; las fases tras registrar no. */
-const PASOS_NUMERADOS = 3;
+/** Índices 0..2 son pre-registro (destino, detalles, revisar); >= 3 requieren `resultado`. */
+const PASOS_PRE_REGISTRO = 3;
 
 const TITULOS: Record<Paso, string> = {
   destino: "¿A dónde la envías?",
   detalles: "Detalles de la encomienda",
   revisar: "Revisa y registra",
-  registrada: "Encomienda registrada",
   foto: "Foto del paquete",
   cobro: "Cobro del envío",
+  registrada: "Encomienda registrada",
 };
 
 const URL_LISTA = "/cooperativas/taquilla/encomiendas";
@@ -205,7 +206,7 @@ export function NuevaEncomiendaFlujo() {
   const [resultado, setResultado] = useState<Resultado | null>(null);
   /** Se entró a un paso desde "Editar" del resumen (AN-20): el botón vuelve a él. */
   const [editando, setEditando] = useState(false);
-  const [modoFoto, setModoFoto] = useState<ModoFoto>("camara");
+  const [modoFoto, setModoFoto] = useState<ModoFoto>("seleccion");
   const [fotoOcupada, setFotoOcupada] = useState(false);
   const terminadoRef = useRef(false);
 
@@ -353,9 +354,14 @@ export function NuevaEncomiendaFlujo() {
     esAccesible: (p) => {
       // Antes de hidratar el borrador o de cargar las rutas no se sabe: no se expulsa a nadie.
       if (!hidratado) return true;
-      if (resultado) return true;
       const i = PASOS.indexOf(p);
-      if (i >= PASOS_NUMERADOS) return false;
+      if (resultado) {
+        if (i < PASOS_PRE_REGISTRO) return false;
+        const cobrar = resultado.encomienda.modalidad_pago === "ORIGEN" && resultado.encomienda.estado === "POR_PAGAR";
+        if (p === "cobro") return cobrar;
+        return true;
+      }
+      if (i >= PASOS_PRE_REGISTRO) return false;
       if (i === 0) return true;
       if (!datos) return rutaId !== "";
       if (!destinoValido) return false;
@@ -363,7 +369,9 @@ export function NuevaEncomiendaFlujo() {
     },
   });
   const { paso, indice, ir } = url;
-  const enNumerados = indice < PASOS_NUMERADOS;
+  const enPreRegistro = indice < PASOS_PRE_REGISTRO;
+  const modalidadEfectiva = resultado?.encomienda.modalidad_pago ?? modalidad;
+  const totalPasos = modalidadEfectiva === "DESTINO" ? 4 : 5;
 
   const sucio =
     rutaId !== "" ||
@@ -372,7 +380,7 @@ export function NuevaEncomiendaFlujo() {
       (v) => v.trim() !== ""
     );
   const { dialogo, confirmarSalida, permitirSalida } = useSalidaProtegida({
-    activo: sucio && !resultado,
+    activo: (sucio && !resultado) || (Boolean(resultado) && paso !== "registrada"),
     bloqueado: enviando,
   });
 
@@ -383,7 +391,7 @@ export function NuevaEncomiendaFlujo() {
     const iUrl = (PASOS as readonly string[]).indexOf(pasoUrl);
     const b = leerBorrador(user.id);
     // Con `?paso=` es una recarga o un "atrás": se recupera lo escrito. Sin él es una entrada nueva.
-    const recuperar = !!b && iUrl > 0 && (b.resultado ? iUrl >= PASOS_NUMERADOS : iUrl < PASOS_NUMERADOS);
+    const recuperar = !!b && iUrl > 0 && (b.resultado ? iUrl >= PASOS_PRE_REGISTRO : iUrl < PASOS_PRE_REGISTRO);
     if (b && recuperar) {
       setIdemKey(b.idemKey);
       setSucursalId(b.sucursalId);
@@ -445,7 +453,13 @@ export function NuevaEncomiendaFlujo() {
   useEffect(() => {
     if (!hidratado || !resultado) return;
     const cobrarAun = resultado.encomienda.modalidad_pago === "ORIGEN" && resultado.encomienda.estado === "POR_PAGAR";
-    if (indice < PASOS_NUMERADOS || (paso === "cobro" && !cobrarAun)) ir("registrada", { reemplazar: true });
+    if (indice < PASOS_PRE_REGISTRO) {
+      ir("foto", { reemplazar: true });
+      return;
+    }
+    if (paso === "cobro" && !cobrarAun) {
+      ir("registrada", { reemplazar: true });
+    }
   }, [hidratado, resultado, indice, paso, ir]);
 
   // ── Datos: sucursales y rutas ──
@@ -509,7 +523,7 @@ export function NuevaEncomiendaFlujo() {
   // "Volver al resumen" solo mientras se está en un paso de datos: al llegar al resumen se apaga.
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
-    if (paso === "revisar" || indice >= PASOS_NUMERADOS) setEditando(false);
+    if (paso === "revisar" || indice >= PASOS_PRE_REGISTRO) setEditando(false);
   }, [paso, indice]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
@@ -675,7 +689,7 @@ export function NuevaEncomiendaFlujo() {
       };
       setResultado({ registro: r, encomienda });
       setEditando(false);
-      url.ir("registrada", { reemplazar: true });
+      url.ir("foto", { reemplazar: true });
       if (r.repetido) avisarInfo("Esta encomienda ya estaba registrada: no se creó otra.");
     } catch (err) {
       setErrorGeneral(humanizeError(err, "registrar la encomienda"));
@@ -686,37 +700,26 @@ export function NuevaEncomiendaFlujo() {
   };
 
   // ─── Fases tras registrar ─────────────────────────────────────────────────
-  if (resultado && indice >= PASOS_NUMERADOS) {
+  if (resultado && indice >= PASOS_PRE_REGISTRO) {
     const { registro, encomienda } = resultado;
     // Solo se cobra si sigue por pagar (un alta repetida puede venir ya pagada).
     const cobrar = encomienda.modalidad_pago === "ORIGEN" && encomienda.estado === "POR_PAGAR";
-    const despuesDeFoto = () => (cobrar ? url.ir("cobro") : terminar(encomienda.id));
+    const despuesDeFoto = () => (cobrar ? url.ir("cobro") : url.ir("registrada", { reemplazar: true }));
+    const alCobrar = () => {
+      setResultado((prev) => (prev ? { ...prev, encomienda: { ...prev.encomienda, estado: "PAGADA" } } : prev));
+      url.ir("registrada", { reemplazar: true });
+    };
 
     return (
       <>
         {dialogo}
-        {paso === "registrada" && (
-          <FlujoPagina
-            titulo={TITULOS.registrada}
-            descripcion={
-              <>
-                Código <span className="font-mono text-foreground">{encomienda.tracking_id}</span> · Recibida con{" "}
-                {Number(encomienda.peso_kg).toLocaleString("es-VE")} kg · {MODALIDAD_PAGO[encomienda.modalidad_pago].largo}
-              </>
-            }
-            barra={
-              <BarraFlujo
-                resumen={`Sigue: foto del paquete${cobrar ? " y cobro del envío" : ""}.`}
-                principal={{ etiqueta: "Continuar", onClick: () => url.ir("foto") }}
-              />
-            }
-          >
-            <EncomiendaRegistrada registro={registro} encomienda={encomienda} cooperativa={user.cooperativa_nombre ?? ""} />
-          </FlujoPagina>
-        )}
-
         {paso === "foto" && (
-          <FlujoPagina titulo={tituloFoto(modoFoto)} descripcion={descripcionFoto(modoFoto, encomienda.tracking_id)}>
+          <FlujoPagina
+            titulo={tituloFoto(modoFoto)}
+            paso={4}
+            total={totalPasos}
+            descripcion={descripcionFoto(modoFoto, encomienda.tracking_id)}
+          >
             <FotoPaquete
               encomiendaId={encomienda.id}
               trackingId={encomienda.tracking_id}
@@ -732,15 +735,38 @@ export function NuevaEncomiendaFlujo() {
         )}
 
         {paso === "cobro" && cobrar && (
-          <FlujoPagina titulo={TITULOS.cobro} descripcion={<span className="font-mono text-foreground">{encomienda.tracking_id}</span>}>
-            <CobroEncomiendaContenido
-              encomienda={encomienda}
-              onSuccess={() => terminar(encomienda.id)}
-              onCerrar={() => terminar(encomienda.id)}
-            />
-            <Button variant="ghost" size="lg" className="self-start" onClick={() => terminar(encomienda.id)}>
-              Cobrar después
-            </Button>
+          <FlujoPagina
+            titulo={TITULOS.cobro}
+            paso={5}
+            total={5}
+            descripcion={<span className="font-mono text-foreground">{encomienda.tracking_id}</span>}
+          >
+            <CobroEncomiendaContenido encomienda={encomienda} onSuccess={alCobrar} />
+          </FlujoPagina>
+        )}
+
+        {paso === "registrada" && (
+          <FlujoPagina
+            titulo={TITULOS.registrada}
+            descripcion={
+              <>
+                Código <span className="font-mono text-foreground">{encomienda.tracking_id}</span> · Recibida con{" "}
+                {Number(encomienda.peso_kg).toLocaleString("es-VE")} kg ·{" "}
+                {encomienda.estado === "PAGADA" ? "Pagada" : MODALIDAD_PAGO[encomienda.modalidad_pago].largo}
+              </>
+            }
+            barra={
+              <BarraFlujo
+                resumen={
+                  encomienda.estado === "PAGADA"
+                    ? "Pagada y lista para despacho."
+                    : "Lista para despacho · se cobra al retirar."
+                }
+                principal={{ etiqueta: "Ver encomienda", onClick: () => terminar(encomienda.id) }}
+              />
+            }
+          >
+            <EncomiendaRegistrada registro={registro} encomienda={encomienda} cooperativa={user.cooperativa_nombre ?? ""} />
           </FlujoPagina>
         )}
       </>
@@ -809,8 +835,8 @@ export function NuevaEncomiendaFlujo() {
       {dialogo}
       <FlujoPagina
         titulo={TITULOS[paso]}
-        paso={enNumerados ? url.numero : undefined}
-        total={enNumerados ? PASOS_NUMERADOS : undefined}
+        paso={enPreRegistro ? url.numero : undefined}
+        total={enPreRegistro ? totalPasos : undefined}
         onAtras={indice > 0 ? url.anterior : salir}
         atrasEtiqueta={indice > 0 ? "Volver al paso anterior" : "Salir de la encomienda"}
         descripcion={paso === "detalles" ? "Quien recibe retira con su cédula y el PIN." : undefined}
@@ -1177,7 +1203,7 @@ function PasoDestino({
   return (
     <div className="flex flex-col gap-6">
       {elegirSucursal ? (
-        <CampoContenedor id={idSucursal} label="Sucursal donde recibes" error={errores.sucursal}>
+        <CampoContenedor id={idSucursal} label="Sucursal de origen" error={errores.sucursal}>
           <Select value={sucursalId} items={itemsSucursal} onValueChange={(v) => onSucursal(v ?? "")}>
             <SelectTrigger
               id={idSucursal}
