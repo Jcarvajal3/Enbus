@@ -45,7 +45,6 @@ export function PhotoCaptureModal({ encomiendaId, trackingId, isOpen, onClose, o
         {isOpen && (
           <FotoPaquete
             encomiendaId={encomiendaId}
-            trackingId={trackingId}
             siguiente={siguiente}
             onListo={onListo}
             onModo={setModo}

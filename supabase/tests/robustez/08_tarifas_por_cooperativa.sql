@@ -163,6 +163,23 @@ INSERT INTO resultados (r) SELECT pg_temp.espera_error('EB_DATOS_INVALIDOS',
   $q$SELECT public.fn_publicar_tarifa(0.001, 0.001, 50, 25)$q$);
 RESET ROLE;
 
+-- Tope de anticipación: más de 365 días -> EB_DATOS_INVALIDOS; justo dentro del tope se programa.
+SELECT pg_temp.como('AA');
+INSERT INTO resultados (r) SELECT pg_temp.espera_error('EB_DATOS_INVALIDOS',
+  $q$SELECT public.fn_publicar_tarifa(2.00, 0.0010, 50, 25, now() + interval '366 days')$q$);
+RESET ROLE;
+
+SELECT pg_temp.como('AA');
+INSERT INTO fx (k, v)
+SELECT 'PROG_TOPE', (public.fn_publicar_tarifa(2.00, 0.0010, 50, 25, now() + interval '364 days', 'Dentro del tope')->>'id')::uuid;
+RESET ROLE;
+
+SELECT pg_temp.como('AA');
+INSERT INTO resultados (r) SELECT pg_temp.afirma(
+  (public.fn_cancelar_tarifa_programada((SELECT v FROM fx WHERE k = 'PROG_TOPE'))->>'estado') = 'CANCELADA',
+  'AA programa a 364 días y cancela: el tope de 365 días no bloquea programaciones válidas');
+RESET ROLE;
+
 -- ─── 5. fn_cotizar_envio_publico por cooperativa ─────────────────────────────
 -- Rutas aisladas para verificar conteos exactos sin interferencia de otras cooperativas.
 INSERT INTO public.rutas (cooperativa_id, estado_origen, ciudad_origen, estado_destino, ciudad_destino,

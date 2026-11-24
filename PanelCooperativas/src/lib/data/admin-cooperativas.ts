@@ -13,6 +13,7 @@ import type {
   Calificacion 
 } from "@/lib/types/admin-cooperativas";
 import { aTarifa, type FilaTarifa } from "@/lib/types/tarifas";
+import { MAX_HISTORIAL_TARIFAS } from "@/lib/data/cooperativa-tarifas";
 
 export async function fetchCooperativas(filters?: { estado?: string; search?: string }): Promise<Cooperativa[]> {
   await requireSuperAdmin();
@@ -83,7 +84,7 @@ export async function fetchCooperativaById(id: string): Promise<CooperativaDetal
       .select("*, profiles:creada_por(nombre_completo)")
       .eq("cooperativa_id", id)
       .order("created_at", { ascending: false })
-      .limit(50),
+      .limit(MAX_HISTORIAL_TARIFAS),
     supabase.from("profiles").select("id, nombre_completo, role, cooperativa_id, telefono, cedula_rif, created_at").eq("cooperativa_id", id).order("created_at", { ascending: false }),
     supabase
       .from("calificaciones")

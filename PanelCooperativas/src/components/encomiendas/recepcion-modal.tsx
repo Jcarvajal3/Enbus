@@ -21,7 +21,7 @@ import { Prohibit, WarningCircle } from "@phosphor-icons/react";
 import { createClient } from "@/lib/supabase/client";
 import type { Encomienda } from "@/lib/types/encomiendas";
 import type { CotizacionEncomienda, RecepcionOrigen } from "@/lib/types/pagos";
-import { formatNumeroVE, leerMonto, type TasaRef } from "@/lib/dinero";
+import { leerMonto, type TasaRef } from "@/lib/dinero";
 import { Campo } from "@/components/campos";
 import { codigoEB, humanizeError, parseDetalleEB } from "@/lib/errores";
 import { confirmarRecepcion } from "@/app/cooperativas/(panel)/taquilla/encomiendas/actions";
@@ -35,6 +35,7 @@ import { printer } from "@/lib/printing/bluetooth";
 import { requireOnline } from "@/components/connectivity-banner";
 import { Monto } from "@/components/monto";
 import { formatCiudad } from "@/lib/ciudades";
+import { formatPesoKg } from "@/lib/peso";
 
 interface RecepcionModalProps {
   encomienda: Encomienda;
@@ -131,7 +132,12 @@ export function RecepcionModal({ encomienda, isOpen, onClose, onSuccess, onRecha
         .eq("cooperativa_id", user.cooperativa_id)
         .eq("activa", true)
         .maybeSingle();
-      if (!vigente || error) return;
+      if (!vigente) return;
+      if (error) {
+        // Solo es una precarga de límites: la cotización al escribir el peso vuelve a validar la tarifa.
+        console.error("Error al precargar la tarifa activa:", error);
+        return;
+      }
       if (!data) {
         setSinTarifa(true);
         return;
@@ -156,7 +162,7 @@ export function RecepcionModal({ encomienda, isOpen, onClose, onSuccess, onRecha
     }
     const maximo = pesoMaxRef.current;
     if (maximo != null && pesoNum > maximo) {
-      setPesoError(`El peso máximo es ${formatNumeroVE(maximo, 1)} kg.`);
+      setPesoError(`El peso máximo es ${formatPesoKg(maximo)} kg.`);
       setCotizacion(null);
       return;
     }
@@ -405,7 +411,7 @@ export function RecepcionModal({ encomienda, isOpen, onClose, onSuccess, onRecha
                 autoFocus
                 error={pesoError || null}
                 disabled={sinTarifa || submitting}
-                ayuda={pesoMax != null ? `Máximo ${formatNumeroVE(pesoMax, 1)} kg.` : "En kilos."}
+                ayuda={pesoMax != null ? `Máximo ${formatPesoKg(pesoMax)} kg.` : "En kilos."}
               />
             </form>
 

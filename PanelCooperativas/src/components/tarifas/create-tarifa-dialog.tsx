@@ -30,10 +30,12 @@ import { avisarExito } from "@/lib/avisos";
 import { createTarifa } from "@/app/cooperativas/(panel)/tarifas/actions";
 import { humanizeError } from "@/lib/errores";
 import { formatNumeroVE, formatUsd, leerMonto } from "@/lib/dinero";
-import { fechaHoraVEaISO, hoyVE } from "@/lib/fechas";
+import { fechaHoraVEaISO, hoyVE, sumarDiasVE } from "@/lib/fechas";
 import { formatCiudad } from "@/lib/ciudades";
 import {
   costoEncomiendaUsd,
+  DECIMALES_TARIFA,
+  DIAS_MAX_PROGRAMACION,
   formatFechaProgramada,
   LIMITES_TARIFA,
   recargoPorcentaje,
@@ -41,6 +43,7 @@ import {
   type RouteOption,
   type Tarifa,
 } from "@/lib/types/tarifas";
+import { formatPesoKg } from "@/lib/peso";
 
 type CampoTarifa = keyof ParametrosTarifa | "vigente_desde";
 type Errores = Partial<Record<CampoTarifa, string>>;
@@ -53,10 +56,11 @@ function leerNumero(texto: string): number {
   return leerMonto(texto) ?? NaN;
 }
 
-/** Recargo por minuto ("0,0010"): lleva hasta 6 decimales, más que un monto (`leerMonto` admite 2). */
+/** Recargo por minuto ("0,0010"): hasta los decimales que guarda la base (más no es válido: no se redondea en silencio). */
 function leerFactor(texto: string): number {
   const t = texto.trim();
-  return /^\d+([.,]\d{1,6})?$/.test(t) ? Number(t.replace(",", ".")) : NaN;
+  const patron = new RegExp(`^\\d+([.,]\\d{1,${DECIMALES_TARIFA.factor}})?$`);
+  return patron.test(t) ? Number(t.replace(",", ".")) : NaN;
 }
 
 /** Medida en cm: solo un entero. */
@@ -103,10 +107,17 @@ function esFuturo(iso: string): boolean {
   return new Date(iso).getTime() > Date.now();
 }
 
-/** Ahora en Venezuela (UTC-4 fijo) + 1 hora, redondeado a la hora: valor inicial de "Programar". */
-function horaSugerida(): string {
-  const h = (new Date(Date.now() - 4 * 3_600_000).getUTCHours() + 1) % 24;
-  return `${String(h).padStart(2, "0")}:00`;
+/**
+ * Próxima hora en punto de Venezuela: valor inicial de "Programar". Pasadas las 23:00 es la
+ * medianoche de mañana (no las 00:00 de hoy, que ya quedó atrás).
+ */
+function programacionSugerida(): { fecha: string; hora: string } {
+  const hoy = hoyVE();
+  const inicioDelDia = new Date(fechaHoraVEaISO(hoy, "00:00")).getTime();
+  const proxima = Math.floor((Date.now() - inicioDelDia) / 3_600_000) + 1;
+  return proxima >= 24
+    ? { fecha: sumarDiasVE(hoy, 1), hora: "00:00" }
+    : { fecha: hoy, hora: `${String(proxima).padStart(2, "0")}:00` };
 }
 
 /** "… 3:00 a. m." → "… 3:00 a. m" para cerrar la frase con un solo punto. */
@@ -176,8 +187,9 @@ function Formulario({
   const [pesoMax, setPesoMax] = useState(montoATexto(vigente?.peso_max_kg));
   const [medidaMax, setMedidaMax] = useState(aTexto(vigente?.dimensiones_max_cm));
   const [cuando, setCuando] = useState<"ahora" | "programar">("ahora");
-  const [fecha, setFecha] = useState(hoyVE());
-  const [hora, setHora] = useState(horaSugerida);
+  const [sugerida] = useState(programacionSugerida);
+  const [fecha, setFecha] = useState(sugerida.fecha);
+  const [hora, setHora] = useState(sugerida.hora);
   const [nota, setNota] = useState("");
   const [errores, setErrores] = useState<Errores>({});
   const [errorGeneral, setErrorGeneral] = useState<string | null>(null);
@@ -213,7 +225,7 @@ function Formulario({
       nueva.factor_distancia_por_min < LIMITES_TARIFA.factor_distancia_por_min.min ||
       nueva.factor_distancia_por_min > LIMITES_TARIFA.factor_distancia_por_min.max
     ) {
-      e.factor_distancia_por_min = "El recargo por minuto de viaje debe estar entre 0 y 1 (por ejemplo 0,0010).";
+      e.factor_distancia_por_min = `El recargo por minuto de viaje debe estar entre 0 y 1, con hasta ${DECIMALES_TARIFA.factor} decimales (por ejemplo 0,0010).`;
     }
     if (
       !Number.isFinite(nueva.peso_max_kg) ||
@@ -234,6 +246,8 @@ function Formulario({
         e.vigente_desde = "Elige la fecha y la hora en que empieza a regir.";
       } else if (!esFuturo(fechaHoraVEaISO(fecha, hora))) {
         e.vigente_desde = "La fecha programada tiene que ser posterior a ahora.";
+      } else if (fecha > sumarDiasVE(hoyVE(), DIAS_MAX_PROGRAMACION)) {
+        e.vigente_desde = `Solo puedes programar con hasta ${DIAS_MAX_PROGRAMACION} días de anticipación.`;
       }
     }
     setErrores(e);
@@ -296,7 +310,7 @@ function Formulario({
         despues: nueva.factor_distancia_por_min,
         formato: (n) => formatNumeroVE(n, 4),
       },
-      { etiqueta: "Peso máximo", antes: vigente?.peso_max_kg ?? null, despues: nueva.peso_max_kg, formato: (n) => `${formatNumeroVE(n, 1)} kg` },
+      { etiqueta: "Peso máximo", antes: vigente?.peso_max_kg ?? null, despues: nueva.peso_max_kg, formato: (n) => `${formatPesoKg(n)} kg` },
       {
         etiqueta: "Medida máxima",
         antes: vigente?.dimensiones_max_cm ?? null,
@@ -519,6 +533,7 @@ function Formulario({
               {...comun("vigente_desde")}
               label="Fecha"
               min={hoyVE()}
+              max={sumarDiasVE(hoyVE(), DIAS_MAX_PROGRAMACION)}
               atajos={false}
               value={fecha}
               onChange={(v) => {

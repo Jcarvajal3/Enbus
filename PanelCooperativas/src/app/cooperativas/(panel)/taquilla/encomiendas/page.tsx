@@ -51,6 +51,7 @@ import { MODALIDAD_PAGO, etiquetaEstado } from "@/lib/estados";
 import { capitalizarInicio, formatHaceTiempo } from "@/lib/fechas";
 import { ICONO_SECCION } from "@/lib/navigation";
 import { MSG_VENTANA_BLOQUEADA, abrirUrlAsincrona } from "@/lib/printing/print-helpers";
+import { formatPesoKg } from "@/lib/peso";
 
 const SELECT_ENCOMIENDAS = `
   id, tracking_id, estado, modalidad_pago, peso_kg, costo_calculado, cooperativa_id,
@@ -265,7 +266,7 @@ function TaquillaEncomiendas() {
       codigo: encomienda.tracking_id,
       tono: "exito",
       titulo: `Recibida · ${encomienda.tracking_id}`,
-      detalle: `${pesoKg.toLocaleString("es-VE")} kg · sigue la foto del paquete`,
+      detalle: `${formatPesoKg(pesoKg)} kg · sigue la foto del paquete`,
     });
     void fetchEncomiendas();
     pedirFoto({

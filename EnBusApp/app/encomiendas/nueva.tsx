@@ -236,10 +236,11 @@ export default function NuevaEncomiendaWizard() {
   const tarifaCoop = cooperativaId ? desde[cooperativaId] : undefined;
   const pesoMaxCoop =
     tarifaCoop?.peso_max_kg && tarifaCoop.peso_max_kg > 0 ? Number(tarifaCoop.peso_max_kg) : PESO_MAX_KG;
+  // Sin la tarifa de la cooperativa no se conoce la medida máxima: no se inventa una.
   const dimMaxCoop =
     tarifaCoop?.dimensiones_max_cm && tarifaCoop.dimensiones_max_cm > 0
       ? Number(tarifaCoop.dimensiones_max_cm)
-      : 50;
+      : null;
 
   // ── Rutas activas para el trayecto y tarifa inicial (1 kg) ───────────────
   useEffect(() => {
@@ -936,7 +937,11 @@ export default function NuevaEncomiendaWizard() {
                   <Aviso
                     tono="warning"
                     icon={Warning}
-                    texto={`Máximo ${formatPesoKg(pesoMaxCoop)} kg y ${dimMaxCoop} × ${dimMaxCoop} × ${dimMaxCoop} cm.`}
+                    texto={
+                      dimMaxCoop !== null
+                        ? `Máximo ${formatPesoKg(pesoMaxCoop)} kg y ${dimMaxCoop} × ${dimMaxCoop} × ${dimMaxCoop} cm.`
+                        : `Máximo ${formatPesoKg(pesoMaxCoop)} kg.`
+                    }
                   />
                 </Card>
               </View>

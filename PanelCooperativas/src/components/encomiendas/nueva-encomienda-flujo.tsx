@@ -61,6 +61,7 @@ import {
   type DatosAltaEncomienda,
   type RutaAlta,
 } from "@/app/cooperativas/(panel)/taquilla/encomiendas/actions";
+import { formatPesoKg } from "@/lib/peso";
 import { EncomiendaRegistrada } from "./encomienda-registrada";
 import { FotoPaquete, descripcionFoto, tituloFoto, type ModoFoto } from "./foto-paquete";
 import { CobroEncomiendaContenido } from "./cobro-encomienda";
@@ -71,6 +72,9 @@ const PASOS = ["destino", "detalles", "revisar", "foto", "cobro", "registrada"] 
 type Paso = (typeof PASOS)[number];
 /** Índices 0..2 son pre-registro (destino, detalles, revisar); >= 3 requieren `resultado`. */
 const PASOS_PRE_REGISTRO = 3;
+/** Numeración mostrada tras registrar: la foto sigue a los pasos de datos y el cobro a la foto. */
+const NUMERO_PASO_FOTO = PASOS_PRE_REGISTRO + 1;
+const NUMERO_PASO_COBRO = NUMERO_PASO_FOTO + 1;
 
 const TITULOS: Record<Paso, string> = {
   destino: "¿A dónde la envías?",
@@ -310,6 +314,9 @@ export function NuevaEncomiendaFlujo() {
       ? formatMoney({ usd: estimadoVigente.usd, bs: estimadoVigente.bs, tasa: estimadoVigente.tasa }).principal
       : null;
 
+  /** Tope de peso de la tarifa de esta cooperativa (la cotización pública trae el de todas, no el propio). */
+  const pesoMax = pesoMaxTarifa ?? estimadoVigente?.max ?? null;
+
   // ── Validación ──
   /** Errores del paso 2 por campo y el orden en que aparecen en pantalla (el primero recibe el foco). */
   const calcularErroresDetalles = (): { e: Errores; orden: string[] } => {
@@ -328,9 +335,8 @@ export function NuevaEncomiendaFlujo() {
     if (d.cedula) marcar("des-cedula", d.cedula);
     if (d.telefono) marcar("des-telefono", d.telefono);
     if (contenido.trim().length < 3) marcar("contenido", "Describe el contenido del paquete (mínimo 3 letras).");
-    const max = estimadoVigente?.max ?? pesoMaxTarifa ?? undefined;
     if (pesoNum == null || pesoNum <= 0) marcar("peso", "Escribe el peso en kilos, por ejemplo 2,5.");
-    else if (max && pesoNum > max) marcar("peso", `El peso máximo es ${max.toLocaleString("es-VE")} kg.`);
+    else if (pesoMax && pesoNum > pesoMax) marcar("peso", `El peso máximo es ${formatPesoKg(pesoMax)} kg.`);
     if (valor.trim() && leerMonto(valor, { permitirCero: true }) == null) {
       marcar("valor", "Escribe el valor en dólares, por ejemplo 40,00.");
     }
@@ -371,7 +377,8 @@ export function NuevaEncomiendaFlujo() {
   const { paso, indice, ir } = url;
   const enPreRegistro = indice < PASOS_PRE_REGISTRO;
   const modalidadEfectiva = resultado?.encomienda.modalidad_pago ?? modalidad;
-  const totalPasos = modalidadEfectiva === "DESTINO" ? 4 : 5;
+  // El cobro es un paso más solo cuando paga quien envía (ORIGEN).
+  const totalPasos = modalidadEfectiva === "ORIGEN" ? NUMERO_PASO_COBRO : NUMERO_PASO_FOTO;
 
   const sucio =
     rutaId !== "" ||
@@ -705,6 +712,7 @@ export function NuevaEncomiendaFlujo() {
     // Solo se cobra si sigue por pagar (un alta repetida puede venir ya pagada).
     const cobrar = encomienda.modalidad_pago === "ORIGEN" && encomienda.estado === "POR_PAGAR";
     const despuesDeFoto = () => (cobrar ? url.ir("cobro") : url.ir("registrada", { reemplazar: true }));
+    const irARegistrada = () => url.ir("registrada", { reemplazar: true });
     const alCobrar = () => {
       setResultado((prev) => (prev ? { ...prev, encomienda: { ...prev.encomienda, estado: "PAGADA" } } : prev));
       url.ir("registrada", { reemplazar: true });
@@ -716,13 +724,12 @@ export function NuevaEncomiendaFlujo() {
         {paso === "foto" && (
           <FlujoPagina
             titulo={tituloFoto(modoFoto)}
-            paso={4}
+            paso={NUMERO_PASO_FOTO}
             total={totalPasos}
             descripcion={descripcionFoto(modoFoto, encomienda.tracking_id)}
           >
             <FotoPaquete
               encomiendaId={encomienda.id}
-              trackingId={encomienda.tracking_id}
               siguiente={cobrar ? "Después: cobrar el envío." : undefined}
               onListo={despuesDeFoto}
               onModo={setModoFoto}
@@ -737,11 +744,14 @@ export function NuevaEncomiendaFlujo() {
         {paso === "cobro" && cobrar && (
           <FlujoPagina
             titulo={TITULOS.cobro}
-            paso={5}
-            total={5}
+            paso={NUMERO_PASO_COBRO}
+            total={totalPasos}
             descripcion={<span className="font-mono text-foreground">{encomienda.tracking_id}</span>}
           >
-            <CobroEncomiendaContenido encomienda={encomienda} onSuccess={alCobrar} />
+            <CobroEncomiendaContenido encomienda={encomienda} onSuccess={alCobrar} onCerrar={irARegistrada} />
+            <Button variant="ghost" size="lg" className="self-start" onClick={irARegistrada}>
+              Cobrar después
+            </Button>
           </FlujoPagina>
         )}
 
@@ -751,7 +761,7 @@ export function NuevaEncomiendaFlujo() {
             descripcion={
               <>
                 Código <span className="font-mono text-foreground">{encomienda.tracking_id}</span> · Recibida con{" "}
-                {Number(encomienda.peso_kg).toLocaleString("es-VE")} kg ·{" "}
+                {formatPesoKg(Number(encomienda.peso_kg))} kg ·{" "}
                 {encomienda.estado === "PAGADA" ? "Pagada" : MODALIDAD_PAGO[encomienda.modalidad_pago].largo}
               </>
             }
@@ -760,7 +770,9 @@ export function NuevaEncomiendaFlujo() {
                 resumen={
                   encomienda.estado === "PAGADA"
                     ? "Pagada y lista para despacho."
-                    : "Lista para despacho · se cobra al retirar."
+                    : cobrar
+                      ? "Falta cobrar el envío: hazlo desde su detalle."
+                      : "Lista para despacho · se cobra al retirar."
                 }
                 principal={{ etiqueta: "Ver encomienda", onClick: () => terminar(encomienda.id) }}
               />
@@ -956,8 +968,8 @@ export function NuevaEncomiendaFlujo() {
                 }}
                 error={errores.peso}
                 ayuda={
-                  (estimadoVigente?.max ?? pesoMaxTarifa)
-                    ? `Máximo ${(estimadoVigente?.max ?? pesoMaxTarifa)!.toLocaleString("es-VE")} kg.`
+                  pesoMax
+                    ? `Máximo ${formatPesoKg(pesoMax)} kg.`
                     : "Pesa el paquete y escribe el peso."
                 }
                 inputMode="decimal"
@@ -992,10 +1004,10 @@ export function NuevaEncomiendaFlujo() {
                   <p className="text-muted-foreground">{estimadoVigente.mensaje}</p>
                 )}
               </div>
-              {(estimadoVigente?.max ?? pesoMaxTarifa) != null && dimMaxTarifa != null && (
+              {pesoMax != null && dimMaxTarifa != null && (
                 <p className="flex items-start gap-2 text-[13px] text-muted-foreground md:col-span-2">
                   <Warning aria-hidden className="mt-0.5 size-4 shrink-0" />
-                  Máximo {(estimadoVigente?.max ?? pesoMaxTarifa)!.toLocaleString("es-VE")} kg y {dimMaxTarifa} × {dimMaxTarifa} × {dimMaxTarifa} cm.
+                  Máximo {formatPesoKg(pesoMax)} kg y {dimMaxTarifa} × {dimMaxTarifa} × {dimMaxTarifa} cm.
                 </p>
               )}
             </Seccion>

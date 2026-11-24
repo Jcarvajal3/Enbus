@@ -5,14 +5,15 @@
 // nueva encomienda y `PhotoCaptureModal` (recepción de encomiendas de la app y
 // "Agregar foto" del detalle). En escritorio ofrece selección desde archivos o
 // arrastrar y soltar; en móvil ofrece "Tomar foto" (cámara trasera nativa) y
-// "Galería" sin recorte. También permite "Omitir por ahora" con un motivo.
+// "Galería" sin recorte (la selección y la vista previa las resuelve
+// `SelectorFotoPaquete`). También permite "Omitir por ahora" con un motivo.
 //
 // No pinta título ni cierre: quien lo monta pone el título (`tituloFoto(modo)`)
 // y la descripción (`descripcionFoto(modo, trackingId)`), y se entera del modo
 // con `onModo` y de que hay procesamiento o subida en curso con `onOcupado`.
 
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { Camera, Check, FastForward, Image as ImageIcon, UploadSimple } from "@phosphor-icons/react";
+import { Check, FastForward } from "@phosphor-icons/react";
 import { guardarFotoEncomienda } from "@/app/cooperativas/(panel)/taquilla/encomiendas/actions";
 import { AvisoError } from "@/components/aviso-error";
 import { SelectorFotoPaquete } from "@/components/encomiendas/selector-foto-paquete";
@@ -20,15 +21,9 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
-import { useBlobPreviewUrl } from "@/hooks/use-blob-preview";
-import { useEsDispositivoMovil } from "@/hooks/use-mobile";
 import { avisarExito, avisarInfo } from "@/lib/avisos";
 import { humanizeError } from "@/lib/errores";
-import {
-  prepararImagenArchivo,
-  subirYGuardarFotoEncomienda,
-  type CacheSubidaFoto,
-} from "@/lib/fotos-archivo";
+import { subirYGuardarFotoEncomienda, type CacheSubidaFoto } from "@/lib/fotos-archivo";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 
@@ -71,7 +66,6 @@ export function FotoPaquete({
 }: FotoPaqueteProps): React.JSX.Element {
   const supabase = useMemo(() => createClient(), []);
   const uid = useId();
-  const esMovil = useEsDispositivoMovil();
 
   const [foto, setFoto] = useState<Blob | null>(null);
   const [modo, setModo] = useState<ModoFoto>("seleccion");
@@ -82,12 +76,7 @@ export function FotoPaquete({
   const [motivoOtro, setMotivoOtro] = useState("");
   const [errorMotivo, setErrorMotivo] = useState<string | null>(null);
 
-  const previewUrl = useBlobPreviewUrl(foto);
-
-  const galeriaRef = useRef<HTMLInputElement>(null);
-  const camaraRef = useRef<HTMLInputElement>(null);
   const motivoRef = useRef<HTMLTextAreaElement>(null);
-  const solicitudRef = useRef(0);
   /** Última foto ya subida al bucket (para reintentar solo el guardado). */
   const cacheRef = useRef<CacheSubidaFoto | null>(null);
 
@@ -100,41 +89,6 @@ export function FotoPaquete({
   useEffect(() => {
     onOcupado?.(ocupado);
   }, [ocupado, onOcupado]);
-
-  useEffect(() => {
-    return () => {
-      solicitudRef.current += 1;
-    };
-  }, []);
-
-  const procesarNuevaFoto = async (archivo: File | undefined) => {
-    if (!archivo || guardando) return;
-    const idSolicitud = ++solicitudRef.current;
-    setError(null);
-    setProcesando(true);
-
-    try {
-      const resultado = await prepararImagenArchivo(archivo);
-      if (solicitudRef.current !== idSolicitud) return;
-      if (!resultado.ok) {
-        setError(resultado.error);
-        return;
-      }
-      setFoto(resultado.blob);
-    } finally {
-      if (solicitudRef.current === idSolicitud) {
-        setProcesando(false);
-      }
-    }
-  };
-
-  const manejarCambioInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const archivo = e.target.files?.[0];
-    e.target.value = "";
-    if (archivo) {
-      void procesarNuevaFoto(archivo);
-    }
-  };
 
   const guardarFoto = async () => {
     if (!foto || ocupado) return;
@@ -186,15 +140,13 @@ export function FotoPaquete({
 
   return (
     <div className={cn("flex flex-col gap-4", className)}>
-      {modo === "seleccion" && (
+      {modo !== "omitir" && (
         <SelectorFotoPaquete
-          value={null}
+          value={foto}
           onChange={(blob) => {
-            if (blob) {
-              setFoto(blob);
-              setError(null);
-              setModo("vista");
-            }
+            setFoto(blob);
+            setError(null);
+            setModo(blob ? "vista" : "seleccion");
           }}
           disabled={guardando}
           onProcesando={setProcesando}
@@ -202,122 +154,17 @@ export function FotoPaquete({
       )}
 
       {modo === "vista" && (
-        <div className="flex flex-col gap-4">
-          {/* Inputs para reemplazar la foto directamente desde `modo === "vista"`. */}
-          <input
-            ref={galeriaRef}
-            id={`${uid}-galeria`}
-            type="file"
-            accept="image/*"
-            className="sr-only"
-            tabIndex={-1}
-            aria-hidden
-            disabled={ocupado}
-            onChange={manejarCambioInput}
-          />
-          {esMovil && (
-            <input
-              ref={camaraRef}
-              id={`${uid}-camara`}
-              type="file"
-              accept="image/*"
-              capture="environment"
-              className="sr-only"
-              tabIndex={-1}
-              aria-hidden
-              disabled={ocupado}
-              onChange={manejarCambioInput}
-            />
-          )}
-
-          {/* Con su proporción (vertical u horizontal): la foto se guarda tal cual. */}
-          <div className="relative flex w-full items-center justify-center overflow-hidden rounded-lg border border-border bg-surface">
-            {previewUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={previewUrl}
-                alt="Vista previa de la foto del paquete"
-                className="h-auto max-h-[min(50vh,22rem)] w-auto max-w-full object-contain"
-              />
-            ) : (
-              <div className="flex h-48 w-full items-center justify-center">
-                <Spinner size="md" />
-              </div>
-            )}
-
-            {procesando && (
-              <div
-                className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-night/60 text-white"
-                role="status"
-              >
-                <Spinner size="md" />
-                <span className="text-[15px] font-medium">Preparando foto…</span>
-              </div>
-            )}
-          </div>
-
-          {esMovil ? (
-            <div className="flex flex-col gap-3">
-              <div className="grid grid-cols-2 gap-3">
-                <Button
-                  type="button"
-                  size="lg"
-                  variant="outline"
-                  onClick={() => camaraRef.current?.click()}
-                  disabled={ocupado}
-                >
-                  <Camera aria-hidden />
-                  Tomar otra
-                </Button>
-                <Button
-                  type="button"
-                  size="lg"
-                  variant="outline"
-                  onClick={() => galeriaRef.current?.click()}
-                  disabled={ocupado}
-                >
-                  <ImageIcon aria-hidden />
-                  Galería
-                </Button>
-              </div>
-              <Button
-                type="button"
-                size="lg"
-                onClick={() => void guardarFoto()}
-                disabled={ocupado || !foto}
-                aria-busy={guardando || undefined}
-                autoFocus
-              >
-                {guardando ? <Spinner size="sm" /> : <Check aria-hidden />}
-                {guardando ? "Subiendo…" : "Guardar foto"}
-              </Button>
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 gap-3">
-              <Button
-                type="button"
-                size="lg"
-                variant="outline"
-                onClick={() => galeriaRef.current?.click()}
-                disabled={ocupado}
-              >
-                <UploadSimple aria-hidden />
-                Cambiar foto
-              </Button>
-              <Button
-                type="button"
-                size="lg"
-                onClick={() => void guardarFoto()}
-                disabled={ocupado || !foto}
-                aria-busy={guardando || undefined}
-                autoFocus
-              >
-                {guardando ? <Spinner size="sm" /> : <Check aria-hidden />}
-                {guardando ? "Subiendo…" : "Guardar foto"}
-              </Button>
-            </div>
-          )}
-        </div>
+        <Button
+          type="button"
+          size="lg"
+          onClick={() => void guardarFoto()}
+          disabled={ocupado || !foto}
+          aria-busy={guardando || undefined}
+          autoFocus
+        >
+          {guardando ? <Spinner size="sm" /> : <Check aria-hidden />}
+          {guardando ? "Subiendo…" : "Guardar foto"}
+        </Button>
       )}
 
       {modo === "omitir" && (

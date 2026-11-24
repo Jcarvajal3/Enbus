@@ -13,6 +13,7 @@ import { formatCiudad } from "@/lib/ciudades";
 import { formatNumeroVE, formatUsd } from "@/lib/dinero";
 import type { TasaBCV } from "@/lib/types/pagos";
 import { Monto } from "@/components/monto";
+import { formatPesoKg } from "@/lib/peso";
 
 interface SimuladorProps {
   tarifa: Tarifa | null;
@@ -21,23 +22,27 @@ interface SimuladorProps {
   tasa?: TasaBCV | null;
 }
 
+/** Peso con el que arranca el simulador y mínimo del control (kg). */
+const PESO_INICIAL_KG = 5;
+const PESO_MINIMO_KG = 0.5;
+
 export function Simulador({ tarifa, rutas, tasa = null }: SimuladorProps) {
   const [selectedRutaId, setSelectedRutaId] = useState<string>("");
-  const [peso, setPeso] = useState<number>(() => Math.min(5, tarifa?.peso_max_kg ?? 25));
+  const [peso, setPeso] = useState<number>(() => Math.min(PESO_INICIAL_KG, tarifa?.peso_max_kg ?? PESO_INICIAL_KG));
 
-  // Get selected route details
+  // Ruta elegida
   const selectedRoute = useMemo(() => {
     return rutas.find((r) => r.id === selectedRutaId) || null;
   }, [rutas, selectedRutaId]);
 
-  // Calculate limits and default values
-  const maxPeso = tarifa ? tarifa.peso_max_kg : 25;
+  // Sin tarifa no se muestra el control de peso: el tope solo se usa con una tarifa vigente.
+  const maxPeso = tarifa?.peso_max_kg ?? PESO_MINIMO_KG;
 
-  // Real-time calculation on the client for smooth UX
+  // Cálculo en el cliente para que responda al instante
   const calculation = useMemo(() => {
     if (!tarifa || !selectedRoute) return null;
 
-    // Check weight limit
+    // Límite de peso de la tarifa
     const exceedsLimit = peso > tarifa.peso_max_kg;
 
     const tarifa_por_kg = tarifa.tarifa_por_kg;
@@ -62,7 +67,7 @@ export function Simulador({ tarifa, rutas, tasa = null }: SimuladorProps) {
 
   const handlePesoChange = (val: number) => {
     if (isNaN(val)) return;
-    // Keep it non-negative
+    // Nunca negativo
     const safeVal = Math.max(0, val);
     setPeso(safeVal);
   };
@@ -132,7 +137,7 @@ export function Simulador({ tarifa, rutas, tasa = null }: SimuladorProps) {
                   type="number"
                   step="0.1"
                   inputMode="decimal"
-                  min="0.5"
+                  min={PESO_MINIMO_KG}
                   max={maxPeso}
                   value={peso === 0 ? "" : Number(peso.toFixed(1))}
                   onChange={(e) => handlePesoChange(parseFloat(e.target.value))}
@@ -141,25 +146,25 @@ export function Simulador({ tarifa, rutas, tasa = null }: SimuladorProps) {
               </div>
               <input
                 type="range"
-                min="0.5"
+                min={PESO_MINIMO_KG}
                 max={maxPeso}
                 step="0.5"
                 value={peso}
                 onChange={handleSliderChange}
                 aria-label="Peso de la encomienda"
-                aria-valuetext={`${formatNumeroVE(peso, 1)} kg`}
+                aria-valuetext={`${formatPesoKg(peso)} kg`}
                 className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-surface-dark accent-accent-strong"
               />
               <div className="flex justify-between text-[13px] text-muted-foreground tabular-nums">
-                <span>0,5 kg</span>
-                <span>Máximo {formatNumeroVE(maxPeso, 1)} kg</span>
+                <span>{formatPesoKg(PESO_MINIMO_KG)} kg</span>
+                <span>Máximo {formatPesoKg(maxPeso)} kg</span>
               </div>
             </Field>
 
             {calculation ? (
               calculation.exceedsLimit ? (
                 <AvisoError>
-                  El peso supera el máximo de la tarifa vigente ({formatNumeroVE(tarifa.peso_max_kg, 1)} kg).
+                  El peso supera el máximo de la tarifa vigente ({formatPesoKg(tarifa.peso_max_kg)} kg).
                 </AvisoError>
               ) : (
                 <div className="flex flex-col gap-3 rounded-md bg-surface p-4">

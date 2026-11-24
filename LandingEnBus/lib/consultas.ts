@@ -297,15 +297,31 @@ export async function origenesConDestinos(): Promise<OrigenConDestinos[]> {
   try {
     // Solo cooperativas con tarifa activa para encomiendas (si la migración aún no se aplica,
     // el query puede fallar por columna ausente y se mantiene el listado sin filtrar).
-    const { data: tarifasActivas, error: errorTarifas } = await supabase
-      .from("tarifas")
-      .select("cooperativa_id")
-      .eq("activa", true)
-      .not("cooperativa_id", "is", null);
-    const coopsConTarifa =
-      !errorTarifas && tarifasActivas
-        ? new Set(tarifasActivas.map((t) => String(t.cooperativa_id ?? "")).filter(Boolean))
-        : null;
+    // Como las rutas, se pagina: PostgREST corta cada respuesta en `max_rows` filas.
+    const tarifasActivas: { cooperativa_id: unknown }[] = [];
+    let errorTarifas: { message: string } | null = null;
+    for (let desde = 0; desde < MAX_RUTAS; desde += PAGINA_RUTAS) {
+      const { data, error } = await supabase
+        .from("tarifas")
+        .select("cooperativa_id")
+        .eq("activa", true)
+        .not("cooperativa_id", "is", null)
+        .order("id")
+        .range(desde, desde + PAGINA_RUTAS - 1);
+      if (error) {
+        errorTarifas = error;
+        break;
+      }
+      tarifasActivas.push(...(data ?? []));
+      if ((data?.length ?? 0) < PAGINA_RUTAS) break;
+    }
+    if (errorTarifas) {
+      // Sin el filtro se listarían cooperativas sin tarifa: se avisa en el log en vez de ocultarlo.
+      console.error("[consultas] origenesConDestinos: no se pudieron leer las tarifas activas:", errorTarifas.message);
+    }
+    const coopsConTarifa = errorTarifas
+      ? null
+      : new Set(tarifasActivas.map((t) => String(t.cooperativa_id ?? "")).filter(Boolean));
 
     // Filtro por la cooperativa con un join (`!inner`): con `.in(ids)` la URL crece con cada
     // cooperativa activa hasta pasar el límite del servidor. PostgREST devuelve como mucho

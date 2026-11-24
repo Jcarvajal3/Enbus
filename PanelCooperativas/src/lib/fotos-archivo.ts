@@ -49,6 +49,9 @@ async function canvasAJpeg(fuente: CanvasImageSource, ancho: number, alto: numbe
   canvas.height = Math.max(1, Math.round(alto * escala));
   const ctx = canvas.getContext("2d");
   if (!ctx) return null;
+  // JPEG no tiene transparencia: sin fondo, los PNG/WebP con alfa quedarían sobre negro.
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.drawImage(fuente, 0, 0, canvas.width, canvas.height);
   return await new Promise<Blob | null>((resolve) => {
     canvas.toBlob((blob) => resolve(blob), "image/jpeg", CALIDAD_JPEG_FOTO);
@@ -130,6 +133,15 @@ export async function prepararImagenArchivo(archivo: File): Promise<ResultadoPre
   return { ok: true, blob: procesado };
 }
 
+/** Borra (sin fallar) una foto subida que nunca se registró; si no hay permiso, queda para la limpieza del bucket. */
+async function borrarFotoHuerfana(supabase: Pick<SupabaseClient, "storage">, ruta: string): Promise<void> {
+  try {
+    await supabase.storage.from(BUCKET_FOTOS).remove([ruta]);
+  } catch {
+    // Mejor esfuerzo: un fallo aquí no debe impedir subir la foto nueva.
+  }
+}
+
 /**
  * Sube una foto al bucket privado y registra su ruta en la encomienda.
  * Reutiliza `cacheRef` si coincide `(encomiendaId, foto)` para evitar subidas
@@ -144,12 +156,13 @@ export async function subirYGuardarFotoEncomienda(params: {
 }): Promise<ResultadoSubidaFoto> {
   const { supabase, encomiendaId, foto, cacheRef, guardarEnServidor } = params;
   try {
-    let ruta =
-      cacheRef?.current?.encomiendaId === encomiendaId && cacheRef.current.foto === foto
-        ? cacheRef.current.ruta
-        : null;
+    const previa = cacheRef?.current?.encomiendaId === encomiendaId ? cacheRef.current : null;
+    let ruta = previa && previa.foto === foto ? previa.ruta : null;
 
     if (!ruta) {
+      // La foto anterior se subió pero nunca se registró en la encomienda: se borra para no dejarla huérfana.
+      if (previa) await borrarFotoHuerfana(supabase, previa.ruta);
+
       const tipo = foto.type || "image/jpeg";
       const nueva = rutaNuevaFoto(encomiendaId, extensionDeFoto(tipo));
       const { error: errorSubida } = await supabase.storage.from(BUCKET_FOTOS).upload(nueva, foto, { contentType: tipo });
@@ -164,6 +177,8 @@ export async function subirYGuardarFotoEncomienda(params: {
     if (!res.success) {
       return { ok: false, error: res.error };
     }
+    // Ya quedó registrada: la caché no debe tratarla como huérfana si luego se cambia la foto.
+    if (cacheRef) cacheRef.current = null;
     return { ok: true, ruta };
   } catch (err) {
     return { ok: false, error: isNetworkError(err) ? humanizeError(err) : MSG_ERROR_SUBIDA };

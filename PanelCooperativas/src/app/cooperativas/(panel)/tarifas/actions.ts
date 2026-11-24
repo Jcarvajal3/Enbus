@@ -5,7 +5,14 @@ import { createClient } from "@/lib/supabase/server";
 import { esUuid } from "@/lib/data/admin-auth";
 import { humanizeError, parseDetalleEB } from "@/lib/errores";
 import { fechaHoraVEaISO } from "@/lib/fechas";
-import { LIMITES_TARIFA, type CreateTarifaInput, type ResultadoPublicarTarifa } from "@/lib/types/tarifas";
+import {
+  DIAS_MAX_PROGRAMACION,
+  LIMITES_TARIFA,
+  type CreateTarifaInput,
+  type ResultadoPublicarTarifa,
+} from "@/lib/types/tarifas";
+
+const MS_POR_DIA = 86_400_000;
 
 async function requireAdminCooperativa() {
   const supabase = await createClient();
@@ -105,6 +112,13 @@ export async function createTarifa(input: CreateTarifaInput): Promise<ResultadoP
     vigenteDesde = fechaHoraVEaISO(fecha, hora);
     if (new Date(vigenteDesde).getTime() <= Date.now()) {
       return { success: false, error: "La fecha programada tiene que ser posterior a ahora.", campo: "vigente_desde" };
+    }
+    if (new Date(vigenteDesde).getTime() > Date.now() + DIAS_MAX_PROGRAMACION * MS_POR_DIA) {
+      return {
+        success: false,
+        error: `Solo puedes programar con hasta ${DIAS_MAX_PROGRAMACION} días de anticipación.`,
+        campo: "vigente_desde",
+      };
     }
   }
 

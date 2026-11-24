@@ -11,6 +11,7 @@ import type { Tarifa } from "@/lib/types/tarifas";
 import { formatNumeroVE, formatUsd } from "@/lib/dinero";
 import { formatFechaHoraVE } from "@/lib/fechas";
 import { ClockCounterClockwise, CurrencyDollar } from "@phosphor-icons/react";
+import { formatPesoKg } from "@/lib/peso";
 
 interface HistorialTarifasTableProps {
   tarifas: Tarifa[];
@@ -65,7 +66,7 @@ export function HistorialTarifasTable({ tarifas }: HistorialTarifasTableProps) {
                     {formatNumeroVE(tarifa.factor_distancia_por_min, 4)}
                   </TableCell>
                   <TableCell className="hidden text-right tabular-nums 2xl:table-cell">
-                    {formatNumeroVE(tarifa.peso_max_kg, 1)} kg · {formatNumeroVE(tarifa.dimensiones_max_cm, 0)} cm
+                    {formatPesoKg(tarifa.peso_max_kg)} kg · {formatNumeroVE(tarifa.dimensiones_max_cm, 0)} cm
                   </TableCell>
                   <TableCell className="whitespace-normal">
                     <span className="block whitespace-nowrap tabular-nums">{formatFechaHoraVE(tarifa.vigente_desde)}</span>

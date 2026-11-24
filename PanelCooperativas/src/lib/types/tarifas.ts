@@ -136,16 +136,41 @@ export interface SimuladorResult {
   peso_kg: number;
 }
 
+/** Decimales con que se guardan el precio por kilo, el peso (2) y el recargo por minuto (4). */
+export const DECIMALES_TARIFA = { dinero: 2, peso: 2, factor: 4 } as const;
+
+/** Hasta cuántos días en el futuro se puede programar una tarifa (lo valida también fn_publicar_tarifa). */
+export const DIAS_MAX_PROGRAMACION = 365;
+
+/** `valor` como entero escalado (2,5 con 2 decimales → 250), o null si tiene más decimales que `decimales`. */
+function escalar(valor: number, decimales: number): bigint | null {
+  const escalado = valor * 10 ** decimales;
+  const entero = Math.round(escalado);
+  return Number.isFinite(escalado) && Math.abs(escalado - entero) < 1e-6 ? BigInt(entero) : null;
+}
+
 /**
  * Costo de una encomienda en USD de referencia: la misma fórmula que
  * `_costo_encomienda` (SQL) y `fn_cotizar_envio_publico`:
  *   round(peso × precio por kilo × (1 + recargo por minuto × duración), 2)
+ *
+ * Con valores de los decimales que guarda la base se calcula con enteros (sin errores de
+ * coma flotante, redondeando como `round(numeric, 2)`); si no, cae a coma flotante.
  */
 export function costoEncomiendaUsd(
   pesoKg: number,
   tarifa: Pick<ParametrosTarifa, "tarifa_por_kg" | "factor_distancia_por_min">,
   duracionMin: number
 ): number {
+  const peso = escalar(pesoKg, DECIMALES_TARIFA.peso);
+  const precio = escalar(tarifa.tarifa_por_kg, DECIMALES_TARIFA.dinero);
+  const factor = escalar(tarifa.factor_distancia_por_min, DECIMALES_TARIFA.factor);
+  if (peso !== null && precio !== null && factor !== null && Number.isInteger(duracionMin)) {
+    // peso/100 × precio/100 × (1 + factor/10⁴ × min) en centavos = peso × precio × (10⁴ + factor × min) / 10⁶
+    const divisor = BigInt(1_000_000);
+    const numerador = peso * precio * (BigInt(10_000) + factor * BigInt(duracionMin));
+    return Number((numerador + divisor / BigInt(2)) / divisor) / 100;
+  }
   const bruto = pesoKg * tarifa.tarifa_por_kg * (1 + tarifa.factor_distancia_por_min * duracionMin);
   return Math.round((bruto + Number.EPSILON) * 100) / 100;
 }

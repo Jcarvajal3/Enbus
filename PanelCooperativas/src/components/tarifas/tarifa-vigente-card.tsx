@@ -6,6 +6,7 @@ import { formatFechaHoraVE } from "@/lib/fechas";
 import { recargoPorcentaje, type Tarifa } from "@/lib/types/tarifas";
 import { CurrencyDollar } from "@phosphor-icons/react/dist/ssr";
 import { TarifaProgramadaAviso } from "./tarifa-programada-aviso";
+import { formatPesoKg } from "@/lib/peso";
 
 interface TarifaVigenteCardProps {
   tarifa: Tarifa | null;
@@ -63,7 +64,7 @@ export function TarifaVigenteCard({ tarifa, programada = null, soloLectura = fal
             valor={formatNumeroVE(tarifa.factor_distancia_por_min, 4)}
             ayuda={`Viaje de 8 h: +${formatNumeroVE(recargoPorcentaje(tarifa.factor_distancia_por_min, 480), 0)} %`}
           />
-          <Concepto etiqueta="Peso máximo" valor={`${formatNumeroVE(tarifa.peso_max_kg, 1)} kg`} />
+          <Concepto etiqueta="Peso máximo" valor={`${formatPesoKg(tarifa.peso_max_kg)} kg`} />
           <Concepto etiqueta="Medida máxima" valor={`${formatNumeroVE(tarifa.dimensiones_max_cm, 0)} cm`} />
         </dl>
 

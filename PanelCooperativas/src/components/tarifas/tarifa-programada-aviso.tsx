@@ -10,6 +10,7 @@ import { avisarExito } from "@/lib/avisos";
 import { formatNumeroVE, formatUsd } from "@/lib/dinero";
 import { formatFechaProgramada, type Tarifa } from "@/lib/types/tarifas";
 import { cn } from "@/lib/utils";
+import { formatPesoKg } from "@/lib/peso";
 
 /** "Programada para el 05/10 a las 6:00 a. m." con "Cancelar programación" (fn_cancelar_tarifa_programada). */
 export function TarifaProgramadaAviso({
@@ -41,7 +42,7 @@ export function TarifaProgramadaAviso({
             Precio por kilo {formatUsd(tarifa.tarifa_por_kg)}
             {actual && actual.tarifa_por_kg !== tarifa.tarifa_por_kg ? ` (hoy ${formatUsd(actual.tarifa_por_kg)})` : ""} ·
             recargo por minuto {formatNumeroVE(tarifa.factor_distancia_por_min, 4)} · hasta{" "}
-            {formatNumeroVE(tarifa.peso_max_kg, 1)} kg y {formatNumeroVE(tarifa.dimensiones_max_cm, 0)} cm.
+            {formatPesoKg(tarifa.peso_max_kg)} kg y {formatNumeroVE(tarifa.dimensiones_max_cm, 0)} cm.
           </p>
           {tarifa.nota && <p>Nota: {tarifa.nota}</p>}
           {vencida && <p className="font-medium">Su hora ya llegó: se activará en los próximos minutos.</p>}
