@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { List, X } from "@phosphor-icons/react";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 
+import { CuentaMenuMovil, MenuCuenta } from "@/components/pasajero/menu-cuenta";
 import { RUTAS_PANEL } from "@/lib/sitio/urls";
 import estilos from "./barra.module.css";
 
@@ -117,6 +118,7 @@ export function BarraMenu({ marca, secciones, cooperativas, login }: Props) {
               </Link>
             </>
           )}
+          <MenuCuenta />
           <button
             ref={boton}
             type="button"
@@ -143,6 +145,9 @@ export function BarraMenu({ marca, secciones, cooperativas, login }: Props) {
               </li>
             ))}
           </ul>
+          <div className={estilos.panelCuenta}>
+            <CuentaMenuMovil alNavegar={() => cerrar(false)} />
+          </div>
           <div className={estilos.panelPie}>
             <Link href={cooperativas} className={estilos.panelEnlace} onClick={() => cerrar(false)}>
               Para cooperativas

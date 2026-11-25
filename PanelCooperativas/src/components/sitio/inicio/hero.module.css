@@ -1,59 +1,86 @@
 .hero {
   position: relative;
-  overflow-x: clip;
-  padding-top: clamp(40px, 6vw, 88px);
-  padding-bottom: clamp(48px, 6vw, 80px);
-  scroll-margin-top: 0;
+  padding-block: clamp(20px, 4vw, 56px) clamp(24px, 4vw, 56px);
+  color: var(--s-on-night);
+  background: var(--s-ink);
+}
+.fondo {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+.foto {
+  object-fit: cover;
+  object-position: center 60%;
+  opacity: 0.55;
+}
+.velo {
+  position: absolute;
+  inset: 0;
   background:
-    radial-gradient(60% 55% at 85% 20%, var(--s-cielo-soft) 0%, transparent 70%),
-    radial-gradient(45% 45% at 5% 95%, var(--s-sol-soft) 0%, transparent 70%),
-    var(--s-canvas);
+    linear-gradient(180deg, rgb(15 27 51 / 0.92) 0%, rgb(15 27 51 / 0.7) 55%, rgb(15 27 51 / 0.92) 100%),
+    radial-gradient(60% 80% at 85% 0%, color-mix(in srgb, var(--s-cielo-deep) 40%, transparent) 0%, transparent 70%);
 }
 
-.rejilla {
+.contenido {
+  position: relative;
+  z-index: 2; /* sobre las secciones siguientes: las listas desplegables salen del hero */
   display: grid;
-  gap: clamp(40px, 6vw, 56px);
-  align-items: center;
+  gap: clamp(14px, 2vw, 24px);
+  max-width: 1080px;
 }
-@media (min-width: 1024px) {
-  .rejilla {
-    grid-template-columns: 55fr 45fr;
-    gap: 48px;
-  }
-}
-
-.texto {
+.cabeza {
   display: grid;
-  gap: 24px;
+  gap: 8px;
   justify-items: start;
 }
 .titulo {
-  max-width: 14ch;
-}
-@media (max-width: 640px) {
-  .titulo {
-    max-width: none;
-  }
+  font-size: clamp(30px, 4.6vw, 56px);
+  letter-spacing: -0.035em;
+  line-height: 1.05;
 }
 .bajada {
-  max-width: 52ch;
+  max-width: 56ch;
+  font-size: var(--t-lead);
+  color: var(--s-on-night-muted);
 }
-.acciones {
-  display: flex;
-  flex-wrap: wrap;
+@media (max-width: 599px) {
+  .bajada {
+    display: none;
+  }
+}
+.tasa {
+  display: inline-flex;
   align-items: center;
-  gap: 16px;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: var(--r-full);
+  background: rgb(255 255 255 / 0.12);
+  font-size: var(--t-small);
 }
+.tasa svg {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  color: var(--s-sol);
+}
+@media (max-width: 599px) {
+  .tasa {
+    font-size: 13px;
+    padding: 4px 12px;
+  }
+}
+
 .garantias {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px 24px;
+  gap: 8px 24px;
   margin: 0;
   padding: 0;
   list-style: none;
   font-size: var(--t-small);
   font-weight: 500;
-  color: var(--s-ink-2);
+  color: var(--s-on-night);
 }
 .garantias li {
   display: inline-flex;
@@ -61,295 +88,8 @@
   gap: 8px;
 }
 .garantias svg {
+  flex: none;
   width: 20px;
   height: 20px;
-  flex: none;
-  color: var(--s-ok);
-}
-
-/* Visual */
-.visual {
-  position: relative;
-  display: grid;
-  place-items: center;
-  width: min(100%, 460px);
-  margin-inline: auto;
-  padding-block: 24px;
-}
-.panel {
-  position: absolute;
-  inset: 40px 12% 40px;
-  overflow: hidden;
-  border-radius: var(--r-xl);
-  background: var(--s-cielo);
-}
-.foto {
-  object-fit: cover;
-}
-.velo {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(180deg, transparent 40%, var(--s-ink) 135%);
-  opacity: 0.55;
-}
-.telefono {
-  position: relative;
-  z-index: 1;
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .telefono {
-    animation: entrar 800ms var(--ease) both;
-  }
-  .flota {
-    animation: entrar 800ms var(--ease) 250ms both;
-  }
-  .flotaPrecio {
-    animation-delay: 400ms;
-  }
-}
-@keyframes entrar {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
-/* Pantalla de la app */
-.pantalla {
-  display: grid;
-  gap: 14px;
-  align-content: start;
-  padding: 48px 14px 14px;
-  height: 100%;
-}
-.pantallaCab {
-  display: grid;
-  gap: 8px;
-  justify-items: start;
-}
-.pantallaTitulo {
-  font-size: 18px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  color: var(--s-ink);
-}
-.pase {
-  display: grid;
-  gap: 14px;
-  padding: 16px;
-  border-radius: var(--r-lg);
-  background: var(--s-paper);
-  box-shadow: var(--sh-2);
-  color: var(--s-ink);
-}
-.trayecto {
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  align-items: center;
-  gap: 8px;
-}
-.trayecto small {
-  display: block;
-  font-size: 11px;
-  color: var(--s-muted);
-}
-.trayecto strong {
-  font-size: 17px;
-  letter-spacing: -0.02em;
-  line-height: 1.15;
-}
-.destino {
-  text-align: right;
-}
-.flecha {
-  width: 28px;
-  height: 2px;
-  background: var(--s-line-2);
-  position: relative;
-}
-.flecha::after {
-  content: "";
-  position: absolute;
-  right: 0;
-  top: -3px;
-  width: 7px;
-  height: 7px;
-  border-top: 2px solid var(--s-line-2);
-  border-right: 2px solid var(--s-line-2);
-  rotate: 45deg;
-}
-.datos {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 10px 16px;
-  margin: 0;
-}
-.datos dt {
-  font-size: 11px;
-  color: var(--s-muted);
-}
-.datos dd {
-  margin: 0;
-  font-size: 13px;
-  font-weight: 600;
-}
-.ancho {
-  grid-column: 1 / -1;
-}
-.corte {
-  height: 0;
-  border-top: 2px dashed var(--s-line-2);
-  margin-inline: -16px;
-}
-.qr {
-  display: grid;
-  justify-items: center;
-  gap: 10px;
-}
-.qr > :first-child {
-  width: 118px;
-  height: 118px;
-}
-.qr p {
-  font-size: 11px;
-  color: var(--s-muted);
-  text-align: center;
-}
-
-/* Tarjetas flotantes */
-.flota {
-  position: absolute;
-  z-index: 2;
-  display: grid;
-  gap: 10px;
-  padding: 14px 16px;
-  border-radius: var(--r-md);
-  background: var(--s-paper);
-  box-shadow: var(--sh-3);
-  color: var(--s-ink);
-}
-.flotaAsiento {
-  left: -4px;
-  top: 50%;
-  width: 176px;
-}
-.flotaPrecio {
-  right: -4px;
-  bottom: 3%;
-  width: 190px;
-  justify-items: start;
-  gap: 4px;
-}
-.flotaCab {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.flotaCab svg {
-  width: 28px;
-  height: 28px;
-  flex: none;
-  padding: 5px;
-  border-radius: 9px;
-  background: var(--s-sol-soft);
-  color: var(--s-sol-deep);
-}
-.flotaCab div {
-  display: grid;
-  line-height: 1.25;
-}
-.flotaCab strong {
-  font-size: 14px;
-}
-.flotaCab span,
-.flotaEtiqueta {
-  font-size: 12px;
-  color: var(--s-muted);
-}
-.precio {
-  font-size: 28px;
-  letter-spacing: -0.03em;
-  line-height: 1.1;
-}
-.precioBs {
-  font-size: 14px;
-  font-weight: 600;
-  margin-bottom: 4px;
-}
-.precioTexto {
-  font-size: 15px;
-  line-height: 1.3;
-}
-@media (min-width: 1024px) {
-  .flotaAsiento {
-    left: -72px;
-  }
-  .flotaPrecio {
-    right: -64px;
-  }
-}
-@media (max-width: 599px) {
-  .flota {
-    display: none;
-  }
-  .panel {
-    inset: 40px 6% 40px;
-  }
-}
-
-/* Franja de confianza */
-.confianza {
-  margin-top: clamp(40px, 5vw, 72px);
-  padding-top: clamp(24px, 3vw, 36px);
-  border-top: 1px solid var(--s-line-2);
-}
-.cifras {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 16px;
-  margin: 0;
-  text-align: center;
-}
-.cifras div {
-  display: grid;
-  gap: 4px;
-}
-.cifras dd {
-  margin: 0;
-  order: -1;
-  font-size: clamp(28px, 4vw, 44px);
-  font-weight: 700;
-  letter-spacing: -0.03em;
-  line-height: 1.1;
-}
-.cifras dt {
-  font-size: var(--t-small);
-  color: var(--s-muted);
-}
-.pilares {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
-  gap: 16px 24px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.pilares li {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  font-size: var(--t-small);
-  font-weight: 500;
-  color: var(--s-ink-2);
-}
-.pilares svg {
-  width: 28px;
-  height: 28px;
-  flex: none;
-  color: var(--s-cielo-deep);
+  color: var(--s-sol);
 }

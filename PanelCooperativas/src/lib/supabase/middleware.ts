@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { INICIO } from "@/lib/navigation";
+import { PREFIJOS_CON_SESION, urlIngresar } from "@/lib/pasajero/rutas";
 
 // ─── Redirecciones de entrada (proxy.ts) ─────────────────────────────────────
 // Solo se exige sesión. El ROL (y la cooperativa) lo comprueba cada layout con el
@@ -37,6 +38,17 @@ function redirigir(request: NextRequest, respuesta: NextResponse, pathname: stri
   const url = request.nextUrl.clone();
   url.pathname = pathname;
   url.search = "";
+  const redireccion = NextResponse.redirect(url);
+  respuesta.cookies.getAll().forEach((cookie) => redireccion.cookies.set(cookie));
+  return redireccion;
+}
+
+/** Redirige a `/ingresar?next=…` (ruta + query de origen) conservando las cookies de sesión renovadas. */
+function redirigirAIngresar(request: NextRequest, respuesta: NextResponse) {
+  const url = request.nextUrl.clone();
+  const destino = new URL(urlIngresar(request.nextUrl.pathname + request.nextUrl.search), request.url);
+  url.pathname = destino.pathname;
+  url.search = destino.search;
   const redireccion = NextResponse.redirect(url);
   respuesta.cookies.getAll().forEach((cookie) => redireccion.cookies.set(cookie));
   return redireccion;
@@ -83,7 +95,7 @@ export async function updateSession(request: NextRequest) {
   if (dentroDe(pathname, "/admin")) {
     const publica = PUBLICAS_ADMIN.some((p) => dentroDe(pathname, p));
     if (!autenticado && !publica) return redirigir(request, supabaseResponse, "/admin/login");
-  } else {
+  } else if (dentroDe(pathname, "/cooperativas")) {
     // "/cooperativas" EXACTO es la página pública para captar cooperativas (app/(sitio)/cooperativas);
     // sus subrutas siguen siendo el panel y exigen sesión salvo las de PUBLICAS_COOPERATIVAS.
     const publica =
@@ -109,6 +121,10 @@ export async function updateSession(request: NextRequest) {
         .maybeSingle();
       if (perfil?.role === "taquillero") return redirigir(request, supabaseResponse, INICIO);
     }
+  } else if (PREFIJOS_CON_SESION.some((p) => dentroDe(pathname, p))) {
+    // Área del pasajero (/cuenta, /comprar): solo se exige sesión; el rol lo decide
+    // `exigirPasajero`. El resto del sitio del pasajero solo renueva la sesión.
+    if (!autenticado) return redirigirAIngresar(request, supabaseResponse);
   }
 
   return supabaseResponse;

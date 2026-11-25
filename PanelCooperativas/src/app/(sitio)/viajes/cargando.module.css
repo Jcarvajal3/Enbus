@@ -1,0 +1,48 @@
+.tituloFalso,
+.buscadorFalso,
+.dia,
+.tarjeta {
+  border-radius: var(--r-lg);
+  background: linear-gradient(90deg, var(--s-canvas-2) 25%, var(--s-canvas) 50%, var(--s-canvas-2) 75%);
+  background-size: 200% 100%;
+  animation: brillo 1.4s linear infinite;
+}
+.tituloFalso {
+  width: min(320px, 70%);
+  height: 40px;
+  opacity: 0.25;
+}
+.buscadorFalso {
+  height: 96px;
+  border-radius: var(--r-lg);
+  opacity: 0.2;
+}
+.tira {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(88px, 1fr));
+  gap: 8px;
+  overflow: hidden;
+}
+.dia {
+  height: 92px;
+}
+.lista {
+  display: grid;
+  gap: 12px;
+}
+.tarjeta {
+  height: 132px;
+}
+@keyframes brillo {
+  to {
+    background-position: -200% 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tituloFalso,
+  .buscadorFalso,
+  .dia,
+  .tarjeta {
+    animation: none;
+  }
+}

@@ -49,7 +49,7 @@ export default function RootLayout({
   return (
     <html lang="es" className="motion-safe:scroll-smooth" suppressHydrationWarning>
       <body className={cn("min-h-full flex flex-col bg-background text-foreground antialiased font-sans", onest.variable)}>
-        {/* Un solo proveedor de tema (D14): panel, admin y pantallas públicas siguen el tema elegido. */}
+        {/* Un solo proveedor de tema (D14): panel y admin siguen el tema elegido; el sitio público es siempre claro. */}
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
           {children}
           <Toaster />

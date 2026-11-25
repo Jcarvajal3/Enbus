@@ -1,0 +1,102 @@
+.tarjeta {
+  display: grid;
+  align-content: start;
+  gap: 18px;
+  height: 100%;
+  padding: clamp(20px, 2vw, 26px);
+  border: 1px solid transparent;
+  border-radius: var(--r-lg);
+  background: var(--s-canvas);
+  color: var(--s-ink);
+  text-decoration: none;
+  transition:
+    transform var(--dur) var(--ease),
+    box-shadow var(--dur) ease,
+    background-color var(--dur) ease,
+    border-color var(--dur) ease;
+}
+.tarjeta:hover {
+  transform: translateY(-3px);
+  background: var(--s-paper);
+  border-color: var(--s-line);
+  box-shadow: var(--sh-2);
+}
+@media (prefers-reduced-motion: reduce) {
+  .tarjeta {
+    transition: none;
+  }
+  .tarjeta:hover {
+    transform: none;
+  }
+}
+.trayecto {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+}
+.ciudad {
+  font-size: var(--t-h3);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+.flecha {
+  display: inline-flex;
+  color: var(--s-cielo-deep);
+}
+.flecha svg {
+  width: 18px;
+  height: 18px;
+}
+.precio {
+  display: grid;
+  gap: 2px;
+}
+.desde {
+  font-size: var(--t-small);
+  color: var(--s-muted);
+}
+.precio strong {
+  font-size: clamp(26px, 2.6vw, 32px);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+.usd {
+  font-size: var(--t-small);
+  color: var(--s-muted);
+}
+.datos {
+  display: grid;
+  gap: 8px;
+  padding-top: 14px;
+  border-top: 1px solid var(--s-line-2);
+  font-size: var(--t-small);
+}
+.datos > span {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.datos svg {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  color: var(--s-cielo-deep);
+}
+.cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  color: var(--s-cielo-deep);
+}
+.cta svg {
+  width: 18px;
+  height: 18px;
+  transition: transform var(--dur) var(--ease);
+}
+.tarjeta:hover .cta svg {
+  transform: translateX(3px);
+}

@@ -1,0 +1,656 @@
+/* ─── Buscador de pasajes y encomiendas (portada y /viajes) ───────────────────
+   Tokens --s-* de sitio.css. Los campos (ciudad, fecha) son propios del sitio: no usan
+   los de components/campos, que siguen el tema del panel. */
+
+.buscador {
+  display: grid;
+  gap: 14px;
+}
+
+/* ── Pestañas ─────────────────────────────────────────────────────────────── */
+.pestanas {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  width: fit-content;
+  max-width: 100%;
+  border-radius: var(--r-full);
+  background: var(--s-canvas);
+}
+.pestana {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 20px;
+  border: 0;
+  border-radius: var(--r-full);
+  background: transparent;
+  color: var(--s-muted);
+  font: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    background-color var(--dur) ease,
+    color var(--dur) ease,
+    box-shadow var(--dur) ease;
+}
+.pestana svg {
+  width: 20px;
+  height: 20px;
+  flex: none;
+}
+.pestana:hover {
+  color: var(--s-ink);
+}
+.pestana[aria-selected="true"] {
+  background: var(--s-ink);
+  color: #fff;
+  box-shadow: var(--sh-1);
+}
+.pestana[aria-selected="true"][data-tono="coral"] {
+  background: var(--s-coral-deep);
+}
+@media (max-width: 420px) {
+  .pestana {
+    padding: 0 16px;
+  }
+}
+
+/* ── Rejilla del formulario ───────────────────────────────────────────────── */
+.formulario {
+  display: grid;
+  gap: 12px;
+  align-items: start;
+}
+.ruta {
+  position: relative;
+  display: grid;
+  gap: 12px;
+}
+@media (min-width: 900px) {
+  .formulario {
+    grid-template-columns: minmax(0, 2.3fr) minmax(0, 1fr) auto;
+    column-gap: 12px;
+  }
+  .ruta {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    column-gap: 24px;
+  }
+  .accion {
+    padding-top: 22px; /* a la altura de las cajas, no de las etiquetas */
+  }
+  .accion :global(.s-boton) {
+    min-width: 160px;
+  }
+}
+@media (max-width: 899px) and (min-width: 600px) {
+  .formulario {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+  .ruta {
+    grid-column: 1 / -1;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    column-gap: 24px;
+  }
+  .accion {
+    padding-top: 22px;
+  }
+}
+
+/* Botón intercambiar, sobre la unión de origen y destino */
+.intercambiar {
+  position: absolute;
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1.5px solid var(--s-line-2);
+  border-radius: var(--r-full);
+  background: var(--s-paper);
+  color: var(--s-cielo-deep);
+  cursor: pointer;
+  box-shadow: var(--sh-1);
+  transition:
+    transform 240ms var(--ease),
+    border-color var(--dur) ease,
+    background-color var(--dur) ease;
+  /* Móvil: a la derecha, entre los dos campos */
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+.intercambiar svg {
+  width: 20px;
+  height: 20px;
+}
+.iconoH {
+  display: none;
+}
+.intercambiar:hover {
+  border-color: var(--s-cielo-deep);
+  background: var(--s-cielo-soft);
+}
+.intercambiar:active {
+  transform: translateY(-50%) scale(0.94);
+}
+@media (min-width: 600px) {
+  .intercambiar {
+    right: auto;
+    top: 48px;
+    left: 50%;
+    transform: translate(-50%, -50%);
+  }
+  .iconoH {
+    display: block;
+  }
+  .iconoV {
+    display: none;
+  }
+  .intercambiar:active {
+    transform: translate(-50%, -50%) scale(0.94);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .intercambiar {
+    transition: none;
+  }
+}
+
+/* ── Campo (etiqueta + caja) ──────────────────────────────────────────────── */
+.campo {
+  position: relative;
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  align-content: start;
+}
+.etiqueta {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--s-muted);
+}
+.entrada {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  height: 52px;
+  border: 1.5px solid var(--s-line-2);
+  border-radius: var(--r-md);
+  background: var(--s-paper);
+  transition:
+    border-color var(--dur) ease,
+    box-shadow var(--dur) ease;
+}
+.entrada:hover {
+  border-color: var(--s-ink-3);
+}
+.entrada:focus-within {
+  border-color: var(--s-cielo-deep);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--s-cielo-deep) 18%, transparent);
+}
+[data-invalido="true"] .entrada {
+  border-color: var(--s-error);
+}
+.icono {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 44px;
+  color: var(--s-cielo-deep);
+}
+.icono svg {
+  width: 20px;
+  height: 20px;
+}
+.input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0 14px 0 0;
+  border: 0;
+  background: transparent;
+  color: var(--s-ink);
+  font: inherit;
+  font-size: 16px; /* 16 px: iOS no hace zoom al enfocar */
+  font-weight: 600;
+  text-overflow: ellipsis;
+}
+.input::placeholder {
+  font-weight: 400;
+  color: var(--s-muted);
+  opacity: 1;
+}
+/* El foco lo muestra la caja entera */
+.entrada .input:focus-visible {
+  outline: none;
+}
+.sufijo {
+  flex: none;
+  padding-right: 14px;
+  color: var(--s-muted);
+  font-size: 15px;
+  font-weight: 600;
+}
+.error {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.3;
+  color: var(--s-error);
+}
+
+/* Lista de ciudades */
+.lista {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% - 4px);
+  left: 0;
+  right: 0;
+  max-height: min(320px, 46dvh);
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--s-line);
+  border-radius: var(--r-md);
+  background: var(--s-paper);
+  box-shadow: var(--sh-3);
+}
+.campo:has([data-invalido]) .lista,
+.campo[data-invalido="true"] .lista {
+  top: calc(100% - 24px);
+}
+.opcion {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 44px;
+  padding: 10px 12px;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  align-items: center;
+}
+.opcion[data-activa] {
+  background: var(--s-cielo-soft);
+}
+.opcion[aria-selected="true"] .opcionNombre {
+  color: var(--s-cielo-deep);
+}
+.opcionNombre {
+  font-weight: 600;
+  font-size: 16px;
+  min-width: 0;
+}
+.opcionEstado {
+  flex: none;
+  font-size: 13px;
+  color: var(--s-muted);
+}
+.sinResultados {
+  padding: 16px 12px;
+  font-size: var(--t-small);
+  color: var(--s-muted);
+}
+
+/* ── Fecha ────────────────────────────────────────────────────────────────── */
+.disparador {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--s-ink);
+  font: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.disparadorTexto {
+  min-width: 0;
+  padding-right: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.disparadorRel {
+  font-weight: 400;
+  color: var(--s-muted);
+}
+.entrada:has(.disparador:focus-visible) {
+  border-color: var(--s-cielo-deep);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--s-cielo-deep) 18%, transparent);
+}
+.entrada .disparador:focus-visible {
+  outline: none;
+}
+
+.atajos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1.5px solid var(--s-line-2);
+  border-radius: var(--r-full);
+  background: var(--s-paper);
+  color: var(--s-ink);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    background-color var(--dur) ease,
+    border-color var(--dur) ease,
+    color var(--dur) ease;
+}
+.chip:hover {
+  border-color: var(--s-ink);
+}
+.chip[aria-pressed="true"] {
+  background: var(--s-ink);
+  border-color: var(--s-ink);
+  color: #fff;
+}
+
+/* Popover del calendario: bajo el campo en escritorio, hoja inferior en móvil */
+.telon {
+  display: none;
+}
+.popover {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 6px);
+  left: 0;
+  width: min(340px, calc(100vw - 2 * var(--m)));
+  padding: 12px 12px 8px;
+  border: 1px solid var(--s-line);
+  border-radius: var(--r-lg);
+  background: var(--s-paper);
+  box-shadow: var(--sh-3);
+}
+.cerrarHoja {
+  display: none;
+}
+@media (max-width: 599px) {
+  .telon {
+    display: block;
+    position: fixed;
+    z-index: 90;
+    inset: 0;
+    border: 0;
+    padding: 0;
+    background: rgb(15 27 51 / 0.5);
+  }
+  .popover {
+    position: fixed;
+    z-index: 91;
+    inset: auto 0 0 0;
+    width: auto;
+    padding: 16px 16px calc(12px + env(safe-area-inset-bottom));
+    border: 0;
+    border-radius: var(--r-xl) var(--r-xl) 0 0;
+    animation: subir 220ms var(--ease);
+  }
+  .cerrarHoja {
+    display: block;
+    width: 100%;
+    min-height: 48px;
+    margin-top: 8px;
+    border: 0;
+    border-radius: var(--r-full);
+    background: var(--s-canvas);
+    color: var(--s-ink);
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+  }
+}
+@keyframes subir {
+  from {
+    transform: translateY(24px);
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .popover {
+    animation: none;
+  }
+}
+
+.cal {
+  display: grid;
+  gap: 8px;
+}
+.calCab {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.calTitulo {
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: capitalize;
+}
+.calNav {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-full);
+  background: transparent;
+  color: var(--s-ink);
+  cursor: pointer;
+}
+.calNav:hover:not(:disabled) {
+  background: var(--s-canvas);
+}
+.calNav:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+.calNav svg {
+  width: 18px;
+  height: 18px;
+}
+.calRejilla {
+  display: grid;
+}
+.calFila {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+}
+.calDiaSemana {
+  padding: 4px 0;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--s-muted);
+}
+.calCelda {
+  display: flex;
+  justify-content: center;
+}
+.calDia {
+  width: 100%;
+  max-width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-full);
+  background: transparent;
+  color: var(--s-ink);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.calDia:hover:not(:disabled) {
+  background: var(--s-cielo-soft);
+}
+.calDia[data-hoy] {
+  box-shadow: inset 0 0 0 1.5px var(--s-cielo-deep);
+}
+.calDia[data-elegido] {
+  background: var(--s-ink);
+  color: #fff;
+}
+.calDia:disabled {
+  color: var(--s-line-2);
+  cursor: not-allowed;
+}
+
+/* ── Acción ───────────────────────────────────────────────────────────────── */
+.accion {
+  display: grid;
+}
+.accion :global(.s-boton) {
+  width: 100%;
+  min-height: 52px;
+}
+.pie {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+}
+.aviso {
+  font-size: var(--t-small);
+  color: var(--s-muted);
+}
+
+/* ── Hero / compacto ──────────────────────────────────────────────────────── */
+.hero {
+  padding: clamp(14px, 2.2vw, 24px);
+  border-radius: var(--r-xl);
+  background: var(--s-paper);
+  box-shadow: var(--sh-3);
+}
+.compacto {
+  padding: clamp(12px, 1.6vw, 16px);
+  border-radius: var(--r-lg);
+  background: var(--s-paper);
+  box-shadow: var(--sh-2);
+}
+.compacto .buscador {
+  gap: 10px;
+}
+@media (max-width: 599px) {
+  .hero .entrada,
+  .compacto .entrada {
+    height: 48px;
+  }
+  .hero {
+    border-radius: var(--r-lg);
+  }
+}
+
+/* ── Encomiendas: resultados ──────────────────────────────────────────────── */
+.resultados {
+  display: grid;
+  gap: 10px;
+  padding-top: 4px;
+}
+.resultadosTitulo {
+  font-size: var(--t-small);
+  font-weight: 600;
+  color: var(--s-ink);
+}
+.opciones {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+@media (min-width: 900px) {
+  .opciones {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+.opcionEnvio {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 16px;
+  align-items: center;
+  padding: 14px 16px;
+  border: 1px solid var(--s-line);
+  border-radius: var(--r-md);
+  background: var(--s-canvas);
+}
+.opcionEnvioNombre {
+  font-size: var(--t-body);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+}
+.opcionEnvioMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  font-size: var(--t-small);
+  color: var(--s-muted);
+}
+.opcionEnvioPrecio {
+  grid-row: 1 / span 2;
+  grid-column: 2;
+  text-align: right;
+  display: grid;
+  gap: 0;
+}
+.opcionEnvioPrecio strong {
+  font-size: 22px;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+.opcionEnvioPrecio span {
+  font-size: 13px;
+  color: var(--s-muted);
+}
+.opcionEnvioAccion {
+  grid-column: 1 / -1;
+  margin-top: 8px;
+}
+.opcionEnvioAccion :global(.s-boton) {
+  width: 100%;
+}
+.vacio {
+  padding: 14px 16px;
+  border-radius: var(--r-md);
+  background: var(--s-canvas);
+  font-size: var(--t-small);
+  color: var(--s-ink);
+}
+.vacio[data-tono="error"] {
+  background: var(--s-error-soft);
+  color: var(--s-error);
+}
+
+.celdaFecha {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+  min-width: 0;
+}

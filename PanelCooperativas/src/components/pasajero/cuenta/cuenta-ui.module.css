@@ -1,0 +1,355 @@
+/* Piezas comunes del área de cuenta: cabecera, pestañas, chips, tarjetas tipo pase, avisos. */
+
+.pagina {
+  display: grid;
+  gap: 24px;
+  min-width: 0;
+}
+
+.cabecera {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 16px;
+}
+.cabecera h1 {
+  font-size: clamp(26px, 3.4vw, 36px);
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+  color: var(--s-ink);
+}
+.cabecera p {
+  margin-top: 4px;
+  font-size: var(--t-small);
+  color: var(--s-muted);
+}
+
+/* ─── Pestañas (enlaces, el estado vive en la URL) ───────────────────────── */
+.pestanas {
+  max-width: 100%;
+}
+.pestanas ul {
+  display: inline-flex;
+  max-width: 100%;
+  gap: 4px;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  border-radius: var(--r-full);
+  background: var(--s-canvas-2);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.pestanas ul::-webkit-scrollbar {
+  display: none;
+}
+.pestana {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 18px;
+  border-radius: var(--r-full);
+  color: var(--s-muted);
+  font-size: 15px;
+  font-weight: 600;
+  white-space: nowrap;
+  text-decoration: none;
+  transition:
+    background-color var(--dur) ease,
+    color var(--dur) ease;
+}
+.pestana:hover {
+  color: var(--s-ink);
+}
+.pestana[aria-current="page"] {
+  background: var(--s-paper);
+  color: var(--s-ink);
+  box-shadow: var(--sh-1);
+}
+.cuenta {
+  min-width: 22px;
+  padding: 3px 7px;
+  border-radius: var(--r-full);
+  background: var(--s-paper);
+  color: var(--s-ink);
+  font-size: var(--t-xs);
+  line-height: 1;
+  text-align: center;
+}
+.pestana[aria-current="page"] .cuenta {
+  background: var(--s-canvas-2);
+}
+
+/* ─── Chips de estado ────────────────────────────────────────────────────── */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 0 12px;
+  border-radius: var(--r-full);
+  font-size: var(--t-xs);
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  background: var(--s-canvas-2);
+  color: var(--s-ink);
+}
+.chip svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+.chip[data-tono="ok"] {
+  background: var(--s-ok-soft);
+  color: var(--s-ok);
+}
+.chip[data-tono="aviso"] {
+  background: var(--s-sol-soft);
+  color: var(--s-sol-deep);
+}
+.chip[data-tono="error"] {
+  background: var(--s-error-soft);
+  color: var(--s-error);
+}
+.chip[data-tono="info"] {
+  background: var(--s-cielo-soft);
+  color: var(--s-cielo-deep);
+}
+
+/* ─── Lista y tarjeta tipo pase ──────────────────────────────────────────── */
+.lista {
+  display: grid;
+  gap: 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pase {
+  position: relative;
+  display: grid;
+  background: var(--s-paper);
+  border-radius: var(--r-lg);
+  box-shadow: var(--sh-1);
+  overflow: hidden;
+}
+.paseCab {
+  display: grid;
+  gap: 8px;
+  padding: 20px 20px 16px;
+}
+.paseCoop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: var(--t-xs);
+  font-weight: 600;
+  color: var(--s-muted);
+}
+.paseCoop span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.paseRuta {
+  font-size: clamp(20px, 2.4vw, 24px);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  color: var(--s-ink);
+  overflow-wrap: anywhere;
+}
+.paseFecha {
+  font-size: var(--t-small);
+  font-weight: 600;
+  color: var(--s-ink);
+}
+
+/* Perforación entre cabecera y filas */
+.perfora {
+  position: relative;
+  height: 0;
+  margin: 0 16px;
+  border-top: 2px dashed var(--s-line-2);
+}
+.perfora::before,
+.perfora::after {
+  content: "";
+  position: absolute;
+  top: -11px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--s-canvas);
+}
+.perfora::before {
+  left: -26px;
+}
+.perfora::after {
+  right: -26px;
+}
+
+.filas {
+  display: grid;
+  margin: 0;
+  padding: 4px 8px 8px;
+  list-style: none;
+}
+.fila {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px 12px;
+  min-height: 56px;
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  color: inherit;
+  text-decoration: none;
+  transition: background-color var(--dur) ease;
+}
+a.fila:hover {
+  background: var(--s-canvas);
+}
+.filaTexto {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.filaTitulo {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--s-ink);
+  overflow-wrap: anywhere;
+}
+.filaSub {
+  font-size: var(--t-xs);
+  color: var(--s-muted);
+  overflow-wrap: anywhere;
+}
+.codigo {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+}
+.filaFin {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+/* ─── Cuenta regresiva ───────────────────────────────────────────────────── */
+.contador {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: var(--r-md);
+  background: var(--s-sol-soft);
+  color: var(--s-sol-deep);
+  font-size: var(--t-small);
+  font-weight: 600;
+}
+.contador svg {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  margin-top: 1px;
+}
+.contador strong {
+  font-variant-numeric: tabular-nums;
+  font-size: 17px;
+}
+.contador[data-vencida="true"] {
+  background: var(--s-canvas-2);
+  color: var(--s-ink);
+}
+.contadorMini {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 20px 14px;
+  font-size: var(--t-xs);
+  font-weight: 700;
+  color: var(--s-sol-deep);
+  font-variant-numeric: tabular-nums;
+}
+.contadorMini svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* ─── Vacío, avisos y error de carga ─────────────────────────────────────── */
+.vacio {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  padding: clamp(32px, 6vw, 56px) 20px;
+  border-radius: var(--r-lg);
+  background: var(--s-paper);
+  box-shadow: var(--sh-1);
+  text-align: center;
+}
+.vacio h2 {
+  font-size: var(--t-h3);
+  letter-spacing: -0.02em;
+  color: var(--s-ink);
+}
+.vacio p {
+  max-width: 44ch;
+  font-size: var(--t-small);
+}
+.vacioAcciones {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.aviso {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: var(--r-md);
+  background: var(--s-cielo-soft);
+  color: var(--s-ink);
+  font-size: var(--t-small);
+}
+.aviso svg {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  margin-top: 1px;
+  color: var(--s-cielo-deep);
+}
+.aviso[data-tono="aviso"] {
+  background: var(--s-sol-soft);
+}
+.aviso[data-tono="aviso"] svg {
+  color: var(--s-sol-deep);
+}
+.aviso[data-tono="error"] {
+  background: var(--s-error-soft);
+}
+.aviso[data-tono="error"] svg {
+  color: var(--s-error);
+}
+.aviso[data-tono="ok"] {
+  background: var(--s-ok-soft);
+}
+.aviso[data-tono="ok"] svg {
+  color: var(--s-ok);
+}
+.aviso strong {
+  display: block;
+  color: var(--s-ink);
+}
+
+.masCargas {
+  font-size: var(--t-xs);
+  text-align: center;
+}

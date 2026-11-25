@@ -1,0 +1,151 @@
+/* Cuenta en la barra del sitio (escritorio). El ancho está reservado: sin salto al leer la sesión. */
+.raiz {
+  position: relative;
+  display: none;
+  align-items: center;
+  min-width: 112px;
+  min-height: 44px;
+  justify-content: flex-end;
+}
+
+.reserva {
+  width: 112px;
+  height: 44px;
+}
+
+.ingresar,
+.boton {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 14px 0 8px;
+  border: 1px solid var(--s-line-2);
+  border-radius: var(--r-full);
+  background: var(--s-paper);
+  color: var(--s-ink);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: border-color var(--dur) ease;
+}
+.ingresar {
+  padding-left: 14px;
+}
+.ingresar svg {
+  width: 20px;
+  height: 20px;
+}
+.ingresar:hover,
+.boton:hover,
+.boton[aria-expanded="true"] {
+  border-color: var(--s-ink);
+}
+
+.inicial {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--s-sol);
+  color: var(--s-ink);
+  font-size: 14px;
+  font-weight: 700;
+}
+.inicial svg {
+  width: 16px;
+  height: 16px;
+}
+.nombre {
+  max-width: 11ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.flecha {
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+
+.menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 60;
+  width: 260px;
+  padding: 8px;
+  border: 1px solid var(--s-line);
+  border-radius: var(--r-md);
+  background: var(--s-paper);
+  box-shadow: var(--sh-3);
+}
+.menu ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.titulo {
+  padding: 8px 12px 10px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--s-line);
+  font-size: var(--t-small);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--s-ink);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 500;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+.item svg {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  color: var(--s-muted);
+}
+.item:hover {
+  background: var(--s-canvas);
+}
+
+/* Menú móvil: filas del mismo estilo que los demás enlaces del panel. */
+.filaMovil {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 56px;
+  padding: 0;
+  border: 0;
+  border-bottom: 1px solid var(--s-line);
+  background: transparent;
+  color: var(--s-ink);
+  font: inherit;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+@media (min-width: 1180px) {
+  .raiz {
+    display: flex;
+  }
+}

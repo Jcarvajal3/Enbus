@@ -140,6 +140,8 @@ interface SeatSelectorProps {
   maxSeleccion?: number;
   /** Se está cobrando: el mapa queda bloqueado. */
   bloqueado?: boolean;
+  /** Quién lo usa: la taquilla "vende"; el pasajero "compra" (solo cambia los textos). */
+  modo?: "taquilla" | "pasajero";
 }
 
 export function SeatSelector({
@@ -151,6 +153,7 @@ export function SeatSelector({
   onReintentar,
   maxSeleccion = 10,
   bloqueado = false,
+  modo = "taquilla",
 }: SeatSelectorProps) {
   const [limiteAlcanzado, setLimiteAlcanzado] = useState(false);
   const filas = filasDe(totalAsientos);
@@ -236,7 +239,7 @@ export function SeatSelector({
       <div className="flex flex-col items-center gap-2 text-[13px] text-muted-foreground">
         <Leyenda />
         <p className="tabular-nums">
-          {libres} libres de {totalAsientos} · máx. {maxSeleccion} por venta
+          {libres} libres de {totalAsientos} · máx. {maxSeleccion} {modo === "pasajero" ? "por compra" : "por venta"}
         </p>
       </div>
 
@@ -245,7 +248,9 @@ export function SeatSelector({
           role="alert"
           className="w-full max-w-sm rounded-md bg-warning-light px-4 py-3 text-[13px] text-warning-text"
         >
-          Puedes vender hasta {maxSeleccion} asientos por compra.
+          {modo === "pasajero"
+            ? `Puedes elegir hasta ${maxSeleccion} asientos por compra.`
+            : `Puedes vender hasta ${maxSeleccion} asientos por compra.`}
         </p>
       )}
 

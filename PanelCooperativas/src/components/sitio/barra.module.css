@@ -96,6 +96,10 @@
 .coop {
   display: none;
 }
+/* Cuenta en el panel móvil: la rellena el cliente; vacía no ocupa lugar. */
+.panelCuenta:empty {
+  display: none;
+}
 
 .hamburguesa {
   display: none;
@@ -197,11 +201,15 @@
     margin-left: auto;
     gap: 20px;
   }
-  .coop {
-    display: inline-flex;
-  }
   .panel {
     display: none;
+  }
+}
+
+/* "Para cooperativas" solo cuando sobra ancho: sigue en el menú móvil y en el pie. */
+@media (min-width: 1360px) {
+  .coop {
+    display: inline-flex;
   }
 }
 

@@ -25,8 +25,8 @@ function grupos(): Grupo[] {
   const hayTienda = Boolean(android || ios);
 
   const textoApp = hayTienda
-    ? `Está en ${[android && "Google Play", ios && "App Store"].filter(Boolean).join(" y en ")}. Con tu cuenta compras pasajes, envías encomiendas y guardas tus pases de abordar.`
-    : "La app de EnBus llega muy pronto a Google Play y App Store. Mientras tanto, rastrear un envío no necesita la app: se hace en esta misma página.";
+    ? `Está en ${[android && "Google Play", ios && "App Store"].filter(Boolean).join(" y en ")}. Con tu cuenta compras pasajes, envías encomiendas y guardas tus pases de abordar. Todo eso también lo haces en esta web.`
+    : "La app de EnBus llega muy pronto a Google Play y App Store. Mientras tanto, puedes comprar pasajes, enviar encomiendas y rastrearlas desde esta misma web.";
 
   const contenidoApp = hayTienda ? (
     <p>
@@ -42,7 +42,7 @@ function grupos(): Grupo[] {
           App Store
         </a>
       )}
-      . Con tu cuenta compras pasajes, envías encomiendas y guardas tus pases de abordar.
+      . Con tu cuenta compras pasajes, envías encomiendas y guardas tus pases de abordar. Todo eso también lo haces en esta web.
     </p>
   ) : undefined;
 
@@ -54,7 +54,7 @@ function grupos(): Grupo[] {
         {
           pregunta: "¿Cómo compro un pasaje?",
           parrafos: [
-            "En la app de EnBus. Buscas origen, destino y fecha, comparas las salidas de varias cooperativas, eliges tu asiento en el mapa del bus y pagas. Tu pase de abordar queda guardado en la app.",
+            "En esta web o en la app de EnBus. Buscas origen, destino y fecha, comparas las salidas de varias cooperativas, eliges tu asiento en el mapa del bus y pagas. Ver las salidas es gratis y no pide cuenta; para elegir asiento inicias sesión. Tu pase de abordar queda guardado en tu cuenta, en la web y en la app.",
           ],
         },
         {
@@ -97,7 +97,7 @@ function grupos(): Grupo[] {
         {
           pregunta: "¿Qué llevo el día del viaje?",
           parrafos: [
-            "Tu cédula y el pase de abordar con su código QR, que queda guardado en la app. En el andén escanean el QR y te confirman el asiento.",
+            "Tu cédula y el pase de abordar con su código QR, que encuentras en tu cuenta (web o app). En el andén escanean el QR y te confirman el asiento.",
           ],
         },
       ],

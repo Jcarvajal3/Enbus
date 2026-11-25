@@ -1,0 +1,107 @@
+/* Pantallas de acceso del pasajero: tarjeta centrada sobre el fondo del sitio. */
+.pagina {
+  flex: 1;
+  display: grid;
+  align-content: start;
+  justify-items: center;
+  padding: clamp(24px, 6vw, 72px) var(--m) clamp(48px, 8vw, 96px);
+}
+
+.tarjeta {
+  width: min(100%, 460px);
+  display: grid;
+  gap: 24px;
+  padding: clamp(24px, 5vw, 40px);
+  background: var(--s-paper);
+  border-radius: var(--r-lg);
+  box-shadow: var(--sh-2);
+}
+
+.cabeza {
+  display: grid;
+  gap: 8px;
+}
+.cabeza h1 {
+  font-size: clamp(28px, 4.4vw, 34px);
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+.cabeza p {
+  color: var(--s-muted);
+  font-size: var(--t-small);
+  line-height: 1.55;
+}
+
+.cuerpo {
+  display: grid;
+  gap: 20px;
+}
+
+.pie {
+  padding-top: 20px;
+  border-top: 1px solid var(--s-line);
+  text-align: center;
+  font-size: var(--t-small);
+  color: var(--s-muted);
+}
+
+.separador {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--s-muted);
+  font-size: var(--t-xs);
+}
+.separador::before,
+.separador::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--s-line);
+}
+
+.terminos {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  font-size: var(--t-small);
+  line-height: 1.5;
+}
+.terminos label {
+  cursor: pointer;
+}
+.terminos > :first-child {
+  margin-top: 2px;
+}
+
+.acciones {
+  display: grid;
+  gap: 8px;
+}
+
+.estado {
+  display: grid;
+  justify-items: center;
+  gap: 16px;
+  text-align: center;
+}
+.estado :global(.s-icono) {
+  width: 64px;
+  height: 64px;
+  border-radius: 20px;
+}
+.estado :global(.s-icono) svg {
+  width: 32px;
+  height: 32px;
+}
+.estado h1 {
+  font-size: clamp(26px, 4vw, 30px);
+}
+.estado p {
+  color: var(--s-muted);
+  max-width: 38ch;
+}
+.estado strong {
+  color: var(--s-ink);
+  overflow-wrap: anywhere;
+}

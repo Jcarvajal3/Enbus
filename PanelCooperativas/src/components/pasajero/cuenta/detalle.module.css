@@ -1,0 +1,263 @@
+/* Detalle de un boleto o de una encomienda. */
+
+.volver {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  font-size: var(--t-small);
+  font-weight: 600;
+  color: var(--s-cielo-deep);
+  text-decoration: none;
+}
+.volver:hover {
+  text-decoration: underline;
+}
+.volver svg {
+  width: 18px;
+  height: 18px;
+}
+
+.titulo {
+  display: grid;
+  gap: 8px;
+}
+.titulo h1 {
+  font-size: clamp(24px, 3.2vw, 34px);
+  letter-spacing: -0.03em;
+  line-height: 1.12;
+  color: var(--s-ink);
+  overflow-wrap: anywhere;
+}
+.titulo .meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  font-size: var(--t-small);
+}
+
+.columnas {
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+}
+.columnas > * {
+  min-width: 0;
+}
+@media (min-width: 1100px) {
+  .columnas {
+    grid-template-columns: minmax(0, 420px) minmax(0, 1fr);
+    align-items: start;
+  }
+}
+
+.apilado {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.tarjeta {
+  display: grid;
+  gap: 14px;
+  padding: clamp(18px, 2.2vw, 24px);
+  border-radius: var(--r-lg);
+  background: var(--s-paper);
+  box-shadow: var(--sh-1);
+}
+.tarjeta h2 {
+  font-size: 18px;
+  letter-spacing: -0.015em;
+  color: var(--s-ink);
+}
+
+/* QR dentro del pase */
+.qrCaja {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding: 20px;
+  text-align: center;
+}
+.qrMarco {
+  width: min(100%, 260px);
+  padding: 8px;
+  border-radius: var(--r-md);
+  background: #fff;
+  border: 1px solid var(--s-line);
+}
+.qrCodigo {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: var(--s-ink);
+  font-variant-numeric: tabular-nums;
+}
+.qrAyuda {
+  max-width: 34ch;
+  font-size: var(--t-xs);
+}
+
+/* Datos en cuadrícula */
+.datos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 14px 16px;
+  margin: 0;
+}
+.datos dt {
+  font-size: var(--t-xs);
+  font-weight: 600;
+  color: var(--s-muted);
+}
+.datos dd {
+  margin: 2px 0 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--s-ink);
+  overflow-wrap: anywhere;
+}
+.datos dd small {
+  display: block;
+  font-size: var(--t-xs);
+  font-weight: 500;
+  color: var(--s-muted);
+}
+.ancho {
+  grid-column: 1 / -1;
+}
+
+.acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.acciones > * {
+  flex: 1 1 180px;
+}
+
+.peligro {
+  color: var(--s-error);
+}
+
+/* Hermanos de la compra */
+.hermanos {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Línea de tiempo */
+.tiempo {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.paso {
+  position: relative;
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 12px;
+  padding-bottom: 18px;
+}
+.paso:last-child {
+  padding-bottom: 0;
+}
+.paso::before {
+  content: "";
+  position: absolute;
+  left: 13px;
+  top: 28px;
+  bottom: 0;
+  width: 2px;
+  background: var(--s-line-2);
+}
+.paso:last-child::before {
+  display: none;
+}
+.paso[data-situacion="completada"]::before {
+  background: var(--s-ok);
+}
+.punto {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--s-canvas-2);
+  color: var(--s-muted);
+  border: 2px solid var(--s-line-2);
+}
+.punto svg {
+  width: 14px;
+  height: 14px;
+}
+.paso[data-situacion="completada"] .punto {
+  background: var(--s-ok);
+  border-color: var(--s-ok);
+  color: #fff;
+}
+.paso[data-situacion="actual"] .punto {
+  background: var(--s-sol);
+  border-color: var(--s-sol);
+  color: var(--s-ink);
+}
+.paso[data-situacion="cortada"] .punto {
+  background: var(--s-error);
+  border-color: var(--s-error);
+  color: #fff;
+}
+.pasoTexto {
+  display: grid;
+  gap: 2px;
+  padding-top: 3px;
+}
+.pasoTexto strong {
+  font-size: 16px;
+  color: var(--s-ink);
+}
+.paso[data-situacion="pendiente"] .pasoTexto strong {
+  color: var(--s-muted);
+  font-weight: 600;
+}
+.pasoTexto span {
+  font-size: var(--t-xs);
+}
+
+/* PIN */
+.pin {
+  display: flex;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.pin li {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 68px;
+  border-radius: var(--r-md);
+  background: var(--s-ink);
+  color: var(--s-sol);
+  font-size: 32px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.foto {
+  width: 100%;
+  max-height: 420px;
+  object-fit: contain;
+  border-radius: var(--r-md);
+  background: var(--s-canvas-2);
+}
+
+.pagoCaja {
+  display: grid;
+  gap: 16px;
+}

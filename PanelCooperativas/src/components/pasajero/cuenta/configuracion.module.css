@@ -1,0 +1,75 @@
+.seccion {
+  display: grid;
+  gap: 18px;
+  padding: clamp(18px, 2.4vw, 28px);
+  border-radius: var(--r-lg);
+  background: var(--s-paper);
+  box-shadow: var(--sh-1);
+}
+.seccionCab h2 {
+  font-size: var(--t-h3);
+  letter-spacing: -0.02em;
+  color: var(--s-ink);
+}
+.seccionCab p {
+  margin-top: 4px;
+  font-size: var(--t-small);
+}
+
+.formulario {
+  display: grid;
+  gap: 18px;
+  max-width: 520px;
+}
+
+.interruptores {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.interruptor {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 64px;
+  padding: 12px 0;
+  border-top: 1px solid var(--s-line);
+}
+.interruptor:first-child {
+  border-top: 0;
+}
+.interruptorTexto {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.interruptorTexto strong {
+  font-size: 16px;
+  color: var(--s-ink);
+}
+.interruptorTexto span {
+  font-size: var(--t-small);
+}
+
+.peligro {
+  border: 1px solid var(--s-error-soft);
+}
+.peligro h2 {
+  color: var(--s-error);
+}
+
+.lista {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-left: 20px;
+  font-size: var(--t-small);
+}
+
+.enlaces {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}

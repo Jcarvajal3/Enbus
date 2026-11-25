@@ -35,8 +35,8 @@ const BENEFICIOS = [
 export function Encomiendas(_props: { tasa: TasaRef | null }) {
   const pasos = [
     {
-      titulo: "Créalo en la app",
-      texto: "Dices qué envías y quién lo retira. Ves el costo estimado en dólares y en bolívares antes de salir de casa.",
+      titulo: "Créalo en la web o en la app",
+      texto: "Dices qué envías y quién lo retira. Ves el costo estimado en bolívares y en dólares antes de salir de casa.",
     },
     {
       titulo: "Llévalo a la taquilla",

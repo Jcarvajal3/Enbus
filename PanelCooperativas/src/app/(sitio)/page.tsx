@@ -1,19 +1,19 @@
 import type { Metadata } from "next";
 
-import { Beneficios } from "@/components/sitio/inicio/beneficios";
-import { ComoFunciona } from "@/components/sitio/inicio/como-funciona";
 import { Descarga } from "@/components/sitio/inicio/descarga";
 import { Encomiendas } from "@/components/sitio/inicio/encomiendas";
 import { Hero } from "@/components/sitio/inicio/hero";
 import { Preguntas } from "@/components/sitio/inicio/preguntas";
+import { ProximasSalidas } from "@/components/sitio/inicio/proximas-salidas";
 import { RutasPopulares } from "@/components/sitio/inicio/rutas";
 import { Revelar } from "@/components/sitio/revelar";
-import { estadisticas, rutasPopulares, tasaBCV } from "@/lib/sitio/consultas";
+import { ciudadesConSalidas, proximasSalidas } from "@/lib/pasajero/viajes";
+import { rutasPopulares, tasaBCV } from "@/lib/sitio/consultas";
 import { sitioUrl } from "@/lib/sitio/urls";
 
 const TITULO = "EnBus · Pasajes de bus y encomiendas en Venezuela";
 const DESCRIPCION =
-  "Compra tu pasaje de bus desde el teléfono, elige tu asiento y paga en bolívares a la tasa BCV. Envía encomiendas con seguimiento y PIN de retiro. Cooperativas verificadas en toda Venezuela.";
+  "Busca pasajes de bus por ciudad y fecha, elige tu asiento y paga en bolívares a la tasa BCV. Cotiza y envía encomiendas con seguimiento. Cooperativas verificadas en toda Venezuela.";
 
 export const metadata: Metadata = {
   title: { absolute: TITULO },
@@ -23,18 +23,22 @@ export const metadata: Metadata = {
   ...(sitioUrl() ? { alternates: { canonical: "/" } } : {}),
 };
 
-// Regenera la portada cada 30 min (ISR): rutas, cifras y tasa BCV vigentes
-// (la tarea programada actualiza la tasa cada 30 min).
-export const revalidate = 1800;
+// Regenera la portada cada 2 min (ISR): salidas, rutas y tasa BCV vigentes. Sin sesión ni cookies:
+// el menú de la cuenta vive en la barra (cliente), así la portada sigue siendo estática.
+export const revalidate = 120;
 
 /**
- * Portada para el pasajero: qué es EnBus y por qué conviene (portada y beneficios),
- * cómo se compra, rutas reales, encomiendas con rastreo, preguntas y la app.
- * Lo de las cooperativas vive en /cooperativas.
+ * Portada para el pasajero: buscador de pasajes y encomiendas arriba, próximas salidas reales,
+ * rutas populares, rastreo, preguntas y la app. Lo de las cooperativas vive en /cooperativas.
  */
 export default async function Portada() {
   // Cada consulta devuelve null/[] sin configuración o ante un error: la portada se adapta.
-  const [rutas, tasa, stats] = await Promise.all([rutasPopulares(9), tasaBCV(), estadisticas()]);
+  const [ciudades, salidas, rutas, tasa] = await Promise.all([
+    ciudadesConSalidas(),
+    proximasSalidas({ limite: 24 }),
+    rutasPopulares(9),
+    tasaBCV(),
+  ]);
 
   const url = sitioUrl();
   const jsonLd = [
@@ -57,9 +61,8 @@ export default async function Portada() {
 
   return (
     <>
-      <Hero ruta={rutas[0] ?? null} tasa={tasa} stats={stats} />
-      <Beneficios />
-      <ComoFunciona />
+      <Hero ciudades={ciudades} tasa={tasa} />
+      <ProximasSalidas viajes={salidas} tasa={tasa} />
       <RutasPopulares rutas={rutas} tasa={tasa} />
       <Encomiendas tasa={tasa} />
       <Preguntas />

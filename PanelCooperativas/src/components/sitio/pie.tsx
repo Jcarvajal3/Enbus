@@ -10,7 +10,8 @@ const COLUMNAS = [
     id: "pie-viajar",
     titulo: "Viajar",
     enlaces: [
-      { href: "/#como-funciona", texto: "Cómo funciona" },
+      { href: "/viajes", texto: "Buscar pasajes" },
+      { href: "/#salidas", texto: "Próximas salidas" },
       { href: "/#rutas", texto: "Rutas" },
       { href: "/#preguntas", texto: "Preguntas" },
       { href: "/#descargar", texto: "Descargar la app" },

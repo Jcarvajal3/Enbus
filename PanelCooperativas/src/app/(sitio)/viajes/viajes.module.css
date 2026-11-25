@@ -1,0 +1,203 @@
+/* /viajes: banda con el buscador, tira de fechas y resultados. */
+
+.banda {
+  background:
+    radial-gradient(70% 120% at 90% 0%, color-mix(in srgb, var(--s-cielo-deep) 35%, transparent) 0%, transparent 70%),
+    var(--s-ink);
+  color: var(--s-on-night);
+  padding-block: clamp(20px, 3vw, 36px) clamp(24px, 3vw, 36px);
+}
+.bandaInterior {
+  display: grid;
+  gap: clamp(16px, 2vw, 24px);
+}
+.titulo {
+  font-size: clamp(26px, 3.4vw, 42px);
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+}
+.sub {
+  margin-top: 6px;
+  color: var(--s-on-night-muted);
+  font-size: var(--t-small);
+}
+
+.cuerpo {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: clamp(16px, 2vw, 24px);
+  padding-block: clamp(20px, 3vw, 32px) clamp(48px, 6vw, 88px);
+  min-width: 0;
+}
+.subtitulo {
+  font-size: var(--t-h3);
+}
+.rutas {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+@media (max-width: 1000px) {
+  .rutas {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 600px) {
+  .rutas {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Filtros (columna) + resultados */
+.rejilla {
+  display: grid;
+  gap: 16px;
+  align-items: start;
+  min-width: 0;
+}
+@media (min-width: 900px) {
+  .rejilla {
+    grid-template-columns: 280px minmax(0, 1fr);
+    gap: 24px;
+  }
+}
+.principal {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+.barra {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+}
+.conteo {
+  font-size: var(--t-body);
+}
+.orden {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.ordenRotulo {
+  font-size: var(--t-small);
+  color: var(--s-muted);
+}
+.pildora {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1.5px solid var(--s-line-2);
+  border-radius: var(--r-full);
+  background: var(--s-paper);
+  color: var(--s-ink);
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  transition:
+    background-color var(--dur) ease,
+    border-color var(--dur) ease;
+}
+.pildora:hover {
+  border-color: var(--s-ink);
+}
+.pildora[aria-current="true"] {
+  background: var(--s-ink);
+  border-color: var(--s-ink);
+  color: #fff;
+}
+.lista {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.nota {
+  font-size: var(--t-small);
+  color: var(--s-muted);
+  max-width: 68ch;
+}
+
+/* Estados vacíos */
+.vacio {
+  display: grid;
+  justify-items: start;
+  gap: 14px;
+  padding: clamp(24px, 4vw, 40px);
+  border-radius: var(--r-xl);
+  background: var(--s-paper);
+  box-shadow: var(--sh-1);
+}
+.vacio h2 {
+  font-size: clamp(22px, 2.4vw, 28px);
+  letter-spacing: -0.025em;
+}
+.vacio p {
+  color: var(--s-muted);
+  max-width: 60ch;
+}
+.fechas {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.fecha {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 56px;
+  padding: 10px 16px;
+  border: 1.5px solid var(--s-line-2);
+  border-radius: var(--r-md);
+  color: var(--s-ink);
+  text-decoration: none;
+  transition: border-color var(--dur) ease;
+}
+.fecha:hover {
+  border-color: var(--s-ink);
+}
+.fecha strong {
+  flex: 1;
+}
+.fecha span {
+  font-size: var(--t-small);
+  color: var(--s-muted);
+}
+.fecha svg {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  color: var(--s-cielo-deep);
+}
+.otrosTitulo {
+  margin-top: 8px;
+  font-weight: 600;
+  color: var(--s-ink);
+}
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.chipEnlace {
+  min-height: 40px;
+  padding: 0 16px;
+  font-size: 14px;
+  text-decoration: none;
+}

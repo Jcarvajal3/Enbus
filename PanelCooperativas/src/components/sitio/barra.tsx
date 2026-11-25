@@ -4,11 +4,12 @@ import { RUTAS_PANEL, RUTAS_SITIO } from "@/lib/sitio/urls";
 import { BarraMenu } from "./barra-menu";
 import estilos from "./barra.module.css";
 
-/** Secciones de la portada. Con "/#…" sirven igual desde las demás páginas del sitio. */
+/** Compra (Pasajes, Encomiendas) y secciones de la portada. Con "/#…" sirven igual desde las demás páginas. */
 export const SECCIONES = [
-  { href: "/#como-funciona", texto: "Cómo funciona" },
+  { href: "/viajes", texto: "Pasajes" },
+  { href: "/enviar", texto: "Encomiendas" },
+  { href: "/#salidas", texto: "Próximas salidas" },
   { href: "/#rutas", texto: "Rutas" },
-  { href: "/#encomiendas", texto: "Encomiendas" },
   { href: "/#rastrear", texto: "Rastrear envío" },
   { href: "/#preguntas", texto: "Preguntas" },
 ] as const;
