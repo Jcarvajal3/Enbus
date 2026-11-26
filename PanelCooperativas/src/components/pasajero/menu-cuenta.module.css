@@ -20,9 +20,9 @@
   gap: 8px;
   min-height: 44px;
   padding: 0 14px 0 8px;
-  border: 1px solid var(--s-line-2);
+  border: 1px solid transparent;
   border-radius: var(--r-full);
-  background: var(--s-paper);
+  background: rgb(12 23 48 / 0.06);
   color: var(--s-ink);
   font: inherit;
   font-size: 15px;
@@ -79,7 +79,7 @@
   width: 260px;
   padding: 8px;
   border: 1px solid var(--s-line);
-  border-radius: var(--r-md);
+  border-radius: 20px;
   background: var(--s-paper);
   box-shadow: var(--sh-3);
 }

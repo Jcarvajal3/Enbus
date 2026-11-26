@@ -9,7 +9,7 @@
     align-content: start;
     gap: 16px;
     position: sticky;
-    top: 88px;
+    top: calc(var(--barra-alto) + 12px);
     padding: 20px;
     border: 1px solid var(--s-line);
     border-radius: var(--r-lg);

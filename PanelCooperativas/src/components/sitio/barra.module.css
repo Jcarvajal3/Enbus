@@ -1,46 +1,41 @@
+/* Barra flotante: una pastilla de cristal que acompaña el scroll, separada del borde. */
 .barra {
   position: sticky;
   top: 0;
   z-index: 50;
-  border-bottom: 1px solid transparent;
-  transition:
-    border-color var(--dur) ease,
-    box-shadow var(--dur) ease;
-}
-/* El desenfoque va en un pseudo-elemento: un backdrop-filter en el propio header
-   volvería su contenedor al panel `fixed` del menú móvil. */
-.barra::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  background: color-mix(in srgb, var(--s-canvas) 86%, transparent);
-  -webkit-backdrop-filter: saturate(160%) blur(14px);
-  backdrop-filter: saturate(160%) blur(14px);
-}
-.barra[data-scroll="true"],
-.barra[data-abierto="true"] {
-  border-bottom-color: var(--s-line);
-  box-shadow: var(--sh-1);
-}
-.barra[data-abierto="true"]::before {
-  background: var(--s-canvas);
+  padding-block: 12px 8px;
 }
 
 .fila {
-  min-height: 72px;
+  position: relative;
+  height: 60px;
   display: flex;
   align-items: center;
-  gap: 24px;
+  gap: 20px;
+  padding: 0 8px 0 22px;
+  border: 1px solid rgb(12 23 48 / 0.07);
+  border-radius: var(--r-full);
+  background: color-mix(in srgb, var(--s-paper) 78%, transparent);
+  -webkit-backdrop-filter: saturate(180%) blur(18px);
+  backdrop-filter: saturate(180%) blur(18px);
+  box-shadow: var(--sh-1);
+  transition:
+    box-shadow 240ms ease,
+    background-color 240ms ease;
+}
+.barra[data-scroll="true"] .fila,
+.barra[data-abierto="true"] .fila {
+  background: color-mix(in srgb, var(--s-paper) 92%, transparent);
+  box-shadow: var(--sh-2);
 }
 
 .marca {
   display: inline-flex;
   align-items: center;
   min-height: 44px;
-  font-size: 24px;
+  font-size: 23px;
   font-weight: 800;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.05em;
   text-decoration: none;
   color: var(--s-ink);
   margin-right: auto;
@@ -61,40 +56,32 @@
 
 .enlace {
   white-space: nowrap;
-  position: relative;
   display: inline-flex;
   align-items: center;
-  min-height: 44px;
-  padding: 0 4px;
+  min-height: 40px;
+  padding: 0 10px;
+  border-radius: var(--r-full);
   font-size: 15px;
   font-weight: 500;
   color: var(--s-ink);
   text-decoration: none;
+  transition: background-color var(--dur) ease;
 }
-.enlace::after {
-  content: "";
-  position: absolute;
-  left: 4px;
-  right: 4px;
-  bottom: 8px;
-  height: 2px;
-  border-radius: 2px;
-  background: var(--s-cielo-deep);
-  transform: scaleX(0);
-  transform-origin: left;
-  transition: transform var(--dur) var(--ease);
-}
-.enlace:hover::after {
-  transform: scaleX(1);
+.enlace:hover {
+  background: rgb(12 23 48 / 0.06);
 }
 
 .derecha {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
 }
 .coop {
   display: none;
+  color: var(--s-muted);
+}
+.coop:hover {
+  color: var(--s-ink);
 }
 /* Cuenta en el panel móvil: la rellena el cliente; vacía no ocupa lugar. */
 .panelCuenta:empty {
@@ -106,25 +93,22 @@
   width: 44px;
   height: 44px;
   place-items: center;
-  border: 1px solid var(--s-line-2);
+  border: 0;
   border-radius: var(--r-full);
-  background: var(--s-paper);
-  color: var(--s-ink);
+  background: var(--s-ink);
+  color: #fff;
   cursor: pointer;
-  transition: border-color var(--dur) ease;
+  transition: background-color var(--dur) ease;
 }
 .hamburguesa:hover {
-  border-color: var(--s-ink);
+  background: var(--s-ink-2);
 }
 
-/* Sin JS: los enlaces quedan en filas bajo la marca, siempre accesibles. */
-.panel {
-  border-top: 1px solid var(--s-line);
-}
+/* Sin JS: los enlaces quedan en filas bajo la pastilla, siempre accesibles. */
 .panelNav {
   width: var(--ancho);
   margin-inline: auto;
-  padding-bottom: 8px;
+  padding: 8px 22px 0;
 }
 .panelNav ul,
 .panelPie {
@@ -142,24 +126,32 @@
   color: var(--s-ink);
 }
 
-/* Con JS en móvil/tablet: hoja a pantalla completa bajo la barra. */
+/* Con JS en móvil/tablet: hoja flotante bajo la pastilla. */
 @media (max-width: 1179.98px) and (scripting: enabled) {
   .barra .hamburguesa {
     display: inline-grid;
   }
-  .barra .fila {
-    height: 72px;
-  }
   .barra .panel {
     position: fixed;
-    inset: 72px 0 0 0;
+    top: calc(var(--barra-alto) - 4px);
+    left: var(--m);
+    right: var(--m);
+    max-height: calc(100dvh - var(--barra-alto) - 12px);
     overflow-y: auto;
     overscroll-behavior: contain;
-    background: var(--s-canvas);
-    padding-block: 8px 32px;
+    border: 1px solid var(--s-line);
+    border-radius: var(--r-lg);
+    background: var(--s-paper);
+    box-shadow: var(--sh-3);
+    padding: 8px 22px 16px;
+    animation: bajar 220ms var(--ease);
   }
   .barra:not([data-abierto="true"]) .panel {
     display: none;
+  }
+  .barra .panelNav {
+    width: auto;
+    padding: 0;
   }
   .barra .panelNav ul,
   .barra .panelPie {
@@ -169,17 +161,36 @@
     min-height: 56px;
     font-size: 20px;
     font-weight: 600;
-    letter-spacing: -0.015em;
+    letter-spacing: -0.02em;
     border-bottom: 1px solid var(--s-line);
   }
   .barra .panelPie {
-    margin-top: 16px;
+    margin-top: 8px;
+  }
+  .barra .panelPie .panelEnlace {
+    min-height: 48px;
+    font-size: 16px;
+    font-weight: 500;
+    border-bottom: 0;
+    color: var(--s-muted);
   }
   .barra .panelPie .panelEnlace:last-child {
     color: var(--s-cielo-deep);
   }
 }
+@keyframes bajar {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.985);
+  }
+}
 
+@media (max-width: 480px) {
+  .fila {
+    padding-left: 18px;
+    gap: 8px;
+  }
+}
 @media (max-width: 380px) {
   .derecha :global(.s-boton) {
     padding: 0 12px;
@@ -192,14 +203,14 @@
   }
   .centro ul {
     display: flex;
-    gap: 20px;
+    gap: 2px;
   }
   .marca {
-    margin-right: 0;
+    margin-right: 10px;
   }
   .derecha {
     margin-left: auto;
-    gap: 20px;
+    gap: 8px;
   }
   .panel {
     display: none;
@@ -207,14 +218,18 @@
 }
 
 /* "Para cooperativas" solo cuando sobra ancho: sigue en el menú móvil y en el pie. */
-@media (min-width: 1360px) {
+@media (min-width: 1320px) {
   .coop {
     display: inline-flex;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .enlace::after {
+  .fila,
+  .enlace {
     transition: none;
+  }
+  .barra .panel {
+    animation: none;
   }
 }

@@ -7,9 +7,13 @@
  *   ≥ 800px   tres zonas en una fila
  */
 
+/* Pase de abordar: la zona de compra va tras una línea perforada con dos muescas. */
 .tarjeta {
   container: tarjeta / inline-size;
-  padding: clamp(16px, 2vw, 20px);
+  --pad: clamp(16px, 2vw, 22px);
+  position: relative;
+  overflow: hidden;
+  padding: var(--pad);
   border: 1px solid var(--s-line);
   border-radius: var(--r-lg);
   background: var(--s-paper);
@@ -22,6 +26,7 @@
 .tarjeta:hover {
   border-color: var(--s-line-2);
   box-shadow: var(--sh-2);
+  transform: translateY(-2px);
 }
 .rejilla {
   display: grid;
@@ -93,9 +98,9 @@
   text-align: right;
 }
 .hora {
-  font-size: clamp(20px, 2vw, 24px);
+  font-size: clamp(21px, 2.1vw, 26px);
   font-weight: 700;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.035em;
   line-height: 1.15;
   white-space: nowrap;
 }
@@ -126,8 +131,13 @@
 .trazo::after {
   content: "";
   width: 100%;
-  margin-top: 6px;
-  border-top: 2px dotted var(--s-line-2);
+  height: 8px;
+  margin-top: 5px;
+  /* punto de salida, trayecto, punto de llegada */
+  background:
+    radial-gradient(circle at 4px 50%, var(--s-ink) 3px, transparent 3.6px),
+    radial-gradient(circle at calc(100% - 4px) 50%, var(--s-ink) 3px, transparent 3.6px),
+    linear-gradient(var(--s-line-2), var(--s-line-2)) center / calc(100% - 16px) 2px no-repeat;
 }
 .trazo span {
   line-height: 1.2;
@@ -163,7 +173,7 @@
   flex: none;
   width: 40px;
   height: 40px;
-  border-radius: var(--r-sm);
+  border-radius: 14px;
   background: var(--s-canvas);
   object-fit: cover;
 }
@@ -214,7 +224,7 @@
   align-items: center;
   min-width: 0;
   padding-top: 14px;
-  border-top: 1px solid var(--s-line);
+  border-top: 2px dashed var(--s-line-2);
 }
 @container tarjeta (max-width: 359px) {
   .compra {
@@ -234,14 +244,40 @@
     text-align: right;
   }
 }
+@container tarjeta (min-width: 800px) {
+  .compra {
+    position: relative;
+    align-self: stretch;
+    align-content: center;
+    padding-left: 24px;
+    border-left: 2px dashed var(--s-line-2);
+  }
+  .compra::before,
+  .compra::after {
+    content: "";
+    position: absolute;
+    left: -12px;
+    width: 22px;
+    height: 22px;
+    border: 1px solid var(--s-line);
+    border-radius: 50%;
+    background: var(--tarjeta-fondo, var(--s-canvas));
+  }
+  .compra::before {
+    top: calc(-1 * var(--pad) - 12px);
+  }
+  .compra::after {
+    bottom: calc(-1 * var(--pad) - 12px);
+  }
+}
 .precio {
   display: grid;
   gap: 0;
 }
 .precio strong {
-  font-size: clamp(22px, 2.2vw, 26px);
-  font-weight: 700;
-  letter-spacing: -0.025em;
+  font-size: clamp(22px, 2.2vw, 27px);
+  font-weight: 800;
+  letter-spacing: -0.035em;
   line-height: 1.15;
 }
 .precio span {

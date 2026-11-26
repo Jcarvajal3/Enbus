@@ -90,7 +90,7 @@
 
 .resumen {
   position: sticky;
-  top: 72px;
+  top: var(--barra-alto);
   z-index: 20;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;

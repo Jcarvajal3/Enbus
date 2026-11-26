@@ -15,20 +15,20 @@
   width: fit-content;
   max-width: 100%;
   border-radius: var(--r-full);
-  background: var(--s-canvas);
+  background: var(--s-canvas-2);
 }
 .pestana {
   display: inline-flex;
   align-items: center;
   gap: 8px;
   min-height: 44px;
-  padding: 0 20px;
+  padding: 0 22px 0 18px;
   border: 0;
   border-radius: var(--r-full);
   background: transparent;
   color: var(--s-muted);
   font: inherit;
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 600;
   line-height: 1;
   cursor: pointer;
@@ -46,12 +46,17 @@
   color: var(--s-ink);
 }
 .pestana[aria-selected="true"] {
-  background: var(--s-ink);
-  color: #fff;
-  box-shadow: var(--sh-1);
+  background: var(--s-paper);
+  color: var(--s-ink);
+  box-shadow:
+    var(--sh-1),
+    0 0 0 1px rgb(12 23 48 / 0.04);
 }
-.pestana[aria-selected="true"][data-tono="coral"] {
-  background: var(--s-coral-deep);
+.pestana[aria-selected="true"] svg {
+  color: var(--s-cielo-deep);
+}
+.pestana[aria-selected="true"][data-tono="coral"] svg {
+  color: var(--s-coral);
 }
 @media (max-width: 420px) {
   .pestana {
@@ -77,7 +82,7 @@
   }
   .ruta {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    column-gap: 24px;
+    column-gap: 28px;
   }
   .accion {
     padding-top: 22px; /* a la altura de las cajas, no de las etiquetas */
@@ -109,12 +114,12 @@
   width: 44px;
   height: 44px;
   padding: 0;
-  border: 1.5px solid var(--s-line-2);
+  border: 1px solid var(--s-line);
   border-radius: var(--r-full);
   background: var(--s-paper);
-  color: var(--s-cielo-deep);
+  color: var(--s-ink);
   cursor: pointer;
-  box-shadow: var(--sh-1);
+  box-shadow: var(--sh-2);
   transition:
     transform 240ms var(--ease),
     border-color var(--dur) ease,
@@ -132,8 +137,9 @@
   display: none;
 }
 .intercambiar:hover {
-  border-color: var(--s-cielo-deep);
-  background: var(--s-cielo-soft);
+  border-color: var(--s-ink);
+  background: var(--s-ink);
+  color: #fff;
 }
 .intercambiar:active {
   transform: translateY(-50%) scale(0.94);
@@ -141,7 +147,7 @@
 @media (min-width: 600px) {
   .intercambiar {
     right: auto;
-    top: 48px;
+    top: 51px;
     left: 50%;
     transform: translate(-50%, -50%);
   }
@@ -180,20 +186,22 @@
   display: flex;
   align-items: center;
   min-width: 0;
-  height: 52px;
-  border: 1.5px solid var(--s-line-2);
-  border-radius: var(--r-md);
-  background: var(--s-paper);
+  height: 58px;
+  border: 1.5px solid transparent;
+  border-radius: 18px;
+  background: var(--s-canvas);
   transition:
     border-color var(--dur) ease,
+    background-color var(--dur) ease,
     box-shadow var(--dur) ease;
 }
 .entrada:hover {
-  border-color: var(--s-ink-3);
+  border-color: var(--s-line-2);
 }
 .entrada:focus-within {
   border-color: var(--s-cielo-deep);
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--s-cielo-deep) 18%, transparent);
+  background: var(--s-paper);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--s-cielo-deep) 16%, transparent);
 }
 [data-invalido="true"] .entrada {
   border-color: var(--s-error);
@@ -202,8 +210,8 @@
   display: grid;
   place-items: center;
   flex: none;
-  width: 44px;
-  color: var(--s-cielo-deep);
+  width: 48px;
+  color: var(--s-ink);
 }
 .icono svg {
   width: 20px;
@@ -331,7 +339,8 @@
 }
 .entrada:has(.disparador:focus-visible) {
   border-color: var(--s-cielo-deep);
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--s-cielo-deep) 18%, transparent);
+  background: var(--s-paper);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--s-cielo-deep) 16%, transparent);
 }
 .entrada .disparador:focus-visible {
   outline: none;
@@ -347,7 +356,7 @@
   align-items: center;
   min-height: 36px;
   padding: 0 14px;
-  border: 1.5px solid var(--s-line-2);
+  border: 1px solid var(--s-line-2);
   border-radius: var(--r-full);
   background: var(--s-paper);
   color: var(--s-ink);
@@ -527,7 +536,7 @@
 }
 .accion :global(.s-boton) {
   width: 100%;
-  min-height: 52px;
+  min-height: 58px;
 }
 .pie {
   display: flex;
@@ -543,13 +552,15 @@
 
 /* ── Hero / compacto ──────────────────────────────────────────────────────── */
 .hero {
-  padding: clamp(14px, 2.2vw, 24px);
+  padding: clamp(14px, 2.2vw, 26px);
+  border: 1px solid rgb(12 23 48 / 0.06);
   border-radius: var(--r-xl);
   background: var(--s-paper);
   box-shadow: var(--sh-3);
 }
 .compacto {
   padding: clamp(12px, 1.6vw, 16px);
+  border: 1px solid var(--s-line);
   border-radius: var(--r-lg);
   background: var(--s-paper);
   box-shadow: var(--sh-2);
@@ -560,10 +571,14 @@
 @media (max-width: 599px) {
   .hero .entrada,
   .compacto .entrada {
-    height: 48px;
+    height: 52px;
+    border-radius: var(--r-md);
   }
   .hero {
     border-radius: var(--r-lg);
+  }
+  .accion :global(.s-boton) {
+    min-height: 54px;
   }
 }
 

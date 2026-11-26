@@ -1,8 +1,24 @@
 .pie {
   background: var(--s-ink);
   color: var(--s-on-night);
-  border-top: 1px solid var(--s-ink-3);
-  padding-block: clamp(48px, 6vw, 72px) 32px;
+  padding-block: clamp(48px, 6vw, 72px) 0;
+  overflow: hidden;
+}
+/* La marca, enorme y a media luz, cierra la página cortada por el borde. */
+.gigante {
+  margin: clamp(16px, 3vw, 32px) 0 -0.3em;
+  text-align: center;
+  font-size: clamp(110px, 22vw, 330px);
+  font-weight: 800;
+  letter-spacing: -0.07em;
+  line-height: 0.8;
+  white-space: nowrap;
+  color: transparent;
+  background: linear-gradient(180deg, rgb(255 255 255 / 0.14) 0%, rgb(255 255 255 / 0.03) 70%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  user-select: none;
+  pointer-events: none;
 }
 .pie a {
   color: inherit;
@@ -16,7 +32,7 @@
   display: grid;
   gap: 28px;
   padding-bottom: 40px;
-  border-bottom: 1px solid var(--s-ink-3);
+  border-bottom: 1px solid rgb(255 255 255 / 0.12);
 }
 .marcaBloque {
   display: grid;
@@ -100,7 +116,7 @@
   align-items: center;
   gap: 4px 24px;
   padding-top: 24px;
-  border-top: 1px solid var(--s-ink-3);
+  border-top: 1px solid rgb(255 255 255 / 0.12);
   font-size: var(--t-small);
   color: var(--s-on-night-muted);
 }

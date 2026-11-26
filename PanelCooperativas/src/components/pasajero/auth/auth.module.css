@@ -1,30 +1,111 @@
-/* Pantallas de acceso del pasajero: tarjeta centrada sobre el fondo del sitio. */
+/* Pantallas de acceso del pasajero: una hoja partida en dos. A la izquierda el formulario;
+   a la derecha, en escritorio, un panel de marca con la foto del sitio. */
 .pagina {
   flex: 1;
   display: grid;
   align-content: start;
   justify-items: center;
-  padding: clamp(24px, 6vw, 72px) var(--m) clamp(48px, 8vw, 96px);
+  padding: clamp(12px, 3vw, 40px) var(--m) clamp(48px, 8vw, 96px);
+}
+
+.marco {
+  width: min(100%, 520px);
+  display: grid;
+  border: 1px solid var(--s-line);
+  border-radius: var(--r-xl);
+  background: var(--s-paper);
+  box-shadow: var(--sh-2);
 }
 
 .tarjeta {
   width: min(100%, 460px);
+  justify-self: center;
+  align-self: center;
   display: grid;
   gap: 24px;
-  padding: clamp(24px, 5vw, 40px);
-  background: var(--s-paper);
-  border-radius: var(--r-lg);
-  box-shadow: var(--sh-2);
+  padding: clamp(24px, 5vw, 44px);
+}
+
+/* Panel de marca */
+.lado {
+  display: none;
+}
+@media (min-width: 1000px) {
+  .marco {
+    width: min(100%, 1120px);
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    min-height: min(680px, calc(100dvh - var(--barra-alto) - 80px));
+    padding: 10px;
+  }
+  .tarjeta {
+    padding: clamp(32px, 4vw, 56px);
+  }
+  .lado {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+    display: grid;
+    align-content: end;
+    gap: 24px;
+    padding: clamp(28px, 3vw, 44px);
+    border-radius: 31px;
+    background: var(--s-ink);
+    color: #fff;
+  }
+}
+.ladoFoto {
+  z-index: -2;
+  object-fit: cover;
+  object-position: 62% center;
+}
+.ladoVelo {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(180deg, rgb(12 23 48 / 0.15) 0%, rgb(12 23 48 / 0.35) 40%, rgb(12 23 48 / 0.92) 100%);
+}
+.ladoLema {
+  max-width: 11ch;
+  font-size: clamp(36px, 3.8vw, 56px);
+  font-weight: 800;
+  letter-spacing: -0.05em;
+  line-height: 0.96;
+}
+.ladoLema em {
+  font-style: normal;
+  color: var(--s-sol);
+}
+.ladoLista {
+  list-style: none;
+  margin: 0;
+  padding: 20px 0 0;
+  border-top: 1px solid rgb(255 255 255 / 0.2);
+  display: grid;
+  gap: 12px;
+  font-size: var(--t-small);
+  font-weight: 500;
+}
+.ladoLista li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.ladoLista svg {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  color: var(--s-sol);
 }
 
 .cabeza {
   display: grid;
-  gap: 8px;
+  gap: 10px;
 }
 .cabeza h1 {
-  font-size: clamp(28px, 4.4vw, 34px);
-  letter-spacing: -0.03em;
-  line-height: 1.1;
+  font-size: clamp(30px, 4.4vw, 42px);
+  font-weight: 800;
+  letter-spacing: -0.045em;
+  line-height: 1.02;
 }
 .cabeza p {
   color: var(--s-muted);

@@ -49,20 +49,27 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  font-size: var(--t-small);
+  min-height: 30px;
+  padding: 0 14px 0 12px;
+  border: 1px solid rgb(255 255 255 / 0.16);
+  border-radius: var(--r-full);
+  background: rgb(255 255 255 / 0.06);
+  font-size: var(--t-xs);
   font-weight: 600;
-  color: var(--s-sol);
+  color: var(--s-on-night);
 }
 .etiqueta::before {
   content: "";
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
-  background: currentColor;
+  background: var(--s-sol);
+  box-shadow: 0 0 0 3px rgb(255 199 87 / 0.22);
 }
 .texto h2 {
   font-size: var(--t-h2);
-  letter-spacing: -0.03em;
+  letter-spacing: -0.04em;
+  line-height: 1.02;
   color: var(--s-on-night);
 }
 .bajada {

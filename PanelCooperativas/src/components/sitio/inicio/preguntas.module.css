@@ -14,10 +14,10 @@
 .contacto {
   display: grid;
   gap: 12px;
-  padding: 20px 24px;
+  padding: 22px 26px;
   border-radius: var(--r-lg);
   background: var(--s-canvas);
-  max-width: 420px;
+  max-width: 400px;
 }
 .contactoTitulo {
   font-weight: 700;
@@ -58,12 +58,12 @@
   display: grid;
 }
 .rotulo {
-  font-size: var(--t-small);
+  font-size: var(--t-xs);
   font-weight: 600;
   letter-spacing: 0;
   color: var(--s-muted);
   padding-bottom: 12px;
-  border-bottom: 1px solid var(--s-line);
+  border-bottom: 1.5px solid var(--s-ink);
 }
 
 .item {
@@ -74,11 +74,11 @@
   align-items: center;
   justify-content: space-between;
   gap: 20px;
-  min-height: 56px;
-  padding: 16px 0;
-  font-size: 18px;
+  min-height: 64px;
+  padding: 18px 0;
+  font-size: clamp(18px, 1.5vw, 20px);
   font-weight: 600;
-  letter-spacing: -0.015em;
+  letter-spacing: -0.025em;
   line-height: 1.3;
   cursor: pointer;
   list-style: none;
@@ -95,8 +95,8 @@
 .mas {
   position: relative;
   flex: none;
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   border-radius: var(--r-full);
   background: var(--s-canvas);
   transition:

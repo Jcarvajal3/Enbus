@@ -1,62 +1,58 @@
+/* Portada: la foto va enmarcada como una ventana; el buscador monta sobre su borde inferior. */
 .hero {
   position: relative;
-  padding-block: clamp(20px, 4vw, 56px) clamp(24px, 4vw, 56px);
-  color: var(--s-on-night);
+  padding-bottom: clamp(28px, 4vw, 48px);
+}
+
+.marco {
+  position: relative;
+  width: min(100% - 2 * var(--borde), 1440px);
+  margin-inline: auto;
+  --borde: clamp(8px, 1.4vw, 20px);
+  --monta: clamp(88px, 9vw, 128px); /* cuánto se mete el buscador en la foto */
+  padding-block: clamp(32px, 6.5vw, 96px) calc(var(--monta) + clamp(24px, 4vw, 56px));
+  border-radius: var(--r-xl);
+  overflow: hidden;
   background: var(--s-ink);
+  color: #fff;
+  isolation: isolate;
 }
 .fondo {
   position: absolute;
   inset: 0;
-  overflow: hidden;
+  z-index: -1;
 }
 .foto {
   object-fit: cover;
-  object-position: center 60%;
-  opacity: 0.55;
+  object-position: center 72%;
 }
+/* Velo de noche: denso donde va el texto (arriba, izquierda), abierto hacia el horizonte. */
 .velo {
   position: absolute;
   inset: 0;
   background:
-    linear-gradient(180deg, rgb(15 27 51 / 0.92) 0%, rgb(15 27 51 / 0.7) 55%, rgb(15 27 51 / 0.92) 100%),
-    radial-gradient(60% 80% at 85% 0%, color-mix(in srgb, var(--s-cielo-deep) 40%, transparent) 0%, transparent 70%);
+    linear-gradient(100deg, rgb(12 23 48 / 0.8) 0%, rgb(12 23 48 / 0.46) 44%, rgb(12 23 48 / 0) 78%),
+    linear-gradient(180deg, rgb(12 23 48 / 0.3) 0%, rgb(12 23 48 / 0) 45%, rgb(12 23 48 / 0.3) 100%);
 }
 
-.contenido {
-  position: relative;
-  z-index: 2; /* sobre las secciones siguientes: las listas desplegables salen del hero */
-  display: grid;
-  gap: clamp(14px, 2vw, 24px);
-  max-width: 1080px;
-}
 .cabeza {
   display: grid;
-  gap: 8px;
+  gap: clamp(14px, 1.8vw, 22px);
   justify-items: start;
-}
-.titulo {
-  font-size: clamp(30px, 4.6vw, 56px);
-  letter-spacing: -0.035em;
-  line-height: 1.05;
-}
-.bajada {
-  max-width: 56ch;
-  font-size: var(--t-lead);
-  color: var(--s-on-night-muted);
-}
-@media (max-width: 599px) {
-  .bajada {
-    display: none;
-  }
 }
 .tasa {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 14px;
+  min-height: 34px;
+  padding: 0 14px 0 10px;
+  border: 1px solid rgb(255 255 255 / 0.22);
   border-radius: var(--r-full);
-  background: rgb(255 255 255 / 0.12);
-  font-size: var(--t-small);
+  background: rgb(12 23 48 / 0.35);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  font-size: var(--t-xs);
+  font-weight: 500;
 }
 .tasa svg {
   flex: none;
@@ -64,23 +60,45 @@
   height: 18px;
   color: var(--s-sol);
 }
-@media (max-width: 599px) {
-  .tasa {
-    font-size: 13px;
-    padding: 4px 12px;
-  }
+.titulo {
+  max-width: 12ch;
+  font-size: clamp(40px, 7.4vw, 104px);
+  font-weight: 800;
+  letter-spacing: -0.05em;
+  line-height: 0.94;
+  text-shadow: 0 2px 28px rgb(12 23 48 / 0.35);
+}
+.titulo em {
+  font-style: normal;
+  color: var(--s-sol);
+}
+.bajada {
+  max-width: 40ch;
+  font-size: var(--t-lead);
+  line-height: 1.45;
+  color: rgb(255 255 255 / 0.92);
+  text-shadow: 0 1px 16px rgb(12 23 48 / 0.5);
+}
+
+/* Buscador + garantías: sobre el borde inferior de la foto */
+.contenido {
+  position: relative;
+  z-index: 2; /* sobre las secciones siguientes: las listas desplegables salen del hero */
+  display: grid;
+  gap: clamp(16px, 2vw, 24px);
+  margin-top: calc(-1 * clamp(88px, 9vw, 128px));
 }
 
 .garantias {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px 24px;
+  gap: 8px 28px;
   margin: 0;
-  padding: 0;
+  padding: 0 clamp(4px, 2vw, 24px);
   list-style: none;
   font-size: var(--t-small);
   font-weight: 500;
-  color: var(--s-on-night);
+  color: var(--s-ink);
 }
 .garantias li {
   display: inline-flex;
@@ -91,5 +109,22 @@
   flex: none;
   width: 20px;
   height: 20px;
-  color: var(--s-sol);
+  color: var(--s-cielo-deep);
+}
+
+@media (max-width: 599px) {
+  .marco {
+    --monta: 64px;
+    border-radius: 28px;
+    padding-top: 28px;
+  }
+  .contenido {
+    margin-top: -64px;
+  }
+  .bajada {
+    display: none;
+  }
+  .velo {
+    background: linear-gradient(180deg, rgb(12 23 48 / 0.72) 0%, rgb(12 23 48 / 0.35) 70%, rgb(12 23 48 / 0.5) 100%);
+  }
 }

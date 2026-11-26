@@ -77,18 +77,20 @@ export function Encomiendas(_props: { tasa: TasaRef | null }) {
           ))}
         </ul>
 
+        <div className={estilos.recorrido} data-revelar>
         <h3 className={estilos.subtitulo}>Así funciona un envío</h3>
         <ol className={estilos.pasos}>
           {pasos.map((p, i) => (
             <li key={p.titulo} className={estilos.paso}>
               <span className={`${estilos.numero} s-num`} aria-hidden>
-                {i + 1}
+                0{i + 1}
               </span>
               <h4>{p.titulo}</h4>
               <p>{p.texto}</p>
             </li>
           ))}
         </ol>
+        </div>
 
         <div id="rastrear" className={estilos.panel} role="group" aria-labelledby="titulo-rastrear">
           <div className={estilos.panelTexto}>

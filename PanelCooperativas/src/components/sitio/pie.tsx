@@ -123,6 +123,9 @@ export function Pie() {
           ))}
         </p>
       </div>
+      <p className={estilos.gigante} aria-hidden>
+        EnBus
+      </p>
     </footer>
   );
 }

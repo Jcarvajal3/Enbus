@@ -18,25 +18,21 @@ export function Hero({ ciudades, tasa }: { ciudades: CiudadesConSalidas; tasa: T
 
   return (
     <section id="inicio" aria-labelledby="hero-titulo" className={s.hero}>
-      <div className={s.fondo} aria-hidden>
-        <Image
-          src={FOTOS.llanosApure}
-          alt=""
-          fill
-          priority
-          placeholder="blur"
-          sizes="100vw"
-          className={s.foto}
-        />
-        <div className={s.velo} />
-      </div>
+      <div className={s.marco}>
+        <div className={s.fondo} aria-hidden>
+          <Image
+            src={FOTOS.llanosApure}
+            alt=""
+            fill
+            priority
+            placeholder="blur"
+            sizes="(min-width: 1480px) 1440px, 100vw"
+            className={s.foto}
+          />
+          <div className={s.velo} />
+        </div>
 
-      <div className={`s-marco ${s.contenido}`}>
-        <div className={s.cabeza}>
-          <h1 id="hero-titulo" className={s.titulo}>
-            Tu pasaje de bus, sin colas
-          </h1>
-          <p className={s.bajada}>Compara salidas, elige tu asiento y paga en bolívares a la tasa BCV.</p>
+        <div className={`s-marco ${s.cabeza}`}>
           {tasaOk && (
             <p className={s.tasa}>
               <Receipt aria-hidden />
@@ -46,8 +42,14 @@ export function Hero({ ciudades, tasa }: { ciudades: CiudadesConSalidas; tasa: T
               </span>
             </p>
           )}
+          <h1 id="hero-titulo" className={s.titulo}>
+            Tu pasaje de bus, <em>sin colas</em>
+          </h1>
+          <p className={s.bajada}>Compara salidas, elige tu asiento y paga en bolívares a la tasa BCV.</p>
         </div>
+      </div>
 
+      <div className={`s-marco ${s.contenido}`}>
         <div id="buscador">
           <Buscador ciudades={ciudades} modo="hero" />
         </div>

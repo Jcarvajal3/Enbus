@@ -1,6 +1,6 @@
 .seccion {
   padding-block: clamp(40px, 5vw, 72px);
-  scroll-margin-top: 72px;
+  scroll-margin-top: var(--barra-alto);
 }
 
 .chips {
@@ -28,7 +28,7 @@
   align-items: center;
   min-height: 44px;
   padding: 0 18px;
-  border: 1.5px solid var(--s-line-2);
+  border: 1px solid var(--s-line-2);
   border-radius: var(--r-full);
   background: var(--s-paper);
   color: var(--s-ink);
