@@ -74,7 +74,6 @@ export default async function ViajesPage({
     return base().or(filtroHoy).order("fecha_hora_salida", { ascending: false }).limit(LIMITE_LISTA);
   };
 
-  const esAdmin = user.role === "admin_cooperativa";
   const [rutasResult, viajesResult, hoyResult, busesResult] = await Promise.all([
     supabase
       .from("rutas")
@@ -88,24 +87,22 @@ export default async function ViajesPage({
       .select("id", { count: "exact", head: true })
       .eq("cooperativa_id", user.cooperativa_id)
       .or(filtroHoy),
-    // Buses activos para "Programar viaje" y "Editar viaje" (solo el administrador programa).
-    esAdmin
-      ? supabase
-          .from("buses")
-          .select("id, numero_unidad, placa, asientos, chofer_nombre")
-          .eq("cooperativa_id", user.cooperativa_id)
-          .eq("activo", true)
-          .limit(500)
-      : Promise.resolve(null),
+    // Buses activos para el desplegable de Unidad y "Editar viaje" (ambos roles asignan).
+    supabase
+      .from("buses")
+      .select("id, numero_unidad, placa, asientos, chofer_nombre")
+      .eq("cooperativa_id", user.cooperativa_id)
+      .eq("activo", true)
+      .limit(500),
   ]);
 
   // Si falla la carga, la lista no se muestra vacía: el cliente enseña el error con "Reintentar".
   const error = viajesResult.error ?? rutasResult.error;
   if (error) console.error("[ViajesPage] Error al cargar viajes o rutas:", error);
-  // Si fallan los buses, la lista se ve igual; el formulario de programar avisa del error.
-  if (busesResult?.error) console.error("[ViajesPage] Error al cargar los buses:", busesResult.error);
+  // Si fallan los buses, la lista se ve igual; el desplegable avisa del error.
+  if (busesResult.error) console.error("[ViajesPage] Error al cargar los buses:", busesResult.error);
   const viajes = viajesResult.data ?? [];
-  const busesActivos = ((busesResult?.data ?? []) as BusParaViaje[]).sort((a, b) =>
+  const busesActivos = ((busesResult.data ?? []) as BusParaViaje[]).sort((a, b) =>
     ORDEN_UNIDAD.compare(a.numero_unidad, b.numero_unidad)
   );
 
@@ -116,7 +113,7 @@ export default async function ViajesPage({
       viajes={viajes}
       rutasActivas={rutasResult.data || []}
       busesActivos={busesActivos}
-      errorBuses={busesResult?.error ? humanizeError(busesResult.error, "cargar los buses") : null}
+      errorBuses={busesResult.error ? humanizeError(busesResult.error, "cargar los buses") : null}
       userRole={user.role}
       vista={vista}
       fecha={fecha}

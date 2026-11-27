@@ -5,137 +5,33 @@ import { revalidatePath } from "next/cache";
 import { codigoEB, humanizeError, parseDetalleEB } from "@/lib/errores";
 import type { SalidaViaje } from "@/lib/types/pagos";
 import type { ImpactoCancelarViaje, ResultadoCancelarViaje } from "@/lib/types/reembolsos";
-import type { ResultadoCompletarViaje, ResultadoEditarViaje } from "@/lib/types/operacion";
+import type { BusParaViaje, ResultadoAsignarBus, ResultadoCompletarViaje, ResultadoEditarViaje } from "@/lib/types/operacion";
 import { fechaHoraVEaISO } from "@/lib/fechas";
-import { planificarSalidas } from "./salidas";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** Llegada estimada en ISO a partir de la salida ISO y la duración de la ruta. */
-function llegadaEstimada(salidaISO: string, duracionMin: number): string {
-  return new Date(new Date(salidaISO).getTime() + duracionMin * 60000).toISOString();
+/** "Unidad 2" antes que "Unidad 10". */
+const ORDEN_UNIDAD = new Intl.Collator("es", { numeric: true, sensitivity: "base" });
+
+type FalloAsignar = {
+  success: false;
+  data?: undefined;
+  error: string;
+  codigo?: string;
+  /** `detail.campo`: "bus", etc. */
+  campo?: string;
+};
+
+function falloAsignar(error: unknown, accion: string): FalloAsignar {
+  const detalle = parseDetalleEB(error);
+  return {
+    success: false,
+    error: humanizeError(error, accion),
+    codigo: codigoEB(error) ?? undefined,
+    campo: typeof detalle.campo === "string" ? detalle.campo : undefined,
+  };
 }
 
-export async function guardarViaje(
-  payload: Record<string, string>,
-  isRecurring: boolean,
-  recurringDays?: string[],
-  recurringStart?: string,
-  recurringEnd?: string
-) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "Tu sesión expiró. Inicia sesión de nuevo para continuar." };
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("cooperativa_id, role")
-    .eq("id", user.id)
-    .single();
-  if (!profile || profile.role !== "admin_cooperativa") return { error: "Solo el administrador de la cooperativa puede programar viajes." };
-
-  const rutaId = payload?.ruta_id;
-  if (!rutaId || !UUID_RE.test(rutaId)) return { error: "Elige la ruta del viaje." };
-  if (!profile.cooperativa_id) return { error: "Solo el administrador de la cooperativa puede programar viajes." };
-  // El bus es obligatorio: de él salen la unidad, los asientos y el chofer (copia en el viaje).
-  const busId = payload?.bus_id;
-  if (!busId || !UUID_RE.test(busId)) return { error: "Elige el bus del viaje." };
-
-  const [{ data: ruta }, { data: bus }] = await Promise.all([
-    supabase
-      .from("rutas")
-      .select("duracion_estimada_min, activa")
-      .eq("id", rutaId)
-      .eq("cooperativa_id", profile.cooperativa_id)
-      .maybeSingle(),
-    supabase
-      .from("buses")
-      .select("numero_unidad, asientos, chofer_nombre, activo")
-      .eq("id", busId)
-      .eq("cooperativa_id", profile.cooperativa_id)
-      .maybeSingle(),
-  ]);
-
-  if (!ruta) return { error: "No encontramos la ruta. Actualiza la página y vuelve a elegirla." };
-  if (!ruta.activa) return { error: "Esa ruta está desactivada. Reactívala en Rutas o elige otra." };
-  if (!bus) return { error: "No encontramos ese bus. Actualiza la página y vuelve a elegirlo." };
-  if (!bus.activo) return { error: "Ese bus está desactivado. Reactívalo en Buses o elige otro." };
-
-  // Copia del bus al programar (la base la vuelve a copiar en proteger_viajes_cliente_fn).
-  // El chofer se puede cambiar solo para estas salidas; vacío = el del bus.
-  const asientosTotales = Number(bus.asientos);
-  const numeroUnidad = bus.numero_unidad as string;
-  const nombreChofer =
-    String(payload.nombre_chofer ?? "").trim().replace(/\s+/g, " ").slice(0, 80) || (bus.chofer_nombre as string | null) || null;
-
-  // Las fechas y horas del formulario son hora de Venezuela. Se convierten a ISO con
-  // lib/fechas para no depender de la zona horaria del servidor (Vercel corre en UTC).
-  if (isRecurring) {
-    // Misma función que el resumen del formulario: se crea exactamente lo anunciado.
-    const plan = planificarSalidas({
-      dias: recurringDays ?? [],
-      desde: recurringStart ?? "",
-      hasta: recurringEnd ?? "",
-      hora: payload.hora_fija ?? "",
-    });
-    if (!plan.ok) return { error: plan.error };
-
-    const viajesToInsert = plan.salidas.map((salida) => ({
-      cooperativa_id: profile.cooperativa_id,
-      ruta_id: rutaId,
-      fecha_hora_salida: salida,
-      fecha_hora_llegada_est: llegadaEstimada(salida, ruta.duracion_estimada_min),
-      asientos_totales: asientosTotales,
-      asientos_disponibles: asientosTotales,
-      bus_id: busId,
-      numero_unidad: numeroUnidad,
-      nombre_chofer: nombreChofer,
-      estado: "PROGRAMADO",
-    }));
-
-    const { error } = await supabase.from("viajes").insert(viajesToInsert);
-    if (error) {
-      console.error("[guardarViaje] Error insertar recurrentes:", error);
-      return { error: humanizeError(error, "programar los viajes") };
-    }
-  } else {
-    // Viaje único. El input datetime-local envía 'YYYY-MM-DDTHH:mm' sin zona horaria.
-    if (!payload.fecha_hora_salida) return { error: "Elige la fecha y la hora de salida." };
-
-    const [fecha, hora] = payload.fecha_hora_salida.split("T");
-    let salida: string;
-    try {
-      salida = fechaHoraVEaISO(fecha ?? "", hora ?? "");
-    } catch {
-      return { error: "Revisa la fecha y la hora de salida." };
-    }
-    if (new Date(salida).getTime() <= Date.now()) {
-      return { error: "La salida tiene que ser más tarde que ahora." };
-    }
-
-    const { error } = await supabase.from("viajes").insert({
-      cooperativa_id: profile.cooperativa_id,
-      ruta_id: rutaId,
-      fecha_hora_salida: salida,
-      fecha_hora_llegada_est: llegadaEstimada(salida, ruta.duracion_estimada_min),
-      asientos_totales: asientosTotales,
-      asientos_disponibles: asientosTotales,
-      bus_id: busId,
-      numero_unidad: numeroUnidad,
-      nombre_chofer: nombreChofer,
-      estado: "PROGRAMADO",
-    });
-
-    if (error) {
-      console.error("[guardarViaje] Error insertar viaje único:", error);
-      return { error: humanizeError(error, "programar el viaje") };
-    }
-  }
-
-  revalidatePath("/cooperativas/viajes");
-  revalidatePath("/cooperativas/dashboard");
-  return { success: true };
-}
 
 /**
  * Cancela un viaje programado (solo el administrador; lo valida fn_cancelar_viaje):
@@ -293,13 +189,21 @@ function falloViaje(error: unknown, accion: string): FalloViaje {
   };
 }
 
+function revalidarViaje() {
+  revalidatePath("/cooperativas/viajes");
+  revalidatePath("/cooperativas/taquilla/boletos");
+  revalidatePath("/cooperativas/despacho");
+  revalidatePath("/cooperativas/dashboard");
+}
+
 /**
  * Edita un viaje programado (solo el administrador; lo valida fn_editar_viaje).
  * `undefined` = sin cambio; `""` en unidad o chofer lo borra. La salida llega en
  * hora de Venezuela ('YYYY-MM-DDTHH:mm'). Si cambia la hora y hay pasajeros, el
  * motivo es obligatorio y se avisa a cada comprador. `busId` cambia de bus: la base
  * copia su unidad, su chofer (salvo `nombreChofer`) y sus asientos (salvo
- * `asientosTotales`), sin bajar de los asientos ya vendidos.
+ * `asientosTotales`), sin bajar de los asientos ya vendidos. `quitarUnidad` la deja
+ * "Por asignar".
  */
 export async function editarViaje(input: {
   viajeId: string;
@@ -308,6 +212,8 @@ export async function editarViaje(input: {
   nombreChofer?: string;
   asientosTotales?: number;
   busId?: string;
+  /** Deja la salida sin unidad (fn_asignar_bus con bus nulo); los demás cambios se aplican antes. */
+  quitarUnidad?: boolean;
   motivo?: string;
 }): Promise<{ success: true; data: ResultadoEditarViaje; error?: undefined } | FalloViaje> {
   if (!UUID_RE.test(input.viajeId ?? "")) {
@@ -334,6 +240,39 @@ export async function editarViaje(input: {
   }
 
   const supabase = await createClient();
+  const hayOtrosCambios =
+    input.salida !== undefined ||
+    input.numeroUnidad !== undefined ||
+    input.nombreChofer !== undefined ||
+    input.asientosTotales !== undefined ||
+    input.busId !== undefined;
+  if (input.quitarUnidad && !hayOtrosCambios) {
+    const { data: q, error: errorQuitar } = await supabase.rpc("fn_asignar_bus", {
+      p_viaje_id: input.viajeId,
+      p_bus_id: null,
+      p_nombre_chofer: null,
+    });
+    if (errorQuitar) {
+      console.error("[editarViaje] Error al quitar la unidad:", errorQuitar);
+      return falloViaje(errorQuitar, "quitar la unidad del viaje");
+    }
+    revalidarViaje();
+    const r = (q ?? {}) as Partial<ResultadoAsignarBus>;
+    return {
+      success: true,
+      data: {
+        viaje_id: input.viajeId,
+        salida: "",
+        llegada_estimada: "",
+        asientos_totales: Number(r.asientos_totales) || 0,
+        asientos_disponibles: Number(r.asientos_disponibles) || 0,
+        bus_id: null,
+        numero_unidad: null,
+        nombre_chofer: null,
+        pasajeros_avisados: 0,
+      },
+    };
+  }
   const { data, error } = await supabase.rpc("fn_editar_viaje", {
     p_viaje_id: input.viajeId,
     p_numero_unidad: input.numeroUnidad === undefined ? null : input.numeroUnidad.trim(),
@@ -349,10 +288,20 @@ export async function editarViaje(input: {
     return falloViaje(error, "editar el viaje");
   }
 
-  revalidatePath("/cooperativas/viajes");
-  revalidatePath("/cooperativas/taquilla/boletos");
-  revalidatePath("/cooperativas/despacho");
-  revalidatePath("/cooperativas/dashboard");
+  if (input.quitarUnidad) {
+    const { error: errorQuitar } = await supabase.rpc("fn_asignar_bus", {
+      p_viaje_id: input.viajeId,
+      p_bus_id: null,
+      p_nombre_chofer: null,
+    });
+    if (errorQuitar) {
+      console.error("[editarViaje] Error al quitar la unidad:", errorQuitar);
+      revalidarViaje();
+      return falloViaje(errorQuitar, "quitar la unidad");
+    }
+  }
+
+  revalidarViaje();
   return { success: true, data: data as ResultadoEditarViaje };
 }
 
@@ -373,4 +322,62 @@ export async function completarViaje(
   revalidatePath("/cooperativas/recepcion-destino");
   revalidatePath("/cooperativas/dashboard");
   return { success: true, data: (data ?? { estado: "COMPLETADO" }) as ResultadoCompletarViaje };
+}
+
+/**
+ * Asigna (o quita, con `busId` null) la unidad de una salida programada. Un chofer
+ * vacío deja el del bus. Si ya hay boletos, la base no sube los asientos sola.
+ */
+export async function asignarUnidad(input: {
+  viajeId: string;
+  busId: string | null;
+  nombreChofer?: string;
+}): Promise<{ success: true; data: ResultadoAsignarBus; error?: undefined } | FalloAsignar> {
+  if (!UUID_RE.test(input.viajeId ?? "")) {
+    return { success: false, error: "No encontramos esa salida. Actualiza la página e intenta de nuevo." };
+  }
+  if (input.busId !== null && !UUID_RE.test(input.busId ?? "")) {
+    return { success: false, error: "No encontramos ese bus. Actualiza la página y vuelve a elegirlo.", campo: "bus" };
+  }
+  const chofer = (input.nombreChofer ?? "").trim().replace(/\s+/g, " ").slice(0, 80);
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("fn_asignar_bus", {
+    p_viaje_id: input.viajeId,
+    p_bus_id: input.busId,
+    p_nombre_chofer: input.busId && chofer ? chofer : null,
+  });
+  if (error) {
+    console.error("[asignarUnidad] Error:", error);
+    return falloAsignar(error, input.busId ? "asignar la unidad" : "quitar la unidad");
+  }
+  revalidatePath("/cooperativas/viajes");
+  revalidatePath("/cooperativas/despacho");
+  revalidatePath("/cooperativas/taquilla/boletos");
+  revalidatePath("/cooperativas/dashboard");
+  return { success: true, data: data as ResultadoAsignarBus };
+}
+
+/** Buses activos de la cooperativa (para el diálogo de marcar salida cuando falta la unidad). */
+export async function listarBusesActivos(): Promise<
+  { success: true; data: BusParaViaje[]; error?: undefined } | { success: false; data?: undefined; error: string }
+> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { success: false, error: "Tu sesión expiró. Inicia sesión de nuevo para continuar." };
+  const { data: perfil } = await supabase.from("profiles").select("cooperativa_id").eq("id", user.id).single();
+  if (!perfil?.cooperativa_id) return { success: false, error: "No encontramos tu cooperativa." };
+
+  const { data, error } = await supabase
+    .from("buses")
+    .select("id, numero_unidad, placa, asientos, chofer_nombre")
+    .eq("cooperativa_id", perfil.cooperativa_id)
+    .eq("activo", true)
+    .limit(500);
+  if (error) {
+    console.error("[listarBusesActivos] Error:", error);
+    return { success: false, error: humanizeError(error, "cargar los buses") };
+  }
+  const buses = ((data ?? []) as BusParaViaje[]).sort((a, b) => ORDEN_UNIDAD.compare(a.numero_unidad, b.numero_unidad));
+  return { success: true, data: buses };
 }

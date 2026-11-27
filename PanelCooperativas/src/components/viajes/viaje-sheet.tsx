@@ -110,6 +110,8 @@ export function paraSalida(v: ViajeDetalle): ViajeParaSalida {
     origen: v.ruta?.ciudad_origen ?? "",
     destino: v.ruta?.ciudad_destino ?? "",
     salida: v.fecha_hora_salida,
+    numero_unidad: v.numero_unidad,
+    bus_id: v.bus_id ?? null,
   };
 }
 
@@ -246,6 +248,7 @@ export function ViajeSheet({
     : "Viaje";
   const programado = viaje?.estado === "PROGRAMADO";
   const enCurso = viaje?.estado === "EN_CURSO";
+  const sinUnidad = Boolean(viaje && !viaje.numero_unidad && !viaje.bus_id);
   const conMenu = Boolean(viaje && programado && (onEditar || onCancelar));
 
   return (
@@ -304,7 +307,9 @@ export function ViajeSheet({
                 </div>
                 <div className="flex flex-col gap-0.5">
                   <dt className="text-[13px] text-muted-foreground">Unidad</dt>
-                  <dd className="font-medium">{viaje.numero_unidad || "Sin asignar"}</dd>
+                  <dd className={cn("font-medium", sinUnidad && "text-warning-text")}>
+                    {viaje.numero_unidad || (viaje.bus_id ? "Asignada" : "Por asignar")}
+                  </dd>
                 </div>
                 <div className="col-span-2 flex flex-col gap-0.5">
                   <dt className="text-[13px] text-muted-foreground">Chofer</dt>

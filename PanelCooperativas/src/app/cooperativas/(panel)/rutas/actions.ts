@@ -143,8 +143,12 @@ export async function guardarRuta(formData: FormData, rutaId?: string) {
     if (error) return { error: humanizeError(error, "actualizar la ruta") };
     if (!filas || filas.length === 0) return { error: MSG_RUTA_NO_ENCONTRADA };
   } else {
-    const { error } = await supabase.from("rutas").insert(payload);
+    // Devuelve la ruta creada: el diálogo sigue abierto para agregarle sus salidas.
+    const { data: creada, error } = await supabase.from("rutas").insert(payload).select("*").single();
     if (error) return { error: humanizeError(error, "crear la ruta") };
+    revalidatePath("/cooperativas/rutas");
+    revalidatePath("/cooperativas/viajes");
+    return { success: true, creada };
   }
 
   revalidatePath("/cooperativas/rutas");
@@ -161,16 +165,39 @@ export async function checkDesactivarRuta(rutaId: string) {
   const { data: profile } = await supabase.from("profiles").select("cooperativa_id, role").eq("id", user.id).single();
   if (!profile?.cooperativa_id) return { error: MSG_RUTA_NO_ENCONTRADA };
 
-  const { count, error } = await supabase
+  // Salidas futuras de la ruta. Las generadas por un horario suelen estar vacías y no deben
+  // alarmar: solo cuentan como "con pasajeros" las que tienen boletos RESERVADO/PAGADO/USADO.
+  const { data: viajes, error } = await supabase
     .from("viajes")
-    .select("id", { count: "exact", head: true })
+    .select("id")
     .eq("cooperativa_id", profile.cooperativa_id)
     .eq("ruta_id", rutaId)
     .eq("estado", "PROGRAMADO")
-    .gt("fecha_hora_salida", new Date().toISOString());
-
+    .gt("fecha_hora_salida", new Date().toISOString())
+    // Tope de seguridad (PostgREST corta en 1000): 30 días de horarios caben de sobra.
+    .limit(1000);
   if (error) return { error: humanizeError(error, "revisar los viajes de la ruta") };
-  return { hasViajes: (count || 0) > 0, count: count || 0 };
+
+  const ids = (viajes ?? []).map((v) => v.id as string);
+  let conPasajeros = 0;
+  if (ids.length > 0) {
+    const { data: boletos, error: errorBoletos } = await supabase
+      .from("boletos")
+      .select("viaje_id")
+      .in("viaje_id", ids)
+      .in("estado", ["RESERVADO", "PAGADO", "USADO"])
+      .limit(5000);
+    if (errorBoletos) return { error: humanizeError(errorBoletos, "revisar los viajes de la ruta") };
+    conPasajeros = new Set((boletos ?? []).map((b) => b.viaje_id as string)).size;
+  }
+
+  return {
+    hasViajes: conPasajeros > 0,
+    /** Viajes futuros con pasajeros. */
+    count: conPasajeros,
+    /** Salidas futuras sin pasajeros (no alarman). */
+    vacias: ids.length - conPasajeros,
+  };
 }
 
 export async function toggleActivaRuta(rutaId: string, activa: boolean) {

@@ -28,6 +28,10 @@ export type BandejaCooperativa = {
   encomiendas_por_despachar: number;
   encomiendas_en_camino: number;
   proxima_salida: ProximaSalida | null;
+  /** Salidas de hoy y mañana sin unidad. Puede faltar hasta aplicar 20261127000001. */
+  salidas_sin_unidad?: number;
+  /** Salidas futuras fuera de horario que conservan pasajeros. Puede faltar hasta aplicar 20261127000001. */
+  salidas_fuera_de_horario?: number;
   generado_at: string;
 };
 
@@ -65,8 +69,24 @@ export type Bus = {
   created_at: string;
 };
 
-/** Bus activo para el selector de "Programar viaje" y "Editar viaje". */
+/** Bus activo para el selector de unidad de Viajes y "Editar viaje". */
 export type BusParaViaje = Pick<Bus, "id" | "numero_unidad" | "placa" | "asientos" | "chofer_nombre">;
+
+/** Respuesta de `fn_asignar_bus(p_viaje_id, p_bus_id, p_nombre_chofer)` (20261127000001). */
+export type ResultadoAsignarBus = {
+  viaje_id: string;
+  bus_id: string | null;
+  numero_unidad: string | null;
+  nombre_chofer: string | null;
+  asientos_totales: number;
+  asientos_disponibles: number;
+};
+
+/** Respuesta de `fn_copiar_asignaciones(p_desde, p_hasta)`. */
+export type ResultadoCopiarAsignaciones = {
+  asignadas: number;
+  omitidas: { viaje_id: string; motivo: string }[];
+};
 
 /** Respuesta de `fn_completar_viaje(p_viaje_id)`. */
 export type ResultadoCompletarViaje = {

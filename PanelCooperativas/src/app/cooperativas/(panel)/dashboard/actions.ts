@@ -41,6 +41,9 @@ function normalizar(d: Partial<BandejaCooperativa> | null): BandejaCooperativa {
             encomiendas_por_despachar: num(p.encomiendas_por_despachar),
           }
         : null,
+    // Pueden faltar mientras la migración 20261127000001 no esté aplicada.
+    salidas_sin_unidad: num(d?.salidas_sin_unidad),
+    salidas_fuera_de_horario: num(d?.salidas_fuera_de_horario),
     generado_at: d?.generado_at ?? new Date().toISOString(),
   };
 }

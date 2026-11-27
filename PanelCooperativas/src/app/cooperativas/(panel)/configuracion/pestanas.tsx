@@ -5,18 +5,19 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 // ─── Pestañas de Configuración en la URL (?tab=, PN-08, PN-32) ───────────────
-// Orden de la puesta en marcha: Sucursales · Métodos de pago · Datos. Cambiar de
+// Orden de la puesta en marcha: Sucursales · Métodos de pago · Días no laborables · Datos. Cambiar de
 // pestaña reescribe `?tab=` con la History API (Next la sincroniza con
 // useSearchParams), sin volver a pedir la página al servidor.
 
-export const PESTANAS = ["sucursales", "metodos-pago", "datos"] as const;
+export const PESTANAS = ["sucursales", "metodos-pago", "no-laborables", "datos"] as const;
 export type Pestana = (typeof PESTANAS)[number];
 
-const CORTAS: Partial<Record<Pestana, string>> = { "metodos-pago": "Pagos" };
+const CORTAS: Partial<Record<Pestana, string>> = { "metodos-pago": "Pagos", "no-laborables": "Feriados" };
 
 const ETIQUETAS: Record<Pestana, string> = {
   sucursales: "Sucursales",
   "metodos-pago": "Métodos de pago",
+  "no-laborables": "Días no laborables",
   datos: "Datos",
 };
 

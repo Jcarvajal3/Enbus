@@ -44,6 +44,9 @@ import { formatCiudad, mismaCiudad, terminalVE, terminalesParaSalir } from "@/li
 import { ICONO_SECCION } from "@/lib/navigation";
 import { cn } from "@/lib/utils";
 import { CeldaEnlace } from "@/components/celda-enlace";
+import { AvisoConservadas } from "@/components/horarios/aviso-conservadas";
+import type { Horario, SalidaConservada } from "@/lib/types/horarios";
+import { SalidasRuta, resumenSalidas } from "./salidas-ruta";
 
 /** Fila de `rutas` que usa esta pantalla. */
 export type Ruta = {
@@ -195,6 +198,20 @@ function PrecioRuta({ ruta }: { ruta: Ruta }) {
   );
 }
 
+/** Salidas activas de la ruta (máximo 3 líneas) o "Sin salidas fijas". */
+function ResumenSalidas({ horarios }: { horarios: Horario[] }) {
+  const lineas = resumenSalidas(horarios);
+  if (lineas.length === 0) return <span className="text-[13px] text-muted-foreground">Sin salidas fijas</span>;
+  return (
+    <span className="flex flex-col text-[13px] tabular-nums">
+      {lineas.slice(0, 3).map((l) => (
+        <span key={l}>{l}</span>
+      ))}
+      {lineas.length > 3 && <span className="text-muted-foreground">+{lineas.length - 3} más</span>}
+    </span>
+  );
+}
+
 function NombreRuta({ ruta }: { ruta: Ruta }) {
   return (
     <span className="flex flex-col">
@@ -211,10 +228,28 @@ function NombreRuta({ ruta }: { ruta: Ruta }) {
   );
 }
 
-export function RutasClient({ rutas, errorCarga }: { rutas: Ruta[]; errorCarga: string | null }) {
+export function RutasClient({
+  rutas,
+  horarios,
+  capacidadDefecto,
+  errorCarga,
+}: {
+  rutas: Ruta[];
+  horarios: Horario[];
+  capacidadDefecto: number;
+  errorCarga: string | null;
+}) {
   const router = useRouter();
   const uid = useId();
   const { visibles, pagina, paginas, ir } = usePaginacion(rutas);
+
+  // Salidas fijas de cada ruta y las que ya tenían pasajeros al cambiarlas.
+  const salidasPorRuta = useMemo(() => {
+    const mapa = new Map<string, Horario[]>();
+    for (const h of horarios) mapa.set(h.ruta_id, [...(mapa.get(h.ruta_id) ?? []), h]);
+    return mapa;
+  }, [horarios]);
+  const [conservadas, setConservadas] = useState<SalidaConservada[]>([]);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingRuta, setEditingRuta] = useState<Ruta | null>(null);
@@ -223,7 +258,7 @@ export function RutasClient({ rutas, errorCarga }: { rutas: Ruta[]; errorCarga: 
 
   // Desactivar una ruta con viajes programados (con confirmación)
   const [alertOpen, setAlertOpen] = useState(false);
-  const [alertData, setAlertData] = useState<{ id: string; count: number; nombre: string } | null>(null);
+  const [alertData, setAlertData] = useState<{ id: string; count: number; vacias: number; nombre: string } | null>(null);
 
   // Form states
   const [estadoOrigen, setEstadoOrigen] = useState<string>("");
@@ -321,6 +356,7 @@ export function RutasClient({ rutas, errorCarga }: { rutas: Ruta[]; errorCarga: 
             setAlertData({
               id: ruta.id,
               count: check.count,
+              vacias: check.vacias,
               nombre: `${formatCity(ruta.ciudad_origen)} → ${formatCity(ruta.ciudad_destino)}`,
             });
             setAlertOpen(true);
@@ -375,6 +411,10 @@ export function RutasClient({ rutas, errorCarga }: { rutas: Ruta[]; errorCarga: 
         if (res.error) {
           setFormError(res.error);
           setErrorCampo("campo" in res && res.campo ? res.campo : null);
+        } else if (!editingRuta && "creada" in res && res.creada) {
+          // Ruta nueva: el diálogo pasa a "Editar ruta" para agregarle sus salidas ahí mismo.
+          avisarExito("Ruta creada. Ahora agrega sus salidas.");
+          setEditingRuta(res.creada as Ruta);
         } else {
           avisarExito(editingRuta ? "Ruta actualizada." : "Ruta creada.");
           setIsModalOpen(false);
@@ -432,7 +472,7 @@ export function RutasClient({ rutas, errorCarga }: { rutas: Ruta[]; errorCarga: 
     <div className="flex flex-col gap-8">
       <PageHeader
         title="Rutas"
-        description="Duración y precio del pasaje en USD."
+        description="Duración, precio del pasaje en USD y salidas fijas de cada ruta."
         principal={
           rutas.length > 0 ? (
             <Button size="lg" onClick={openCreateModal}>
@@ -442,6 +482,8 @@ export function RutasClient({ rutas, errorCarga }: { rutas: Ruta[]; errorCarga: 
           ) : undefined
         }
       />
+
+      {!isModalOpen && <AvisoConservadas conservadas={conservadas} onCerrar={() => setConservadas([])} />}
 
       {errorCarga ? (
         <Card className="p-0">
@@ -480,6 +522,7 @@ export function RutasClient({ rutas, errorCarga }: { rutas: Ruta[]; errorCarga: 
                   .filter(Boolean)
                   .join(" · ")}
                 lineasSubtitulo={2}
+                meta={resumenSalidas(salidasPorRuta.get(ruta.id) ?? [])[0]}
                 adorno={Number(ruta.precio_pasaje) > 0 ? formatUsd(Number(ruta.precio_pasaje)) : undefined}
                 badge={<StatusBadge status={ruta.activa ? "ACTIVO" : "INACTIVO"} dominio="recurso" />}
               />
@@ -489,6 +532,7 @@ export function RutasClient({ rutas, errorCarga }: { rutas: Ruta[]; errorCarga: 
             <TableHeader>
               <TableRow>
                 <TableHead>Ruta</TableHead>
+                <TableHead>Salidas</TableHead>
                 <TableHead>Duración</TableHead>
                 <TableHead className="text-right">Precio</TableHead>
                 <TableHead>Estado</TableHead>
@@ -507,6 +551,9 @@ export function RutasClient({ rutas, errorCarga }: { rutas: Ruta[]; errorCarga: 
                   >
                     <NombreRuta ruta={ruta} />
                   </CeldaEnlace>
+                  <TableCell className="whitespace-normal">
+                    <ResumenSalidas horarios={salidasPorRuta.get(ruta.id) ?? []} />
+                  </TableCell>
                   <TableCell className="tabular-nums">
                     <DuracionRuta ruta={ruta} />
                   </TableCell>
@@ -698,6 +745,22 @@ export function RutasClient({ rutas, errorCarga }: { rutas: Ruta[]; errorCarga: 
                   onCheckedChange={setActivaSwitch}
                 />
               </div>
+
+              {editingRuta ? (
+                <SalidasRuta
+                  key={editingRuta.id}
+                  rutaId={editingRuta.id}
+                  rutaActiva={editingRuta.activa}
+                  horarios={salidasPorRuta.get(editingRuta.id) ?? []}
+                  capacidadDefecto={capacidadDefecto}
+                  onConservadas={setConservadas}
+                />
+              ) : (
+                <p className="text-[13px] text-muted-foreground">
+                  Al guardar la ruta podrás agregar aquí mismo sus salidas (hora y días).
+                </p>
+              )}
+              {isModalOpen && <AvisoConservadas conservadas={conservadas} onCerrar={() => setConservadas([])} />}
             </div>
 
             {/* Móvil: la tarjeta no lleva menú, desactivar vive en la hoja. */}
@@ -739,9 +802,9 @@ export function RutasClient({ rutas, errorCarga }: { rutas: Ruta[]; errorCarga: 
           alertData
             ? [
                 alertData.count === 1
-                  ? "Tiene 1 viaje programado: seguirá en pie. Cancélalo en Viajes si no va a salir."
-                  : `Tiene ${alertData.count} viajes programados: seguirán en pie. Cancélalos en Viajes si no van a salir.`,
-                "No podrás programar viajes nuevos en esta ruta hasta reactivarla.",
+                  ? "Tiene 1 viaje programado con pasajeros: seguirá en pie. Cancélalo en Viajes si no va a salir."
+                  : `Tiene ${alertData.count} viajes programados con pasajeros: seguirán en pie. Cancélalos en Viajes si no van a salir.`,
+                "Sus horarios dejan de crear salidas nuevas y no podrás programar viajes en esta ruta hasta reactivarla.",
               ]
             : []
         }

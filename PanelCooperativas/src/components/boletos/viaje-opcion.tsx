@@ -114,15 +114,12 @@ export function ViajeOpcion({
         )}
       </span>
 
-      {/* Unidad y chofer: secundarios. */}
-      {(viaje.numero_unidad || viaje.nombre_chofer) && (
+      {/* Unidad y chofer: secundarios. Sin bus asignado se vende igual; la unidad se decide después. */}
         <span className="col-start-2 flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1 text-[13px] text-muted-foreground">
-          {viaje.numero_unidad && (
-            <span className="flex items-center gap-1.5">
-              <Bus className="size-4 shrink-0" aria-hidden />
-              Unidad {viaje.numero_unidad}
-            </span>
-          )}
+          <span className="flex items-center gap-1.5">
+            <Bus className="size-4 shrink-0" aria-hidden />
+            {viaje.numero_unidad ? `Unidad ${viaje.numero_unidad}` : "Unidad por asignar"}
+          </span>
           {viaje.nombre_chofer && (
             <span className="flex min-w-0 items-center gap-1.5">
               <SteeringWheel className="size-4 shrink-0" aria-hidden />
@@ -131,7 +128,6 @@ export function ViajeOpcion({
             </span>
           )}
         </span>
-      )}
     </button>
   );
 }

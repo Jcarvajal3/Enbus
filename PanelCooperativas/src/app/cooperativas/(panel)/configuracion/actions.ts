@@ -3,7 +3,8 @@
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { getUserProfile } from "@/lib/supabase/cached";
 import { revalidatePath } from "next/cache";
-import { codigoEB, humanizeError } from "@/lib/errores";
+import { codigoEB, humanizeError, parseDetalleEB } from "@/lib/errores";
+import type { ResultadoDiaNoLaborable } from "@/lib/types/horarios";
 import { normalizeRif, RIF_ERROR } from "@/lib/rif";
 import { cedulaParaGuardar, telefonoParaGuardar } from "@/lib/ve";
 import { horarioATexto, normalizarHorario, type HorarioSemana } from "@/lib/horario";
@@ -602,4 +603,71 @@ export async function eliminarSucursal(id: string): Promise<ResultadoConfig> {
   revalidatePath("/cooperativas/configuracion");
   revalidatePath("/cooperativas/empleados");
   return { ok: true, data: null };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Días no laborables (fn_guardar_dia_no_laborable / fn_borrar_dia_no_laborable)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const FECHA_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+function refrescarSalidas() {
+  revalidatePath("/cooperativas/configuracion");
+  revalidatePath("/cooperativas/rutas");
+  revalidatePath("/cooperativas/viajes");
+  revalidatePath("/cooperativas/dashboard");
+}
+
+/** Agrega (o actualiza) un día en que no se crean salidas de los horarios. */
+export async function guardarDiaNoLaborable(entrada: {
+  /** 'YYYY-MM-DD'. Con `cadaAnio` solo importan el mes y el día. */
+  fecha: string;
+  nombre: string;
+  cadaAnio: boolean;
+}): Promise<ResultadoConfig<ResultadoDiaNoLaborable>> {
+  const admin = await requireAdmin();
+  if (!admin.ok) return admin;
+  if (!FECHA_RE.test(entrada.fecha ?? "")) return { ok: false, error: "Elige la fecha del día no laborable.", campo: "fecha" };
+  const nombre = (entrada.nombre ?? "").trim().replace(/\s+/g, " ");
+  if (nombre.length > 60) return { ok: false, error: "El nombre puede tener hasta 60 caracteres.", campo: "nombre" };
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("fn_guardar_dia_no_laborable", {
+    p_fecha: entrada.fecha,
+    p_nombre: nombre || null,
+    p_cada_anio: entrada.cadaAnio === true,
+  });
+  if (error) {
+    console.error("[guardarDiaNoLaborable] Error:", error);
+    const detalle = parseDetalleEB(error);
+    return { ...fallo(error, "agregar el día no laborable"), campo: typeof detalle.campo === "string" ? detalle.campo : undefined };
+  }
+
+  refrescarSalidas();
+  const d = (data ?? {}) as Partial<ResultadoDiaNoLaborable>;
+  return {
+    ok: true,
+    data: {
+      id: String(d.id ?? ""),
+      quitadas: Number(d.quitadas ?? 0),
+      conservadas: Array.isArray(d.conservadas) ? d.conservadas : [],
+    },
+  };
+}
+
+/** Borra un día no laborable; las salidas de los horarios de ese día se vuelven a crear. */
+export async function borrarDiaNoLaborable(id: string): Promise<ResultadoConfig<{ creadas: number }>> {
+  const admin = await requireAdmin();
+  if (!admin.ok) return admin;
+  if (!UUID_RE.test(id ?? "")) return { ok: false, error: "No encontramos ese día. Actualiza la página." };
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("fn_borrar_dia_no_laborable", { p_id: id });
+  if (error) {
+    console.error("[borrarDiaNoLaborable] Error:", error);
+    return fallo(error, "quitar el día no laborable");
+  }
+
+  refrescarSalidas();
+  return { ok: true, data: { creadas: Number((data as { creadas?: number } | null)?.creadas ?? 0) } };
 }

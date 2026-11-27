@@ -89,7 +89,6 @@ export const NAV_GRUPOS: NavGrupo[] = [
     items: [
       { title: "Taquilla de boletos", href: "/cooperativas/taquilla/boletos", icon: ICONO_SECCION.taquillaBoletos, roles: AMBOS },
       { title: "Pagos por verificar", href: "/cooperativas/pagos", icon: ICONO_SECCION.pagos, roles: AMBOS, contador: "pagos_por_verificar" },
-      { title: "Reembolsos", href: "/cooperativas/reembolsos", icon: ICONO_SECCION.reembolsos, roles: AMBOS, contador: "reembolsos_por_devolver" },
       { title: "Embarque", href: "/cooperativas/embarque", icon: ICONO_SECCION.embarque, roles: AMBOS },
       { title: "Viajes", href: "/cooperativas/viajes", icon: ICONO_SECCION.viajes, roles: AMBOS },
     ],
@@ -103,6 +102,8 @@ export const NAV_GRUPOS: NavGrupo[] = [
       { title: "Despacho", href: "/cooperativas/despacho", icon: ICONO_SECCION.despacho, roles: AMBOS },
       { title: "Recepción en destino", href: "/cooperativas/recepcion-destino", icon: ICONO_SECCION.recepcion, roles: AMBOS, contador: "encomiendas_en_camino" },
       { title: "Entrega", href: "/cooperativas/entrega", icon: ICONO_SECCION.entrega, roles: AMBOS, contador: "encomiendas_por_vencer", tonoContador: "aviso" },
+      // Las tarifas son solo de encomiendas (el pasaje se fija en cada ruta).
+      { title: "Tarifas", href: "/cooperativas/tarifas", icon: ICONO_SECCION.tarifas, roles: ADMIN },
     ],
   },
   {
@@ -112,8 +113,9 @@ export const NAV_GRUPOS: NavGrupo[] = [
     items: [
       { title: "Buses", href: "/cooperativas/buses", icon: ICONO_SECCION.buses, roles: ADMIN },
       { title: "Rutas", href: "/cooperativas/rutas", icon: ICONO_SECCION.rutas, roles: ADMIN },
-      { title: "Tarifas", href: "/cooperativas/tarifas", icon: ICONO_SECCION.tarifas, roles: ADMIN },
       { title: "Empleados", href: "/cooperativas/empleados", icon: ICONO_SECCION.empleados, roles: ADMIN },
+      // Abarca boletos y encomiendas.
+      { title: "Reembolsos", href: "/cooperativas/reembolsos", icon: ICONO_SECCION.reembolsos, roles: AMBOS, contador: "reembolsos_por_devolver" },
       // En el menú es "Cooperativa" (el grupo ya dice "Configuración"); la página sigue
       // titulándose "Configuración" en su H1 y en la pestaña del navegador.
       { title: "Cooperativa", tituloPagina: "Configuración", href: "/cooperativas/configuracion", icon: ICONO_SECCION.cooperativa, roles: ADMIN },

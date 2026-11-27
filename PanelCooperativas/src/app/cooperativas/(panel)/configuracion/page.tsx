@@ -6,8 +6,10 @@ import { humanizeError } from "@/lib/errores";
 import { DatosCooperativaTab } from "./tab-datos";
 import { MetodosPagoTab } from "./tab-metodos-pago";
 import { SucursalesTab } from "./tab-sucursales";
+import { NoLaborablesTab } from "./tab-no-laborables";
 import { PestanasConfiguracion, type Pestana } from "./pestanas";
 import type { CooperativaData, MetodoPagoCooperativa } from "@/lib/types/configuracion";
+import type { DiaNoLaborable } from "@/lib/types/horarios";
 import type { SucursalGuardada } from "./actions";
 
 export default async function ConfiguracionPage() {
@@ -16,7 +18,7 @@ export default async function ConfiguracionPage() {
 
   const supabase = await createClient();
 
-  const [cooperativaResult, metodosResult, sucursalesResult, perfilResult] = await Promise.all([
+  const [cooperativaResult, metodosResult, sucursalesResult, perfilResult, diasResult] = await Promise.all([
     // RIF: por la RPC (no es legible en la tabla).
     leerCooperativasPrivadas(supabase, (cooperativas) =>
       cooperativas.select("id, nombre, rif, logo_url, estado").eq("id", user.cooperativa_id).single()
@@ -32,6 +34,12 @@ export default async function ConfiguracionPage() {
       .eq("cooperativa_id", user.cooperativa_id)
       .order("nombre", { ascending: true }),
     supabase.from("profiles").select("sucursal_id").eq("id", user.id).maybeSingle(),
+    supabase
+      .from("dias_no_laborables")
+      .select("id, cooperativa_id, fecha, nombre, cada_anio, created_at")
+      .eq("cooperativa_id", user.cooperativa_id)
+      .order("fecha", { ascending: true })
+      .limit(500),
   ]);
 
   const cooperativa = cooperativaResult.data as (CooperativaData & { estado?: string | null }) | null;
@@ -42,6 +50,8 @@ export default async function ConfiguracionPage() {
   if (cooperativaResult.error) console.error("[ConfiguracionPage] cooperativa:", cooperativaResult.error);
   if (metodosResult.error) console.error("[ConfiguracionPage] métodos de pago:", metodosResult.error);
   if (sucursalesResult.error) console.error("[ConfiguracionPage] sucursales:", sucursalesResult.error);
+  if (diasResult.error) console.error("[ConfiguracionPage] días no laborables:", diasResult.error);
+  const diasNoLaborables = (diasResult.data ?? []) as DiaNoLaborable[];
 
   if (!cooperativa) {
     // Se lanza para que error.tsx muestre "Reintentar" (sin texto técnico).
@@ -70,6 +80,12 @@ export default async function ConfiguracionPage() {
             <MetodosPagoTab
               metodos={metodos}
               errorCarga={metodosResult.error ? humanizeError(metodosResult.error, "cargar los métodos de pago") : null}
+            />
+          ),
+          "no-laborables": (
+            <NoLaborablesTab
+              dias={diasNoLaborables}
+              errorCarga={diasResult.error ? humanizeError(diasResult.error, "cargar los días no laborables") : null}
             />
           ),
           datos: <DatosCooperativaTab cooperativa={cooperativa} estado={estado} />,

@@ -71,6 +71,33 @@ function tarjetas(b: BandejaCooperativa): Tarjeta[] {
       detalle: <Monto usd={b.reembolsos_usd} size="sm" />,
     });
   }
+  // Los campos nuevos pueden faltar (undefined) mientras la migración no esté aplicada.
+  const sinUnidad = b.salidas_sin_unidad ?? 0;
+  if (sinUnidad > 0) {
+    lista.push({
+      clave: "sin-unidad",
+      href: "/cooperativas/viajes",
+      icono: ICONO_SECCION.unidad,
+      titulo: plural(sinUnidad, "1 salida sin unidad (hoy y mañana)", "{n} salidas sin unidad (hoy y mañana)"),
+      detalle: "Asígnales bus y chofer antes de que salgan.",
+      urgente: true,
+    });
+  }
+  const fueraHorario = b.salidas_fuera_de_horario ?? 0;
+  if (fueraHorario > 0) {
+    lista.push({
+      clave: "fuera-horario",
+      href: "/cooperativas/viajes",
+      icono: ICONO_SECCION.viajes,
+      titulo: plural(
+        fueraHorario,
+        "1 salida fuera de horario tiene pasajeros",
+        "{n} salidas fuera de horario tienen pasajeros"
+      ),
+      detalle: "Revísalas: ya no están en tus horarios.",
+      urgente: true,
+    });
+  }
   if (b.encomiendas_por_vencer > 0) {
     const d = b.dias_minimos_para_devolucion;
     lista.push({

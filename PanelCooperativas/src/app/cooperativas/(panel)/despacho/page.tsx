@@ -116,7 +116,7 @@ function horaCorta(iso: string) {
 
 /** "2:30 p. m. · Unidad 12" */
 function detalleViaje(v: ViajeDespacho) {
-  return [horaCorta(v.fecha_hora_salida), v.numero_unidad ? `Unidad ${v.numero_unidad}` : "Sin unidad"].join(" · ");
+  return [horaCorta(v.fecha_hora_salida), v.numero_unidad ? `Unidad ${v.numero_unidad}` : "Unidad por asignar"].join(" · ");
 }
 
 function rutaDe(v: ViajeDespacho) {
@@ -556,6 +556,7 @@ function Despacho() {
                 origen: selectedViaje.ruta.ciudad_origen,
                 destino: selectedViaje.ruta.ciudad_destino,
                 salida: selectedViaje.fecha_hora_salida,
+                numero_unidad: selectedViaje.numero_unidad,
               }
             : null
         }
