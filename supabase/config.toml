@@ -233,16 +233,41 @@ otp_expiry = 3600
 # admin_email = "admin@email.com"
 # sender_name = "Admin"
 
-# Uncomment to customize email template
-# [auth.email.template.invite]
-# subject = "You have been invited"
-# content_path = "./supabase/templates/invite.html"
+# Plantillas de EnBus: las genera `node shared/correos-auth.ts` desde shared/correo.ts.
+# En producción se pegan a mano en Authentication › Emails (ver supabase/templates/README.md).
+[auth.email.template.confirmation]
+subject = "Confirma tu correo en EnBus"
+content_path = "./supabase/templates/confirmacion.html"
 
-# Uncomment to customize notification email template
-# [auth.email.notification.password_changed]
-# enabled = true
-# subject = "Your password has been changed"
-# content_path = "./templates/password_changed_notification.html"
+[auth.email.template.recovery]
+subject = "Restablece tu contraseña de EnBus"
+content_path = "./supabase/templates/recuperacion.html"
+
+[auth.email.template.email_change]
+subject = "Confirma tu nuevo correo en EnBus"
+content_path = "./supabase/templates/cambio-correo.html"
+
+[auth.email.template.magic_link]
+subject = "Tu enlace para entrar a EnBus"
+content_path = "./supabase/templates/enlace-magico.html"
+
+[auth.email.template.invite]
+subject = "Te invitaron a EnBus"
+content_path = "./supabase/templates/invitacion.html"
+
+[auth.email.template.reauthentication]
+subject = "Tu código de verificación de EnBus"
+content_path = "./supabase/templates/reautenticacion.html"
+
+[auth.email.notification.password_changed]
+enabled = true
+subject = "Cambiaste tu contraseña de EnBus"
+content_path = "./supabase/templates/aviso-contrasena.html"
+
+[auth.email.notification.email_changed]
+enabled = true
+subject = "Cambiaste el correo de tu cuenta de EnBus"
+content_path = "./supabase/templates/aviso-correo.html"
 
 [auth.sms]
 # Allow/disallow new user signups via SMS to your project.

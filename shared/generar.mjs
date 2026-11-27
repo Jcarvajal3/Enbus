@@ -129,6 +129,7 @@ const errores = copia("errores.ts");
 const dinero = copia("dinero.ts");
 const bancos = copia("bancos.ts");
 const asientos = copia("asientos.ts");
+const correo = copia("correo.ts");
 
 const salidas = [
   ["EnBusApp/src/tokens.generated.ts", tsApp],
@@ -145,6 +146,8 @@ const salidas = [
   ["PanelCooperativas/src/lib/dinero.generated.ts", dinero],
   ["PanelCooperativas/src/lib/bancos.generated.ts", bancos],
   ["PanelCooperativas/src/lib/asientos.generated.ts", asientos],
+  ["PanelCooperativas/src/lib/correo.generated.ts", correo],
+  ["supabase/functions/_shared/correo.generated.ts", correo],
   ["LandingEnBus/app/tokens.generated.css", cssLanding],
   ["LandingEnBus/lib/ve.generated.ts", ve],
   ["LandingEnBus/lib/artefactos.generated.ts", artefactos],

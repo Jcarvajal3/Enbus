@@ -2,6 +2,7 @@
 
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { getUserProfile } from "@/lib/supabase/cached";
+import { avisarAdminSolicitud, sendRevisionSolicitadaEmail } from "@/lib/email";
 import { revalidatePath } from "next/cache";
 import { codigoEB, humanizeError, parseDetalleEB } from "@/lib/errores";
 import type { ResultadoDiaNoLaborable } from "@/lib/types/horarios";
@@ -187,6 +188,17 @@ export async function solicitarRevision(mensaje?: string): Promise<ResultadoConf
   // El estado de la cooperativa viene del layout (banner y menú): se recarga todo el panel.
   revalidatePath("/cooperativas", "layout");
   const r = (data ?? {}) as { ya_procesado?: boolean };
+
+  // Correos (no bloquean): confirmación a la cooperativa y aviso al equipo de EnBus.
+  if (!r.ya_procesado) {
+    const nombre = admin.cooperativaNombre ?? "tu cooperativa";
+    const { data: claims } = await supabase.auth.getClaims();
+    const email = typeof claims?.claims?.email === "string" ? claims.claims.email : null;
+    await Promise.allSettled([
+      email ? sendRevisionSolicitadaEmail({ email, cooperativaNombre: nombre }) : Promise.resolve(),
+      avisarAdminSolicitud({ cooperativaNombre: nombre, esRevision: true }),
+    ]);
+  }
   return { ok: true, data: { ya_procesado: Boolean(r.ya_procesado) } };
 }
 

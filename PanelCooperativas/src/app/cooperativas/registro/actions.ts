@@ -14,6 +14,7 @@ import { normalizeRif, RIF_ERROR } from "@/lib/rif";
 import { humanizeError, textoDemasiadosIntentos } from "@/lib/errores";
 import { CLAVE_ERROR, CLAVE_MINIMO, telefonoParaGuardar, TELEFONO_ERROR } from "@/lib/ve";
 import { consumirLimitePorIp, LIMITE_REGISTRO, LIMITE_VERIFICAR_CORREO } from "./limite";
+import { avisarAdminSolicitud, sendSolicitudRecibidaEmail } from "@/lib/email";
 
 export type CampoRegistro =
   | "email"
@@ -324,6 +325,15 @@ export async function completarOnboardingCooperativa(
     }
     return { error: humanizeError(error, "procesar el registro"), etapa: "onboarding" };
   }
+
+  // Correos (no bloquean el registro si fallan): confirmación a la cooperativa y aviso al equipo.
+  const correoCooperativa = (authUser.email ?? "").trim().toLowerCase();
+  await Promise.allSettled([
+    correoCooperativa
+      ? sendSolicitudRecibidaEmail({ email: correoCooperativa, cooperativaNombre: nombre })
+      : Promise.resolve(),
+    avisarAdminSolicitud({ cooperativaNombre: nombre, rif, representante }),
+  ]);
 
   // redirect() lanza una excepción interna: va fuera del try (docs de Next.js 16).
   redirect(INICIO);

@@ -1,5 +1,9 @@
 import { Resend } from "resend";
 import { telefonoWhatsApp } from "@/lib/ve";
+import { correoHtml, correoTexto, type Correo } from "@/lib/correo.generated";
+
+// Correos que manda el panel (Next.js) por Resend. El diseño vive en shared/correo.ts
+// (el mismo de los avisos al pasajero y de las plantillas de Supabase Auth).
 
 const resendApiKey = process.env.RESEND_API_KEY;
 
@@ -8,7 +12,7 @@ export const resend = resendApiKey ? new Resend(resendApiKey) : null;
 /**
  * Remitente de los correos. `onboarding@resend.dev` es el remitente de pruebas de
  * Resend: solo entrega al correo dueño de la cuenta de Resend. En producción hay que
- * definir RESEND_FROM con un dominio verificado (p. ej. "EnBus <no-responder@enbus.app>").
+ * definir RESEND_FROM con un dominio verificado (p. ej. "EnBus <noreply@enbusve.com>").
  */
 export const REMITENTE_CORREO = process.env.RESEND_FROM?.trim() || "EnBus <onboarding@resend.dev>";
 
@@ -17,9 +21,11 @@ export const ERROR_CORREO = "No pudimos enviar el correo.";
 
 export type ResultadoCorreo = { success: true; data?: unknown } | { success: false; error: string };
 
+const MOTIVO_COOPERATIVA = "Recibes este correo porque registraste tu cooperativa en EnBus.";
+
 /** URL pública del panel de cooperativas (sin barra final). Sin variable, el correo no lleva enlace. */
 function urlPanel(): string | null {
-  const url = process.env.NEXT_PUBLIC_COOPERATIVAS_URL?.trim();
+  const url = (process.env.NEXT_PUBLIC_COOPERATIVAS_URL || process.env.NEXT_PUBLIC_SITIO_URL)?.trim();
   return url ? url.replace(/\/+$/, "") : null;
 }
 
@@ -30,49 +36,28 @@ function whatsappSoporte(): string | null {
   return telefonoWhatsApp(crudo) ?? (crudo.replace(/\D/g, "") || null);
 }
 
-/** Escapa texto libre (nombre, motivo) antes de meterlo en el HTML del correo. */
-function escaparHtml(texto: string): string {
-  return texto
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
+/** Línea de ayuda: WhatsApp o correo de soporte, si hay alguno configurado. */
+function ayuda(): string[] {
+  const wa = whatsappSoporte();
+  const correo = process.env.NEXT_PUBLIC_SOPORTE_CORREO?.trim();
+  if (wa) return [`¿Dudas? Escríbenos por WhatsApp: https://wa.me/${wa}`];
+  if (correo) return [`¿Dudas? Escríbenos a ${correo}.`];
+  return [];
 }
 
-function plantilla(contenido: string): string {
-  return `
-    <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;">
-      ${contenido}
-      <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 32px 0;" />
-      <p style="color: #64748b; font-size: 12px; text-align: center;">
-        &copy; ${new Date().getFullYear()} EnBus. Todos los derechos reservados.
-      </p>
-    </div>
-  `;
-}
-
-function boton(href: string, texto: string): string {
-  return `
-    <div style="margin: 32px 0; text-align: center;">
-      <a href="${href}" style="background-color: #f59e0b; color: #000000; padding: 12px 24px; font-weight: bold; text-decoration: none; border-radius: 6px; display: inline-block;">
-        ${texto}
-      </a>
-    </div>
-  `;
-}
-
-async function enviar(para: string, asunto: string, html: string, contexto: string): Promise<ResultadoCorreo> {
+/** Envía un correo con la plantilla de EnBus. Nunca lanza: el detalle va al log. */
+export async function enviarCorreo(para: string, correo: Correo, contexto: string): Promise<ResultadoCorreo> {
   if (!resend) {
-    console.warn(`[email] ${contexto}: falta RESEND_API_KEY; no se envió el correo a ${para}.`);
+    console.warn(`[email] ${contexto}: falta RESEND_API_KEY; no se envió el correo.`);
     return { success: false, error: ERROR_CORREO };
   }
   try {
     const { data, error } = await resend.emails.send({
       from: REMITENTE_CORREO,
       to: [para],
-      subject: asunto,
-      html,
+      subject: correo.asunto,
+      html: correoHtml(correo),
+      text: correoTexto(correo),
     });
     if (error) {
       console.error(`[email] ${contexto}: Resend rechazó el envío:`, error);
@@ -85,67 +70,163 @@ async function enviar(para: string, asunto: string, html: string, contexto: stri
   }
 }
 
-interface SendApprovalEmailParams {
+// ─── Cooperativas ────────────────────────────────────────────────────────────
+
+/** Al completar el registro: la solicitud quedó en revisión. */
+export async function sendSolicitudRecibidaEmail({
+  email,
+  cooperativaNombre,
+}: {
   email: string;
   cooperativaNombre: string;
+}): Promise<ResultadoCorreo> {
+  const panel = urlPanel();
+  return enviarCorreo(
+    email,
+    {
+      asunto: "Recibimos la solicitud de tu cooperativa",
+      preencabezado: "La revisamos en 24 a 48 horas hábiles. Mientras tanto, deja tu panel listo.",
+      estado: { texto: "En revisión", tono: "info" },
+      titulo: "Recibimos tu solicitud",
+      parrafos: [
+        `Gracias por registrar **${cooperativaNombre}** en EnBus. Revisamos cada solicitud a mano y te escribimos en 24 a 48 horas hábiles.`,
+        "Mientras tanto, entra a tu panel y deja todo listo para vender: sucursales, rutas, buses, métodos de pago y taquilleros.",
+      ],
+      boton: panel ? { texto: "Ir a mi panel", url: `${panel}/cooperativas/login` } : undefined,
+      despedida: ayuda(),
+      motivo: MOTIVO_COOPERATIVA,
+    },
+    "solicitud recibida",
+  );
+}
+
+/** La cooperativa corrigió sus datos y pidió otra revisión. */
+export async function sendRevisionSolicitadaEmail({
+  email,
+  cooperativaNombre,
+}: {
+  email: string;
+  cooperativaNombre: string;
+}): Promise<ResultadoCorreo> {
+  return enviarCorreo(
+    email,
+    {
+      asunto: "Recibimos tus cambios",
+      preencabezado: "Volvemos a revisar tu solicitud en 24 a 48 horas hábiles.",
+      estado: { texto: "En revisión", tono: "info" },
+      titulo: "Volvemos a revisar tu solicitud",
+      parrafos: [
+        `Recibimos los cambios de **${cooperativaNombre}**. Te escribimos apenas terminemos la revisión, normalmente en 24 a 48 horas hábiles.`,
+      ],
+      despedida: ayuda(),
+      motivo: MOTIVO_COOPERATIVA,
+    },
+    "revisión solicitada",
+  );
 }
 
 export async function sendApprovalEmail({
   email,
   cooperativaNombre,
-}: SendApprovalEmailParams): Promise<ResultadoCorreo> {
-  const nombre = escaparHtml(cooperativaNombre);
-  const panel = urlPanel();
-  const html = plantilla(`
-    <h2 style="color: #047857; margin-bottom: 16px;">Tu cooperativa ya está activa en EnBus</h2>
-    <p style="color: #334155; font-size: 16px; line-height: 24px;">
-      Revisamos la solicitud de <strong>${nombre}</strong> y la aprobamos. Desde ahora tus salidas y rutas se ven en la app de EnBus.
-    </p>
-    ${panel ? boton(`${panel}/cooperativas/login`, "Entrar a mi panel") : ""}
-  `);
-  return enviar(email, "Tu cooperativa ya está activa en EnBus", html, "aprobación");
-}
-
-interface SendRejectionEmailParams {
+}: {
   email: string;
   cooperativaNombre: string;
-  motivo: string;
+}): Promise<ResultadoCorreo> {
+  const panel = urlPanel();
+  return enviarCorreo(
+    email,
+    {
+      asunto: "Tu cooperativa ya está activa en EnBus",
+      preencabezado: "Tus salidas y rutas ya se ven en la app y en el sitio.",
+      estado: { texto: "Aprobada", tono: "exito" },
+      titulo: "Tu cooperativa ya está activa",
+      parrafos: [
+        `Revisamos la solicitud de **${cooperativaNombre}** y la aprobamos. Desde ahora tus salidas se ven en la app y en el sitio de EnBus, y los pasajeros pueden comprar sus boletos.`,
+        "Revisa que tus rutas, horarios y métodos de pago estén completos antes de tu primera venta.",
+      ],
+      boton: panel ? { texto: "Entrar a mi panel", url: `${panel}/cooperativas/login` } : undefined,
+      despedida: ayuda(),
+      motivo: MOTIVO_COOPERATIVA,
+    },
+    "aprobación",
+  );
 }
 
 export async function sendRejectionEmail({
   email,
   cooperativaNombre,
   motivo,
-}: SendRejectionEmailParams): Promise<ResultadoCorreo> {
-  const nombre = escaparHtml(cooperativaNombre);
+}: {
+  email: string;
+  cooperativaNombre: string;
+  motivo: string;
+}): Promise<ResultadoCorreo> {
   const panel = urlPanel();
-  const login = panel ? `${panel}/cooperativas/login` : null;
-  const soporte = whatsappSoporte();
-  const html = plantilla(`
-    <h2 style="color: #b91c1c; margin-bottom: 16px;">Necesitamos que corrijas tu solicitud</h2>
-    <p style="color: #334155; font-size: 16px; line-height: 24px;">
-      Revisamos la solicitud de <strong>${nombre}</strong> y por ahora no pudimos aprobarla.
-    </p>
-    <div style="background-color: #fef2f2; border-left: 4px solid #b91c1c; border-radius: 4px; padding: 16px; margin: 24px 0;">
-      <strong style="color: #7f1d1d; display: block; margin-bottom: 4px; font-size: 14px;">Motivo</strong>
-      <p style="color: #7f1d1d; margin: 0; font-size: 14px; line-height: 20px;">${escaparHtml(motivo)}</p>
-    </div>
-    <p style="color: #334155; font-size: 16px; line-height: 24px;">
-      ${
-        login
-          ? `Corrige tus datos en tu panel (<a href="${login}" style="color: #0f172a;">${login}</a>) y pide una nueva revisión.`
-          : "Corrige tus datos en tu panel de EnBus y pide una nueva revisión."
-      }
-    </p>
-    ${login ? boton(login, "Corregir mis datos") : ""}
-    ${
-      // El remitente (onboarding@resend.dev) no recibe respuestas: la ayuda va por WhatsApp si está configurado.
-      soporte
-        ? `<p style="color: #475569; font-size: 14px; line-height: 20px;">
-      Si tienes dudas, escríbenos por <a href="https://wa.me/${soporte}" style="color: #0f172a;">WhatsApp</a>.
-    </p>`
-        : ""
-    }
-  `);
-  return enviar(email, "Tu solicitud en EnBus necesita cambios", html, "rechazo");
+  return enviarCorreo(
+    email,
+    {
+      asunto: "Tu solicitud en EnBus necesita cambios",
+      preencabezado: "Corrige los datos en tu panel y pide una nueva revisión.",
+      estado: { texto: "Acción requerida", tono: "aviso" },
+      titulo: "Necesitamos que corrijas tu solicitud",
+      parrafos: [`Revisamos la solicitud de **${cooperativaNombre}** y por ahora no pudimos aprobarla.`],
+      nota: { titulo: "Motivo", texto: motivo, tono: "error" },
+      boton: panel ? { texto: "Corregir mis datos", url: `${panel}/cooperativas/configuracion` } : undefined,
+      despedida: [
+        "Cuando termines, toca **Pedir nueva revisión** en tu panel y la revisamos de nuevo.",
+        ...ayuda(),
+      ],
+      motivo: MOTIVO_COOPERATIVA,
+    },
+    "rechazo",
+  );
+}
+
+// ─── Equipo de EnBus ─────────────────────────────────────────────────────────
+
+/** Correos del equipo que revisa solicitudes (CORREO_AVISOS_ADMIN, separados por coma). */
+function correosAdmin(): string[] {
+  return (process.env.CORREO_AVISOS_ADMIN ?? "")
+    .split(",")
+    .map((c) => c.trim())
+    .filter((c) => c.includes("@"));
+}
+
+/** Aviso interno: llegó una solicitud nueva (o una corrección) para revisar. */
+export async function avisarAdminSolicitud({
+  cooperativaNombre,
+  rif,
+  representante,
+  esRevision = false,
+}: {
+  cooperativaNombre: string;
+  rif?: string | null;
+  representante?: string | null;
+  esRevision?: boolean;
+}): Promise<void> {
+  const destinos = correosAdmin();
+  if (destinos.length === 0) return;
+  const panel = urlPanel();
+  const detalles = [
+    { etiqueta: "Cooperativa", valor: cooperativaNombre },
+    ...(rif ? [{ etiqueta: "RIF", valor: rif }] : []),
+    ...(representante ? [{ etiqueta: "Representante", valor: representante }] : []),
+  ];
+  await Promise.all(
+    destinos.map((para) =>
+      enviarCorreo(
+        para,
+        {
+          asunto: esRevision ? `${cooperativaNombre} corrigió su solicitud` : `Nueva solicitud: ${cooperativaNombre}`,
+          estado: { texto: "Por revisar", tono: "aviso" },
+          titulo: esRevision ? "Una cooperativa pidió otra revisión" : "Llegó una solicitud nueva",
+          parrafos: ["Revísala desde el panel de administración."],
+          detalles,
+          boton: panel ? { texto: "Ver solicitudes", url: `${panel}/admin/solicitudes` } : undefined,
+          motivo: "Aviso interno para el equipo de EnBus.",
+        },
+        "aviso admin",
+      ),
+    ),
+  );
 }

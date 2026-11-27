@@ -2,6 +2,7 @@
 // La invoca pg_cron cada minuto (job 'procesar_notificaciones_pendientes') con la service role.
 // Toma la cola pending_notifications en lotes, reclamando las filas de forma atómica para que dos
 // ejecuciones solapadas no manden el mismo aviso dos veces, y envía los push a Expo en lotes de 100.
+// Los avisos importantes (pagos, boletos, viajes, encomiendas) también salen por correo (Resend).
 //
 // Reclamo: si existe la RPC fn_tomar_notificaciones_pendientes (migración 20261103000004: FOR UPDATE
 // SKIP LOCKED + reserva tomada_hasta + intentos) se usa, y un fallo transitorio se reintenta con
@@ -11,6 +12,7 @@ import '@supabase/functions-js/edge-runtime.d.ts';
 import { errorInterno, filtrarMetodo, responder } from '../_shared/http.ts';
 import { clienteAdmin, soloServiceRole, type SupabaseClient } from '../_shared/supabase.ts';
 import { type Aviso, enviarAvisos, revisarRecibos } from '../_shared/push.ts';
+import { enviarCorreosAvisos } from '../_shared/correo-pasajero.ts';
 
 const LOTE = 100;
 const MAX_LOTES = 5;
@@ -121,6 +123,7 @@ Deno.serve(async (req) => {
   let fallidas = 0;
   let reintentar = 0;
   let descartadas = 0;
+  let correos = 0;
 
   try {
     const admin = clienteAdmin();
@@ -148,6 +151,9 @@ Deno.serve(async (req) => {
         // Fallo leyendo perfiles: todo el lote se reintenta.
         console.error('[procesar-notificaciones] lote sin enviar:', (e as Error)?.message ?? e);
       }
+
+      // Correo (mejor esfuerzo, idempotente por id del aviso): no cambia el resultado del push.
+      correos += (await enviarCorreosAvisos(admin, avisos, inicio + PRESUPUESTO_MS + 10_000)).enviados;
 
       const hechas: string[] = [...sinAviso];
       const aLiberar: Fila[] = [];
@@ -178,7 +184,7 @@ Deno.serve(async (req) => {
     }
 
     const recibos = Date.now() - inicio < PRESUPUESTO_MS ? await revisarRecibos(admin) : null;
-    return responder(200, { procesadas, fallidas, reintentar, descartadas, ...(recibos ? { recibos } : {}) });
+    return responder(200, { procesadas, fallidas, reintentar, descartadas, correos, ...(recibos ? { recibos } : {}) });
   } catch (e) {
     return errorInterno('procesar-notificaciones-pendientes', e);
   }
