@@ -55,3 +55,52 @@ Medido contra la base de producción (`tydpnvajwfzcsxsowctp`) con `pg_stat_state
 3. **E3** (retención): una migración con crons de limpieza.
 4. **E1** (Broadcast por usuario): el cambio más grande. Toca la base (triggers y políticas de `realtime.messages`) y los hooks de la app. Hacerlo antes de un lanzamiento con muchos usuarios.
 5. **E6** (pasar a Pro): cuando se acerque el lanzamiento o se pase de ~150 usuarios simultáneos.
+
+## 5. Avance
+
+- **E2 hecho (27/11).**
+  - Migración `20261127000003_notificaciones_cron_condicional.sql`, aplicada en producción.
+  - El cron sigue revisando cada minuto, pero solo llama a la edge function si hay avisos listos en la cola o recibos de Expo por revisar (entre 15 min y 24 h).
+  - Comprobado: con la cola vacía, las ejecuciones terminan bien (25–60 ms) y no hacen ninguna llamada HTTP.
+- **E4 hecho (27/11).**
+  - `EnBusApp/src/utils/storage.ts` reduce cada imagen antes de subirla con `expo-image-manipulator` (~14.0.8) y la guarda en JPEG:
+    - fotos de encomienda: 1600 px, calidad 0.8;
+    - captures de pago: 2000 px, calidad 0.85.
+  - Si la reducción falla, se sube la original.
+  - `tsc` y `expo lint` pasan sin errores.
+  - **Falta:** probarlo en un teléfono. Es un módulo nativo, así que hace falta un build nuevo (dev client o EAS); el binario actual no lo trae.
+- **E3 hecho (27/11).**
+  - Migración `20261127000004_retencion_datos.sql`, aplicada en producción. Solo borra lo que no tiene valor de negocio: nada con pago, reembolso o calificación, ni encomiendas o su historial.
+  - Reglas:
+
+    | Tabla | Se borra | Cron |
+    |---|---|---|
+    | `pending_notifications` procesadas | a los 30 días (ya existía) | `limpiar_notificaciones` 04:27 |
+    | `notificaciones_log` | a los 90 días | `limpiar_notificaciones` 04:27 |
+    | `notificaciones_usuario` | leídas a los 90 días, sin leer a los 180 | `limpiar_notificaciones` 04:27 |
+    | `boletos` `EXPIRADO`/`CANCELADO` sin pago, reembolso ni calificación | 90 días después, con el viaje salido hace más de 30 | `limpiar_boletos_abandonados` 04:57 |
+
+  - Hoy son 48 de los 62 boletos (77 %).
+  - Se borra en lotes de 5.000 por ejecución.
+  - Probado en producción dentro de una transacción revertida: borró los 48 abandonados, quedaron los 14 reales y no cambió el cupo de ningún viaje.
+  - Hoy ninguna fila cumple las antigüedades, así que la primera limpieza real ocurrirá cuando pasen los 90 días.
+  - Efecto visible: el pasajero deja de ver en su historial las reservas vencidas o canceladas sin pago de hace más de 3 meses. En las estadísticas del super admin bajan los conteos de boletos `EXPIRADO` y `CANCELADO` antiguos.
+- **E1 hecho (27/11).**
+  - **Base** (migración `20261127000005_realtime_broadcast_por_usuario.sql`, aplicada en producción):
+    - triggers `zz_rt_usuario` en `boletos`, `encomiendas` y `notificaciones_usuario` publican cada cambio con `realtime.send()` en el canal privado `usuario:<id>` del dueño. En encomiendas es el remitente y el destinatario; si el destinatario cambió, también se avisa al anterior;
+    - `zz_rt_viaje` publica en `viaje:<id>` solo cuando cambian el cupo o el estado. El mensaje lleva id, cupo y estado;
+    - política en `realtime.messages`: cada usuario lee su propio canal y los de viajes, y nadie puede publicar desde el cliente;
+    - `realtime.send` captura sus errores, así que un fallo de Realtime nunca revierte una venta.
+  - **App:**
+    - `src/utils/realtimeCanales.ts` abre **un canal por tema**, compartido por todas las pantallas. Antes cada pasajero tenía 4–5 suscripciones `postgres_changes` (más las de cada pantalla de detalle).
+    - Al pasar a segundo plano cierra los canales, con lo que el socket se desconecta y solo ocupan conexión los usuarios con la app en pantalla. Al volver los reabre y las pantallas releen lo que cambió.
+    - Se migraron `useRealtime`, `useEncomiendas`, `useRecargaEnVivo` (cambió su firma a `tabla, campo, valor, recargar`), `boletos/[id]`, `boletos/compra/[id]` y `boletos/buscar`.
+  - **Verificado:**
+    - `tsc` y `expo lint` sin errores; en la app ya no queda ningún `postgres_changes`;
+    - política simulada en SQL: canal propio sí, ajeno no, viaje sí, otro tema no;
+    - de punta a punta contra producción: un `UPDATE` en `notificaciones_usuario` llegó por el canal privado `usuario:<id>` con la fila correcta;
+    - un cliente sin sesión es rechazado (`Unauthorized`).
+  - **Falta:**
+    - **Probarlo en un teléfono** (build nuevo; coincide con el de E4): listas que se actualizan solas, pago aprobado desde el panel, asientos en `buscar`, y la app en segundo plano y de vuelta.
+    - **Cuando todas las instalaciones estén actualizadas,** quitar `boletos`, `pagos`, `viajes` y `notificaciones_usuario` de la publicación `supabase_realtime`. Hoy se mantienen para las versiones viejas de la app. `encomiendas` se queda porque el panel la usa con `postgres_changes` (`use-encomiendas-realtime.ts`), que está bien: es poco personal.
+- **Pendientes:** E6 (plan Pro), E5 y E7.

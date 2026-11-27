@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { AppState } from 'react-native';
 import { supabase } from '@/src/utils/supabase';
+import { escucharUsuario, idDelCambio, type CambioFila } from '@/src/utils/realtimeCanales';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useToast } from '@/src/components/Toast';
 import { useTasaBCV } from '@/src/hooks/useTasaBCV';
@@ -50,17 +51,10 @@ function leerCache(texto: string): CacheEncomiendas | null {
  * Specialized hook for encomiendas that supports OR-filter (sender + receiver)
  * and focus-aware pause/resume lifecycle with local SWR offline caching.
  *
- * C5 Fix — Realtime subscription overhead:
- * Supabase Realtime does not support compound OR filters at the server level
- * (e.g. `sender_id=eq.X,receiver_user_id=eq.X`). To avoid broadcasting ALL
- * encomienda changes to every connected client, this hook uses TWO separate
- * channels, each with a single server-side equality filter:
- *   - Channel A: `sender_id=eq.${userId}`
- *   - Channel B: `receiver_user_id=eq.${userId}`
- *
- * Each channel only receives rows that match the filter at the Supabase
- * Realtime server, drastically reducing unnecessary WebSocket traffic in
- * production environments with many concurrent users.
+ * Realtime: escucha el canal privado `usuario:<id>` (compartido con el resto de
+ * la app, ver `realtimeCanales`), donde la base publica los cambios de las
+ * encomiendas que el usuario envió o va a recibir. Antes eran dos suscripciones
+ * `postgres_changes` (remitente y destinatario) por cada pantalla.
  */
 export function useEncomiendas(
   userId?: string,
@@ -146,11 +140,10 @@ export function useEncomiendas(
     void fetchData();
   }, [hayMas, limit, fetchData]);
 
-  // ── Efecto principal: cache secuencial → fetch → dos canales Realtime ───────
+  // ── Efecto principal: cache secuencial → fetch → canal Realtime del usuario ─
   //
   // La carga de cache y el fetch de red son SECUENCIALES para evitar la misma
-  // race condition que en useRealtime. Se usan DOS canales Realtime en lugar
-  // de uno sin filtro para reducir el tráfico WebSocket en producción (C5 Fix).
+  // race condition que en useRealtime.
   useEffect(() => {
     if (!enabled || !userId) {
       setLoading(false);
@@ -181,27 +174,30 @@ export function useEncomiendas(
 
     initialize();
 
-    // ── Realtime: DOS canales con filtros de servidor individuales ────────────
+    // ── Realtime: canal privado del usuario (compartido, ver realtimeCanales) ──
     //
-    // Un único canal sin filtro recibiría TODOS los cambios de la tabla.
-    // Con dos canales, cada uno filtra en el servidor — sólo llegan al cliente
-    // los eventos relevantes para este usuario.
-    const makeRealtimeHandler = () => (payload: any) => {
-      if (!isMounted) return;
+    // La base publica en `usuario:<id>` los cambios de las encomiendas que envió o
+    // que va a recibir (y avisa al destinatario anterior si cambió).
+    const alCambio = (cambio: CambioFila) => {
+      if (!isMounted || cambio.tabla !== 'encomiendas') return;
+      const fila = cambio.nuevo as unknown as Encomienda | null;
+      const esDelUsuario = !!fila && (fila.sender_id === userId || fila.receiver_user_id === userId);
+      const id = idDelCambio(cambio);
 
       setDataRef.current((current) => {
         let updatedList = current;
 
-        if (payload.eventType === 'INSERT') {
-          const newRec = payload.new as any;
-          // Guard: solo añadir si el registro pertenece al usuario
-          // y si todavía no existe en la lista (deduplicación por los dos canales)
-          const alreadyExists = current.some((item) => item.id === newRec.id);
-          if (!alreadyExists && (newRec.sender_id === userId || newRec.receiver_user_id === userId)) {
-            updatedList = [newRec, ...current];
+        if (cambio.op === 'DELETE' || !esDelUsuario) {
+          // Borrada, o ya no es de este usuario (cambió el destinatario).
+          if (id && current.some((item) => item.id === id)) {
+            updatedList = current.filter((item) => item.id !== id);
           }
-        } else if (payload.eventType === 'UPDATE') {
-          const updated = payload.new as Encomienda;
+        } else if (cambio.op === 'INSERT' && fila) {
+          if (!current.some((item) => item.id === fila.id)) {
+            updatedList = [fila, ...current];
+          }
+        } else if (cambio.op === 'UPDATE' && fila) {
+          const updated = fila;
           if (current.some((item) => item.id === updated.id)) {
             // Realtime trae la fila sin embeds: se conserva la cooperativa si no cambió.
             updatedList = current.map((item) =>
@@ -213,13 +209,11 @@ export function useEncomiendas(
                   }
                 : item
             );
-          } else if (updated.sender_id === userId || updated.receiver_user_id === userId) {
+          } else {
             // M-50: la base vinculó al destinatario después de crear el envío
             // (se registró o completó su cédula o teléfono): aparece en "Para mí".
             updatedList = [updated, ...current];
           }
-        } else if (payload.eventType === 'DELETE') {
-          updatedList = current.filter((item) => item.id !== payload.old.id);
         }
 
         // Persistir parche en cache
@@ -233,10 +227,8 @@ export function useEncomiendas(
       });
     };
 
-    const uniqueId = Math.random().toString(36).substring(2, 9);
-
     // Tras una caída del socket (o al volver a primer plano) lo que cambió en el
-    // hueco no llegó por los canales: se relee la lista una vez.
+    // hueco no llegó por el canal: se relee la lista una vez.
     let recargaTimer: ReturnType<typeof setTimeout> | null = null;
     const programarRecarga = () => {
       if (recargaTimer) clearTimeout(recargaTimer);
@@ -245,54 +237,17 @@ export function useEncomiendas(
         if (isMounted) void fetchData();
       }, 400);
     };
-    const alSuscribir = () => {
-      let suscritoAntes = false;
-      return (status: string) => {
-        if (status !== 'SUBSCRIBED') return;
-        if (suscritoAntes) programarRecarga();
-        suscritoAntes = true;
-      };
-    };
     const appState = AppState.addEventListener('change', (estado) => {
       if (estado === 'active' && Date.now() - ultimaLecturaRef.current >= 30_000) programarRecarga();
     });
 
-    // Canal A: encomiendas enviadas por este usuario
-    const channelSender = supabase
-      .channel(`rt:enc:sender:${userId}:${uniqueId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'encomiendas',
-          filter: `sender_id=eq.${userId}`,
-        },
-        makeRealtimeHandler()
-      )
-      .subscribe(alSuscribir());
-
-    // Canal B: encomiendas recibidas por este usuario
-    const channelReceiver = supabase
-      .channel(`rt:enc:receiver:${userId}:${uniqueId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'encomiendas',
-          filter: `receiver_user_id=eq.${userId}`,
-        },
-        makeRealtimeHandler()
-      )
-      .subscribe(alSuscribir());
+    const dejarDeEscuchar = escucharUsuario(userId, { alCambio, alReconectar: programarRecarga });
 
     return () => {
       isMounted = false;
       if (recargaTimer) clearTimeout(recargaTimer);
       appState.remove();
-      supabase.removeChannel(channelSender);
-      supabase.removeChannel(channelReceiver);
+      dejarDeEscuchar();
     };
   // fetchData is stable (useCallback), re-run only on enabled/userId change
   }, [enabled, userId, fetchData, cacheKey]);

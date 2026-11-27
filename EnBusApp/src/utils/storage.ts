@@ -2,7 +2,35 @@ import { supabase } from './supabase';
 // SDK 54: los métodos clásicos (`getInfoAsync`, `readAsStringAsync`) solo
 // funcionan importados de `expo-file-system/legacy`; desde la raíz lanzan.
 import * as FileSystem from 'expo-file-system/legacy';
+import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import { AppError } from './errores';
+
+/**
+ * Reduce la imagen a `ladoMax` px en su lado más largo (sin recortar) y la guarda en JPEG.
+ * Una foto de un teléfono moderno pesa 2–4 MB; así queda en unos 200–400 KB, lo que ahorra
+ * almacenamiento y egress del bucket (mismos límites que el panel web). También convierte HEIC
+ * a JPEG, que sí se ve en el navegador. Si algo falla, se sube la original.
+ */
+async function prepararImagen(localUri: string, ladoMax: number, calidad: number): Promise<string> {
+  try {
+    const contexto = ImageManipulator.manipulate(localUri);
+    let imagen = await contexto.renderAsync();
+    if (Math.max(imagen.width, imagen.height) > ladoMax) {
+      const original = imagen;
+      imagen = await contexto
+        .resize(original.width >= original.height ? { width: ladoMax } : { height: ladoMax })
+        .renderAsync();
+      original.release();
+    }
+    const resultado = await imagen.saveAsync({ compress: calidad, format: SaveFormat.JPEG });
+    imagen.release();
+    contexto.release();
+    return resultado.uri;
+  } catch (err) {
+    if (__DEV__) console.warn('[storage] No se pudo reducir la imagen; se sube la original:', err);
+    return localUri;
+  }
+}
 
 // Map extension to MIME type (covers HEIC common on iOS, WEBP from Android)
 const MIME_MAP: Record<string, string> = {
@@ -25,8 +53,12 @@ async function subirImagen(
     upsert: boolean;
     /** Si se indica, otros formatos se rechazan antes de subir. */
     formatos?: string[];
+    /** Lado más largo y calidad JPEG con que se reduce antes de subir. */
+    ladoMax: number;
+    calidad: number;
   }
 ): Promise<string> {
+  localUri = await prepararImagen(localUri, opciones.ladoMax, opciones.calidad);
   // fetch().blob() is unreliable on Android and doesn't support HEIC.
   const fileInfo = await FileSystem.getInfoAsync(localUri);
   if (!fileInfo.exists) {
@@ -78,7 +110,13 @@ async function subirImagen(
  * `urlFotoEncomienda(ruta)` de `src/utils/fotos.ts` (URL firmada).
  */
 export function uploadEvidencePhoto(localUri: string, userId: string): Promise<string> {
-  return subirImagen(localUri, userId, { bucket: 'fotos-encomiendas', maxMb: 10, upsert: true });
+  return subirImagen(localUri, userId, {
+    bucket: 'fotos-encomiendas',
+    maxMb: 10,
+    upsert: true,
+    ladoMax: 1600,
+    calidad: 0.8,
+  });
 }
 
 /**
@@ -93,5 +131,8 @@ export function uploadComprobantePago(localUri: string, userId: string): Promise
     maxMb: 5,
     upsert: false,
     formatos: ['jpg', 'jpeg', 'png', 'webp'],
+    // Captures con texto: más resolución que las fotos para que se lean las cifras.
+    ladoMax: 2000,
+    calidad: 0.85,
   });
 }

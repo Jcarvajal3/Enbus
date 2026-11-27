@@ -15,6 +15,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { CheckCircle, Receipt, Storefront, Ticket, UserCircle } from 'phosphor-react-native';
 import { ScreenSkeleton } from '@/src/components/SkeletonLoader';
 import { useVolver } from '@/src/hooks/useVolver';
+import { useRecargaEnVivo } from '@/src/hooks/useRecargaEnVivo';
 import {
   Aviso,
   Card,
@@ -141,37 +142,9 @@ export default function CompraScreen() {
   }, [cargar]);
 
   // La cooperativa aprueba el pago o vence la reserva: la lista se actualiza sola.
-  useEffect(() => {
-    if (!compraId || !UUID_RE.test(compraId)) return;
-    // Aprobar el pago o vencer la reserva cambia todos los boletos de la compra a
-    // la vez (un evento por asiento): una sola recarga por ráfaga.
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    const recargarPronto = () => {
-      if (timer) clearTimeout(timer);
-      timer = setTimeout(() => {
-        timer = null;
-        void cargar();
-      }, 400);
-    };
-    let suscritoAntes = false;
-    const channel = supabase
-      .channel(`rt:compra:${compraId}:${Math.random().toString(36).slice(2, 8)}`)
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'boletos', filter: `compra_id=eq.${compraId}` },
-        recargarPronto
-      )
-      .subscribe((status) => {
-        // Tras una caída del socket se relee: lo de ese hueco no llegó.
-        if (status !== 'SUBSCRIBED') return;
-        if (suscritoAntes) recargarPronto();
-        suscritoAntes = true;
-      });
-    return () => {
-      if (timer) clearTimeout(timer);
-      supabase.removeChannel(channel);
-    };
-  }, [compraId, cargar]);
+  // Eso cambia todos los boletos de la compra a la vez (un evento por asiento):
+  // useRecargaEnVivo hace una sola recarga por ráfaga.
+  useRecargaEnVivo('boletos', 'compra_id', compraId && UUID_RE.test(compraId) ? compraId : null, cargar);
 
   const volver = useVolver('/(tabs)/boletos');
 

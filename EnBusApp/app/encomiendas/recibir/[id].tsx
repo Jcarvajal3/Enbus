@@ -191,7 +191,8 @@ export default function DetalleRecibirScreen() {
   // La taquilla recibe, despacha o entrega el paquete: la pantalla se actualiza sola.
   useRecargaEnVivo(
     'encomiendas',
-    id && /^[0-9a-f-]{36}$/i.test(id) ? `id=eq.${id}` : null,
+    'id',
+    id && /^[0-9a-f-]{36}$/i.test(id) ? id : null,
     fetchData
   );
 

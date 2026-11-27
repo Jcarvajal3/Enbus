@@ -39,6 +39,7 @@ import { PasajerosForm, type PasajerosFormHandle } from '@/src/components/Pasaje
 import { ReservaTimer } from '@/src/components/ReservaTimer';
 import { ScreenSkeleton, SkeletonLoader } from '@/src/components/SkeletonLoader';
 import { useVolver } from '@/src/hooks/useVolver';
+import { useRecargaEnVivo } from '@/src/hooks/useRecargaEnVivo';
 import {
   Atmosfera,
   Aviso,
@@ -259,30 +260,8 @@ export default function DetalleBoletoScreen() {
   }, [id, cacheKey, cargar]);
 
   // ── Realtime: la cooperativa aprueba/rechaza el pago, registra el reembolso o el cron vence la reserva ──
-  const boletoId = boleto?.id;
-  useEffect(() => {
-    if (!boletoId) return;
-    let suscritoAntes = false;
-    const channel = supabase
-      .channel(`rt:boleto:${boletoId}:${Math.random().toString(36).slice(2, 8)}`)
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'boletos', filter: `id=eq.${boletoId}` },
-        () => {
-          void cargar();
-        }
-      )
-      .subscribe((status) => {
-        // Se volvió a suscribir tras una caída del socket (p. ej. al volver de la
-        // app del banco): lo que cambió en el hueco no llegó por el canal.
-        if (status !== 'SUBSCRIBED') return;
-        if (suscritoAntes) void cargar();
-        suscritoAntes = true;
-      });
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [boletoId, cargar]);
+  // Al volver de la app del banco también se relee (el canal se cierra en segundo plano).
+  useRecargaEnVivo('boletos', 'id', boleto?.id, cargar);
 
   // ── Estado que ve el usuario ─────────────────────────────────────────────
   const estadoUi = getEstadoBoletoUi(boleto);

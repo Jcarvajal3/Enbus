@@ -56,6 +56,7 @@ import {
   scrollContent,
 } from '@/src/components/ui';
 import { supabase } from '@/src/utils/supabase';
+import { escucharViaje } from '@/src/utils/realtimeCanales';
 import { useToast } from '@/src/components/Toast';
 import { CIUDADES_POPULARES, Localidad, normalizeCityForDb } from '@/src/utils/venezuela';
 import { ciudadesRecientes } from '@/src/utils/busquedasRecientes';
@@ -576,28 +577,13 @@ export default function BuscarBoletoScreen() {
         setAsientosVersion((v) => v + 1);
       }, 500);
     };
-    let suscritoAntes = false;
-    const channel = supabase
-      .channel(`rt:viaje:${viajeElegidoId}:${Math.random().toString(36).slice(2, 8)}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'viajes',
-          filter: `id=eq.${viajeElegidoId}`,
-        },
-        releer
-      )
-      .subscribe((status) => {
-        // Tras una caída del socket, lo que se apartó en el hueco no llegó.
-        if (status !== 'SUBSCRIBED') return;
-        if (suscritoAntes) releer();
-        suscritoAntes = true;
-      });
+    // Canal privado `viaje:<id>` (la base publica cupo y estado; ver realtimeCanales).
+    // Tras una caída del socket o al volver a la app, lo que se apartó en el hueco
+    // no llegó: alReconectar relee.
+    const dejarDeEscuchar = escucharViaje(viajeElegidoId, { alCambio: releer, alReconectar: releer });
     return () => {
       if (timer) clearTimeout(timer);
-      supabase.removeChannel(channel);
+      dejarDeEscuchar();
     };
   }, [viajeElegidoId, step]);
 

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import { supabase } from '@/src/utils/supabase';
+import { escucharUsuario, idDelCambio } from '@/src/utils/realtimeCanales';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -186,9 +187,11 @@ export function useRealtime<T extends WithId>(
     };
   }, [enabled, tableName, filterColumn, filterValue, selectQuery, filas, cacheKey, refreshCount]);
 
-  // ── Realtime WebSocket (uno por consulta, no por recarga) ───────────────────
+  // ── Realtime: canal privado del usuario (compartido, ver realtimeCanales) ───
+  // `filterValue` es el id del usuario dueño de las filas (comprador_id, usuario_id): la base
+  // publica sus cambios en `usuario:<id>`. Sin filtro por usuario no se escucha nada.
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled || !filterColumn || !filterValue) return;
     let isMounted = true;
 
     // Realtime entrega solo las columnas de la tabla, sin los embeds del select
@@ -205,74 +208,60 @@ export function useRealtime<T extends WithId>(
       }, 400);
     };
 
-    const uniqueId = Math.random().toString(36).substring(2, 9);
-    const channelName = filterColumn && filterValue
-      ? `rt:${tableName}:${filterColumn}:${filterValue}:${uniqueId}`
-      : `rt:${tableName}:all:${uniqueId}`;
+    // El mensaje trae la fila con todas sus columnas; con un select de columnas sueltas
+    // (sin embeds) se guardan solo las pedidas, como en la lectura.
+    const columnas = !tieneEmbeds && selectQuery.trim() !== '*'
+      ? selectQuery.split(',').map((c) => c.trim()).filter(Boolean)
+      : null;
+    const recortar = (fila: Record<string, unknown>): T =>
+      (columnas ? Object.fromEntries(columnas.map((c) => [c, fila[c]])) : fila) as T;
 
-    const realtimeFilter = filterColumn && filterValue
-      ? `${filterColumn}=eq.${filterValue}`
-      : undefined;
+    const dejarDeEscuchar = escucharUsuario(filterValue, {
+      alCambio: (cambio) => {
+        if (!isMounted || cambio.tabla !== tableName) return;
+        const nueva = cambio.nuevo;
+        // La fila dejó de ser de este usuario (p. ej. otro dueño): se trata como borrada.
+        const esDelUsuario = !!nueva && nueva[filterColumn] === filterValue;
+        const op = cambio.op === 'DELETE' || !esDelUsuario ? 'DELETE' : cambio.op;
+        const id = idDelCambio(cambio);
 
-    let suscritoAntes = false;
-    const channel = supabase
-      .channel(channelName)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: tableName,
-          filter: realtimeFilter,
-        },
-        (payload) => {
-          if (!isMounted) return;
+        if (tieneEmbeds && op === 'INSERT') {
+          // Una fila nueva sin embeds rompería la UI: se espera a la recarga.
+          programarRecarga();
+          return;
+        }
 
-          if (tieneEmbeds && payload.eventType === 'INSERT') {
-            // Una fila nueva sin embeds rompería la UI: se espera a la recarga.
-            programarRecarga();
-            return;
+        setDataRef.current((prev) => {
+          let updatedList = prev;
+
+          if (op === 'INSERT' && nueva) {
+            updatedList = prev.some((item) => item.id === nueva.id) ? prev : [recortar(nueva), ...prev];
+          } else if (op === 'UPDATE' && nueva) {
+            updatedList = prev.map((item) =>
+              item.id === nueva.id
+                ? tieneEmbeds
+                  ? ({ ...item, ...(nueva as Partial<T>) } as T)
+                  : recortar(nueva)
+                : item
+            );
+          } else if (op === 'DELETE' && id) {
+            updatedList = prev.some((item) => item.id === id) ? prev.filter((item) => item.id !== id) : prev;
           }
 
-          setDataRef.current((prev) => {
-            let updatedList = prev;
+          // Persistir parche Realtime en caché
+          if (updatedList !== prev && updatedList.length > 0) {
+            AsyncStorage.setItem(cacheKey, JSON.stringify(updatedList)).catch(() => {});
+          }
 
-            if (payload.eventType === 'INSERT') {
-              const nueva = payload.new as T;
-              updatedList = prev.some((item) => item.id === nueva.id) ? prev : [nueva, ...prev];
-            } else if (payload.eventType === 'UPDATE') {
-              updatedList = prev.map((item) =>
-                item.id === (payload.new as T).id
-                  ? tieneEmbeds
-                    ? ({ ...item, ...(payload.new as Partial<T>) } as T)
-                    : (payload.new as T)
-                  : item
-              );
-            } else if (payload.eventType === 'DELETE') {
-              updatedList = prev.filter(
-                (item) => item.id !== (payload.old as Partial<T>).id
-              );
-            }
+          return updatedList;
+        });
 
-            // Persistir parche Realtime en caché
-            if (updatedList !== prev && updatedList.length > 0) {
-              AsyncStorage.setItem(cacheKey, JSON.stringify(updatedList)).catch(() => {});
-            }
-
-            return updatedList;
-          });
-
-          // Los embeds (viaje, pago…) pueden haber cambiado con la fila.
-          if (tieneEmbeds && payload.eventType === 'UPDATE') programarRecarga();
-        }
-      )
-      .subscribe((status) => {
-        if (status !== 'SUBSCRIBED') return;
-        // Se volvió a suscribir tras una caída del socket: lo que cambió en el
-        // hueco no llegó por el canal, así que se relee.
-        if (suscritoAntes) programarRecarga();
-        suscritoAntes = true;
-      });
+        // Los embeds (viaje, pago…) pueden haber cambiado con la fila.
+        if (tieneEmbeds && op === 'UPDATE') programarRecarga();
+      },
+      // App de vuelta en primer plano o socket recuperado: lo del hueco no llegó.
+      alReconectar: programarRecarga,
+    });
 
     // Volver a primer plano: en segundo plano el socket se duerme y los cambios
     // (pago aprobado, reserva vencida) no llegan.
@@ -286,7 +275,7 @@ export function useRealtime<T extends WithId>(
       isMounted = false;
       if (recargaTimer) clearTimeout(recargaTimer);
       appState.remove();
-      supabase.removeChannel(channel);
+      dejarDeEscuchar();
     };
   }, [enabled, tableName, filterColumn, filterValue, selectQuery, cacheKey]);
 

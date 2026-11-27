@@ -2,30 +2,36 @@
  * useRecargaEnVivo — vuelve a leer una pantalla de detalle cuando su fila cambia
  * en la base (Realtime), sin que la persona tenga que deslizar para actualizar.
  *
- * - Escucha los UPDATE de `tabla` con `filtro` (`id=eq.<uuid>`) y llama a
- *   `recargar` una sola vez por ráfaga de cambios.
- * - Si el canal se vuelve a suscribir tras una caída del socket, o la app vuelve
- *   a primer plano, también recarga: esos cambios no llegaron por el canal.
- * - `filtro` null: no escucha nada (p. ej. mientras no hay id).
+ * - Escucha el canal privado del usuario (`usuario:<id>`, compartido con el resto
+ *   de la app; ver `realtimeCanales`) y reacciona a los cambios de `tabla` cuya
+ *   columna `campo` vale `valor` (p. ej. `id` del boleto, `compra_id` de la compra).
+ *   Llama a `recargar` una sola vez por ráfaga de cambios.
+ * - Si el canal se vuelve a unir (socket caído, app de vuelta en primer plano),
+ *   también recarga: esos cambios no llegaron por el canal.
+ * - `valor` null o sin sesión: no escucha nada (p. ej. mientras no hay id).
  */
 import { useEffect, useRef } from 'react';
 import { AppState } from 'react-native';
-import { supabase } from '@/src/utils/supabase';
+import { useAuth } from '@/src/contexts/AuthContext';
+import { escucharUsuario, idDelCambio } from '@/src/utils/realtimeCanales';
 
 const ESPERA_MS = 400;
 
 export function useRecargaEnVivo(
-  tabla: string,
-  filtro: string | null,
+  tabla: 'boletos' | 'encomiendas',
+  campo: string,
+  valor: string | null | undefined,
   recargar: () => unknown
 ): void {
+  const { user } = useAuth();
+  const usuarioId = user?.id;
   const recargarRef = useRef(recargar);
   useEffect(() => {
     recargarRef.current = recargar;
   }, [recargar]);
 
   useEffect(() => {
-    if (!filtro) return;
+    if (!valor || !usuarioId) return;
     let vivo = true;
     let timer: ReturnType<typeof setTimeout> | null = null;
     const pronto = () => {
@@ -36,15 +42,16 @@ export function useRecargaEnVivo(
       }, ESPERA_MS);
     };
 
-    let suscritoAntes = false;
-    const channel = supabase
-      .channel(`rt:${tabla}:${filtro}:${Math.random().toString(36).slice(2, 8)}`)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: tabla, filter: filtro }, pronto)
-      .subscribe((status) => {
-        if (status !== 'SUBSCRIBED') return;
-        if (suscritoAntes) pronto();
-        suscritoAntes = true;
-      });
+    const dejarDeEscuchar = escucharUsuario(usuarioId, {
+      alCambio: (cambio) => {
+        if (cambio.tabla !== tabla) return;
+        const coincide = campo === 'id'
+          ? idDelCambio(cambio) === valor
+          : cambio.nuevo?.[campo] === valor;
+        if (coincide) pronto();
+      },
+      alReconectar: pronto,
+    });
 
     const appState = AppState.addEventListener('change', (estado) => {
       if (estado === 'active') pronto();
@@ -54,7 +61,7 @@ export function useRecargaEnVivo(
       vivo = false;
       if (timer) clearTimeout(timer);
       appState.remove();
-      supabase.removeChannel(channel);
+      dejarDeEscuchar();
     };
-  }, [tabla, filtro]);
+  }, [tabla, campo, valor, usuarioId]);
 }
