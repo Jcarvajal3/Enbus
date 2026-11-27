@@ -10,8 +10,10 @@
  * misma forma.
  *
  * El mapa se dibuja como el bus visto desde arriba, con el frente hacia arriba,
- * para que la persona se ubique: parabrisas, chofer adelante a la izquierda,
- * puerta adelante a la derecha (bus venezolano típico) y pasillo central. Cada
+ * para que la persona se ubique: parabrisas, chofer adelante a la izquierda, puerta
+ * en la primera fila a la derecha (bus venezolano típico), pasillo central y fila
+ * trasera de 5, con un asiento en el pasillo.
+ * La distribución es la misma del panel (shared/asientos.ts). Cada
  * asiento lleva el respaldo abajo, que es hacia donde queda al mirar al frente.
  * La cabina es orientativa: la base de datos no guarda la distribución real.
  */
@@ -29,7 +31,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { PressableScale } from './PressableScale';
 import { Aviso, Button, Text } from '@/src/components/ui';
-import { generarAsientos } from '@/src/utils/seatLayout';
+import { distribucionAsientos, ubicacionAsiento } from '@/src/utils/asientos.generated';
 import { mensajeAsientosTomados, ordenarAsientos } from '@/src/hooks/useCheckoutBoletos';
 import { alpha, Colors, Gradients, Motion, Radius, Shadows, Sizes, Spacing } from '@/src/theme';
 
@@ -59,7 +61,8 @@ interface SeatSelectorProps {
 const SEAT_SIZE = Sizes.touchTarget;
 const LEYENDA = Sizes.icon.md;
 const ESPACIO_ASIENTOS = Spacing.sm;
-const ANCHO_PASILLO = Spacing.xl;
+/** Del ancho de un asiento: la fila trasera puede llevar uno en el pasillo. */
+const ANCHO_PASILLO = SEAT_SIZE;
 /** Dos asientos y el espacio entre ellos: un lado del bus. */
 const ANCHO_LADO = SEAT_SIZE * 2 + ESPACIO_ASIENTOS;
 /** Los dos lados y el pasillo, con su espacio a cada lado. */
@@ -152,7 +155,7 @@ export function SeatSelector({
   const [limiteAlcanzado, setLimiteAlcanzado] = useState(false);
   /** "El asiento 14 acaba de ser tomado. Elige otro." (M-14) */
   const [avisoTomados, setAvisoTomados] = useState<string | null>(null);
-  const filas = useMemo(() => generarAsientos(asientosTotales), [asientosTotales]);
+  const { filas } = useMemo(() => distribucionAsientos(asientosTotales), [asientosTotales]);
 
   /** Sin la lista de ocupados no se sabe qué está libre: no se elige. */
   const mapaBloqueado = confirmando || cargandoOcupados || !!errorOcupados;
@@ -190,6 +193,18 @@ export function SeatSelector({
     setAvisoTomados(mensajeAsientosTomados(ordenarAsientos(tomados)));
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
   }, [asientosOcupados]);
+
+  const asiento = (seat: string, colIndex: number) => (
+    <SeatButton
+      key={seat}
+      seat={seat}
+      ubicacion={ubicacionAsiento(colIndex)}
+      ocupado={asientosOcupados.includes(seat)}
+      seleccionado={seleccionados.includes(seat)}
+      bloqueado={mapaBloqueado}
+      onToggle={toggleSeat}
+    />
+  );
 
   return (
     <View>
@@ -253,51 +268,38 @@ export function SeatSelector({
                 Chofer
               </Text>
             </View>
-            <View
-              style={[s.puesto, s.puerta]}
-              accessible
-              accessibilityLabel="Puerta, adelante a la derecha"
-            >
-              <DoorOpen size={Sizes.icon.md} color={Colors.primaryText} weight="duotone" />
-              <Text variant="caption" weight="semibold" color="primaryText" compact>
-                Puerta
-              </Text>
-            </View>
-            {/* El hueco de la puerta en la carrocería, a la altura de la cabina. */}
-            <View style={s.huecoPuerta} />
-          </View>
-
-          <View
-            style={s.fila}
-            importantForAccessibility="no-hide-descendants"
-            accessibilityElementsHidden
-          >
-            <Columna>Ventana</Columna>
-            <Columna>Pasillo</Columna>
-            <View style={s.pasillo} />
-            <Columna>Pasillo</Columna>
-            <Columna>Ventana</Columna>
           </View>
 
           {filas.map((fila, rowIndex) => (
             <View key={`fila-${rowIndex}`} style={s.fila}>
-              {completarFila(fila).map((seat, colIndex) =>
-                seat === HUECO ? (
-                  <View key={`hueco-${rowIndex}-${colIndex}`} style={s.hueco} />
-                ) : seat === '' ? (
-                  <View key={`pasillo-${rowIndex}-${colIndex}`} style={s.pasillo} />
-                ) : (
-                  <SeatButton
-                    key={seat}
-                    seat={seat}
-                    ubicacion={colIndex === 0 || colIndex === 4 ? 'ventana' : 'pasillo'}
-                    ocupado={asientosOcupados.includes(seat)}
-                    seleccionado={seleccionados.includes(seat)}
-                    bloqueado={mapaBloqueado}
-                    onToggle={toggleSeat}
+              {fila.map((seat, colIndex) => {
+                // Primera fila: la puerta ocupa la derecha (el asiento 3 va una fila más atrás).
+                if (rowIndex === 0 && colIndex === 3 && !seat && !fila[4]) {
+                  return (
+                    <View
+                      key="puerta"
+                      style={[s.puesto, s.puerta]}
+                      accessible
+                      accessibilityLabel="Puerta, adelante a la derecha"
+                    >
+                      <DoorOpen size={Sizes.icon.md} color={Colors.primaryText} weight="duotone" />
+                      <Text variant="caption" weight="semibold" color="primaryText" compact>
+                        Puerta
+                      </Text>
+                      {/* El hueco de la puerta en la carrocería. */}
+                      <View style={s.huecoPuerta} />
+                    </View>
+                  );
+                }
+                if (rowIndex === 0 && colIndex === 4 && !seat && !fila[3]) return null;
+                if (seat) return asiento(seat, colIndex);
+                return (
+                  <View
+                    key={`${colIndex === 2 ? 'pasillo' : 'hueco'}-${rowIndex}-${colIndex}`}
+                    style={colIndex === 2 ? s.pasillo : s.hueco}
                   />
-                )
-              )}
+                );
+              })}
             </View>
           ))}
         </View>
@@ -306,31 +308,6 @@ export function SeatSelector({
           Parte trasera
         </Text>
       </View>
-    </View>
-  );
-}
-
-/** Hueco de una fila incompleta (la última): conserva las columnas del bus. */
-const HUECO = '·';
-
-/** 2 + pasillo + 2: la última fila puede venir corta y se completa con huecos. */
-function completarFila(fila: string[]): string[] {
-  const conPasillo = fila.includes('') ? fila : [...fila, ''];
-  const pasillo = conPasillo.indexOf('');
-  const izquierda = conPasillo.slice(0, pasillo);
-  const derecha = conPasillo.slice(pasillo + 1);
-  while (izquierda.length < 2) izquierda.push(HUECO);
-  while (derecha.length < 2) derecha.push(HUECO);
-  return [...izquierda, '', ...derecha];
-}
-
-/** Rótulo sobre una columna de asientos, del ancho justo de un asiento. */
-function Columna({ children }: { children: string }) {
-  return (
-    <View style={s.columna}>
-      <Text variant="caption" size="micro" color="muted" align="center" numberOfLines={1} compact>
-        {children}
-      </Text>
     </View>
   );
 }
@@ -446,9 +423,6 @@ const s = StyleSheet.create({
     alignItems: 'center',
     gap: ESPACIO_ASIENTOS,
     marginBottom: ESPACIO_ASIENTOS,
-  },
-  columna: {
-    width: SEAT_SIZE,
   },
   seat: {
     width: SEAT_SIZE,
