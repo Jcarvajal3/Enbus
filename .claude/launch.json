@@ -1,0 +1,16 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "panel-web",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "PanelCooperativas",
+        "run",
+        "dev"
+      ],
+      "port": 3000
+    }
+  ]
+}
