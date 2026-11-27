@@ -1,4 +1,7 @@
+import Link from "next/link";
+import type { ReactNode } from "react";
 import {
+  ArrowUpRight,
   Buildings,
   Bus,
   ClipboardText,
@@ -7,26 +10,30 @@ import {
   Ticket,
 } from "@phosphor-icons/react/dist/ssr";
 import type { Icon } from "@phosphor-icons/react";
-import { BrandMark } from "@/components/brand-mark";
+
+import "@/app/(sitio)/sitio.css";
+import estilos from "./auth-layout.module.css";
 
 // ─── Marco común de las pantallas de acceso (login, recuperar, restablecer,
 // registro, invitación) del panel y del admin ─────────────────────────────────
-// lg+: a la izquierda, panel de marca en `primary` (tinta sobre amarillo, igual
-// en claro y oscuro) con lo que hace la zona; queda fijo al desplazar los
-// formularios largos. A la derecha, el formulario sobre el fondo, sin tarjeta.
-// md–lg: la marca arriba y el formulario en una tarjeta centrada sobre `muted`.
-// Teléfono: el formulario se funde con el fondo, empieza arriba (sin huecos
-// cuando sale el teclado) y el pie de página va al final. El título es siempre
-// el H1 de la pantalla. Sigue el tema elegido (D14).
+// Es la puerta de entrada, no el panel: usa el sistema del sitio público (`.sitio`)
+// y va siempre en claro (ThemeProvider lo fuerza). Barra en pastilla con la marca y
+// la vuelta al sitio; debajo, una hoja partida: el formulario y, en escritorio, un
+// panel de noche con lo que hace la zona, que se queda a la vista en el registro
+// largo. En el teléfono solo queda el formulario. El título es siempre el H1.
 
 type Zona = "cooperativas" | "admin";
 
 const ZONA = { cooperativas: "Cooperativas", admin: "Administración" } as const;
 
-const MARCA: Record<Zona, { antetitulo: string; titular: string; texto: string; puntos: { icono: Icon; titulo: string; detalle: string }[] }> = {
+const MARCA: Record<Zona, { antetitulo: string; titular: ReactNode; texto: string; puntos: { icono: Icon; titulo: string; detalle: string }[] }> = {
   cooperativas: {
     antetitulo: "Panel de cooperativas",
-    titular: "Vende, despacha y entrega desde un solo lugar.",
+    titular: (
+      <>
+        Vende, despacha y entrega <em>desde un solo lugar</em>
+      </>
+    ),
     texto: "La taquilla, las encomiendas y los viajes de tu cooperativa, en la PC del terminal o en el teléfono.",
     puntos: [
       { icono: Ticket, titulo: "Taquilla de boletos", detalle: "Vende en el mostrador y verifica los pagos de la app." },
@@ -36,7 +43,11 @@ const MARCA: Record<Zona, { antetitulo: string; titular: string; texto: string; 
   },
   admin: {
     antetitulo: "Administración EnBus",
-    titular: "Toda la red de cooperativas, en un solo panel.",
+    titular: (
+      <>
+        Toda la red de cooperativas, <em>en un solo panel</em>
+      </>
+    ),
     texto: "Solicitudes, cuentas y operación de la plataforma, para el equipo de EnBus.",
     puntos: [
       { icono: ClipboardText, titulo: "Solicitudes", detalle: "Revisa y aprueba las cooperativas que se registran." },
@@ -46,22 +57,21 @@ const MARCA: Record<Zona, { antetitulo: string; titular: string; texto: string; 
   },
 };
 
-/** Ruta punteada con paradas: adorno del panel de marca (solo `currentColor`). En
- * pantallas bajas se oculta para no cruzarse con el texto. */
+/** Ruta punteada con paradas: adorno del panel de marca (solo `currentColor`). */
 function RutaDecorativa({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 400 400" fill="none" aria-hidden focusable="false" className={className}>
       <path
         d="M-40 380C60 380 110 300 190 280S320 220 330 120S380 -10 440 -30"
         stroke="currentColor"
-        strokeOpacity="0.07"
+        strokeOpacity="0.06"
         strokeWidth="44"
         strokeLinecap="round"
       />
       <path
         d="M-40 380C60 380 110 300 190 280S320 220 330 120S380 -10 440 -30"
         stroke="currentColor"
-        strokeOpacity="0.22"
+        strokeOpacity="0.2"
         strokeWidth="4"
         strokeLinecap="round"
         strokeDasharray="2 14"
@@ -71,8 +81,8 @@ function RutaDecorativa({ className }: { className?: string }) {
         [330, 120],
       ].map(([cx, cy]) => (
         <g key={`${cx}-${cy}`}>
-          <circle cx={cx} cy={cy} r="15" fill="currentColor" fillOpacity="0.12" />
-          <circle cx={cx} cy={cy} r="6" fill="currentColor" fillOpacity="0.45" />
+          <circle cx={cx} cy={cy} r="15" fill="currentColor" fillOpacity="0.1" />
+          <circle cx={cx} cy={cy} r="6" fill="currentColor" fillOpacity="0.4" />
         </g>
       ))}
     </svg>
@@ -92,61 +102,63 @@ export function AuthLayout({
   children: React.ReactNode;
   pie?: React.ReactNode;
 }) {
-  const nombreZona = ZONA[zona];
   const marca = MARCA[zona];
   const anio = new Date().getFullYear();
 
   return (
-    <div className="grid min-h-svh w-full flex-1 bg-canvas lg:grid-cols-[minmax(26rem,5fr)_7fr]">
-      <aside className="relative hidden overflow-hidden bg-night text-white lg:sticky lg:top-0 lg:flex lg:h-svh lg:flex-col lg:justify-between lg:p-10 xl:p-14">
-        <RutaDecorativa className="pointer-events-none absolute hidden [@media(min-height:50rem)]:block -right-6 -bottom-12 size-[28rem] text-white" />
-
-        <BrandMark tamano="lg" conNombre zona={nombreZona} sobreNoche className="relative" />
-
-        <div className="relative flex max-w-md flex-col gap-8">
-          <div className="flex flex-col gap-4">
-            <p className="text-[13px] font-semibold text-primary">{marca.antetitulo}</p>
-            <p className="text-3xl leading-tight font-semibold tracking-tight text-balance xl:text-4xl">{marca.titular}</p>
-            <p className="text-base text-pretty text-night-muted">{marca.texto}</p>
-          </div>
-          <ul className="flex flex-col gap-5">
-            {marca.puntos.map(({ icono: Icono, titulo: tituloPunto, detalle }) => (
-              <li key={tituloPunto} className="flex items-start gap-3.5">
-                <span className="inline-flex size-11 shrink-0 items-center justify-center rounded-2xl bg-night-raised text-primary">
-                  <Icono className="size-6" weight="fill" aria-hidden />
-                </span>
-                <span className="flex flex-col gap-0.5 pt-0.5">
-                  <span className="text-[15px] font-semibold">{tituloPunto}</span>
-                  <span className="text-[13px] text-night-muted">{detalle}</span>
-                </span>
-              </li>
-            ))}
-          </ul>
+    <div className={`sitio ${estilos.raiz}`}>
+      <header className={estilos.barra}>
+        <div className={`s-marco ${estilos.barraFila}`}>
+          <Link href="/" className={estilos.marca} aria-label="EnBus, ir al sitio">
+            En<span>Bus</span>
+          </Link>
+          <span className={estilos.zona}>{ZONA[zona]}</span>
+          <Link href="/" className={estilos.volver}>
+            <span className={estilos.volverTexto}>Ir al sitio</span>
+            <ArrowUpRight weight="bold" aria-hidden />
+          </Link>
         </div>
+      </header>
 
-        <p className="relative text-[13px] text-night-muted">© {anio} EnBus · Venezuela</p>
-      </aside>
-
-      <div className="flex min-h-svh min-w-0 flex-col lg:bg-canvas">
-        <header className="px-5 pt-[max(1.5rem,env(safe-area-inset-top))] md:px-8 md:pt-8 lg:hidden">
-          <BrandMark tamano="md" conNombre zona={nombreZona} />
-        </header>
-
-        <main className="flex flex-1 flex-col items-center px-5 pt-8 pb-10 md:justify-center md:px-8 md:py-10 lg:px-12">
-          <div className="flex w-full max-w-md flex-col gap-6 md:rounded-3xl md:bg-card md:p-8 md:shadow-raised lg:max-w-sm lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0 xl:max-w-[25rem]">
-            <div className="flex flex-col gap-2">
-              <h1 className="text-[26px] font-semibold tracking-tight text-balance text-foreground lg:text-[32px]">{titulo}</h1>
-              {descripcion && <p className="text-[15px] text-pretty text-muted-foreground">{descripcion}</p>}
-            </div>
+      <main className={estilos.pagina}>
+        <div className={estilos.hoja}>
+          <section className={estilos.formulario} aria-labelledby="acceso-titulo">
+            <header className={estilos.cabeza}>
+              <h1 id="acceso-titulo" className={estilos.titulo}>
+                {titulo}
+              </h1>
+              {descripcion && <p className={estilos.descripcion}>{descripcion}</p>}
+            </header>
             {children}
-            {pie && (
-              <div className="border-t border-border pt-6 text-center text-[15px] text-muted-foreground">{pie}</div>
-            )}
-          </div>
-        </main>
+            {pie && <footer className={estilos.pie}>{pie}</footer>}
+          </section>
 
-        <footer className="px-5 pb-[max(1.5rem,env(safe-area-inset-bottom))] text-center text-xs text-muted-foreground md:px-8 lg:hidden">© {anio} EnBus</footer>
-      </div>
+          <aside className={estilos.lado} aria-label={marca.antetitulo}>
+            <RutaDecorativa className={estilos.ruta} />
+            <div className={estilos.antetitulo}>
+              <p className={estilos.chip}>{marca.antetitulo}</p>
+              <p className={estilos.titular}>{marca.titular}</p>
+              <p className={estilos.texto}>{marca.texto}</p>
+            </div>
+            <ul className={estilos.puntos}>
+              {marca.puntos.map(({ icono: Icono, titulo: tituloPunto, detalle }) => (
+                <li key={tituloPunto} className={estilos.punto}>
+                  <span className={estilos.puntoIcono} aria-hidden>
+                    <Icono weight="fill" />
+                  </span>
+                  <span className={estilos.puntoTexto}>
+                    <strong>{tituloPunto}</strong>
+                    <span>{detalle}</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <p className={estilos.derechos}>© {anio} EnBus · Venezuela</p>
+          </aside>
+        </div>
+      </main>
+
+      <p className={estilos.derechosMovil}>© {anio} EnBus · Venezuela</p>
     </div>
   );
 }

@@ -19,8 +19,12 @@ if (typeof window !== "undefined" && process.env.NODE_ENV === "development") {
   };
 }
 
+/** Pantallas de acceso del panel y del admin: usan el sistema del sitio, siempre en claro. */
+const ACCESO = /^\/(cooperativas\/(login|registro|recuperar|restablecer|invite)|admin\/login)(\/|$)/;
+
 /** true en el panel de cooperativas (/cooperativas/…, no la página pública /cooperativas) y en /admin. */
 function esPanel(pathname: string) {
+  if (ACCESO.test(pathname)) return false;
   return pathname.startsWith("/admin") || (pathname.startsWith("/cooperativas/") && pathname !== "/cooperativas/");
 }
 

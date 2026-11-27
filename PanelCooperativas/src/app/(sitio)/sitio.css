@@ -94,40 +94,44 @@
   }
 }
 
-:where(.sitio) :where(a) {
-  color: inherit;
-}
+/* Reseteos de elementos en la capa "base" de Tailwind: las clases (del sitio o de Tailwind,
+   como las del kit de componentes en las pantallas de acceso) siempre les ganan. */
+@layer base {
+  :where(.sitio) :where(a) {
+    color: inherit;
+  }
 
-.sitio :where(h1, h2, h3, h4) {
-  font-weight: 700;
-  letter-spacing: -0.03em;
-  line-height: 1.1;
-  margin: 0;
-  text-wrap: balance;
-}
+  .sitio :where(h1, h2, h3, h4) {
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    line-height: 1.1;
+    margin: 0;
+    text-wrap: balance;
+  }
 
-.sitio :where(p, ul, ol, dl, dd, figure) {
-  margin: 0;
-}
+  .sitio :where(p, ul, ol, dl, dd, figure) {
+    margin: 0;
+  }
 
-.sitio :where(p) {
-  text-wrap: pretty;
-}
+  .sitio :where(p) {
+    text-wrap: pretty;
+  }
 
-.sitio :where(img, svg) {
-  display: block;
-  max-width: 100%;
-}
+  .sitio :where(img, svg) {
+    display: block;
+    max-width: 100%;
+  }
 
-.sitio :focus-visible {
-  outline: 3px solid var(--s-cielo-deep);
-  outline-offset: 3px;
-  border-radius: 6px;
-}
+  .sitio :focus-visible {
+    outline: 3px solid var(--s-cielo-deep);
+    outline-offset: 3px;
+    border-radius: 6px;
+  }
 
-.sitio ::selection {
-  background: var(--s-sol);
-  color: var(--s-ink);
+  .sitio ::selection {
+    background: var(--s-sol);
+    color: var(--s-ink);
+  }
 }
 
 /* ─── Marco y secciones ───────────────────────────────────────────────────── */
