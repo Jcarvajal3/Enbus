@@ -1,4 +1,5 @@
 import type { Tarifa } from "@/lib/types/tarifas";
+import type { Bus } from "@/lib/types/operacion";
 
 /** RECHAZADA es reversible (vuelve a PENDIENTE); DESACTIVADA es terminal. */
 export type EstadoCooperativa = "PENDIENTE" | "RECHAZADA" | "ACTIVA" | "SUSPENDIDA" | "DESACTIVADA";
@@ -106,10 +107,15 @@ export interface Calificacion {
   usuario_nombre?: string;
 }
 
+/** Unidad (bus) de la cooperativa, con sus salidas programadas que aún no han salido. */
+export type BusCooperativa = Bus & { viajes_proximos: number };
+
 export interface CooperativaDetalle extends Cooperativa {
   sucursales: Sucursal[];
   metodos_pago: MetodoPago[];
   rutas: Ruta[];
+  /** Unidades (buses): activas primero y por número de unidad ("Unidad 2" antes que "Unidad 10"). */
+  buses: BusCooperativa[];
   tarifas: Tarifa[];
   empleados: Empleado[];
   calificaciones: Calificacion[];

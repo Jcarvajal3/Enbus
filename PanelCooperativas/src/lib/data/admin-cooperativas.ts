@@ -14,6 +14,7 @@ import type {
 } from "@/lib/types/admin-cooperativas";
 import { aTarifa, type FilaTarifa } from "@/lib/types/tarifas";
 import { MAX_HISTORIAL_TARIFAS } from "@/lib/data/cooperativa-tarifas";
+import type { BusCooperativa } from "@/lib/types/admin-cooperativas";
 
 export async function fetchCooperativas(filters?: { estado?: string; search?: string }): Promise<Cooperativa[]> {
   await requireSuperAdmin();
@@ -40,6 +41,9 @@ export async function fetchCooperativas(filters?: { estado?: string; search?: st
 
   return data as Cooperativa[];
 }
+
+/** "Unidad 2" antes que "Unidad 10". */
+const ORDEN_UNIDAD = new Intl.Collator("es", { numeric: true, sensitivity: "base" });
 
 /** Reseñas que se cargan en el detalle (las más recientes; el total sale de la cooperativa). */
 export const MAX_CALIFICACIONES_DETALLE = 50;
@@ -74,6 +78,8 @@ export async function fetchCooperativaById(id: string): Promise<CooperativaDetal
     calificacionesResult,
     comisionesResult,
     encomiendasResult,
+    busesResult,
+    viajesProximosResult,
   ] = await Promise.all([
     supabase.from("sucursales").select("*").eq("cooperativa_id", id).order("nombre", { ascending: true }),
     // Use adminSupabase to bypass RLS activo=true filter — super admin needs to see ALL methods
@@ -98,6 +104,20 @@ export async function fetchCooperativaById(id: string): Promise<CooperativaDetal
       .select("id", { count: "exact", head: true })
       .eq("cooperativa_id", id)
       .not("estado", "in", "(ENTREGADA,CANCELADA,DEVUELTA)"),
+    supabase
+      .from("buses")
+      .select("id, numero_unidad, placa, asientos, chofer_nombre, chofer_telefono, activo, created_at")
+      .eq("cooperativa_id", id)
+      .limit(500),
+    // Salidas programadas que aún no han salido, para contar las de cada unidad.
+    supabase
+      .from("viajes")
+      .select("bus_id")
+      .eq("cooperativa_id", id)
+      .eq("estado", "PROGRAMADO")
+      .gt("fecha_hora_salida", new Date().toISOString())
+      .not("bus_id", "is", null)
+      .limit(1000),
   ]);
 
   if (sucursalesResult.error) console.error("Error sucursales:", sucursalesResult.error);
@@ -108,10 +128,21 @@ export async function fetchCooperativaById(id: string): Promise<CooperativaDetal
   if (calificacionesResult.error) console.error("Error calificaciones:", calificacionesResult.error);
   if (comisionesResult.error) console.error("Error comisiones:", comisionesResult.error);
   if (encomiendasResult.error) console.error("Error encomiendas:", encomiendasResult.error);
+  if (busesResult.error) console.error("Error buses:", busesResult.error);
+  if (viajesProximosResult.error) console.error("Error viajes por bus:", viajesProximosResult.error);
 
   const sucursales = (sucursalesResult.data || []) as Sucursal[];
   const metodos_pago = (metodosResult.data || []) as MetodoPago[];
   const rutas = (rutasResult.data || []) as Ruta[];
+
+  const proximosPorBus = new Map<string, number>();
+  for (const v of (viajesProximosResult.data || []) as { bus_id: string | null }[]) {
+    if (v.bus_id) proximosPorBus.set(v.bus_id, (proximosPorBus.get(v.bus_id) ?? 0) + 1);
+  }
+  const buses = ((busesResult.data || []) as Omit<BusCooperativa, "viajes_proximos">[])
+    .map((b): BusCooperativa => ({ ...b, viajes_proximos: proximosPorBus.get(b.id) ?? 0 }))
+    // Activas primero; dentro, "Unidad 2" antes que "Unidad 10".
+    .sort((a, b) => Number(b.activo) - Number(a.activo) || ORDEN_UNIDAD.compare(a.numero_unidad, b.numero_unidad));
   const tarifas = ((tarifasResult.data || []) as unknown as FilaTarifa[]).map(aTarifa);
 
   // Fetch auth user data only for the profiles we already have (targeted lookup, not full listUsers)
@@ -180,6 +211,7 @@ export async function fetchCooperativaById(id: string): Promise<CooperativaDetal
     sucursales,
     metodos_pago,
     rutas,
+    buses,
     tarifas,
     empleados,
     calificaciones,

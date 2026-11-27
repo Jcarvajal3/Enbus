@@ -4,7 +4,7 @@
 // Pestañas en `?tab=` con el contador en la pestaña. Cada pestaña es su propia
 // tarjeta o tabla (sin título que repita la pestaña). Estados con `StatusBadge`.
 
-import { CreditCard, MapPin, Path, Star, User } from "@phosphor-icons/react";
+import { Bus, CreditCard, MapPin, Path, Star, User } from "@phosphor-icons/react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -42,6 +42,7 @@ const PESTANAS = [
   "sucursales",
   "metodos",
   "rutas",
+  "unidades",
   "tarifas",
   "empleados",
   "calificaciones",
@@ -124,6 +125,9 @@ export function CooperativaDetailTabs({ cooperativa, resumen, actividad }: Coope
         </TabsTrigger>
         <TabsTrigger value="rutas" className={CLASE_PESTANA}>
           Rutas <ConteoPestana n={cooperativa.rutas.length} />
+        </TabsTrigger>
+        <TabsTrigger value="unidades" className={CLASE_PESTANA}>
+          Unidades <ConteoPestana n={cooperativa.buses.length} />
         </TabsTrigger>
         <TabsTrigger value="tarifas" className={CLASE_PESTANA}>
           Tarifas <ConteoPestana n={cooperativa.tarifas.length} />
@@ -382,6 +386,79 @@ export function CooperativaDetailTabs({ cooperativa, resumen, actividad }: Coope
             <HistorialTarifasTable tarifas={cooperativa.tarifas} />
           </div>
         </div>
+      </TabsContent>
+
+      {/* Unidades (buses) */}
+      <TabsContent value="unidades">
+        <Card className="gap-0 overflow-hidden p-0 max-md:overflow-visible max-md:bg-transparent max-md:shadow-none">
+          <ListaResponsive
+            items={cooperativa.buses}
+            clave={(bus) => bus.id}
+            etiqueta="unidades"
+            vacio={
+              <div className="max-md:rounded-xl max-md:bg-card max-md:shadow-card">
+                <Table>
+                  <TableBody>
+                    <FilaVacia colSpan={6} icon={Bus} titulo="Todavía no tiene unidades" />
+                  </TableBody>
+                </Table>
+              </div>
+            }
+            tarjeta={(bus) => (
+              <EntityCard
+                leading={<IconTile icon={Bus} tone={bus.activo ? "sky" : "neutral"} />}
+                title={bus.numero_unidad}
+                subtitle={[bus.placa ? `Placa ${bus.placa}` : null, bus.chofer_nombre || "Sin chofer"].filter(Boolean).join(" · ")}
+                lineasSubtitulo={2}
+                adorno={
+                  <span className="text-[15px] font-medium tabular-nums">
+                    {bus.asientos}
+                    <span className="text-[13px] font-normal text-muted-foreground"> asientos</span>
+                  </span>
+                }
+                badge={<StatusBadge status={String(bus.activo)} dominio="recurso" />}
+                meta={bus.viajes_proximos > 0 ? `${bus.viajes_proximos} por salir` : undefined}
+              />
+            )}
+            tabla={(items) => (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Unidad</TableHead>
+                    <TableHead className="hidden md:table-cell">Placa</TableHead>
+                    <TableHead className="text-right">Asientos</TableHead>
+                    <TableHead>Chofer</TableHead>
+                    <TableHead className="hidden text-right lg:table-cell">Viajes por salir</TableHead>
+                    <TableHead>Estado</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {items.map((bus) => (
+                    <TableRow key={bus.id}>
+                      <TableCell className="font-medium">{bus.numero_unidad}</TableCell>
+                      <TableCell className="hidden font-mono text-[13px] md:table-cell">
+                        {bus.placa || <Vacio texto="Sin placa" />}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">{bus.asientos}</TableCell>
+                      <TableCell>
+                        <span className="block">{bus.chofer_nombre || <Vacio texto="Sin chofer" />}</span>
+                        {bus.chofer_telefono && (
+                          <span className="block text-[13px] text-muted-foreground">{telefonoOVacio(bus.chofer_telefono)}</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="hidden text-right tabular-nums lg:table-cell">
+                        {bus.viajes_proximos > 0 ? bus.viajes_proximos : <Vacio />}
+                      </TableCell>
+                      <TableCell>
+                        <StatusBadge status={String(bus.activo)} dominio="recurso" />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          />
+        </Card>
       </TabsContent>
 
       {/* Empleados */}
