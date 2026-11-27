@@ -1,11 +1,9 @@
 "use client";
 
 // ─── Mapa de asientos (taquilla) ────────────────────────────────────────────
-// Asientos numerados "1".."N" en filas 2 + pasillo + 2: el mismo formato y la
-// misma distribución que la app (EnBusApp/src/utils/seatLayout.ts). El bus se
-// dibuja visto desde arriba, con el frente arriba: parabrisas, chofer adelante a
-// la izquierda y puerta adelante a la derecha (la cabina es orientativa: la base
-// de datos no guarda la distribución real), igual que `SeatSelector` de la app.
+// Asientos numerados "1".."N" con la misma distribución que la app (shared/asientos.ts):
+// copiloto al lado del chofer, puerta adelante a la derecha y fila trasera que puede
+// llevar un asiento en el pasillo. El bus lo dibuja `BusAsientos`.
 // Permite elegir varios asientos para vender una compra completa.
 // Colores D24: libre blanco con borde `border-strong`; ocupado relleno
 // `surface-dark` con el número en `muted-foreground`; elegido `accent-strong`.
@@ -15,9 +13,9 @@
 // (`useAsientosOcupados`).
 
 import { useState } from "react";
-import { DoorOpenIcon, SteeringWheelIcon } from "@phosphor-icons/react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ErrorState } from "@/components/error-state";
+import { BusAsientos } from "./bus-asientos";
 import { cn } from "@/lib/utils";
 
 /** Asientos guardados con el formato antiguo del panel ("3B") → número ("10"). */
@@ -35,77 +33,6 @@ export function listaAsientos(asientos: string[]): string {
 }
 
 const CASILLA = "size-12 md:size-14";
-
-/** Filas de 4 (2 + pasillo + 2), con huecos al final. */
-export function filasDe(totalAsientos: number): (string | null)[][] {
-  const resultado: (string | null)[][] = [];
-  for (let numero = 1; numero <= totalAsientos; numero += 4) {
-    resultado.push([0, 1, 2, 3].map((i) => (numero + i <= totalAsientos ? String(numero + i) : null)));
-  }
-  return resultado;
-}
-
-/** Carrocería: parabrisas, cabina (chofer y puerta), rótulos de columna, filas y parte trasera. */
-function Bus({
-  filas,
-  casilla,
-}: {
-  filas: (string | null)[][];
-  casilla: (asiento: string | null, idx: number) => React.ReactNode;
-}) {
-  return (
-    <div
-      className="w-full max-w-sm rounded-t-[2.5rem] rounded-b-xl bg-surface px-4 pt-4 pb-3 md:px-6 md:pt-5"
-      role="group"
-      aria-label="Mapa de asientos. El frente del bus está arriba."
-    >
-      <p className="rounded-t-3xl rounded-b-md bg-info-light px-3 py-2.5 text-center text-[13px] font-medium text-info-text">
-        Frente del bus
-      </p>
-
-      {/* Cabina: chofer adelante a la izquierda, puerta adelante a la derecha. */}
-      <div className="mt-4 flex items-center justify-between gap-3">
-        <span
-          className="flex h-11 flex-1 items-center justify-center gap-1.5 rounded-md bg-background text-[13px] text-muted-foreground"
-          aria-label="Chofer, adelante a la izquierda"
-        >
-          <SteeringWheelIcon className="size-5" aria-hidden />
-          Chofer
-        </span>
-        <span
-          className="flex h-11 flex-1 items-center justify-center gap-1.5 rounded-md bg-primary-light text-[13px] font-semibold text-primary-text"
-          aria-label="Puerta, adelante a la derecha"
-        >
-          <DoorOpenIcon className="size-5" aria-hidden />
-          Puerta
-        </span>
-      </div>
-
-      <div className="mt-4 flex flex-col gap-3">
-        <div className="flex w-full items-center justify-between text-[11px] text-muted-foreground" aria-hidden>
-          <div className="flex gap-2">
-            <span className="w-12 text-center md:w-14">Ventana</span>
-            <span className="w-12 text-center md:w-14">Pasillo</span>
-          </div>
-          <div className="w-6 md:w-8" />
-          <div className="flex gap-2">
-            <span className="w-12 text-center md:w-14">Pasillo</span>
-            <span className="w-12 text-center md:w-14">Ventana</span>
-          </div>
-        </div>
-        {filas.map((fila, filaIdx) => (
-          <div key={`fila-${filaIdx}`} className="flex w-full items-center justify-between">
-            <div className="flex gap-2">{fila.slice(0, 2).map((a, i) => casilla(a, filaIdx * 4 + i))}</div>
-            <div className="w-6 md:w-8" aria-hidden />
-            <div className="flex gap-2">{fila.slice(2, 4).map((a, i) => casilla(a, filaIdx * 4 + 2 + i))}</div>
-          </div>
-        ))}
-      </div>
-
-      <p className="mt-4 text-center text-[13px] text-muted-foreground">Parte trasera</p>
-    </div>
-  );
-}
 
 function Leyenda() {
   return (
@@ -156,7 +83,6 @@ export function SeatSelector({
   modo = "taquilla",
 }: SeatSelectorProps) {
   const [limiteAlcanzado, setLimiteAlcanzado] = useState(false);
-  const filas = filasDe(totalAsientos);
 
   if (error) {
     return (
@@ -173,11 +99,10 @@ export function SeatSelector({
     return (
       <div className="flex flex-col items-center gap-5" role="status" aria-label="Cargando los asientos">
         <Skeleton className="h-4 w-48" />
-        <Bus
-          filas={filas}
-          casilla={(a, idx) =>
-            a ? <Skeleton key={a} className={cn(CASILLA, "rounded-sm")} /> : <div key={`vacio-${idx}`} className={CASILLA} />
-          }
+        <BusAsientos
+          totalAsientos={totalAsientos}
+          tamCasilla={CASILLA}
+          casilla={(a) => <Skeleton key={a} className={cn(CASILLA, "rounded-sm")} />}
         />
       </div>
     );
@@ -200,8 +125,7 @@ export function SeatSelector({
     onChange([...seleccion, asiento].sort((a, b) => Number(a) - Number(b)));
   };
 
-  const casilla = (asiento: string | null, idx: number) => {
-    if (!asiento) return <div key={`vacio-${idx}`} className={CASILLA} />;
+  const casilla = (asiento: string) => {
     const ocupado = ocupados.has(asiento);
     const elegido = seleccion.includes(asiento);
     return (
@@ -254,7 +178,7 @@ export function SeatSelector({
         </p>
       )}
 
-      <Bus filas={filas} casilla={casilla} />
+      <BusAsientos totalAsientos={totalAsientos} tamCasilla={CASILLA} casilla={casilla} />
     </div>
   );
 }

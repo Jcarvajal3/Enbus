@@ -12,6 +12,7 @@ shared/
   errores.ts      catálogo común de mensajes de error (MSG, mensajeAuth, mensajePostgres)
   dinero.ts       formato de montos: Bs, USD, tasa BCV (formatMoney) y lectura/máscara de montos escritos (leerMonto)
   bancos.ts       lista única de bancos VE (código SUDEBAN + nombre + alias) y su búsqueda
+  asientos.ts     distribución de asientos del bus (puerta adelante, fila trasera de 5); app y panel
   generar.mjs     node shared/generar.mjs [--check]   (Node ≥ 18, sin dependencias)
   tests/          pruebas de ve.ts, del catálogo de ciudades y de artefactos.ts (npm test, Node ≥ 22.6)
 ```

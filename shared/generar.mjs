@@ -128,6 +128,7 @@ const artefactos = copia("artefactos.ts");
 const errores = copia("errores.ts");
 const dinero = copia("dinero.ts");
 const bancos = copia("bancos.ts");
+const asientos = copia("asientos.ts");
 
 const salidas = [
   ["EnBusApp/src/tokens.generated.ts", tsApp],
@@ -136,12 +137,14 @@ const salidas = [
   ["EnBusApp/src/utils/errores.generated.ts", errores],
   ["EnBusApp/src/utils/dinero.generated.ts", dinero],
   ["EnBusApp/src/utils/bancos.generated.ts", bancos],
+  ["EnBusApp/src/utils/asientos.generated.ts", asientos],
   ["PanelCooperativas/src/app/tokens.generated.css", cssPanel],
   ["PanelCooperativas/src/lib/ve.generated.ts", ve],
   ["PanelCooperativas/src/lib/artefactos.generated.ts", artefactos],
   ["PanelCooperativas/src/lib/errores.generated.ts", errores],
   ["PanelCooperativas/src/lib/dinero.generated.ts", dinero],
   ["PanelCooperativas/src/lib/bancos.generated.ts", bancos],
+  ["PanelCooperativas/src/lib/asientos.generated.ts", asientos],
   ["LandingEnBus/app/tokens.generated.css", cssLanding],
   ["LandingEnBus/lib/ve.generated.ts", ve],
   ["LandingEnBus/lib/artefactos.generated.ts", artefactos],
