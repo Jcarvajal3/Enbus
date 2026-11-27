@@ -2,11 +2,11 @@
 // Compartidos entre la página (servidor), las server actions y los pasos (cliente).
 // Solo tipos y constantes: no importa nada del servidor.
 
-export const PASOS_ENVIO = ["ruta", "sucursal", "destinatario", "revisar", "listo"] as const;
+export const PASOS_ENVIO = ["destino", "sucursal", "detalles", "revisar", "listo"] as const;
 export type PasoEnvio = (typeof PASOS_ENVIO)[number];
 
-/** Pasos que exigen sesión de pasajero (el primero es público). */
-export const PASOS_CON_SESION: readonly PasoEnvio[] = ["sucursal", "destinatario", "revisar", "listo"];
+/** Pasos que exigen sesión de pasajero (el primero es público). Nombres viejos de `?paso=`: ruta → destino, destinatario → detalles. */
+export const PASOS_CON_SESION: readonly PasoEnvio[] = ["sucursal", "detalles", "revisar", "listo"];
 
 /** Una ciudad con ruta activa: claves como se guardan en la base ("zulia", "maracaibo"). */
 export interface CiudadConRuta {

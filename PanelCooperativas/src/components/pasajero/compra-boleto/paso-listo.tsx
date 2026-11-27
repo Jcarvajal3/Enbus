@@ -1,18 +1,25 @@
 "use client";
 
-// ─── Paso final: confirmación ────────────────────────────────────────────────
-// Dos finales: pago reportado (la cooperativa lo verifica) o asientos apartados para pagar en
-// taquilla (30 minutos). En ambos se ven los códigos de boleto y el camino a "Mis boletos".
+// ─── Pantalla final: confirmación ────────────────────────────────────────────
+// Como `BoletosEmitidos` del panel: icono de estado, total y una tarjeta por boleto (código, ruta, salida,
+// asiento y pasajero). Dos finales: pago reportado (la cooperativa lo verifica) o asientos apartados para
+// pagar en taquilla (30 minutos, con cuenta regresiva). Sin QR: el boleto aún no está confirmado; el QR
+// aparece en "Mis boletos" cuando la cooperativa verifica el pago. Las acciones ("Ver mis boletos",
+// "Otra compra") van en la `BarraFlujo` de la página.
 
 import Link from "next/link";
 import { CheckCircleIcon, ClockIcon, MapPinIcon } from "@phosphor-icons/react";
+import { IconTile } from "@/components/icon-tile";
+import { Card } from "@/components/ui/card";
+import type { DatosPasajero } from "@/components/boletos/venta/tipos";
 import { formatMoney, type TasaRef } from "@/lib/dinero";
 import { formatCiudad } from "@/lib/ciudades";
 import { formatDiaHoraVE } from "@/lib/fechas";
-import { RUTAS_PASAJERO, urlBoleto, urlViajes } from "@/lib/pasajero/rutas";
+import { urlBoleto, urlViajes } from "@/lib/pasajero/rutas";
 import type { ViajePublico } from "@/lib/pasajero/viajes";
+import { formatCedula } from "@/lib/ve";
 import { CuentaRegresiva } from "./cuenta-regresiva";
-import { ordenarAsientos, type ResultadoCompra } from "./tipos";
+import type { ResultadoCompra } from "./tipos";
 import s from "./compra.module.css";
 
 export function PasoListo({
@@ -20,22 +27,21 @@ export function PasoListo({
   resultado,
   offsetMs,
   tasa,
-  onOtra,
+  pasajeros,
   onSalir,
 }: {
   viaje: ViajePublico;
   resultado: ResultadoCompra;
   offsetMs: number;
   tasa: TasaRef | null;
-  /** Empieza otra compra en esta misma salida. */
-  onOtra: () => void;
+  /** Datos de quien viaja por asiento (solo si siguen en memoria: tras recargar no están). */
+  pasajeros: Record<string, DatosPasajero>;
   /** Se salió de la pantalla final hacia otra página: limpia lo guardado. */
   onSalir: () => void;
 }) {
   const { resumen, modo } = resultado;
   const taquilla = modo === "taquilla";
   const boletos = resumen ? [...resumen.boletos].sort((a, b) => Number(a.asiento) - Number(b.asiento)) : [];
-  const asientos = ordenarAsientos(boletos.map((b) => b.asiento));
   const total =
     resumen && resumen.totalUsd !== null
       ? formatMoney({
@@ -46,66 +52,80 @@ export function PasoListo({
       : null;
   const origen = formatCiudad(viaje.origen);
   const destino = formatCiudad(viaje.destino);
-  const lugar = viaje.terminalOrigen ?? `${origen}`;
+  const lugar = viaje.terminalOrigen ?? origen;
+  const cantidad = boletos.length;
 
   return (
-    <div className={s.contenido}>
-      <section className={`${s.tarjeta} ${s.exito}`} aria-labelledby="compra-listo-titulo">
-        <p className={s.exitoEtiqueta} data-tono={taquilla ? "espera" : undefined}>
-          {taquilla ? <ClockIcon weight="fill" aria-hidden /> : <CheckCircleIcon weight="fill" aria-hidden />}
-          <span id="compra-listo-titulo">
-            {taquilla
-              ? "Tus asientos están apartados"
-              : resumen
-                ? "Recibimos tu pago"
-                : "Ya reportaste el pago de esta compra"}
-          </span>
+    <div className="flex flex-col gap-5">
+      <div className="flex flex-col items-center gap-2 text-center">
+        <IconTile icon={taquilla ? ClockIcon : CheckCircleIcon} tone={taquilla ? "warning" : "success"} size="lg" />
+        <p className="font-heading text-[22px] font-semibold tracking-tight" role="status">
+          {taquilla
+            ? cantidad === 1
+              ? "Tu asiento está apartado"
+              : "Tus asientos están apartados"
+            : resumen
+              ? "Recibimos tu pago"
+              : "Ya reportaste el pago de esta compra"}
         </p>
-        <p className={s.apoyo}>
-          {origen} a {destino} · <span className="s-num">{formatDiaHoraVE(viaje.salida)}</span> · {viaje.cooperativa.nombre}
-          {asientos.length > 0 && (
-            <>
-              {" "}
-              · {asientos.length === 1 ? "asiento" : "asientos"} <span className="s-num">{asientos.join(", ")}</span>
-            </>
-          )}
-        </p>
+      </div>
 
-        {taquilla && resumen?.reservaExpiraAt && (
-          <CuentaRegresiva expiraAt={resumen.reservaExpiraAt} offsetMs={offsetMs} etiqueta="Paga antes de que venza:" />
-        )}
+      {taquilla && resumen?.reservaExpiraAt && (
+        <CuentaRegresiva expiraAt={resumen.reservaExpiraAt} offsetMs={offsetMs} etiqueta="Paga antes de que venza:" />
+      )}
 
-        {total && (
-          <p className={`${s.apoyo} s-num`}>
-            {taquilla ? "Total a pagar: " : "Total reportado: "}
-            <strong>{total.principal}</strong>
-            {total.secundario ? ` (${total.secundario})` : ""}
+      {total && (
+        <div className="flex flex-col gap-1 rounded-md bg-surface p-5" aria-live="polite">
+          <p className="text-[13px] text-muted-foreground">{taquilla ? "Total a pagar" : "Total reportado"}</p>
+          <p className="text-[22px] leading-tight font-semibold tracking-tight tabular-nums" aria-label={total.accesible}>
+            {total.principal}
           </p>
-        )}
+          {total.secundario && <p className="text-[13px] text-muted-foreground tabular-nums">{total.secundario}</p>}
+        </div>
+      )}
 
-        {boletos.length > 0 && (
-          <ul className={s.boletos} aria-label="Tus boletos">
-            {boletos.map((b) => (
-              <li key={b.id} className={s.boleto}>
-                <span className={`${s.boletoAsiento} s-num`}>
-                  <span className="sr-only">Asiento </span>
-                  {b.asiento}
-                </span>
-                <span className={s.boletoCodigo}>
-                  <span>Código del boleto</span>
-                  <strong className="s-num">{b.codigoBoleto}</strong>
-                </span>
-                <Link href={urlBoleto(b.id)} className="s-enlace" onClick={onSalir}>
+      {boletos.length > 0 && (
+        <ul className="grid gap-3 md:grid-cols-2" aria-label="Tus boletos">
+          {boletos.map((b) => {
+            const p = pasajeros[b.asiento];
+            return (
+              <li key={b.id} className="flex flex-col gap-2 rounded-md bg-surface p-4">
+                <p className="text-[13px] font-medium text-muted-foreground">Boleto de viaje</p>
+                <p className="text-[15px] font-semibold">{viaje.cooperativa.nombre}</p>
+                <p className="font-mono text-lg font-semibold text-foreground">{b.codigoBoleto}</p>
+                <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[15px]">
+                  <dt className="text-muted-foreground">Ruta</dt>
+                  <dd>
+                    {origen} → {destino}
+                  </dd>
+                  <dt className="text-muted-foreground">Salida</dt>
+                  <dd className="tabular-nums">{formatDiaHoraVE(viaje.salida)}</dd>
+                  <dt className="text-muted-foreground">Asiento</dt>
+                  <dd className="font-semibold">{b.asiento}</dd>
+                  {p?.nombre && (
+                    <>
+                      <dt className="text-muted-foreground">Pasajero</dt>
+                      <dd>{p.nombre}</dd>
+                    </>
+                  )}
+                  {p?.cedula && (
+                    <>
+                      <dt className="text-muted-foreground">Cédula</dt>
+                      <dd>{formatCedula(p.cedula)}</dd>
+                    </>
+                  )}
+                </dl>
+                <Link href={urlBoleto(b.id)} className="s-enlace self-start" onClick={onSalir}>
                   Ver detalle
                 </Link>
               </li>
-            ))}
-          </ul>
-        )}
-      </section>
+            );
+          })}
+        </ul>
+      )}
 
-      <section className={s.tarjeta} aria-labelledby="compra-siguiente-titulo">
-        <h2 id="compra-siguiente-titulo" className={s.subtitulo}>
+      <Card className="gap-3 p-5 py-5" role="region" aria-labelledby="compra-siguiente-titulo">
+        <h2 id="compra-siguiente-titulo" className="text-[17px] font-semibold">
           Qué sigue
         </h2>
         {taquilla ? (
@@ -138,22 +158,15 @@ export function PasoListo({
             </li>
           </ol>
         )}
-        <div className={s.acciones}>
-          <Link href={RUTAS_PASAJERO.misBoletos} className="s-boton s-boton--sol s-boton--lg" onClick={onSalir}>
-            Ver mis boletos
-          </Link>
-          <button type="button" className="s-boton s-boton--claro s-boton--lg" onClick={onOtra}>
-            Comprar otro boleto
-          </button>
-          <Link
-            href={urlViajes({ origen: viaje.origen, destino: viaje.destino })}
-            className="s-boton s-boton--claro s-boton--lg"
-            onClick={onSalir}
-          >
-            Buscar otras salidas
-          </Link>
-        </div>
-      </section>
+      </Card>
+
+      <Link
+        href={urlViajes({ origen: viaje.origen, destino: viaje.destino })}
+        className="s-enlace self-start"
+        onClick={onSalir}
+      >
+        Buscar otras salidas
+      </Link>
     </div>
   );
 }

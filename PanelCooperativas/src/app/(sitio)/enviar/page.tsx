@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 
 import { FlujoEnviar } from "@/components/pasajero/encomienda/flujo-enviar";
 import { PASOS_CON_SESION, PASOS_ENVIO, type PasoEnvio } from "@/components/pasajero/encomienda/tipos";
@@ -23,10 +24,14 @@ function pesoDe(v: string | undefined): number | null {
   return n !== null && n < 10000 ? n : null;
 }
 
+/** Nombres que tenía `?paso=` antes de parecerse al panel (enlaces guardados): viejo → nuevo. */
+const PASOS_VIEJOS: Record<string, PasoEnvio> = { ruta: "destino", destinatario: "detalles" };
+
 export default async function EnviarPage({ searchParams }: { searchParams: Promise<Params> }) {
   const params = await searchParams;
   const pasoCrudo = primero(params.paso);
   const paso = PASOS_ENVIO.find((p) => p === pasoCrudo) as PasoEnvio | undefined;
+  const pasoViejo = pasoCrudo ? PASOS_VIEJOS[pasoCrudo] : undefined;
 
   const rutas = await rutasConEnvio();
   const origenIn = normalizarCiudad(primero(params.origen)?.slice(0, 60));
@@ -36,6 +41,17 @@ export default async function EnviarPage({ searchParams }: { searchParams: Promi
   const destino = ruta?.destino.ciudad ?? "";
   const peso = pesoDe(primero(params.peso));
   const coop = (primero(params.coop) ?? "").slice(0, 40);
+
+  // Enlace con un nombre de paso anterior: se lleva al nombre actual conservando la selección.
+  if (pasoViejo) {
+    const q = new URLSearchParams();
+    if (origen) q.set("origen", origen);
+    if (destino) q.set("destino", destino);
+    if (peso !== null) q.set("peso", String(peso));
+    if (coop) q.set("coop", coop);
+    q.set("paso", pasoViejo);
+    redirect(`${RUTAS_PASAJERO.enviar}?${q.toString()}`);
+  }
 
   // Los pasos que registran el envío exigen sesión; al volver de ingresar se retoma el mismo punto.
   const requiereSesion = paso !== undefined && PASOS_CON_SESION.includes(paso);
@@ -53,7 +69,8 @@ export default async function EnviarPage({ searchParams }: { searchParams: Promi
   }
 
   // Cotización inicial (también al recargar o al volver de iniciar sesión): sin límite por IP y con caché.
-  const cotizacion = ruta ? await cotizarEnvioInicial(origen, destino, peso) : null;
+  // Siempre con 1 kg de referencia ("Desde"): el peso se escribe después, en los detalles.
+  const cotizacion = ruta ? await cotizarEnvioInicial(origen, destino, null) : null;
 
   return (
     <FlujoEnviar
@@ -64,6 +81,7 @@ export default async function EnviarPage({ searchParams }: { searchParams: Promi
         pasajero
           ? {
               id: pasajero.id,
+              nombre: pasajero.nombre,
               esPasajero: pasajero.esPasajero,
               perfilCompleto: pasajero.perfilCompleto,
               cedula: pasajero.cedula,

@@ -1,16 +1,20 @@
 "use client";
 
 // ─── Paso 2: ¿quién viaja? ───────────────────────────────────────────────────
-// Una tarjeta por asiento: nombre y apellido, cédula (V, E o P) y teléfono opcional, con los
-// mismos campos y reglas que la app y la taquilla. "Soy yo" rellena con el perfil y las
-// sugerencias traen a quienes ya viajaron contigo. El botón de la barra envía el <form>.
+// Una tarjeta "Asiento N" por asiento, igual que en la taquilla (`boletos/venta/paso-pasajeros`): nombre y
+// apellido, cédula (V, E o P) y teléfono opcional, con los mismos campos y reglas que la app. "Soy yo"
+// rellena con el perfil y las sugerencias traen a quienes ya viajaron contigo. El botón de la barra
+// envía el <form>; al intentar continuar con errores el foco va al primer campo con error.
 
-import { useEffect, type FormEvent } from "react";
+import { useEffect, type FormEvent, type ReactNode } from "react";
 import { ClockCounterClockwiseIcon, UserCircleIcon } from "@phosphor-icons/react";
+import { AvisoError } from "@/components/aviso-error";
 import { Campo, CedulaField, TelefonoField } from "@/components/campos";
+import { IconTile } from "@/components/icon-tile";
+import { Card } from "@/components/ui/card";
 import { PASAJERO_VACIO, erroresPasajero, type DatosPasajero } from "@/components/boletos/venta/tipos";
+import { cn } from "@/lib/utils";
 import { formatCedula, LETRAS_PASAJERO } from "@/lib/ve";
-import { AvisoCompra } from "./aviso-compra";
 import type { SugerenciaPasajero } from "./tipos";
 import s from "./compra.module.css";
 
@@ -70,8 +74,8 @@ export function PasoPasajeros({
   }, [focoToken]);
 
   return (
-    <form id={ID_FORM_PASAJEROS} onSubmit={alEnviar} noValidate className={s.pasajeros}>
-      <div aria-live="polite">{error && <AvisoCompra tono="error">{error}</AvisoCompra>}</div>
+    <form id={ID_FORM_PASAJEROS} onSubmit={alEnviar} noValidate className="flex flex-col gap-4">
+      {error && <AvisoError>{error}</AvisoError>}
 
       {asientos.map((asiento, i) => {
         const p = pasajeros[asiento] ?? PASAJERO_VACIO;
@@ -84,23 +88,11 @@ export function PasoPasajeros({
         const yoUsado = yo ? asientos.some((a) => a !== asiento && pasajeros[a]?.cedula === yo.cedula) : false;
         const ultimo = i === asientos.length - 1;
         return (
-          <fieldset key={asiento} className={s.tarjeta} data-error={conError || undefined} disabled={bloqueado}>
-            <legend className={`${s.subtitulo} s-num`}>
-              <span className="s-icono s-icono--sol" aria-hidden>
-                <UserCircleIcon weight="bold" />
-              </span>
-              Asiento {asiento}
-            </legend>
-
+          <TarjetaPasajero key={asiento} asiento={asiento} conError={conError} bloqueado={bloqueado}>
             {(yo || disponibles.length > 0) && (
               <div className={s.sugerencias} role="group" aria-label={`Rellenar los datos del asiento ${asiento}`}>
                 {yo && (
-                  <button
-                    type="button"
-                    className={s.chip}
-                    disabled={yoUsado}
-                    onClick={() => onRellenar(asiento, yo)}
-                  >
+                  <button type="button" className={s.chip} disabled={yoUsado} onClick={() => onRellenar(asiento, yo)}>
                     <UserCircleIcon aria-hidden weight="bold" />
                     Soy yo
                   </button>
@@ -156,9 +148,38 @@ export function PasoPasajeros({
               enterKeyHint={ultimo ? "done" : "next"}
               disabled={bloqueado}
             />
-          </fieldset>
+          </TarjetaPasajero>
         );
       })}
     </form>
+  );
+}
+
+function TarjetaPasajero({
+  asiento,
+  conError,
+  bloqueado,
+  children,
+}: {
+  asiento: string;
+  conError: boolean;
+  bloqueado: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <Card
+      className={cn(
+        "gap-5 border-2 border-transparent p-5 py-5 motion-safe:transition-colors",
+        conError && "border-destructive-text"
+      )}
+    >
+      <fieldset className="m-0 flex min-w-0 flex-col gap-5 border-0 p-0" disabled={bloqueado}>
+        <legend className="mb-4 flex items-center gap-3 p-0">
+          <IconTile icon={UserCircleIcon} tone="sky" />
+          <span className="text-[17px] font-semibold">Asiento {asiento}</span>
+        </legend>
+        {children}
+      </fieldset>
+    </Card>
   );
 }

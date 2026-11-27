@@ -1,0 +1,17 @@
+/* Imita el relleno del shell del panel: FlujoPagina y BarraFlujo cuentan con él (-mx-5, -mb-5). */
+.armazon {
+  --alto-pestanas: 0px; /* el sitio no tiene barra de pestañas inferior */
+  flex: 1;
+  /* Ocupa al menos la ventana bajo la barra del sitio (80 px): así la BarraFlujo queda
+     pegada al fondo de la pantalla y no flotando a media página cuando el paso es corto. */
+  min-height: calc(100dvh - 80px);
+  display: flex;
+  flex-direction: column;
+  padding: 20px;
+  background: var(--s-canvas);
+}
+@media (min-width: 1024px) {
+  .armazon {
+    padding: 32px;
+  }
+}

@@ -1,4 +1,4 @@
-export { PagoPasajero, type PagoPasajeroProps } from "./pago-pasajero";
+export { PagoPasajero, ID_FORM_PAGO_PASAJERO, type EstadoBarraPago, type PagoPasajeroProps } from "./pago-pasajero";
 export { AvisoTasaCambio, type AvisoTasaCambioProps } from "./aviso-tasa-cambio";
 export {
   subirComprobante,

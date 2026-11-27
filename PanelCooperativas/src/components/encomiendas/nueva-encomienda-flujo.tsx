@@ -811,13 +811,9 @@ export function NuevaEncomiendaFlujo() {
     motivoBloqueo ??
     (paso === "destino"
       ? trayecto
-      : paso === "detalles"
-        ? [modalidad ? MODALIDAD_PAGO[modalidad].corto : null, estimadoTexto ? `Estimado ${estimadoTexto}` : null]
-            .filter(Boolean)
-            .join(" · ") || null
-        : [trayecto, modalidad ? MODALIDAD_PAGO[modalidad].corto : null, estimadoTexto ? `Estimado ${estimadoTexto}` : null]
-            .filter(Boolean)
-            .join(" · ") || null);
+      : [trayecto, modalidad ? MODALIDAD_PAGO[modalidad].corto : null].filter(Boolean).join(" · ") || null);
+  // El estimado solo se destaca cuando no hay un mensaje de bloqueo en su lugar.
+  const totalPaso = !motivoBloqueo && paso !== "destino" && estimadoTexto ? { valor: estimadoTexto, secundario: "estimado" } : undefined;
 
   const barra =
     paso === "destino" ? (
@@ -825,6 +821,7 @@ export function NuevaEncomiendaFlujo() {
         resumen={resumenPaso}
         principal={{
           etiqueta: editando ? "Volver al resumen" : "Continuar",
+          flecha: true,
           onClick: continuarDestino,
           deshabilitado: !destinoValido,
         }}
@@ -832,8 +829,10 @@ export function NuevaEncomiendaFlujo() {
     ) : paso === "detalles" ? (
       <BarraFlujo
         resumen={resumenPaso}
+        total={totalPaso}
         principal={{
           etiqueta: editando ? "Volver al resumen" : "Continuar",
+          flecha: true,
           type: "submit",
           form: ID_FORMULARIO,
           deshabilitado: !modalidad,
@@ -842,6 +841,7 @@ export function NuevaEncomiendaFlujo() {
     ) : (
       <BarraFlujo
         resumen={resumenPaso}
+        total={totalPaso}
         principal={{
           etiqueta: "Registrar y recibir",
           etiquetaCargando: "Registrando…",

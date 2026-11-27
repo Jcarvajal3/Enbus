@@ -5,7 +5,9 @@
 
 import type { EnvioRegistrado, ModalidadEnvio } from "./tipos";
 
-const CLAVE_BORRADOR = "enbus:enviar:borrador";
+// v2: el peso pasó al paso de detalles y entra en el borrador (la v1 no lo tenía).
+const CLAVE_BORRADOR = "enbus:enviar:borrador:v2";
+const CLAVE_BORRADOR_VIEJA = "enbus:enviar:borrador";
 const CLAVE_LISTO = "enbus:enviar:listo";
 
 export interface BorradorEnvio {
@@ -13,6 +15,8 @@ export interface BorradorEnvio {
   cedula: string;
   telefono: string;
   descripcion: string;
+  /** Peso como se escribió ("2,5"). */
+  peso: string;
   valor: string;
   modalidad: ModalidadEnvio | "";
   sucursalId: string;
@@ -67,6 +71,7 @@ export function leerBorrador(): BorradorEnvio | null {
     cedula: texto(b.cedula),
     telefono: texto(b.telefono),
     descripcion: texto(b.descripcion),
+    peso: texto(b.peso),
     valor: texto(b.valor),
     modalidad: b.modalidad === "ORIGEN" || b.modalidad === "DESTINO" ? b.modalidad : "",
     sucursalId: texto(b.sucursalId),
@@ -75,7 +80,10 @@ export function leerBorrador(): BorradorEnvio | null {
 }
 
 export const guardarBorrador = (b: BorradorEnvio) => escribir(CLAVE_BORRADOR, b);
-export const borrarBorrador = () => borrar(CLAVE_BORRADOR);
+export const borrarBorrador = () => {
+  borrar(CLAVE_BORRADOR);
+  borrar(CLAVE_BORRADOR_VIEJA);
+};
 
 export function leerListo(): EnvioRegistrado | null {
   if (typeof window === "undefined") return null;

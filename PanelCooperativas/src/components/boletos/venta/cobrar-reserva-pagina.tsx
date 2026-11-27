@@ -8,6 +8,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { TotalCorto } from "./total-corto";
 import { BarraFlujo, FlujoPagina, useSalidaProtegida } from "@/components/flujo";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -178,6 +179,8 @@ export function CobrarReservaPagina({ compraId, volver }: { compraId: string; vo
         barra={
           reserva ? (
             <BarraFlujo
+              resumen={`${cantidad === 1 ? "Asiento" : "Asientos"} ${listaAsientos(reserva.asientos)}${reserva.ruta ? ` · ${reserva.ruta}` : ""}`}
+              total={{ valor: <TotalCorto usd={reserva.totalUsd} className="font-[inherit]" /> }}
               principal={{
                 etiqueta: etiquetaCobro,
                 type: "submit",

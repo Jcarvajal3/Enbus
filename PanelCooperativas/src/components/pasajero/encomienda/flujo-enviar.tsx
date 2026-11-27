@@ -1,19 +1,26 @@
 "use client";
 
 // ─── Enviar encomienda (web del pasajero) ────────────────────────────────────
-// Versión web de `EnBusApp/app/encomiendas/nueva.tsx`. Pasos en `?paso=`:
-//   ruta (público) → sucursal → destinatario → revisar → listo.
-// La selección (origen, destino, peso, cooperativa) vive en la URL, así que ir a iniciar sesión
-// y volver, o recargar, retoma el mismo punto. Lo que se escribe del destinatario va a un
-// borrador en sessionStorage.
+// Paralelo al registro de encomienda de la taquilla (`NuevaEncomiendaFlujo` del panel), en voz
+// del pasajero. Pasos en `?paso=`:
+//   1. destino (público)   ¿A dónde la envías?            ruta y cooperativa (con "Desde Bs X (1 kg)")
+//   2. sucursal            ¿Dónde entregas el paquete?    taquilla de origen (y datos de la cuenta)
+//   3. detalles            Detalles de la encomienda      quien recibe, contenido y peso, quién paga
+//   4. revisar             Revisa y registra              resumen por bloques con "Editar"
+//   Pantalla final (sin número): Encomienda registrada.
+// La selección (origen, destino, cooperativa) vive en la URL, así que ir a iniciar sesión y volver,
+// o recargar, retoma el mismo punto. Lo que se escribe va a un borrador en sessionStorage.
+// El peso llega de la portada en `?peso=` y es el valor inicial del campo de "detalles".
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { AvisoError } from "@/components/aviso-error";
 import { BarraFlujo, FlujoPagina, usePasoEnUrl, useSalidaProtegida } from "@/components/flujo";
+import { ArmazonFlujoSitio } from "@/components/pasajero/flujo-sitio";
 import { avisarInfo } from "@/lib/avisos";
-import { leerMonto } from "@/lib/dinero";
-import { urlIngresar, RUTAS_PASAJERO } from "@/lib/pasajero/rutas";
-import { cedulaValida, telefonoValido } from "@/lib/ve";
+import { formatMoney, leerMonto } from "@/lib/dinero";
+import { urlEncomienda, urlIngresar, RUTAS_PASAJERO } from "@/lib/pasajero/rutas";
+import { formatCiudad } from "@/lib/ve.generated";
 import { cargarSucursales, cotizarRuta, registrarEncomienda } from "@/app/(sitio)/enviar/acciones";
 import {
   borrarBorrador,
@@ -24,10 +31,20 @@ import {
   leerListo,
   nuevaClaveEnvio,
 } from "./borrador";
-import s from "./enviar.module.css";
-import { PasoDestinatario, validarDestinatario, type DatosDestinatario, type ErroresDestinatario, type FotoElegida } from "./paso-destinatario";
+import { montoOpcion, PasoDestino, type ErroresDestino } from "./paso-destino";
+import {
+  calcularErroresDetalles,
+  enfocar,
+  ID_FORMULARIO_DETALLES,
+  idDetalle,
+  MODALIDADES,
+  PasoDetalles,
+  type DatosDetalles,
+  type ErroresDetalles,
+  type EstimadoVista,
+  type FotoElegida,
+} from "./paso-detalles";
 import { PasoListo } from "./paso-listo";
-import { montoOpcion, PasoRuta, type ErroresRuta } from "./paso-ruta";
 import { PasoRevisar } from "./paso-revisar";
 import { PasoSucursal } from "./paso-sucursal";
 import { subirFotoPaquete, validarFotoPaquete } from "./subir-foto";
@@ -46,6 +63,7 @@ interface Props {
   cotizacionInicial: Cotizacion | null;
   pasajero: {
     id: string;
+    nombre: string;
     esPasajero: boolean;
     perfilCompleto: boolean;
     cedula: string | null;
@@ -54,21 +72,21 @@ interface Props {
 }
 
 const TITULOS: Record<PasoEnvio, string> = {
-  ruta: "Ruta y paquete",
-  sucursal: "Entrega en sucursal",
-  destinatario: "Destinatario y contenido",
-  revisar: "Revisa y confirma",
-  listo: "¡Listo, registramos tu envío!",
+  destino: "¿A dónde la envías?",
+  sucursal: "¿Dónde entregas el paquete?",
+  detalles: "Detalles de la encomienda",
+  revisar: "Revisa y registra",
+  listo: "Encomienda registrada",
 };
 
 const DESCRIPCIONES: Partial<Record<PasoEnvio, string>> = {
-  ruta: "Elige de dónde a dónde va tu paquete y compara cooperativas. No necesitas cuenta para ver los costos.",
-  sucursal: "Dónde llevarás el paquete para que lo reciban.",
-  destinatario: "A quién se lo entregan y qué lleva.",
-  revisar: "Confirma que todo esté bien antes de registrar el envío.",
+  destino: "Elige de dónde a dónde va y qué cooperativa la lleva. No necesitas cuenta para ver los costos.",
+  detalles: "Quien recibe retira con su cédula y el PIN.",
 };
 
-const DATOS_VACIOS: DatosDestinatario = { nombre: "", cedula: "", telefono: "", descripcion: "", valor: "", modalidad: "" };
+const DATOS_VACIOS: DatosDetalles = { nombre: "", cedula: "", telefono: "", descripcion: "", peso: "", valor: "", modalidad: "" };
+
+const MENSAJE_ESTIMADO_NEUTRO = "No pudimos calcular el estimado ahora. El costo final lo confirma la taquilla al pesar el paquete.";
 
 /** Actualiza parámetros de la URL actual sin recargar ni añadir entradas al historial. */
 function sincronizarUrl(valores: Record<string, string | null>) {
@@ -84,30 +102,31 @@ function sincronizarUrl(valores: Record<string, string | null>) {
   }
 }
 
-function textoPeso(pesoKg: number | null): string | null {
-  return pesoKg === null ? null : String(pesoKg);
-}
+type EstimadoCalculado = { clave: string; vista: EstimadoVista };
 
 export function FlujoEnviar({ rutas, inicial, cotizacionInicial, pasajero }: Props) {
   const router = useRouter();
 
-  // ── Selección (paso 1) ────────────────────────────────────────────────────
+  // ── Destino (paso 1) ──────────────────────────────────────────────────────
   const [origen, setOrigen] = useState(inicial.origen);
   const [destino, setDestino] = useState(inicial.destino);
-  const [peso, setPeso] = useState(inicial.peso);
   const [cotizacion, setCotizacion] = useState<Cotizacion | null>(cotizacionInicial);
   const [cooperativaId, setCooperativaId] = useState(inicial.cooperativaId);
-  const [erroresRuta, setErroresRuta] = useState<ErroresRuta>(() =>
-    cotizacionInicial?.tipo === "invalido" ? { [cotizacionInicial.campo]: cotizacionInicial.mensaje } : {}
+  const [erroresDestino, setErroresDestino] = useState<ErroresDestino>(() =>
+    cotizacionInicial?.tipo === "invalido" && cotizacionInicial.campo !== "peso"
+      ? { [cotizacionInicial.campo]: cotizacionInicial.mensaje }
+      : {}
   );
   const [cotizando, empezarCotizacion] = useTransition();
+  /** Número de la última cotización pedida: una respuesta tardía de otra ruta se descarta. */
+  const secuenciaCotizacion = useRef(0);
 
-  // ── Datos del destinatario (borrador) ─────────────────────────────────────
+  // ── Detalles (borrador) ───────────────────────────────────────────────────
   // sessionStorage solo existe en el navegador: el borrador y el envío listo se restauran en un
   // efecto tras montar (así el HTML del servidor y la primera pintura del cliente coinciden).
   const [restaurado, setRestaurado] = useState(false);
-  const [datos, setDatos] = useState<DatosDestinatario>(DATOS_VACIOS);
-  const [errores, setErrores] = useState<ErroresDestinatario>({});
+  const [datos, setDatos] = useState<DatosDetalles>({ ...DATOS_VACIOS, peso: inicial.peso });
+  const [errores, setErrores] = useState<ErroresDetalles>({});
   const [sucursalId, setSucursalId] = useState("");
   /** Clave de idempotencia del intento; vacía hasta restaurar (no se genera otra si había guardada). */
   const [idem, setIdem] = useState("");
@@ -135,25 +154,19 @@ export function FlujoEnviar({ rutas, inicial, cotizacionInicial, pasajero }: Pro
     [cotizacion, cooperativaId]
   );
   const esPasajero = pasajero?.esPasajero === true;
-  const pesoKg = peso.trim() ? leerMonto(peso) : null;
+  const pesoKg = datos.peso.trim() ? leerMonto(datos.peso) : null;
   const valorUsd = datos.valor.trim() ? leerMonto(datos.valor) : null;
+  /** Tope de peso de la tarifa de la cooperativa elegida. */
+  const pesoMax = opcion?.pesoMaxKg && opcion.pesoMaxKg > 0 ? opcion.pesoMaxKg : null;
 
-  const erroresDatos = useMemo(
-    () =>
-      validarDestinatario(datos, {
-        cedula: cedulaValida(datos.cedula),
-        telefono: telefonoValido(datos.telefono),
-        valor: !datos.valor.trim() || leerMonto(datos.valor) !== null,
-      }),
-    [datos]
-  );
+  const erroresDatos = useMemo(() => calcularErroresDetalles(datos, pesoMax).e, [datos, pesoMax]);
   const datosValidos = Object.keys(erroresDatos).length === 0;
   const hayRuta = opcion !== null && esPasajero && resultado === null;
 
   const url = usePasoEnUrl(PASOS_ENVIO, {
     esAccesible: (p) => {
       // Antes de restaurar no se sabe qué hay guardado: no se redirige todavía.
-      if (!restaurado || p === "ruta") return true;
+      if (!restaurado || p === "destino") return true;
       if (p === "listo") return resultado !== null;
       if (p === "revisar") return hayRuta && datosValidos;
       return hayRuta;
@@ -161,8 +174,10 @@ export function FlujoEnviar({ rutas, inicial, cotizacionInicial, pasajero }: Pro
   });
   const paso = url.paso;
 
+  // El peso que llega de la portada no cuenta como "lo escribiste tú" para pedir confirmar la salida.
   const hayDatos =
-    foto !== null || Object.entries(datos).some(([, v]) => typeof v === "string" && v.trim() !== "");
+    foto !== null ||
+    Object.entries(datos).some(([clave, v]) => typeof v === "string" && v.trim() !== "" && (clave !== "peso" || v !== inicial.peso));
   const { dialogo, confirmarSalida, permitirSalida } = useSalidaProtegida({
     activo: hayDatos && resultado === null,
     bloqueado: enviando,
@@ -177,14 +192,16 @@ export function FlujoEnviar({ rutas, inicial, cotizacionInicial, pasajero }: Pro
       if (listo) setResultado(listo);
       const b = leerBorrador();
       if (b) {
-        setDatos({
+        // Un peso en la URL (de la portada) manda sobre el del borrador.
+        setDatos((d) => ({
           nombre: b.nombre,
           cedula: b.cedula,
           telefono: b.telefono,
           descripcion: b.descripcion,
+          peso: d.peso || b.peso,
           valor: b.valor,
           modalidad: b.modalidad,
-        });
+        }));
         setSucursalId(b.sucursalId);
       }
       // `leerBorrador` ya conserva la clave guardada; solo se crea una si no había borrador.
@@ -212,7 +229,7 @@ export function FlujoEnviar({ rutas, inicial, cotizacionInicial, pasajero }: Pro
 
   // Las taquillas se cargan al entrar a los pasos con sesión (con el cliente de sesión).
   const claveSucursales =
-    opcion && esPasajero && (paso === "sucursal" || paso === "destinatario" || paso === "revisar")
+    opcion && esPasajero && (paso === "sucursal" || paso === "detalles" || paso === "revisar")
       ? `${opcion.cooperativaId}|${origen}|${reintentoSucursales}`
       : null;
   useEffect(() => {
@@ -241,8 +258,78 @@ export function FlujoEnviar({ rutas, inicial, cotizacionInicial, pasajero }: Pro
   const sucursal =
     listaSucursales.find((x) => x.id === sucursalId) ?? (listaSucursales.length === 1 ? listaSucursales[0] : null);
 
+  // ── Costo estimado en vivo ────────────────────────────────────────────────
+  // Con el peso escrito (válido y dentro del tope) se consulta la tarifa de la cooperativa elegida,
+  // 450 ms después de la última tecla. Si coincide con lo ya cotizado (1 kg) no se consulta de nuevo.
+  const opcionId = opcion?.cooperativaId ?? null;
+  const pesoEstimable = pesoKg !== null && pesoKg > 0 && (!pesoMax || pesoKg <= pesoMax);
+  const claveEstimado = opcionId && pesoEstimable ? `${opcionId}|${origen}|${destino}|${pesoKg}` : null;
+  const costoCotizado = opcion && cotizacion?.tipo === "ok" && cotizacion.pesoKg === pesoKg ? opcion : null;
+  const tasaCotizada =
+    cotizacion?.tipo === "ok" && cotizacion.tasa && cotizacion.tasaFecha
+      ? { tasa: cotizacion.tasa, fecha: cotizacion.tasaFecha }
+      : null;
+  const [estimadoCalculado, setEstimadoCalculado] = useState<EstimadoCalculado | null>(null);
+  const consultaActiva = paso === "detalles" || paso === "revisar";
+
+  useEffect(() => {
+    if (!consultaActiva || !claveEstimado || !opcionId || pesoKg === null || costoCotizado) return;
+    let vigente = true;
+    const guardar = (vista: EstimadoVista) => {
+      if (vigente) setEstimadoCalculado({ clave: claveEstimado, vista });
+    };
+    const timer = window.setTimeout(async () => {
+      try {
+        const r = await cotizarRuta(origen, destino, String(pesoKg));
+        const propia = r.tipo === "ok" ? r.opciones.find((o) => o.cooperativaId === opcionId) : undefined;
+        if (r.tipo === "ok" && propia) {
+          guardar({
+            estado: "listo",
+            usd: propia.costoUsd,
+            bs: propia.costoBs,
+            tasa: r.tasa && r.tasaFecha ? { tasa: r.tasa, fecha: r.tasaFecha } : null,
+          });
+        } else {
+          // Límite de consultas, error o sin opción: texto neutro, nunca un error en rojo.
+          guardar({ estado: "neutro", mensaje: MENSAJE_ESTIMADO_NEUTRO });
+        }
+      } catch {
+        guardar({ estado: "neutro", mensaje: MENSAJE_ESTIMADO_NEUTRO });
+      }
+    }, 450);
+    return () => {
+      vigente = false;
+      window.clearTimeout(timer);
+    };
+  }, [consultaActiva, claveEstimado, opcionId, pesoKg, origen, destino, costoCotizado]);
+
+  const estimado: EstimadoVista = !claveEstimado
+    ? { estado: "vacio" }
+    : costoCotizado
+      ? { estado: "listo", usd: costoCotizado.costoUsd, bs: costoCotizado.costoBs, tasa: tasaCotizada }
+      : estimadoCalculado?.clave === claveEstimado
+        ? estimadoCalculado.vista
+        : { estado: "calculando" };
+  const estimadoTexto =
+    estimado.estado === "listo" ? formatMoney({ usd: estimado.usd, bs: estimado.bs, tasa: estimado.tasa }).principal : null;
+
   // ── Paso 1 ────────────────────────────────────────────────────────────────
-  const cambiarRuta = (cambio: { origen?: string; destino?: string; peso?: string }) => {
+  const cotizar = (deOrigen: string, aDestino: string) => {
+    if (!deOrigen || !aDestino) return;
+    const numero = ++secuenciaCotizacion.current;
+    empezarCotizacion(async () => {
+      try {
+        const r = await cotizarRuta(deOrigen, aDestino, "");
+        if (numero !== secuenciaCotizacion.current) return;
+        setCotizacion(r);
+        setErroresDestino(r.tipo === "invalido" && r.campo !== "peso" ? { [r.campo]: r.mensaje } : {});
+      } catch {
+        if (numero === secuenciaCotizacion.current) setCotizacion({ tipo: "error" });
+      }
+    });
+  };
+
+  const cambiarRuta = (cambio: { origen?: string; destino?: string }) => {
     const nuevoOrigen = cambio.origen ?? origen;
     let nuevoDestino = cambio.destino ?? destino;
     if (cambio.origen !== undefined && !rutas.destinosPorOrigen[nuevoOrigen]?.some((c) => c.ciudad === nuevoDestino)) {
@@ -250,34 +337,20 @@ export function FlujoEnviar({ rutas, inicial, cotizacionInicial, pasajero }: Pro
     }
     setOrigen(nuevoOrigen);
     setDestino(nuevoDestino);
-    setPeso(cambio.peso ?? peso);
-    // Lo cotizado ya no corresponde a lo que hay en los campos.
+    // Lo cotizado ya no corresponde a lo elegido: se descarta y se vuelve a consultar con 1 kg.
+    secuenciaCotizacion.current++;
     setCotizacion(null);
     setCooperativaId("");
-    setErroresRuta({});
+    setSucursalId("");
+    setErroresDestino({});
+    sincronizarUrl({ origen: nuevoOrigen, destino: nuevoDestino, coop: null });
+    cotizar(nuevoOrigen, nuevoDestino);
   };
 
-  const cotizar = () => {
-    if (cotizando) return;
-    const faltas: ErroresRuta = {};
-    if (!origen) faltas.origen = "Elige la ciudad de origen.";
-    if (!destino) faltas.destino = "Elige la ciudad de destino.";
-    const pesoLeido = peso.trim() ? leerMonto(peso) : null;
-    if (peso.trim() && pesoLeido === null) faltas.peso = "Escribe el peso en kilos, por ejemplo 2,5.";
-    setErroresRuta(faltas);
-    if (faltas.origen || faltas.destino || faltas.peso) return;
-
-    setCooperativaId("");
-    sincronizarUrl({ origen, destino, peso: textoPeso(pesoLeido), coop: null });
-    empezarCotizacion(async () => {
-      try {
-        const r = await cotizarRuta(origen, destino, peso);
-        setCotizacion(r);
-        setErroresRuta(r.tipo === "invalido" ? { [r.campo]: r.mensaje } : {});
-      } catch {
-        setCotizacion({ tipo: "error" });
-      }
-    });
+  const elegirCooperativa = (id: string) => {
+    setCooperativaId(id);
+    setSucursalId("");
+    sincronizarUrl({ origen, destino, coop: id });
   };
 
   const urlDelPaso = (p: PasoEnvio, coop: string) => {
@@ -305,11 +378,12 @@ export function FlujoEnviar({ rutas, inicial, cotizacionInicial, pasajero }: Pro
     borrarBorrador();
   };
 
-  const continuarRuta = () => {
+  const continuarDestino = () => {
     if (!opcion) return;
-    sincronizarUrl({ origen, destino, peso: textoPeso(pesoKg), coop: opcion.cooperativaId });
+    sincronizarUrl({ origen, destino, coop: opcion.cooperativaId });
     if (!pasajero) {
-      router.push(urlIngresar(urlDelPaso("sucursal", opcion.cooperativaId)));
+      // Navegación completa: al volver con sesión no debe quedar caché del router.
+      window.location.assign(urlIngresar(urlDelPaso("sucursal", opcion.cooperativaId)));
       return;
     }
     if (!pasajero.esPasajero) return;
@@ -332,11 +406,11 @@ export function FlujoEnviar({ rutas, inicial, cotizacionInicial, pasajero }: Pro
     }
   };
 
-  const cambiarDatos = (cambio: Partial<DatosDestinatario>) => {
+  const cambiarDatos = (cambio: Partial<DatosDetalles>) => {
     setDatos((d) => ({ ...d, ...cambio }));
     setErrores((e) => {
       const siguiente = { ...e };
-      for (const clave of Object.keys(cambio) as (keyof DatosDestinatario)[]) delete siguiente[clave];
+      for (const clave of Object.keys(cambio) as (keyof DatosDetalles)[]) delete siguiente[clave];
       return siguiente;
     });
   };
@@ -363,21 +437,16 @@ export function FlujoEnviar({ rutas, inicial, cotizacionInicial, pasajero }: Pro
     setErrorFoto(null);
   };
 
-  const continuarDestinatario = () => {
-    setErrores(erroresDatos);
-    if (!datosValidos) {
-      // Lleva el foco al primer campo con error.
-      requestAnimationFrame(() => document.querySelector<HTMLElement>("[aria-invalid='true']")?.focus());
+  /** Marca todos los errores del paso y lleva el foco al primero. */
+  const continuarDetalles = () => {
+    const { e, orden } = calcularErroresDetalles(datos, pesoMax);
+    setErrores(e);
+    if (orden.length > 0) {
+      enfocar(idDetalle(orden[0]));
       return;
     }
     volverAlResumenOSeguir();
   };
-
-  const estimado = useMemo(() => {
-    if (!opcion || cotizacion?.tipo !== "ok" || cotizacion.referencia) return null;
-    const m = montoOpcion(opcion, cotizacion.tasa, cotizacion.tasaFecha);
-    return { principal: m.principal, secundario: m.secundario };
-  }, [opcion, cotizacion]);
 
   const registrar = async () => {
     if (enviandoRef.current || !opcion || !pasajero || !datos.modalidad) return;
@@ -418,12 +487,12 @@ export function FlujoEnviar({ rutas, inicial, cotizacionInicial, pasajero }: Pro
 
       if (!r.ok) {
         if (r.campo === "sesion") {
-          router.push(urlIngresar(urlDelPaso("revisar", opcion.cooperativaId)));
+          window.location.assign(urlIngresar(urlDelPaso("revisar", opcion.cooperativaId)));
           return;
         }
         setErrorEnvio(r.error);
         if (r.campo === "perfil") url.ir("sucursal");
-        else if (r.campo === "destinatario" || r.campo === "descripcion") url.ir("destinatario");
+        else if (r.campo === "destinatario" || r.campo === "descripcion") url.ir("detalles");
         return;
       }
 
@@ -435,7 +504,7 @@ export function FlujoEnviar({ rutas, inicial, cotizacionInicial, pasajero }: Pro
         destino,
         sucursal,
         modalidad: datos.modalidad,
-        estimado: estimado ? [estimado.principal, estimado.secundario].filter(Boolean).join(" ") : null,
+        estimado: estimadoTexto,
       };
       guardarListo(registrado);
       reiniciarEnvio();
@@ -456,48 +525,63 @@ export function FlujoEnviar({ rutas, inicial, cotizacionInicial, pasajero }: Pro
     reiniciarEnvio();
     setOrigen("");
     setDestino("");
-    setPeso("");
+    secuenciaCotizacion.current++;
     setCotizacion(null);
     setCooperativaId("");
-    setErroresRuta({});
+    setErroresDestino({});
     sincronizarUrl({ origen: null, destino: null, peso: null, coop: null });
-    url.ir("ruta", { reemplazar: true });
+    url.ir("destino", { reemplazar: true });
   };
 
   const editar = (destinoPaso: PasoEnvio) => {
-    setEditando(destinoPaso === "sucursal" || destinoPaso === "destinatario");
+    setEditando(destinoPaso === "sucursal" || destinoPaso === "detalles");
     url.ir(destinoPaso);
   };
 
   // ── Barra de acción de cada paso ──────────────────────────────────────────
   const etiquetaSeguir = editando ? "Volver al resumen" : "Continuar";
+  const trayecto = origen && destino ? `${formatCiudad(origen)} → ${formatCiudad(destino)}` : null;
+  const modalidadCorta = MODALIDADES.find((m) => m.valor === datos.modalidad)?.titulo ?? null;
+
+  const resumenDestino = !origen
+    ? "Elige el origen"
+    : !destino
+      ? "Elige el destino"
+      : cotizacion?.tipo === "sin_opciones"
+        ? "Ninguna cooperativa lleva esta ruta"
+        : !opcion || cotizacion?.tipo !== "ok"
+          ? "Elige la cooperativa"
+          : `${trayecto} · ${opcion.cooperativa}`;
+  const totalDestino =
+    opcion && cotizacion?.tipo === "ok"
+      ? (() => {
+          const m = montoOpcion(opcion, cotizacion.tasa, cotizacion.tasaFecha);
+          return { valor: m.principal, secundario: "desde, 1 kg", accesible: `Desde ${m.accesible}` };
+        })()
+      : undefined;
+  const totalEstimado = estimadoTexto ? { valor: estimadoTexto, secundario: "estimado" } : undefined;
+
   const barra =
-    paso === "listo" ? undefined : paso === "ruta" ? (
-      cotizacion?.tipo === "ok" ? (
-        <BarraFlujo
-          resumen={
-            opcion && cotizacion.tipo === "ok"
-              ? `${opcion.cooperativa} · ${montoOpcion(opcion, cotizacion.tasa, cotizacion.tasaFecha).principal}`
-              : "Elige una cooperativa"
-          }
-          principal={{
-            etiqueta: pasajero ? "Continuar" : "Continuar e iniciar sesión",
-            onClick: continuarRuta,
-            deshabilitado: !opcion || (pasajero !== null && !pasajero.esPasajero),
-          }}
-        />
-      ) : (
-        <BarraFlujo
-          principal={{
-            etiqueta: "Ver cooperativas y costos",
-            etiquetaCargando: "Buscando…",
-            type: "submit",
-            form: "form-ruta",
-            cargando: cotizando,
-            deshabilitado: rutas.origenes.length === 0,
-          }}
-        />
-      )
+    paso === "listo" ? (
+      <BarraFlujo
+        resumen={resultado?.trackingId ? `Código ${resultado.trackingId}` : undefined}
+        principal={{
+          etiqueta: "Ver encomienda",
+          onClick: () => router.push(resultado ? urlEncomienda(resultado.id) : RUTAS_PASAJERO.misEncomiendas),
+        }}
+        secundaria={{ etiqueta: "Otro envío", onClick: otra }}
+      />
+    ) : paso === "destino" ? (
+      <BarraFlujo
+        resumen={resumenDestino}
+        total={totalDestino}
+        principal={{
+          etiqueta: pasajero ? "Continuar" : "Continuar e iniciar sesión",
+          flecha: true,
+          onClick: continuarDestino,
+          deshabilitado: !opcion || (pasajero !== null && !pasajero.esPasajero),
+        }}
+      />
     ) : paso === "sucursal" ? (
       <BarraFlujo
         resumen={
@@ -509,28 +593,29 @@ export function FlujoEnviar({ rutas, inicial, cotizacionInicial, pasajero }: Pro
         }
         principal={{
           etiqueta: etiquetaSeguir,
+          flecha: true,
           onClick: volverAlResumenOSeguir,
           deshabilitado: !pasajero?.perfilCompleto || resultadoSucursales === null || (listaSucursales.length > 1 && !sucursal),
         }}
       />
-    ) : paso === "destinatario" ? (
+    ) : paso === "detalles" ? (
       <BarraFlujo
-        resumen={Object.keys(errores).length > 0 ? "Revisa los campos marcados" : undefined}
-        principal={{ etiqueta: etiquetaSeguir, onClick: continuarDestinatario }}
+        resumen={
+          Object.keys(errores).length > 0
+            ? "Revisa los campos marcados en rojo"
+            : [trayecto, modalidadCorta].filter(Boolean).join(" · ") || undefined
+        }
+        total={Object.keys(errores).length > 0 ? undefined : totalEstimado}
+        principal={{ etiqueta: etiquetaSeguir, flecha: true, type: "submit", form: ID_FORMULARIO_DETALLES }}
       />
     ) : (
       <BarraFlujo
-        resumen={
-          datos.modalidad
-            ? [datos.modalidad === "ORIGEN" ? "Pagas al entregar" : "Paga quien recibe", estimado ? `Estimado ${estimado.principal}` : null]
-                .filter(Boolean)
-                .join(" · ")
-            : undefined
-        }
+        resumen={[trayecto, modalidadCorta].filter(Boolean).join(" · ") || undefined}
+        total={totalEstimado}
         principal={{
           etiqueta: "Registrar envío",
           etiquetaCargando: "Registrando…",
-          onClick: registrar,
+          onClick: () => void registrar(),
           cargando: enviando,
           deshabilitado: !datosValidos || !opcion,
         }}
@@ -540,7 +625,7 @@ export function FlujoEnviar({ rutas, inicial, cotizacionInicial, pasajero }: Pro
   const atras = () => (url.indice > 0 ? url.anterior() : confirmarSalida(() => router.push(RUTAS_PASAJERO.inicio)));
 
   return (
-    <div className={s.armazon}>
+    <ArmazonFlujoSitio>
       {dialogo}
       <FlujoPagina
         titulo={TITULOS[paso]}
@@ -551,24 +636,23 @@ export function FlujoEnviar({ rutas, inicial, cotizacionInicial, pasajero }: Pro
         atrasEtiqueta={url.indice > 0 ? "Volver al paso anterior" : "Salir del envío"}
         barra={barra}
       >
-        {!restaurado && paso !== "ruta" && (
-          <p className={s.cargando} role="status">
+        {!restaurado && paso !== "destino" && (
+          <p className="py-8 text-center text-[15px] text-muted-foreground" role="status">
             Recuperando tu envío…
           </p>
         )}
-        {paso === "ruta" && (
-          <PasoRuta
+        {paso === "destino" && (
+          <PasoDestino
             rutas={rutas}
             origen={origen}
             destino={destino}
-            peso={peso}
             onCambiar={cambiarRuta}
-            errores={erroresRuta}
+            errores={erroresDestino}
             cotizacion={cotizacion}
             cotizando={cotizando}
-            onCotizar={cotizar}
+            onReintentar={() => cotizar(origen, destino)}
             cooperativaId={cooperativaId}
-            onElegir={setCooperativaId}
+            onElegir={elegirCooperativa}
             avisoStaff={pasajero !== null && !pasajero.esPasajero}
           />
         )}
@@ -585,24 +669,33 @@ export function FlujoEnviar({ rutas, inicial, cotizacionInicial, pasajero }: Pro
             telefono={pasajero?.telefono ?? null}
           />
         )}
-        {paso === "destinatario" && opcion && (
-          <PasoDestinatario
-            datos={datos}
-            onCambiar={cambiarDatos}
-            errores={errores}
-            foto={foto}
-            onFoto={cambiarFoto}
-            errorFoto={errorFoto}
-            cooperativa={opcion.cooperativa}
-          />
+        {paso === "detalles" && opcion && pasajero && (
+          <>
+            {errorEnvio && <AvisoError>{errorEnvio}</AvisoError>}
+            <PasoDetalles
+              datos={datos}
+              onCambiar={cambiarDatos}
+              errores={errores}
+              remitente={{ nombre: pasajero.nombre, cedula: pasajero.cedula, telefono: pasajero.telefono }}
+              foto={foto}
+              onFoto={cambiarFoto}
+              errorFoto={errorFoto}
+              cooperativa={opcion.cooperativa}
+              pesoMax={pesoMax}
+              dimensionesMax={opcion.dimensionesMaxCm && opcion.dimensionesMaxCm > 0 ? opcion.dimensionesMaxCm : null}
+              estimado={estimado}
+              onEnviar={continuarDetalles}
+            />
+          </>
         )}
-        {paso === "revisar" && opcion && datos.modalidad && (
+        {paso === "revisar" && opcion && pasajero && datos.modalidad && (
           <PasoRevisar
             origen={origen}
             destino={destino}
             cooperativa={opcion.cooperativa}
             sucursal={sucursal}
-            nombre={datos.nombre.trim()}
+            remitente={{ nombre: pasajero.nombre, cedula: pasajero.cedula, telefono: pasajero.telefono }}
+            nombre={datos.nombre.trim().replace(/\s+/g, " ")}
             cedula={datos.cedula}
             telefono={datos.telefono}
             descripcion={datos.descripcion.trim()}
@@ -610,14 +703,13 @@ export function FlujoEnviar({ rutas, inicial, cotizacionInicial, pasajero }: Pro
             valorUsd={valorUsd}
             foto={foto}
             modalidad={datos.modalidad}
-            estimado={estimado}
+            estimadoTexto={estimadoTexto}
             onEditar={editar}
             error={errorEnvio}
-            deshabilitado={enviando}
           />
         )}
-        {paso === "listo" && resultado && <PasoListo envio={resultado} onOtra={otra} />}
+        {paso === "listo" && resultado && <PasoListo envio={resultado} />}
       </FlujoPagina>
-    </div>
+    </ArmazonFlujoSitio>
   );
 }

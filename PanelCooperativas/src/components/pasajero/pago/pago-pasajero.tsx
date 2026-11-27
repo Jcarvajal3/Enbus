@@ -49,7 +49,28 @@ export interface PagoPasajeroProps {
   error?: string | null;
   onEnviar(datos: DatosPagoPasajero): void;
   onTaquilla?(): void;
+  /**
+   * Con él, el botón de acción NO se dibuja aquí: la página lo pone en su `BarraFlujo`
+   * (`type: "submit"`, `form: idForm`, o `onClick` en el modo taquilla) con lo que informa este callback,
+   * igual que `CobroTaquillaForm` del panel. Sin él (cuenta, encomiendas) el formulario trae su propio botón.
+   */
+  onBarra?(estado: EstadoBarraPago): void;
+  /** `id` del <form> de pago (por defecto `ID_FORM_PAGO_PASAJERO`). */
+  idForm?: string;
 }
+
+/** Qué debe hacer el botón principal de la barra de la página. */
+export interface EstadoBarraPago {
+  /** `reportar`: envía el formulario · `taquilla`: apartar para pagar en taquilla · `ninguno`: aún no hay método. */
+  modo: "reportar" | "taquilla" | "ninguno";
+  /** Etiqueta del botón: "Reportar pago de Bs 2.500,00". */
+  etiqueta: string;
+  /** Se está subiendo el capture (la página lo muestra como cargando). */
+  subiendo: boolean;
+  deshabilitado: boolean;
+}
+
+export const ID_FORM_PAGO_PASAJERO = "pago-pasajero";
 
 const TAQUILLA = "taquilla";
 
@@ -363,6 +384,8 @@ export function PagoPasajero({
   error,
   onEnviar,
   onTaquilla,
+  onBarra,
+  idForm = ID_FORM_PAGO_PASAJERO,
 }: PagoPasajeroProps) {
   const id = useId();
   const hayTaquilla = permitirTaquilla && !!onTaquilla;
@@ -463,6 +486,20 @@ export function PagoPasajero({
       ? `≈ ${formatUsd(totalUsd)}`
       : null;
 
+  // Con barra externa, informa a la página qué botón dibujar (solo cuando cambia algo).
+  const modoBarra: EstadoBarraPago["modo"] = taquilla ? "taquilla" : metodo ? "reportar" : "ninguno";
+  const etiquetaBarra = modoBarra === "taquilla" ? "Apartar y pagar en taquilla" : `Reportar pago de ${principal}`;
+  const deshabilitadoBarra = modoBarra === "ninguno" || (modoBarra === "reportar" && sinTasa);
+  const onBarraRef = useRef(onBarra);
+  useEffect(() => {
+    onBarraRef.current = onBarra;
+  });
+  const hayBarra = Boolean(onBarra);
+  useEffect(() => {
+    if (!hayBarra) return;
+    onBarraRef.current?.({ modo: modoBarra, etiqueta: etiquetaBarra, subiendo, deshabilitado: deshabilitadoBarra });
+  }, [hayBarra, modoBarra, etiquetaBarra, subiendo, deshabilitadoBarra]);
+
   const encabezado = (
     <div className="rounded-xl bg-card p-4 shadow-card">
       <p className="text-[13px] font-semibold tracking-wide text-muted-foreground uppercase">
@@ -534,14 +571,17 @@ export function PagoPasajero({
             <InfoIcon className="mt-0.5 size-5 shrink-0 text-info-text" weight="fill" aria-hidden />
             <p>Tu asiento queda apartado 30 minutos. Paga en efectivo en la taquilla antes de que venza la reserva.</p>
           </div>
-          <Button type="button" size="lg" onClick={onTaquilla} disabled={ocupado} className="w-full">
-            Apartar y pagar en taquilla
-          </Button>
+          {!hayBarra && (
+            <Button type="button" size="lg" onClick={onTaquilla} disabled={ocupado} className="w-full">
+              Apartar y pagar en taquilla
+            </Button>
+          )}
         </>
       )}
 
       {metodo && (
         <form
+          id={idForm}
           noValidate
           className="flex flex-col gap-5"
           onSubmit={(e) => {
@@ -644,10 +684,12 @@ export function PagoPasajero({
 
           <div aria-live="polite">{error && <AvisoError>{error}</AvisoError>}</div>
 
-          <Button type="submit" size="xl" disabled={ocupado || sinTasa} className="w-full">
-            {ocupado && <Spinner size="sm" />}
-            {subiendo ? "Subiendo capture…" : enviando ? "Reportando pago…" : "Reportar pago"}
-          </Button>
+          {!hayBarra && (
+            <Button type="submit" size="xl" disabled={ocupado || sinTasa} className="w-full">
+              {ocupado && <Spinner size="sm" />}
+              {subiendo ? "Subiendo capture…" : enviando ? "Reportando pago…" : "Reportar pago"}
+            </Button>
+          )}
         </form>
       )}
 

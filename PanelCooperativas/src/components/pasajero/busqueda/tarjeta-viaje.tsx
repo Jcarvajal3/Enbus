@@ -133,7 +133,7 @@ export function TarjetaViaje({
             </>
           )}
         </p>
-        <Link href={urlComprarBoleto(v.id)} className="s-boton s-boton--tinta">
+        <Link href={urlComprarBoleto(v.id)} prefetch={false} className="s-boton s-boton--tinta">
           Elegir asiento
           <span className="sr-only">
             {" "}

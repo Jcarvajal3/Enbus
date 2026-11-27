@@ -256,7 +256,7 @@
 /* Lista de ciudades */
 .lista {
   position: absolute;
-  z-index: 20;
+  z-index: 25; /* sobre la BarraFlujo (z-20) de /enviar */
   top: calc(100% - 4px);
   left: 0;
   right: 0;

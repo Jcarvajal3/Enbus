@@ -1,15 +1,16 @@
 "use client";
 
+// ─── Paso 4: Revisa y registra ───────────────────────────────────────────────
+// Una tarjeta con bloques divididos y "Editar" por bloque, como `BloqueResumen` del panel.
+
 import type { ReactNode } from "react";
-import { WarningCircleIcon } from "@phosphor-icons/react";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { AvisoError } from "@/components/aviso-error";
 import { Button } from "@/components/ui/button";
+import { formatMoney } from "@/lib/dinero";
 import { formatPesoKg } from "@/lib/peso";
 import { formatCedula, formatTelefono } from "@/lib/ve";
 import { formatCiudad } from "@/lib/ve.generated";
-import { formatUsd } from "@/lib/dinero";
-import s from "./enviar.module.css";
-import type { FotoElegida } from "./paso-destinatario";
+import { MODALIDADES, type FotoElegida, type Remitente } from "./paso-detalles";
 import type { ModalidadEnvio, PasoEnvio, Sucursal } from "./tipos";
 
 interface Props {
@@ -17,6 +18,7 @@ interface Props {
   destino: string;
   cooperativa: string;
   sucursal: Sucursal | null;
+  remitente: Remitente;
   nombre: string;
   cedula: string;
   telefono: string;
@@ -25,42 +27,25 @@ interface Props {
   valorUsd: number | null;
   foto: FotoElegida | null;
   modalidad: ModalidadEnvio;
-  /** "Bs 12,00 ≈ USD 0,30", o null si no se escribió peso. */
-  estimado: { principal: string; secundario: string | null } | null;
+  /** "Bs 12,00" ya formateado, o null si no hay estimado. */
+  estimadoTexto: string | null;
   onEditar(paso: PasoEnvio): void;
   error: string | null;
-  deshabilitado: boolean;
 }
 
-function Seccion({
-  titulo,
-  editar,
-  etiquetaEditar,
-  children,
-}: {
-  titulo: string;
-  editar: () => void;
-  etiquetaEditar: string;
-  children: ReactNode;
-}) {
+/** Bloque del resumen con su botón "Editar" (sin `onEditar` no se puede cambiar aquí). */
+function BloqueResumen({ titulo, onEditar, children }: { titulo: string; onEditar?: () => void; children: ReactNode }) {
   return (
-    <section className={s.tarjeta}>
-      <div className={s.seccionCabeza}>
-        <h2 className={s.subtitulo}>{titulo}</h2>
-        <Button type="button" variant="ghost" size="sm" onClick={editar} aria-label={etiquetaEditar}>
-          Editar
-        </Button>
+    <div className="flex flex-col gap-0.5 py-4">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-[13px] text-muted-foreground">{titulo}</p>
+        {onEditar && (
+          <Button type="button" variant="link" size="sm" onClick={onEditar} aria-label={`Editar ${titulo.toLowerCase()}`}>
+            Editar
+          </Button>
+        )}
       </div>
-      <dl className={s.resumen}>{children}</dl>
-    </section>
-  );
-}
-
-function Dato({ etiqueta, children }: { etiqueta: string; children: ReactNode }) {
-  return (
-    <div className={s.dato}>
-      <dt>{etiqueta}</dt>
-      <dd>{children}</dd>
+      {children}
     </div>
   );
 }
@@ -70,6 +55,7 @@ export function PasoRevisar({
   destino,
   cooperativa,
   sucursal,
+  remitente,
   nombre,
   cedula,
   telefono,
@@ -78,82 +64,76 @@ export function PasoRevisar({
   valorUsd,
   foto,
   modalidad,
-  estimado,
+  estimadoTexto,
   onEditar,
   error,
-  deshabilitado,
 }: Props) {
+  const datosRemitente = [
+    remitente.cedula ? `C.I. ${formatCedula(remitente.cedula)}` : null,
+    remitente.telefono ? `Tel. ${formatTelefono(remitente.telefono)}` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
   return (
-    <div className={s.pagina} aria-busy={deshabilitado || undefined}>
+    <div className="flex flex-col gap-4">
       {error && (
-        <Alert variant="destructive">
-          <WarningCircleIcon weight="fill" aria-hidden />
-          <AlertTitle>No pudimos registrar tu envío</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
+        <AvisoError>
+          <p className="font-medium">No pudimos registrar tu envío</p>
+          <p>{error}</p>
+        </AvisoError>
       )}
-
-      <Seccion titulo="Ruta" editar={() => onEditar("ruta")} etiquetaEditar="Editar la ruta y la cooperativa">
-        <Dato etiqueta="Trayecto">
-          {formatCiudad(origen)} → {formatCiudad(destino)}
-        </Dato>
-        <Dato etiqueta="Cooperativa">{cooperativa}</Dato>
-        {estimado && (
-          <Dato etiqueta="Costo estimado">
-            <span className="s-num">
-              <strong>{estimado.principal}</strong>
-              {estimado.secundario && <span className={s.precioSecundario}> {estimado.secundario}</span>}
-            </span>
-            <span className={s.opcionMeta}>Lo confirma la taquilla al pesar el paquete.</span>
-          </Dato>
-        )}
-      </Seccion>
-
-      <Seccion titulo="Entrega" editar={() => onEditar("sucursal")} etiquetaEditar="Editar la taquilla de entrega">
-        {sucursal ? (
-          <>
-            <Dato etiqueta="Taquilla">{sucursal.nombre}</Dato>
-            {sucursal.direccion && <Dato etiqueta="Dirección">{sucursal.direccion}</Dato>}
-            {sucursal.horario && <Dato etiqueta="Horario">{sucursal.horario}</Dato>}
-          </>
-        ) : (
-          <Dato etiqueta="Taquilla">Pregunta en la taquilla de {cooperativa}</Dato>
-        )}
-      </Seccion>
-
-      <Seccion titulo="Quién recibe" editar={() => onEditar("destinatario")} etiquetaEditar="Editar los datos de quien recibe">
-        <Dato etiqueta="Nombre">{nombre}</Dato>
-        <Dato etiqueta="Cédula o RIF">
-          <span className="s-num">{formatCedula(cedula)}</span>
-        </Dato>
-        <Dato etiqueta="Teléfono">
-          <span className="s-num">{formatTelefono(telefono)}</span>
-        </Dato>
-      </Seccion>
-
-      <Seccion titulo="Contenido y pago" editar={() => onEditar("destinatario")} etiquetaEditar="Editar el contenido y el pago">
-        <Dato etiqueta="Contenido">{descripcion}</Dato>
-        {pesoKg !== null && (
-          <Dato etiqueta="Peso aproximado">
-            <span className="s-num">{formatPesoKg(pesoKg)} kg</span>
-          </Dato>
-        )}
-        {valorUsd !== null && (
-          <Dato etiqueta="Valor declarado">
-            <span className="s-num">{formatUsd(valorUsd)}</span>
-          </Dato>
-        )}
-        <Dato etiqueta="Quién paga">
-          {modalidad === "ORIGEN" ? "Pago yo, al entregar el paquete" : "Paga quien recibe, al retirarlo"}
-        </Dato>
-        {foto && (
-          <Dato etiqueta="Foto">
-            {/* Vista previa local (blob:): next/image no aplica. */}
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={foto.url} alt="Foto del paquete" className={s.fotoMiniatura} />
-          </Dato>
-        )}
-      </Seccion>
+      <div className="flex flex-col divide-y divide-border rounded-xl bg-card px-5 shadow-card">
+        <BloqueResumen titulo="Trayecto" onEditar={() => onEditar("destino")}>
+          <p className="text-[17px] font-semibold">
+            {formatCiudad(origen)} → {formatCiudad(destino)}
+          </p>
+          <p className="text-[13px] text-muted-foreground">{cooperativa}</p>
+        </BloqueResumen>
+        <BloqueResumen titulo="Entrega en" onEditar={() => onEditar("sucursal")}>
+          <p className="text-[17px] font-semibold">{sucursal ? sucursal.nombre : `Taquilla de ${cooperativa}`}</p>
+          <p className="text-[13px] text-muted-foreground">
+            {sucursal
+              ? [sucursal.direccion, sucursal.horario].filter(Boolean).join(" · ") || formatCiudad(origen)
+              : `Pregunta en la taquilla de ${cooperativa} en ${formatCiudad(origen)}.`}
+          </p>
+        </BloqueResumen>
+        <BloqueResumen titulo="Quien envía">
+          <p className="text-[17px] font-semibold">{remitente.nombre || "Tu cuenta"}</p>
+          {datosRemitente && <p className="text-[13px] text-muted-foreground">{datosRemitente}</p>}
+        </BloqueResumen>
+        <BloqueResumen titulo="Quien recibe" onEditar={() => onEditar("detalles")}>
+          <p className="text-[17px] font-semibold">{nombre}</p>
+          <p className="text-[13px] text-muted-foreground">
+            {`C.I. ${formatCedula(cedula)} · Tel. ${formatTelefono(telefono)}`}
+          </p>
+          <p className="text-[13px] text-muted-foreground">Retira con su cédula y el PIN.</p>
+        </BloqueResumen>
+        <BloqueResumen titulo="Contenido" onEditar={() => onEditar("detalles")}>
+          <p className="text-[17px] font-semibold">{descripcion}</p>
+          <p className="text-[13px] text-muted-foreground">
+            {[
+              pesoKg !== null ? `${formatPesoKg(pesoKg)} kg` : "Peso sin indicar",
+              valorUsd !== null ? `Valor ${formatMoney({ usd: valorUsd }).principal}` : null,
+              estimadoTexto ? `Costo estimado ${estimadoTexto}` : null,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+          </p>
+          {foto && (
+            // Vista previa local (blob:): next/image no aplica.
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={foto.url} alt="Foto del paquete" className="mt-2 size-24 rounded-md border border-border object-cover" />
+          )}
+        </BloqueResumen>
+        <BloqueResumen titulo="¿Quién paga?" onEditar={() => onEditar("detalles")}>
+          <p className="text-[17px] font-semibold">{MODALIDADES.find((m) => m.valor === modalidad)?.titulo}</p>
+          <p className="text-[13px] text-muted-foreground">{MODALIDADES.find((m) => m.valor === modalidad)?.detalle}</p>
+        </BloqueResumen>
+      </div>
+      <p className="text-[13px] text-muted-foreground">
+        El costo final lo fija la taquilla al pesar el paquete: puede variar un poco del estimado.
+      </p>
     </div>
   );
 }

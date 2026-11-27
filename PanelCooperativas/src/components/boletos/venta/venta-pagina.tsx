@@ -209,13 +209,9 @@ export function VentaPagina({
 
   const precioViaje = viaje ? Number(viaje.ruta.precio_pasaje) : 0;
   const resumenAsientos =
-    asientos.length > 0 && viaje ? (
-      <span className="flex flex-wrap items-center gap-x-2">
-        <span className="font-medium text-foreground">{etiquetaAsientos(asientos)}</span>
-        <span aria-hidden>·</span>
-        <TotalCorto usd={precioViaje * asientos.length} />
-      </span>
-    ) : undefined;
+    asientos.length > 0 && viaje ? `${etiquetaAsientos(asientos)} · ${etiquetaRuta(viaje.ruta)}` : undefined;
+  const totalAsientos =
+    asientos.length > 0 && viaje ? { valor: <TotalCorto usd={precioViaje * asientos.length} className="font-[inherit]" /> } : undefined;
 
   let barra: React.ReactNode = null;
   if (paso === "salida") {
@@ -224,20 +220,19 @@ export function VentaPagina({
       barra = (
         <BarraFlujo
           resumen={
-            viajeEnLista ? (
-              <span className="flex flex-wrap items-center gap-x-2">
-                <span className="font-medium text-foreground tabular-nums">
-                  {formatHoraVE(viajeEnLista.fecha_hora_salida)} · {etiquetaRuta(viajeEnLista.ruta)}
-                </span>
-                <span aria-hidden>·</span>
-                <TotalCorto usd={Number(viajeEnLista.ruta.precio_pasaje)} />
-                <span>por pasaje</span>
-              </span>
-            ) : (
-              "Elige la salida del pasajero."
-            )
+            viajeEnLista
+              ? `${formatHoraVE(viajeEnLista.fecha_hora_salida)} · ${etiquetaRuta(viajeEnLista.ruta)}`
+              : "Elige la salida del pasajero."
           }
-          principal={{ etiqueta: "Continuar", onClick: continuarSalida, deshabilitado: !viajeEnLista }}
+          total={
+            viajeEnLista
+              ? {
+                  valor: <TotalCorto usd={Number(viajeEnLista.ruta.precio_pasaje)} className="font-[inherit]" />,
+                  secundario: "por pasaje",
+                }
+              : undefined
+          }
+          principal={{ etiqueta: "Continuar", flecha: true, onClick: continuarSalida, deshabilitado: !viajeEnLista }}
         />
       );
     }
@@ -245,8 +240,10 @@ export function VentaPagina({
     barra = (
       <BarraFlujo
         resumen={resumenAsientos ?? "Toca los asientos que quiere el pasajero."}
+        total={totalAsientos}
         principal={{
           etiqueta: "Continuar",
+          flecha: true,
           onClick: continuarAsientos,
           deshabilitado: asientos.length === 0 || ocupadosViaje.ocupados === null,
         }}
@@ -256,13 +253,15 @@ export function VentaPagina({
     barra = (
       <BarraFlujo
         resumen={resumenAsientos}
-        principal={{ etiqueta: "Continuar", type: "submit", form: ID_FORM_PASAJEROS }}
+        total={totalAsientos}
+        principal={{ etiqueta: "Continuar", flecha: true, type: "submit", form: ID_FORM_PASAJEROS }}
       />
     );
   } else if (paso === "pago" && viaje) {
     barra = (
       <BarraFlujo
-        resumen={<span className="font-medium text-foreground">{textoAsientos(asientos)}</span>}
+        resumen={`${textoAsientos(asientos)} · ${etiquetaRuta(viaje.ruta)}`}
+        total={totalAsientos}
         principal={{
           etiqueta: etiquetaCobro,
           type: "submit",

@@ -10,17 +10,26 @@
 //   4. `fn_liberar_reserva`    al abandonar sin pagar (mejor esfuerzo; si falla, el cron la libera).
 // Equivalente de EnBusApp/src/hooks/useCheckoutBoletos.ts y app/boletos/buscar.tsx.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { flushSync } from "react-dom";
 import { useRouter } from "next/navigation";
-import { ArrowLeftIcon } from "@phosphor-icons/react";
-import { PASAJERO_VACIO, mensajeAsientosTomados, pasajeroParaGuardar, pasajeroValido, type DatosPasajero } from "@/components/boletos/venta/tipos";
-import { usePasoEnUrl, useSalidaProtegida } from "@/components/flujo";
+import {
+  PASAJERO_VACIO,
+  etiquetaAsientos,
+  mensajeAsientosTomados,
+  pasajeroParaGuardar,
+  pasajeroValido,
+  type DatosPasajero,
+} from "@/components/boletos/venta/tipos";
+import { BarraFlujo, FlujoPagina, usePasoEnUrl, useSalidaProtegida, type AccionBarraFlujo } from "@/components/flujo";
+import { ArmazonFlujoSitio } from "@/components/pasajero/flujo-sitio";
+import { ID_FORM_PAGO_PASAJERO, type EstadoBarraPago } from "@/components/pasajero/pago";
+import { formatCiudad } from "@/lib/ciudades";
 import { humanizeError } from "@/lib/errores";
 import { fechaVE, hoyVE } from "@/lib/fechas";
 import type { TasaRef } from "@/lib/dinero";
 import type { DatosPagoPasajero, MetodoPagoPasajero } from "@/lib/pasajero/pagos-comun";
-import { urlComprarBoleto, urlIngresar, urlViajes } from "@/lib/pasajero/rutas";
+import { RUTAS_PASAJERO, urlComprarBoleto, urlIngresar, urlViajes } from "@/lib/pasajero/rutas";
 import type { ViajePublico } from "@/lib/pasajero/viajes";
 import {
   asignarPasajeros,
@@ -38,12 +47,12 @@ import {
   leerListo,
 } from "./almacen";
 import type { AvisoFlujo } from "./aviso-compra";
-import { BarraAccion, type AccionBarra } from "./barra-accion";
+import { CuentaRegresiva } from "./cuenta-regresiva";
 import { PasoAsientos } from "./paso-asientos";
 import { PasoListo } from "./paso-listo";
 import { ID_FORM_PASAJEROS, PasoPasajeros } from "./paso-pasajeros";
 import { PasoPago, type TasaCambiada } from "./paso-pago";
-import { ResumenViaje, totalEnVivo } from "./resumen-viaje";
+import { descripcionViaje, totalEnVivo, totalParaBarra } from "./resumen-viaje";
 import { SalidaNoDisponible } from "./salida-no-disponible";
 import {
   PASOS_COMPRA,
@@ -71,12 +80,6 @@ export interface Comprador {
 
 type Fallo = Extract<ResultadoAccion<unknown>, { success: false }>;
 
-const ETIQUETA_PASO: Record<(typeof PASOS_VISIBLES)[number], string> = {
-  asientos: "Asientos",
-  pasajeros: "Pasajeros",
-  pago: "Pago",
-};
-
 function Esqueleto() {
   return (
     <div role="status" aria-live="polite" className={s.contenido}>
@@ -87,6 +90,9 @@ function Esqueleto() {
     </div>
   );
 }
+
+/** Estado inicial de la barra de pago: aún no hay método elegido. */
+const ESTADO_BARRA_INICIAL: EstadoBarraPago = { modo: "ninguno", etiqueta: "Reportar pago", subiendo: false, deshabilitado: true };
 
 export function CompraBoleto({
   viaje,
@@ -127,6 +133,8 @@ export function CompraBoleto({
   const [errorPago, setErrorPago] = useState<string | null>(null);
   const [enCurso, setEnCurso] = useState(false);
   const enCursoRef = useRef(false);
+  /** Qué botón debe dibujar la barra en el paso de pago (lo informa `PagoPasajero`). */
+  const [barraPago, setBarraPago] = useState<EstadoBarraPago>(ESTADO_BARRA_INICIAL);
 
   const reservados = useMemo(
     () =>
@@ -307,7 +315,8 @@ export function CompraBoleto({
         } else if (r.codigo === "EB_VIAJE_NO_DISPONIBLE") {
           setNoDisponible(true);
         } else if (r.codigo === "EB_NO_AUTENTICADO") {
-          router.replace(urlIngresar(urlComprarBoleto(viaje.id)));
+          // Navegación completa: al volver con sesión no debe quedar caché del router.
+          window.location.assign(urlIngresar(urlComprarBoleto(viaje.id)));
           return;
         } else {
           // Los asientos ya no están (vencieron o los tomaron): compra nueva con un aviso claro.
@@ -359,18 +368,6 @@ export function CompraBoleto({
       .catch(() => undefined);
   }, [paso]);
 
-  // El título recibe el foco al cambiar de paso (anuncio para lectores de pantalla), sin robarlo al montar.
-  const tituloRef = useRef<HTMLHeadingElement>(null);
-  const primerPaso = useRef(true);
-  useEffect(() => {
-    if (primerPaso.current) {
-      primerPaso.current = false;
-      return;
-    }
-    window.scrollTo({ top: 0, left: 0, behavior: "instant" });
-    tituloRef.current?.focus({ preventScroll: true });
-  }, [paso]);
-
   // ── Acciones ───────────────────────────────────────────────────────────────
   const ejecutar = useCallback(async (fn: () => Promise<void>) => {
     if (enCursoRef.current) return;
@@ -388,7 +385,7 @@ export function CompraBoleto({
   const errorComun = useCallback(
     (r: Fallo): boolean => {
       if (r.codigo === "EB_NO_AUTENTICADO") {
-        router.push(urlIngresar(urlComprarBoleto(viaje.id)));
+        window.location.assign(urlIngresar(urlComprarBoleto(viaje.id)));
         return true;
       }
       if (r.codigo === "EB_VIAJE_NO_DISPONIBLE") {
@@ -397,7 +394,7 @@ export function CompraBoleto({
       }
       return false;
     },
-    [router, viaje.id]
+    [viaje.id]
   );
 
   /** La reserva venció o ya no existe: se suelta lo local y se vuelve al mapa. */
@@ -640,13 +637,15 @@ export function CompraBoleto({
   });
   const alVencer = useCallback(() => alVencerRef.current(), []);
 
+
   const atras = () => {
+    if (enCurso) return;
     if (paso === "asientos") salida.confirmarSalida(() => router.push(urlBusqueda));
     else url.anterior();
   };
 
   // ── Derivados para mostrar ─────────────────────────────────────────────────
-  const asientosResumen = paso === "asientos" || !reserva ? seleccion : reservados;
+  const asientosResumen = ordenarAsientos(paso === "asientos" || !reserva ? seleccion : reservados);
   const totalUsd =
     paso === "asientos" || !reserva ? seleccion.length * viaje.precioUsd : (reserva.totalUsd ?? reservados.length * viaje.precioUsd);
   const totalBs = paso !== "asientos" && reserva ? totalBsServidor : null;
@@ -658,166 +657,173 @@ export function CompraBoleto({
       ? { nombre: comprador.nombre.trim(), cedula: comprador.cedula, telefono: comprador.telefono ?? "" }
       : null;
 
-  const accion: AccionBarra | null =
-    paso === "asientos"
-      ? {
-          etiqueta: "Continuar",
-          etiquetaCargando: "Apartando asientos…",
-          onClick: continuarAsientos,
-          deshabilitado: seleccion.length === 0 || pidiendoPerfil,
-          cargando: enCurso,
-        }
-      : paso === "pasajeros"
-        ? {
-            etiqueta: "Continuar al pago",
-            etiquetaCargando: "Guardando…",
-            type: "submit",
-            form: ID_FORM_PASAJEROS,
-            cargando: enCurso,
-          }
-        : null;
+  // ── Barra: "ASIENTO 20 · MÉRIDA → BARINAS" + total destacado + la acción del paso ──
+  const resumenBarra: ReactNode =
+    total && asientosResumen.length > 0
+      ? `${etiquetaAsientos(asientosResumen)} · ${formatCiudad(viaje.origen)} → ${formatCiudad(viaje.destino)}`
+      : paso === "asientos"
+        ? "Toca los asientos que quieres."
+        : undefined;
+  const totalBarra = total && asientosResumen.length > 0 ? totalParaBarra(total) : undefined;
 
-  const tituloListo = resultado?.modo === "taquilla" ? "Asientos apartados" : "Compra enviada";
-  const titulo = paso === "listo" ? tituloListo : TITULOS_PASO[paso];
+  let principal: AccionBarraFlujo;
+  let secundaria: { etiqueta: string; onClick: () => void } | undefined;
+  if (paso === "listo") {
+    principal = {
+      etiqueta: "Ver mis boletos",
+      onClick: () => {
+        borrarListo(viaje.id);
+        router.push(RUTAS_PASAJERO.misBoletos);
+      },
+    };
+    secundaria = { etiqueta: "Otra compra", onClick: reiniciarTodo };
+  } else if (paso === "asientos") {
+    principal = {
+      etiqueta: "Continuar",
+      flecha: true,
+      etiquetaCargando: "Apartando asientos…",
+      onClick: continuarAsientos,
+      deshabilitado: seleccion.length === 0 || pidiendoPerfil,
+      cargando: enCurso,
+    };
+  } else if (paso === "pasajeros") {
+    principal = {
+      etiqueta: "Continuar",
+      flecha: true,
+      etiquetaCargando: "Guardando…",
+      type: "submit",
+      form: ID_FORM_PASAJEROS,
+      cargando: enCurso,
+    };
+  } else if (barraPago.modo === "taquilla") {
+    principal = {
+      etiqueta: barraPago.etiqueta,
+      etiquetaCargando: "Apartando…",
+      onClick: apartarEnTaquilla,
+      cargando: enCurso,
+    };
+  } else if (barraPago.modo === "reportar") {
+    principal = {
+      etiqueta: barraPago.etiqueta,
+      etiquetaCargando: barraPago.subiendo ? "Subiendo capture…" : "Enviando…",
+      type: "submit",
+      form: ID_FORM_PAGO_PASAJERO,
+      cargando: enCurso || barraPago.subiendo,
+      deshabilitado: barraPago.deshabilitado,
+    };
+  } else {
+    principal = { etiqueta: barraPago.etiqueta, deshabilitado: true };
+  }
+
+  const titulo = paso === "listo" ? (resultado?.modo === "taquilla" ? "Asientos apartados" : "Pago reportado") : TITULOS_PASO[paso];
   const indicePaso = PASOS_VISIBLES.indexOf(paso as (typeof PASOS_VISIBLES)[number]);
 
-  return (
-    <div className={`s-marco ${s.pagina}`}>
-      {salida.dialogo}
-
-      {fase === "iniciando" ? (
+  if (fase === "iniciando") {
+    return (
+      <ArmazonFlujoSitio>
         <Esqueleto />
-      ) : noDisponible ? (
+      </ArmazonFlujoSitio>
+    );
+  }
+
+  if (noDisponible) {
+    return (
+      <>
+        {salida.dialogo}
         <SalidaNoDisponible origen={viaje.origen} destino={viaje.destino} fecha={fechaVE(viaje.salida)} />
-      ) : (
-        <>
-          <header className={s.cabecera}>
-            {paso !== "listo" && (
-              <button type="button" className={s.atras} onClick={atras} disabled={enCurso}>
-                <ArrowLeftIcon aria-hidden weight="bold" />
-                {paso === "asientos" ? "Otras salidas" : "Volver"}
-              </button>
-            )}
-            <h1 ref={tituloRef} tabIndex={-1} className={s.titulo}>
-              {titulo}
-            </h1>
-            {paso !== "listo" && (
-              <ol className={s.pasos} aria-label="Pasos de la compra">
-                {PASOS_VISIBLES.map((p, i) => (
-                  <li
-                    key={p}
-                    className={s.paso}
-                    data-estado={i < indicePaso ? "hecho" : i === indicePaso ? "actual" : "pendiente"}
-                    aria-current={i === indicePaso ? "step" : undefined}
-                  >
-                    {i + 1}. {ETIQUETA_PASO[p]}
-                    {i < indicePaso && <span className="sr-only"> (completado)</span>}
-                  </li>
-                ))}
-              </ol>
-            )}
-          </header>
+      </>
+    );
+  }
 
-          {paso !== "listo" && (
-            <ResumenViaje
-              viaje={viaje}
-              asientos={asientosResumen}
-              totalUsd={totalUsd}
-              totalBs={totalBs}
-              tasa={tasaActual}
-              expiraAt={expiraAt}
-              offsetMs={offsetMs}
-              onVence={alVencer}
-            />
-          )}
+  return (
+    <ArmazonFlujoSitio>
+      {salida.dialogo}
+      <FlujoPagina
+        titulo={titulo}
+        paso={indicePaso >= 0 ? indicePaso + 1 : undefined}
+        total={indicePaso >= 0 ? PASOS_VISIBLES.length : undefined}
+        onAtras={paso === "listo" ? undefined : atras}
+        atrasEtiqueta={paso === "asientos" ? "Volver a otras salidas" : "Volver al paso anterior"}
+        descripcion={descripcionViaje(viaje)}
+        barra={<BarraFlujo resumen={resumenBarra} total={totalBarra} principal={principal} secundaria={secundaria} />}
+      >
+        {expiraAt && paso !== "listo" && (
+          <CuentaRegresiva expiraAt={expiraAt} offsetMs={offsetMs} onVence={alVencer} />
+        )}
 
-          <div className={s.contenido}>
-            {paso === "asientos" && (
-              <PasoAsientos
-                totalAsientos={viaje.asientosTotales}
-                ocupados={ocupadosMapa}
-                errorOcupados={lecturaOcupados.error}
-                onReintentar={recargarOcupados}
-                seleccion={seleccion}
-                onChange={setSeleccion}
-                bloqueado={enCurso}
-                aviso={aviso}
-                pidiendoPerfil={pidiendoPerfil && !perfilOk}
-                cedulaInicial={comprador.cedula}
-                telefonoInicial={comprador.telefono}
-                onPerfilListo={alCompletarPerfil}
-              />
-            )}
+        {paso === "asientos" && (
+          <PasoAsientos
+            totalAsientos={viaje.asientosTotales}
+            ocupados={ocupadosMapa}
+            errorOcupados={lecturaOcupados.error}
+            onReintentar={recargarOcupados}
+            seleccion={seleccion}
+            onChange={setSeleccion}
+            bloqueado={enCurso}
+            aviso={aviso}
+            pidiendoPerfil={pidiendoPerfil && !perfilOk}
+            cedulaInicial={comprador.cedula}
+            telefonoInicial={comprador.telefono}
+            onPerfilListo={alCompletarPerfil}
+          />
+        )}
 
-            {paso === "pasajeros" && reserva && (
-              <PasoPasajeros
-                asientos={reservados}
-                pasajeros={pasajeros}
-                yo={yo}
-                sugerencias={sugerencias.filter((g) => g.cedula !== yo?.cedula)}
-                intento={intentoPasajeros}
-                focoToken={focoToken}
-                marcados={marcados}
-                error={errorPasajeros}
-                onEditar={editarPasajero}
-                onRellenar={rellenarPasajero}
-                onEnviar={() => void enviarPasajeros()}
-                bloqueado={enCurso}
-              />
-            )}
+        {paso === "pasajeros" && reserva && (
+          <PasoPasajeros
+            asientos={reservados}
+            pasajeros={pasajeros}
+            yo={yo}
+            sugerencias={sugerencias.filter((g) => g.cedula !== yo?.cedula)}
+            intento={intentoPasajeros}
+            focoToken={focoToken}
+            marcados={marcados}
+            error={errorPasajeros}
+            onEditar={editarPasajero}
+            onRellenar={rellenarPasajero}
+            onEnviar={() => void enviarPasajeros()}
+            bloqueado={enCurso}
+          />
+        )}
 
-            {paso === "pago" && reserva && (
-              <PasoPago
-                metodos={metodos}
-                totalUsd={totalUsd}
-                totalBs={totalBs}
-                tasa={tasaActual}
-                enviando={enCurso}
-                error={errorPago}
-                tasaCambiada={tasaCambio?.aviso ?? null}
-                onEnviar={(datos) => {
-                  setTasaCambio(null);
-                  void enviarPago(datos, tasaActual?.tasa ?? null);
-                }}
-                onTaquilla={apartarEnTaquilla}
-                onConfirmarTasa={() => {
-                  if (tasaCambio) void enviarPago(tasaCambio.datos, tasaCambio.aviso.tasa);
-                }}
-                onDescartarTasa={() => setTasaCambio(null)}
-              />
-            )}
+        {paso === "pago" && reserva && (
+          <PasoPago
+            metodos={metodos}
+            totalUsd={totalUsd}
+            totalBs={totalBs}
+            tasa={tasaActual}
+            enviando={enCurso}
+            error={errorPago}
+            tasaCambiada={tasaCambio?.aviso ?? null}
+            onEnviar={(datos) => {
+              setTasaCambio(null);
+              void enviarPago(datos, tasaActual?.tasa ?? null);
+            }}
+            onTaquilla={apartarEnTaquilla}
+            onConfirmarTasa={() => {
+              if (tasaCambio) void enviarPago(tasaCambio.datos, tasaCambio.aviso.tasa);
+            }}
+            onDescartarTasa={() => setTasaCambio(null)}
+            onBarra={setBarraPago}
+          />
+        )}
 
-            {paso === "listo" && resultado && (
-              <PasoListo
-                viaje={viaje}
-                resultado={resultado}
-                offsetMs={resultado.offsetMs ?? offsetMs}
-                tasa={tasaActual}
-                onOtra={reiniciarTodo}
-                onSalir={() => borrarListo(viaje.id)}
-              />
-            )}
+        {paso === "listo" && resultado && (
+          <PasoListo
+            viaje={viaje}
+            resultado={resultado}
+            offsetMs={resultado.offsetMs ?? offsetMs}
+            tasa={tasaActual}
+            pasajeros={pasajeros}
+            onSalir={() => borrarListo(viaje.id)}
+          />
+        )}
 
-            {reserva && !resultado && paso !== "listo" && (
-              <button type="button" className={s.cancelar} onClick={cancelarCompra} disabled={enCurso}>
-                Cancelar compra y soltar los asientos
-              </button>
-            )}
-          </div>
-
-          {accion && (
-            <BarraAccion
-              principal={total ? total.principal : "Elige tus asientos"}
-              secundario={
-                total
-                  ? `${asientosResumen.length === 1 ? "1 asiento" : `${asientosResumen.length} asientos`}${total.secundario ? ` · ${total.secundario}` : ""}`
-                  : "Hasta 10 por compra"
-              }
-              accion={accion}
-            />
-          )}
-        </>
-      )}
-    </div>
+        {reserva && !resultado && paso !== "listo" && (
+          <button type="button" className={s.cancelar} onClick={cancelarCompra} disabled={enCurso}>
+            Cancelar compra
+          </button>
+        )}
+      </FlujoPagina>
+    </ArmazonFlujoSitio>
   );
 }

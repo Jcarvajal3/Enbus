@@ -2,7 +2,6 @@
 
 import { useState, type FormEvent } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { WarningCircle } from "@phosphor-icons/react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -32,7 +31,6 @@ const AVISOS: Record<Exclude<AvisoIngreso, null>, Mensaje> = {
 };
 
 export function FormularioIngresar({ next, aviso }: Props) {
-  const router = useRouter();
   const [correo, setCorreo] = useState("");
   const [clave, setClave] = useState("");
   const [errorCorreo, setErrorCorreo] = useState<string | null>(null);
@@ -68,8 +66,9 @@ export function FormularioIngresar({ next, aviso }: Props) {
       }
       // El servidor ya ve la sesión y decide por el rol (una cuenta del panel cae en el
       // aviso de /ingresar, no en un bucle).
-      router.replace(next ?? RUTAS_PASAJERO.cuenta);
-      router.refresh();
+      // Navegación completa: el router del cliente pudo guardar un 307 previo a esta ruta
+      // (precarga sin sesión) y debe releer las cookies. No se apaga `cargando`.
+      window.location.assign(next ?? RUTAS_PASAJERO.cuenta);
     } catch (err) {
       setError({ titulo: "No pudiste entrar", detalle: humanizeError(err, "iniciar sesión") });
       setCargando(false);

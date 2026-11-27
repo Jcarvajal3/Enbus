@@ -10,7 +10,7 @@ export type PasoCompra = (typeof PASOS_COMPRA)[number];
 export const TITULOS_PASO: Record<PasoCompra, string> = {
   asientos: "Elige tus asientos",
   pasajeros: "¿Quién viaja?",
-  pago: "Paga tu boleto",
+  pago: "¿Cómo pagas?",
   listo: "Listo",
 };
 

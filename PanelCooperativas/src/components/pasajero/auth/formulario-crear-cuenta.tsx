@@ -2,7 +2,6 @@
 
 import { useState, type FormEvent } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { EnvelopeSimple, WarningCircle } from "@phosphor-icons/react";
 import { Campo, CedulaField, TelefonoField } from "@/components/campos";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -41,7 +40,6 @@ const NOMBRE_ERROR = "Escribe tu nombre y apellido.";
 const limpiar = (v: string) => v.trim().replace(/\s+/g, " ");
 
 export function FormularioCrearCuenta({ next }: { next: string | null }) {
-  const router = useRouter();
   const [nombre, setNombre] = useState("");
   const [correo, setCorreo] = useState("");
   const [cedula, setCedula] = useState("");
@@ -106,8 +104,8 @@ export function FormularioCrearCuenta({ next }: { next: string | null }) {
 
       if (data.session) {
         // Sin confirmación de correo configurada: ya hay sesión.
-        router.replace(next ?? RUTAS_PASAJERO.cuenta);
-        router.refresh();
+        // Navegación completa: descarta la caché del router y relee las cookies de sesión.
+        window.location.assign(next ?? RUTAS_PASAJERO.cuenta);
         return;
       }
       setEnviadoA(email);
