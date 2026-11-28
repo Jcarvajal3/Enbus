@@ -1,118 +1,75 @@
+/* Ruta popular: una fila compacta. Trayecto y precio mandan; el resto es secundario. */
 .tarjeta {
   display: grid;
-  align-content: start;
-  gap: 18px;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 16px;
   height: 100%;
-  padding: clamp(20px, 2vw, 28px);
+  padding: 16px 16px 16px 18px;
   border: 1px solid var(--s-line);
   border-radius: var(--r-lg);
   background: var(--s-paper);
   color: var(--s-ink);
   text-decoration: none;
   transition:
-    transform var(--dur) var(--ease),
-    box-shadow var(--dur) ease,
-    background-color 240ms ease,
-    color 240ms ease,
-    border-color 240ms ease;
+    border-color var(--dur) ease,
+    box-shadow var(--dur) ease;
 }
-/* Al pasar el cursor la tarjeta se vuelve de noche: la ruta elegida destaca del resto. */
 .tarjeta:hover {
-  transform: translateY(-4px);
-  background: var(--s-ink);
-  border-color: var(--s-ink);
-  color: #fff;
-  box-shadow: var(--sh-3);
-}
-.tarjeta:hover .desde,
-.tarjeta:hover .usd {
-  color: var(--s-on-night-muted);
-}
-.tarjeta:hover .datos {
-  border-top-color: rgb(255 255 255 / 0.16);
-}
-.tarjeta:hover .datos svg,
-.tarjeta:hover .flecha,
-.tarjeta:hover .cta {
-  color: var(--s-sol);
+  border-color: var(--s-line-2);
+  box-shadow: var(--sh-2);
 }
 @media (prefers-reduced-motion: reduce) {
   .tarjeta {
     transition: none;
   }
-  .tarjeta:hover {
-    transform: none;
-  }
+}
+.texto {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
 }
 .trayecto {
-  display: flex;
+  display: inline-flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px 10px;
-}
-.ciudad {
-  font-size: var(--t-h3);
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  line-height: 1.2;
+  gap: 0 6px;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
 }
 .flecha {
-  display: inline-flex;
-  color: var(--s-cielo-deep);
+  width: 14px;
+  height: 14px;
+  color: var(--s-muted);
 }
-.flecha svg {
-  width: 18px;
-  height: 18px;
+.meta {
+  font-size: 13px;
+  color: var(--s-muted);
 }
 .precio {
   display: grid;
-  gap: 2px;
+  justify-items: end;
+  line-height: 1.2;
 }
 .desde {
-  font-size: var(--t-small);
+  font-size: 12px;
   color: var(--s-muted);
 }
 .precio strong {
-  font-size: clamp(28px, 3vw, 38px);
-  font-weight: 800;
-  letter-spacing: -0.045em;
-  line-height: 1.1;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
 }
-.usd {
-  font-size: var(--t-small);
+.ir {
+  width: 16px;
+  height: 16px;
   color: var(--s-muted);
-}
-.datos {
-  display: grid;
-  gap: 8px;
-  padding-top: 14px;
-  border-top: 1px solid var(--s-line);
-  font-size: var(--t-small);
-  transition: border-color 240ms ease;
-}
-.datos > span {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.datos svg {
-  flex: none;
-  width: 18px;
-  height: 18px;
-  color: var(--s-cielo-deep);
-}
-.cta {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-weight: 600;
-  color: var(--s-cielo-deep);
-}
-.cta svg {
-  width: 18px;
-  height: 18px;
   transition: transform var(--dur) var(--ease);
 }
-.tarjeta:hover .cta svg {
-  transform: translateX(3px);
+.tarjeta:hover .ir {
+  transform: translateX(2px);
+  color: var(--s-ink);
 }

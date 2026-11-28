@@ -1,18 +1,20 @@
-/* Tira de fechas: siete días con salidas y precio mínimo; en móvil se desliza. */
+/* Tira de fechas: una sola pieza con siete días; el elegido se marca con una línea inferior.
+   En móvil se desliza. */
 
 .tira {
-  margin-inline: calc(-1 * var(--m));
-  /* Hijo de un grid: sin esto su ancho mínimo es el de los 7 días y desborda la página. */
-  min-width: 0;
-  max-width: 100vw;
+  min-width: 0; /* hijo de un grid: sin esto su ancho mínimo es el de los 7 días */
+  max-width: 100%;
+  border: 1px solid var(--s-line);
+  border-radius: var(--r-lg);
+  background: var(--s-paper);
+  overflow: hidden;
 }
 .lista {
   display: grid;
   grid-auto-flow: column;
-  grid-auto-columns: minmax(104px, 1fr);
-  gap: 8px;
+  grid-auto-columns: minmax(112px, 1fr);
   margin: 0;
-  padding: 4px var(--m) 8px;
+  padding: 0;
   list-style: none;
   overflow-x: auto;
   scroll-snap-type: x proximity;
@@ -22,73 +24,68 @@
 .lista::-webkit-scrollbar {
   display: none;
 }
-@media (min-width: 1248px) {
-  .tira {
-    margin-inline: 0;
-  }
-  .lista {
-    padding-inline: 0;
-  }
-}
 .item {
   scroll-snap-align: center;
   display: grid;
 }
+.item + .item {
+  border-left: 1px solid var(--s-line);
+}
 .dia {
+  position: relative;
   display: grid;
   justify-items: center;
-  align-content: start;
+  align-content: center;
   gap: 2px;
-  min-height: 92px;
+  min-height: 64px;
   padding: 10px 8px;
-  border: 1.5px solid var(--s-line);
-  border-radius: var(--r-md);
-  background: var(--s-paper);
   color: var(--s-ink);
   text-align: center;
   text-decoration: none;
-  transition:
-    border-color var(--dur) ease,
-    background-color var(--dur) ease,
-    box-shadow var(--dur) ease;
+  transition: background-color var(--dur) ease;
 }
 .dia:hover {
-  border-color: var(--s-ink-3);
+  background: var(--s-canvas);
+}
+.dia::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0;
+  height: 3px;
+  background: transparent;
 }
 .dia[aria-current="date"] {
-  border-color: var(--s-ink);
-  background: var(--s-ink);
-  color: #fff;
-  box-shadow: var(--sh-2);
+  background: color-mix(in srgb, var(--s-cielo-soft) 55%, var(--s-paper));
 }
-.dia[data-vacio="true"] {
-  background: transparent;
-  color: var(--s-muted);
-}
-.dia[data-vacio="true"][aria-current="date"] {
+.dia[aria-current="date"]::after {
   background: var(--s-ink);
-  color: #fff;
 }
 .nombre {
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
   line-height: 1.2;
-  opacity: 0.8;
+  color: var(--s-muted);
+  white-space: nowrap;
+}
+.dia[aria-current="date"] .nombre {
+  color: var(--s-ink);
+  font-weight: 600;
 }
 .numero {
-  font-size: 16px;
-  font-weight: 700;
-  line-height: 1.2;
+  /* El día va junto al nombre (sáb. 28 nov.) */
+  display: none;
 }
 .precio {
-  margin-top: 4px;
   font-size: 14px;
-  font-weight: 700;
+  font-weight: 600;
   line-height: 1.2;
   white-space: nowrap;
 }
 .salidas {
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.2;
-  opacity: 0.8;
+  color: var(--s-muted);
+}
+.dia[data-vacio="true"] .nombre {
+  color: color-mix(in srgb, var(--s-muted) 70%, transparent);
 }

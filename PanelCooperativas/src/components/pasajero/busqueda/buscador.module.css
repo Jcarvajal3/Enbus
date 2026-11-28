@@ -3,6 +3,7 @@
    los de components/campos, que siguen el tema del panel. */
 
 .buscador {
+  --campo: 52px; /* alto de las cajas, del intercambiar y del botón */
   display: grid;
   gap: 14px;
 }
@@ -10,21 +11,21 @@
 /* ── Pestañas ─────────────────────────────────────────────────────────────── */
 .pestanas {
   display: flex;
-  gap: 4px;
-  padding: 4px;
+  gap: 2px;
+  padding: 3px;
   width: fit-content;
   max-width: 100%;
-  border-radius: var(--r-full);
+  border-radius: 10px;
   background: var(--s-canvas-2);
 }
 .pestana {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  min-height: 44px;
-  padding: 0 22px 0 18px;
+  min-height: 36px;
+  padding: 0 16px 0 12px;
   border: 0;
-  border-radius: var(--r-full);
+  border-radius: 7px;
   background: transparent;
   color: var(--s-muted);
   font: inherit;
@@ -38,8 +39,8 @@
     box-shadow var(--dur) ease;
 }
 .pestana svg {
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
   flex: none;
 }
 .pestana:hover {
@@ -48,9 +49,7 @@
 .pestana[aria-selected="true"] {
   background: var(--s-paper);
   color: var(--s-ink);
-  box-shadow:
-    var(--sh-1),
-    0 0 0 1px rgb(12 23 48 / 0.04);
+  box-shadow: 0 1px 2px rgb(12 23 48 / 0.08);
 }
 .pestana[aria-selected="true"] svg {
   color: var(--s-cielo-deep);
@@ -82,13 +81,13 @@
   }
   .ruta {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    column-gap: 28px;
+    column-gap: 40px;
   }
   .accion {
     padding-top: 22px; /* a la altura de las cajas, no de las etiquetas */
   }
   .accion :global(.s-boton) {
-    min-width: 160px;
+    min-width: 140px;
   }
 }
 @media (max-width: 899px) and (min-width: 600px) {
@@ -98,7 +97,7 @@
   .ruta {
     grid-column: 1 / -1;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    column-gap: 24px;
+    column-gap: 40px;
   }
   .accion {
     padding-top: 22px;
@@ -111,15 +110,15 @@
   z-index: 3;
   display: grid;
   place-items: center;
-  width: 44px;
-  height: 44px;
+  width: 32px;
+  height: 32px;
   padding: 0;
-  border: 1px solid var(--s-line);
+  border: 1px solid var(--s-line-2);
   border-radius: var(--r-full);
   background: var(--s-paper);
   color: var(--s-ink);
   cursor: pointer;
-  box-shadow: var(--sh-2);
+  box-shadow: var(--sh-1);
   transition:
     transform 240ms var(--ease),
     border-color var(--dur) ease,
@@ -130,16 +129,14 @@
   transform: translateY(-50%);
 }
 .intercambiar svg {
-  width: 20px;
-  height: 20px;
+  width: 16px;
+  height: 16px;
 }
 .iconoH {
   display: none;
 }
 .intercambiar:hover {
-  border-color: var(--s-ink);
-  background: var(--s-ink);
-  color: #fff;
+  border-color: var(--s-ink-3);
 }
 .intercambiar:active {
   transform: translateY(-50%) scale(0.94);
@@ -147,7 +144,7 @@
 @media (min-width: 600px) {
   .intercambiar {
     right: auto;
-    top: 51px;
+    top: calc(22px + var(--campo, 52px) / 2);
     left: 50%;
     transform: translate(-50%, -50%);
   }
@@ -177,7 +174,7 @@
 }
 .etiqueta {
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
   line-height: 1.2;
   color: var(--s-muted);
 }
@@ -186,22 +183,22 @@
   display: flex;
   align-items: center;
   min-width: 0;
-  height: 58px;
-  border: 1.5px solid transparent;
-  border-radius: 18px;
-  background: var(--s-canvas);
+  height: var(--campo, 52px);
+  border: 1px solid var(--s-line-2);
+  border-radius: var(--r-md);
+  background: var(--s-paper);
   transition:
     border-color var(--dur) ease,
     background-color var(--dur) ease,
     box-shadow var(--dur) ease;
 }
 .entrada:hover {
-  border-color: var(--s-line-2);
+  border-color: var(--s-ink-3);
 }
 .entrada:focus-within {
   border-color: var(--s-cielo-deep);
   background: var(--s-paper);
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--s-cielo-deep) 16%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--s-cielo-deep) 16%, transparent);
 }
 [data-invalido="true"] .entrada {
   border-color: var(--s-error);
@@ -210,12 +207,12 @@
   display: grid;
   place-items: center;
   flex: none;
-  width: 48px;
-  color: var(--s-ink);
+  width: 44px;
+  color: var(--s-muted);
 }
 .icono svg {
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
 }
 .input {
   flex: 1;
@@ -227,7 +224,7 @@
   color: var(--s-ink);
   font: inherit;
   font-size: 16px; /* 16 px: iOS no hace zoom al enfocar */
-  font-weight: 600;
+  font-weight: 500;
   text-overflow: ellipsis;
 }
 .input::placeholder {
@@ -322,7 +319,7 @@
   color: var(--s-ink);
   font: inherit;
   font-size: 16px;
-  font-weight: 600;
+  font-weight: 500;
   text-align: left;
   cursor: pointer;
 }
@@ -340,43 +337,10 @@
 .entrada:has(.disparador:focus-visible) {
   border-color: var(--s-cielo-deep);
   background: var(--s-paper);
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--s-cielo-deep) 16%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--s-cielo-deep) 16%, transparent);
 }
 .entrada .disparador:focus-visible {
   outline: none;
-}
-
-.atajos {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-.chip {
-  display: inline-flex;
-  align-items: center;
-  min-height: 36px;
-  padding: 0 14px;
-  border: 1px solid var(--s-line-2);
-  border-radius: var(--r-full);
-  background: var(--s-paper);
-  color: var(--s-ink);
-  font: inherit;
-  font-size: 14px;
-  font-weight: 600;
-  line-height: 1;
-  cursor: pointer;
-  transition:
-    background-color var(--dur) ease,
-    border-color var(--dur) ease,
-    color var(--dur) ease;
-}
-.chip:hover {
-  border-color: var(--s-ink);
-}
-.chip[aria-pressed="true"] {
-  background: var(--s-ink);
-  border-color: var(--s-ink);
-  color: #fff;
 }
 
 /* Popover del calendario: bajo el campo en escritorio, hoja inferior en móvil */
@@ -424,7 +388,7 @@
     min-height: 48px;
     margin-top: 8px;
     border: 0;
-    border-radius: var(--r-full);
+    border-radius: var(--r-md);
     background: var(--s-canvas);
     color: var(--s-ink);
     font: inherit;
@@ -536,7 +500,7 @@
 }
 .accion :global(.s-boton) {
   width: 100%;
-  min-height: 58px;
+  min-height: var(--campo, 52px);
 }
 .pie {
   display: flex;
@@ -552,33 +516,21 @@
 
 /* ── Hero / compacto ──────────────────────────────────────────────────────── */
 .hero {
-  padding: clamp(14px, 2.2vw, 26px);
-  border: 1px solid rgb(12 23 48 / 0.06);
+  padding: clamp(14px, 2vw, 20px);
   border-radius: var(--r-xl);
   background: var(--s-paper);
   box-shadow: var(--sh-3);
 }
+/* En /viajes la cabecera ya es papel: el buscador va sin caja propia. */
 .compacto {
-  padding: clamp(12px, 1.6vw, 16px);
-  border: 1px solid var(--s-line);
-  border-radius: var(--r-lg);
-  background: var(--s-paper);
-  box-shadow: var(--sh-2);
-}
-.compacto .buscador {
-  gap: 10px;
+  --campo: 48px;
 }
 @media (max-width: 599px) {
-  .hero .entrada,
-  .compacto .entrada {
-    height: 52px;
-    border-radius: var(--r-md);
+  .buscador {
+    --campo: 50px;
   }
   .hero {
     border-radius: var(--r-lg);
-  }
-  .accion :global(.s-boton) {
-    min-height: 54px;
   }
 }
 
@@ -613,11 +565,11 @@
   padding: 14px 16px;
   border: 1px solid var(--s-line);
   border-radius: var(--r-md);
-  background: var(--s-canvas);
+  background: var(--s-paper);
 }
 .opcionEnvioNombre {
   font-size: var(--t-body);
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: -0.01em;
   line-height: 1.25;
 }
@@ -636,7 +588,7 @@
   gap: 0;
 }
 .opcionEnvioPrecio strong {
-  font-size: 22px;
+  font-size: 20px;
   letter-spacing: -0.02em;
   line-height: 1.15;
 }

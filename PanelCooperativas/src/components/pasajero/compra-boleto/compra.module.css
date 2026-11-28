@@ -23,7 +23,7 @@
   gap: 8px;
   width: fit-content;
   padding: 6px 12px;
-  border-radius: var(--r-full);
+  border-radius: var(--r-sm);
   background: var(--s-cielo-soft);
   color: var(--s-cielo-deep);
   font-size: var(--t-small);
@@ -82,15 +82,15 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  min-height: 40px;
-  padding: 0 14px;
+  min-height: 36px;
+  padding: 0 12px;
   border: 1px solid var(--s-line-2);
-  border-radius: var(--r-full);
+  border-radius: var(--r-sm);
   background: var(--s-paper);
   color: var(--s-ink);
   font: inherit;
   font-size: var(--t-small);
-  font-weight: 600;
+  font-weight: 500;
   cursor: pointer;
   transition: border-color var(--dur) ease;
 }

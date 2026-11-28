@@ -64,7 +64,7 @@ function PantallaInicio() {
 /** Cierre de la portada: descarga de la app y puerta hacia /cooperativas. */
 export function Descarga() {
   return (
-    <section id="descargar" className={`s-seccion s-seccion--noche ${estilos.seccion}`} aria-labelledby="titulo-descarga">
+    <section id="descargar" className={`s-seccion ${estilos.seccion}`} aria-labelledby="titulo-descarga">
       <div className="s-marco">
         <div className={estilos.panel}>
           <div className={estilos.texto} data-revelar>
@@ -96,7 +96,7 @@ export function Descarga() {
             <h3 id="titulo-coop">¿Tienes una cooperativa de transporte?</h3>
             <p>Vende pasajes y encomiendas desde taquilla y app, con tus propias cuentas de pago.</p>
           </div>
-          <Link href={RUTAS_SITIO.cooperativas} className="s-boton s-boton--fantasma">
+          <Link href={RUTAS_SITIO.cooperativas} className="s-boton s-boton--claro">
             Conoce EnBus para cooperativas
             <ArrowRight weight="bold" aria-hidden />
           </Link>

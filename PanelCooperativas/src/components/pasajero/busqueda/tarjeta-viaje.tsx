@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ArrowRight, Star } from "@phosphor-icons/react/dist/ssr";
 
-import { fechaTasaCorta, formatBs, formatNumeroVE, formatUsd, usdABs, type TasaRef } from "@/lib/dinero.generated";
+import { formatBs, formatNumeroVE, formatUsd, usdABs, type TasaRef } from "@/lib/dinero.generated";
 import type { ViajeResumen } from "@/lib/pasajero/viajes";
 import { urlComprarBoleto } from "@/lib/pasajero/rutas";
 import { formatCiudad, formatDiaVE, formatDuracion, formatHoraVE } from "@/lib/ve.generated";
@@ -121,19 +121,16 @@ export function TarjetaViaje({
           {bs !== null ? (
             <>
               <strong>{formatBs(bs)}</strong>
-              <span>
-                ≈ {formatUsd(v.precioUsd)}
-                {tasa ? ` · BCV ${fechaTasaCorta(tasa.fecha)}` : ""}
-              </span>
+              <span>≈ {formatUsd(v.precioUsd)}</span>
             </>
           ) : (
             <>
               <strong>{formatUsd(v.precioUsd)}</strong>
-              <span>Pagas en Bs a la tasa BCV del día</span>
+              <span>En Bs a la tasa BCV</span>
             </>
           )}
         </p>
-        <Link href={urlComprarBoleto(v.id)} prefetch={false} className="s-boton s-boton--tinta">
+        <Link href={urlComprarBoleto(v.id)} prefetch={false} className="s-boton s-boton--tinta s-boton--sm">
           Elegir asiento
           <span className="sr-only">
             {" "}

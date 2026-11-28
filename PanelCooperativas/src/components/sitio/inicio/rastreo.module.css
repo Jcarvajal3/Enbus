@@ -4,9 +4,9 @@
   gap: 12px;
 }
 .etiqueta {
-  font-size: var(--t-small);
-  font-weight: 600;
-  color: var(--s-on-night);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--s-on-night-muted);
 }
 .fila {
   display: grid;
@@ -16,15 +16,15 @@
 .campo {
   width: 100%;
   min-width: 0;
-  height: 56px;
-  padding: 0 18px;
-  border: 1.5px solid var(--s-line-2);
+  height: 52px;
+  padding: 0 16px;
+  border: 1px solid var(--s-line-2);
   border-radius: var(--r-md);
   background: var(--s-paper);
   color: var(--s-ink);
   font: inherit;
-  font-size: 18px;
-  font-weight: 600;
+  font-size: 16px;
+  font-weight: 500;
   letter-spacing: 0.01em;
   font-variant-numeric: tabular-nums;
   transition:
@@ -39,13 +39,13 @@
 .campo:focus {
   outline: none;
   border-color: var(--s-cielo-deep);
-  box-shadow: 0 0 0 4px var(--s-cielo);
+  box-shadow: 0 0 0 3px var(--s-cielo);
 }
 .campo[aria-invalid="true"] {
   border-color: var(--s-error);
 }
 .boton {
-  min-height: 56px;
+  min-height: 52px;
 }
 .ayuda {
   font-size: var(--t-small);
@@ -96,7 +96,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 4px 10px;
-  font-size: clamp(22px, 2.4vw, 28px);
+  font-size: 20px;
   font-weight: 700;
   letter-spacing: -0.025em;
   line-height: 1.15;

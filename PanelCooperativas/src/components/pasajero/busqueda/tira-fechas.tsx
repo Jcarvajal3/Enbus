@@ -39,6 +39,7 @@ export function TiraFechas({
           const d = porFecha.get(f);
           const actual = f === busqueda.fecha;
           const bs = d && tasa ? usdABs(d.precioMinUsd, tasa.tasa) : null;
+          const partes = formatDiaVE(f).split(" ");
           return (
             <li key={f} className={s.item}>
               <Link
@@ -48,15 +49,21 @@ export function TiraFechas({
                 data-vacio={d ? undefined : "true"}
                 scroll={false}
               >
-                <span className={s.nombre}>{f === hoy ? "Hoy" : formatDiaVE(f).split(" ")[0]}</span>
-                <span className={`${s.numero} s-num`}>{formatDiaVE(f).split(" ").slice(1).join(" ")}</span>
+                <span className={`${s.nombre} s-num`}>
+                  {f === hoy ? "Hoy" : partes[0]} {partes[1]}
+                  <span className="sr-only"> {partes.slice(2).join(" ")}</span>
+                </span>
                 {d ? (
-                  <>
-                    <span className={`${s.precio} s-num`}>{bs !== null ? formatBs(bs) : formatUsd(d.precioMinUsd)}</span>
-                    <span className={s.salidas}>{textoSalidas(d.salidas)}</span>
-                  </>
+                  <span className={`${s.precio} s-num`}>
+                    <span className="sr-only">Desde </span>
+                    {bs !== null ? formatBs(bs) : formatUsd(d.precioMinUsd)}
+                    <span className="sr-only">, {textoSalidas(d.salidas)}</span>
+                  </span>
                 ) : (
-                  <span className={s.salidas}>Sin salidas</span>
+                  <span className={s.salidas}>
+                    <span aria-hidden>—</span>
+                    <span className="sr-only">Sin salidas</span>
+                  </span>
                 )}
               </Link>
             </li>

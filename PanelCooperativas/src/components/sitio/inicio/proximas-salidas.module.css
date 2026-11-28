@@ -5,8 +5,8 @@
 
 .chips {
   display: flex;
-  gap: 8px;
-  margin: 0 calc(-1 * var(--m)) 20px;
+  gap: 6px;
+  margin: 0 calc(-1 * var(--m)) 16px;
   padding: 2px var(--m) 6px;
   overflow-x: auto;
   scrollbar-width: none;
@@ -26,15 +26,15 @@
   flex: none;
   display: inline-flex;
   align-items: center;
-  min-height: 44px;
-  padding: 0 18px;
-  border: 1px solid var(--s-line-2);
-  border-radius: var(--r-full);
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--s-line);
+  border-radius: var(--r-sm);
   background: var(--s-paper);
-  color: var(--s-ink);
+  color: var(--s-muted);
   font: inherit;
-  font-size: 15px;
-  font-weight: 600;
+  font-size: 14px;
+  font-weight: 500;
   line-height: 1;
   cursor: pointer;
   transition:
@@ -43,22 +43,25 @@
     color var(--dur) ease;
 }
 .chip:hover {
-  border-color: var(--s-ink);
+  border-color: var(--s-line-2);
+  color: var(--s-ink);
 }
 .chip[aria-pressed="true"] {
-  background: var(--s-ink);
-  border-color: var(--s-ink);
-  color: #fff;
+  background: var(--s-cielo-soft);
+  border-color: transparent;
+  color: var(--s-cielo-deep);
+  font-weight: 600;
 }
 .lista {
   display: grid;
-  gap: 12px;
+  gap: 10px;
   margin: 0;
   padding: 0;
   list-style: none;
 }
 .vacio {
   padding: 24px;
+  border: 1px solid var(--s-line);
   border-radius: var(--r-lg);
   background: var(--s-paper);
   color: var(--s-muted);

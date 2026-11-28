@@ -5,28 +5,24 @@
  *   < 520px   apilada: horas y duración / cooperativa / precio y botón
  *   ≥ 520px   horas arriba; cooperativa a la izquierda y compra a la derecha
  *   ≥ 800px   tres zonas en una fila
+ * Jerarquía: horas y precio mandan; el resto es texto secundario.
  */
 
-/* Pase de abordar: la zona de compra va tras una línea perforada con dos muescas. */
 .tarjeta {
   container: tarjeta / inline-size;
-  --pad: clamp(16px, 2vw, 22px);
+  --pad: clamp(16px, 1.8vw, 20px);
   position: relative;
-  overflow: hidden;
   padding: var(--pad);
   border: 1px solid var(--s-line);
   border-radius: var(--r-lg);
   background: var(--s-paper);
-  box-shadow: var(--sh-1);
   transition:
     box-shadow var(--dur) ease,
-    border-color var(--dur) ease,
-    transform var(--dur) var(--ease);
+    border-color var(--dur) ease;
 }
 .tarjeta:hover {
   border-color: var(--s-line-2);
   box-shadow: var(--sh-2);
-  transform: translateY(-2px);
 }
 .rejilla {
   display: grid;
@@ -45,8 +41,8 @@
 }
 @container tarjeta (min-width: 800px) {
   .rejilla {
-    grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) minmax(190px, auto);
-    gap: 24px;
+    grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) auto;
+    gap: 32px;
   }
   .rejilla .principal {
     grid-column: auto;
@@ -60,34 +56,32 @@
 
 .principal {
   display: grid;
-  gap: 12px;
+  gap: 10px;
   min-width: 0;
 }
 .contexto {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  justify-content: space-between;
-  gap: 2px 12px;
+  gap: 2px 10px;
 }
 .ruta {
-  font-size: var(--t-h3);
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  line-height: 1.2;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
 }
 .dia {
-  font-size: var(--t-small);
-  font-weight: 600;
+  font-size: 13px;
   color: var(--s-muted);
 }
 
 .tiempos {
   display: grid;
   /* Las columnas de las horas nunca bajan de lo que miden (min-content); la del centro, con la duración, se estira. */
-  grid-template-columns: minmax(min-content, 1fr) minmax(72px, 0.8fr) minmax(min-content, 1fr);
+  grid-template-columns: minmax(min-content, auto) minmax(64px, 1fr) minmax(min-content, auto);
   align-items: start;
-  gap: 12px;
+  gap: 14px;
 }
 .momento {
   display: grid;
@@ -98,16 +92,16 @@
   text-align: right;
 }
 .hora {
-  font-size: clamp(21px, 2.1vw, 26px);
+  font-size: clamp(19px, 1.8vw, 22px);
   font-weight: 700;
-  letter-spacing: -0.035em;
-  line-height: 1.15;
+  letter-spacing: -0.03em;
+  line-height: 1.2;
   white-space: nowrap;
 }
 .masDia {
-  margin-left: 3px;
-  font-size: 12px;
-  font-weight: 700;
+  margin-left: 2px;
+  font-size: 11px;
+  font-weight: 600;
   color: var(--s-coral-deep);
 }
 .lugar {
@@ -116,28 +110,26 @@
   color: var(--s-muted);
   overflow-wrap: anywhere;
 }
-/* Línea punteada con la duración encima */
+/* Trayecto: línea fina con la duración encima */
 .trazo {
-  position: relative;
   display: grid;
   justify-items: center;
   align-content: start;
-  padding-top: 2px;
-  font-size: 13px;
-  font-weight: 600;
+  padding-top: 1px;
+  font-size: 12px;
+  font-weight: 500;
   color: var(--s-muted);
   white-space: nowrap;
 }
 .trazo::after {
   content: "";
   width: 100%;
-  height: 8px;
-  margin-top: 5px;
-  /* punto de salida, trayecto, punto de llegada */
+  height: 7px;
+  margin-top: 4px;
   background:
-    radial-gradient(circle at 4px 50%, var(--s-ink) 3px, transparent 3.6px),
-    radial-gradient(circle at calc(100% - 4px) 50%, var(--s-ink) 3px, transparent 3.6px),
-    linear-gradient(var(--s-line-2), var(--s-line-2)) center / calc(100% - 16px) 2px no-repeat;
+    radial-gradient(circle at 3.5px 50%, var(--s-muted) 2.5px, transparent 3px),
+    radial-gradient(circle at calc(100% - 3.5px) 50%, var(--s-muted) 2.5px, transparent 3px),
+    linear-gradient(var(--s-line-2), var(--s-line-2)) center / calc(100% - 12px) 1px no-repeat;
 }
 .trazo span {
   line-height: 1.2;
@@ -146,7 +138,6 @@
 /* Tarjetas angostas: horas más chicas para que quepan junto a la duración sin encimarse. */
 @container tarjeta (max-width: 339px) {
   .tiempos {
-    grid-template-columns: minmax(min-content, 1fr) minmax(68px, 0.8fr) minmax(min-content, 1fr);
     gap: 8px;
   }
   .hora {
@@ -154,45 +145,44 @@
   }
 }
 @container tarjeta (max-width: 269px) {
-  .tiempos {
-    grid-template-columns: minmax(min-content, 1fr) minmax(64px, 0.8fr) minmax(min-content, 1fr);
-  }
   .hora {
     font-size: 15px;
   }
 }
+
 /* Cooperativa */
 .coop {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   min-width: 0;
 }
 .logo,
 .logoInicial {
   flex: none;
-  width: 40px;
-  height: 40px;
-  border-radius: 14px;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--r-sm);
   background: var(--s-canvas);
   object-fit: cover;
 }
 .logoInicial {
   display: grid;
   place-items: center;
-  background: var(--s-cielo-soft);
-  color: var(--s-cielo-deep);
-  font-size: 14px;
+  background: var(--s-canvas-2);
+  color: var(--s-ink);
+  font-size: 12px;
   font-weight: 700;
 }
 .coopTexto {
   display: grid;
-  gap: 4px;
+  gap: 2px;
   min-width: 0;
 }
 .coopNombre {
-  font-weight: 700;
-  line-height: 1.25;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.3;
   overflow-wrap: anywhere;
 }
 .coopMeta {
@@ -206,14 +196,14 @@
 .calificacion {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
   font-weight: 600;
   color: var(--s-ink);
 }
 .calificacion svg {
-  width: 14px;
-  height: 14px;
-  color: var(--s-sol);
+  width: 13px;
+  height: 13px;
+  color: #e8a317;
 }
 
 /* Precio y botón */
@@ -224,7 +214,7 @@
   align-items: center;
   min-width: 0;
   padding-top: 14px;
-  border-top: 2px dashed var(--s-line-2);
+  border-top: 1px solid var(--s-line);
 }
 @container tarjeta (max-width: 359px) {
   .compra {
@@ -236,9 +226,8 @@
 }
 @container tarjeta (min-width: 520px) {
   .compra {
-    grid-template-columns: minmax(0, 1fr);
-    justify-items: end;
-    gap: 10px;
+    grid-template-columns: auto auto;
+    gap: 20px;
     padding-top: 0;
     border-top: 0;
     text-align: right;
@@ -246,28 +235,9 @@
 }
 @container tarjeta (min-width: 800px) {
   .compra {
-    position: relative;
-    align-self: stretch;
-    align-content: center;
-    padding-left: 24px;
-    border-left: 2px dashed var(--s-line-2);
-  }
-  .compra::before,
-  .compra::after {
-    content: "";
-    position: absolute;
-    left: -12px;
-    width: 22px;
-    height: 22px;
-    border: 1px solid var(--s-line);
-    border-radius: 50%;
-    background: var(--tarjeta-fondo, var(--s-canvas));
-  }
-  .compra::before {
-    top: calc(-1 * var(--pad) - 12px);
-  }
-  .compra::after {
-    bottom: calc(-1 * var(--pad) - 12px);
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: end;
+    gap: 10px;
   }
 }
 .precio {
@@ -275,10 +245,10 @@
   gap: 0;
 }
 .precio strong {
-  font-size: clamp(22px, 2.2vw, 27px);
-  font-weight: 800;
-  letter-spacing: -0.035em;
-  line-height: 1.15;
+  font-size: clamp(20px, 1.9vw, 23px);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.2;
 }
 .precio span {
   font-size: 13px;
@@ -287,4 +257,8 @@
 
 .asientos {
   color: var(--s-muted);
+}
+
+.compra :global(.s-boton) {
+  min-height: 40px;
 }

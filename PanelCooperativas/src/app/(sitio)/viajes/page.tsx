@@ -3,6 +3,7 @@ import Link from "next/link";
 import { ArrowRight, CalendarX, MagnifyingGlass } from "@phosphor-icons/react/dist/ssr";
 
 import { Buscador } from "@/components/pasajero/busqueda/buscador";
+import { EditorBusqueda } from "@/components/pasajero/busqueda/editor-busqueda";
 import { FiltrosViajes, type OpcionCooperativa } from "@/components/pasajero/busqueda/filtros-viajes";
 import { TarjetaRuta } from "@/components/pasajero/busqueda/tarjeta-ruta";
 import { TarjetaViaje } from "@/components/pasajero/busqueda/tarjeta-viaje";
@@ -17,6 +18,7 @@ import {
   urlBusqueda,
   type Franja,
 } from "@/components/pasajero/busqueda/utilidades";
+import { fechaTasaCorta, formatNumeroVE } from "@/lib/dinero.generated";
 import { buscarViajes, ciudadesConSalidas, diasConSalidas, tasaVigente } from "@/lib/pasajero/viajes";
 import { rutasPopulares } from "@/lib/sitio/consultas";
 import { sitioUrl } from "@/lib/sitio/urls";
@@ -135,15 +137,24 @@ export default async function Viajes({ searchParams }: { searchParams: Params })
   return (
     <>
       <section className={s.banda} aria-labelledby="viajes-titulo">
-        <div className={`s-marco ${s.bandaInterior}`}>
-          <div>
-            <h1 id="viajes-titulo" className={s.titulo}>
-              {origenTxt} <span aria-hidden>→</span>
-              <span className="sr-only"> a </span> {destinoTxt}
-            </h1>
-            <p className={`${s.sub} s-num`}>{formatDiaVE(p.fecha)}</p>
-          </div>
-          <Buscador ciudades={ciudades} modo="compacto" inicial={{ origen: p.origen, destino: p.destino, fecha: p.fecha }} />
+        <div className="s-marco">
+          <EditorBusqueda
+            titulo={
+              <>
+                <h1 id="viajes-titulo" className={s.titulo}>
+                  {origenTxt} <span aria-hidden>→</span>
+                  <span className="sr-only"> a </span> {destinoTxt}
+                </h1>
+                <p className={`${s.sub} s-num`}>{formatDiaVE(p.fecha)}</p>
+              </>
+            }
+          >
+            <Buscador
+              ciudades={ciudades}
+              modo="compacto"
+              inicial={{ origen: p.origen, destino: p.destino, fecha: p.fecha }}
+            />
+          </EditorBusqueda>
         </div>
       </section>
 
@@ -160,7 +171,7 @@ export default async function Viajes({ searchParams }: { searchParams: Params })
                   {hayFiltros && <span className="s-num"> de {delDia.length}</span>}
                 </p>
                 <nav aria-label="Ordenar salidas" className={s.orden}>
-                  <span className={s.ordenRotulo}>Ordenar:</span>
+                  <span className="sr-only">Ordenar por:</span>
                   {ORDENES.map((o) => (
                     <Link
                       key={o.id}
@@ -203,8 +214,10 @@ export default async function Viajes({ searchParams }: { searchParams: Params })
               )}
 
               <p className={s.nota}>
-                Pagas en bolívares a la tasa oficial del BCV del día y ves el monto exacto antes de confirmar. Los
-                horarios son de Venezuela.
+                {tasa
+                  ? `Precios en bolívares a la tasa BCV del ${fechaTasaCorta(tasa.fecha)} (Bs ${formatNumeroVE(tasa.tasa)} por dólar). `
+                  : "Pagas en bolívares a la tasa oficial del BCV del día. "}
+                Ves el monto exacto antes de confirmar. Horarios de Venezuela.
               </p>
             </div>
           </div>

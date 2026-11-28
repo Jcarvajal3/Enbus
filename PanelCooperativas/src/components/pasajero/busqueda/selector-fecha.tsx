@@ -178,32 +178,6 @@ function Calendario({
   );
 }
 
-// ─── Atajos ──────────────────────────────────────────────────────────────────
-
-/** Chips "Hoy" y "Mañana". */
-export function AtajosFecha({ value, onChange }: { value: string; onChange(f: string): void }) {
-  const hoy = hoyVE();
-  const manana = sumarDiasVE(hoy, 1);
-  return (
-    <div className={s.atajos} role="group" aria-label="Atajos de fecha">
-      {[
-        { f: hoy, texto: "Hoy" },
-        { f: manana, texto: "Mañana" },
-      ].map(({ f, texto }) => (
-        <button
-          key={f}
-          type="button"
-          className={s.chip}
-          aria-pressed={value === f}
-          onClick={() => onChange(f)}
-        >
-          {texto}
-        </button>
-      ))}
-    </div>
-  );
-}
-
 // ─── Campo ───────────────────────────────────────────────────────────────────
 
 export function SelectorFecha({

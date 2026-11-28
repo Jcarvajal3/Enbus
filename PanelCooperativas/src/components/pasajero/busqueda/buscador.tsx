@@ -16,7 +16,7 @@ import { RUTAS_PASAJERO, urlViajes } from "@/lib/pasajero/rutas";
 import { hoyVE } from "@/lib/ve.generated";
 import { ComboCiudad } from "./combo-ciudad";
 import { ResultadoEnvio } from "./resultado-envio";
-import { AtajosFecha, SelectorFecha } from "./selector-fecha";
+import { SelectorFecha } from "./selector-fecha";
 import s from "./buscador.module.css";
 
 type Pestana = "pasajes" | "encomiendas";
@@ -205,7 +205,6 @@ export function Buscador({ ciudades, modo = "hero", inicial }: BuscadorProps) {
             {ruta}
             <div className={s.celdaFecha}>
               <SelectorFecha id={`${uid}-fecha`} value={fecha} onChange={setFecha} />
-              {!compacto && <AtajosFecha value={fecha} onChange={setFecha} />}
             </div>
             <div className={s.accion}>
               <button

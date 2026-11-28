@@ -9,11 +9,8 @@
     align-content: start;
     gap: 16px;
     position: sticky;
-    top: calc(var(--barra-alto) + 12px);
-    padding: 20px;
-    border: 1px solid var(--s-line);
-    border-radius: var(--r-lg);
-    background: var(--s-paper);
+    top: calc(var(--barra-alto) + 20px);
+    padding-top: 6px;
   }
   .abrir,
   .hoja {
@@ -21,12 +18,13 @@
   }
 }
 .cabecera {
-  font-size: var(--t-h3);
+  font-size: 15px;
+  letter-spacing: -0.01em;
 }
 
 .contenido {
   display: grid;
-  gap: 20px;
+  gap: 24px;
 }
 .grupo {
   display: grid;
@@ -39,11 +37,11 @@
 .titulo {
   float: left; /* un <legend> flotante evita el hueco del borde del fieldset */
   width: 100%;
-  margin-bottom: 6px;
+  margin-bottom: 4px;
   padding: 0;
-  font-size: var(--t-small);
-  font-weight: 700;
-  color: var(--s-ink);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--s-muted);
 }
 .titulo + * {
   clear: both;
@@ -52,10 +50,10 @@
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: 12px;
-  min-height: 44px;
-  padding: 4px 6px;
-  margin-inline: -6px;
+  gap: 10px;
+  min-height: 40px;
+  padding: 4px 8px;
+  margin-inline: -8px;
   border-radius: var(--r-sm);
   cursor: pointer;
 }
@@ -63,8 +61,8 @@
   background: var(--s-canvas);
 }
 .casilla {
-  width: 22px;
-  height: 22px;
+  width: 18px;
+  height: 18px;
   margin: 0;
   accent-color: var(--s-ink);
   cursor: pointer;
@@ -75,7 +73,7 @@
 }
 .nombre {
   font-size: 15px;
-  font-weight: 600;
+  font-weight: 500;
   line-height: 1.3;
   overflow-wrap: anywhere;
 }
@@ -90,13 +88,13 @@
 }
 .limpiar {
   justify-self: start;
-  min-height: 44px;
+  min-height: 36px;
   padding: 0;
   border: 0;
   background: none;
   color: var(--s-cielo-deep);
   font: inherit;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
   text-decoration: underline;
   text-underline-offset: 4px;
@@ -108,10 +106,10 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  min-height: 44px;
-  padding: 0 16px;
-  border: 1.5px solid var(--s-line-2);
-  border-radius: var(--r-full);
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1px solid var(--s-line-2);
+  border-radius: 10px;
   background: var(--s-paper);
   color: var(--s-ink);
   font: inherit;
@@ -173,7 +171,7 @@
   height: 44px;
   padding: 0;
   border: 0;
-  border-radius: var(--r-full);
+  border-radius: var(--r-sm);
   background: var(--s-canvas);
   color: var(--s-ink);
   cursor: pointer;

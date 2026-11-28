@@ -1,39 +1,35 @@
-/* Barra flotante: una pastilla de cristal que acompaña el scroll, separada del borde. */
+/* Barra fija de ancho completo: blanca y discreta; el borde inferior aparece al hacer scroll. */
 .barra {
   position: sticky;
   top: 0;
   z-index: 50;
-  padding-block: 12px 8px;
+  border-bottom: 1px solid transparent;
+  background: color-mix(in srgb, var(--s-canvas) 86%, transparent);
+  -webkit-backdrop-filter: saturate(180%) blur(14px);
+  backdrop-filter: saturate(180%) blur(14px);
+  transition:
+    border-color 200ms ease,
+    background-color 200ms ease;
+}
+.barra[data-scroll="true"],
+.barra[data-abierto="true"] {
+  border-bottom-color: var(--s-line);
+  background: color-mix(in srgb, var(--s-paper) 94%, transparent);
 }
 
 .fila {
   position: relative;
-  height: 60px;
+  height: var(--barra-alto);
   display: flex;
   align-items: center;
-  gap: 20px;
-  padding: 0 8px 0 22px;
-  border: 1px solid rgb(12 23 48 / 0.07);
-  border-radius: var(--r-full);
-  background: color-mix(in srgb, var(--s-paper) 78%, transparent);
-  -webkit-backdrop-filter: saturate(180%) blur(18px);
-  backdrop-filter: saturate(180%) blur(18px);
-  box-shadow: var(--sh-1);
-  transition:
-    box-shadow 240ms ease,
-    background-color 240ms ease;
-}
-.barra[data-scroll="true"] .fila,
-.barra[data-abierto="true"] .fila {
-  background: color-mix(in srgb, var(--s-paper) 92%, transparent);
-  box-shadow: var(--sh-2);
+  gap: 16px;
 }
 
 .marca {
   display: inline-flex;
   align-items: center;
   min-height: 44px;
-  font-size: 23px;
+  font-size: 22px;
   font-weight: 800;
   letter-spacing: -0.05em;
   text-decoration: none;
@@ -58,17 +54,20 @@
   white-space: nowrap;
   display: inline-flex;
   align-items: center;
-  min-height: 40px;
-  padding: 0 10px;
-  border-radius: var(--r-full);
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: var(--r-sm);
   font-size: 15px;
   font-weight: 500;
-  color: var(--s-ink);
+  color: var(--s-muted);
   text-decoration: none;
-  transition: background-color var(--dur) ease;
+  transition:
+    background-color var(--dur) ease,
+    color var(--dur) ease;
 }
 .enlace:hover {
-  background: rgb(12 23 48 / 0.06);
+  color: var(--s-ink);
+  background: rgb(12 23 48 / 0.05);
 }
 
 .derecha {
@@ -92,23 +91,24 @@
   display: none;
   width: 44px;
   height: 44px;
+  margin-right: -10px;
   place-items: center;
   border: 0;
-  border-radius: var(--r-full);
-  background: var(--s-ink);
-  color: #fff;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--s-ink);
   cursor: pointer;
   transition: background-color var(--dur) ease;
 }
 .hamburguesa:hover {
-  background: var(--s-ink-2);
+  background: rgb(12 23 48 / 0.06);
 }
 
 /* Sin JS: los enlaces quedan en filas bajo la pastilla, siempre accesibles. */
 .panelNav {
   width: var(--ancho);
   margin-inline: auto;
-  padding: 8px 22px 0;
+  padding: 0 0 8px;
 }
 .panelNav ul,
 .panelPie {
@@ -127,24 +127,23 @@
 }
 
 /* Con JS en móvil/tablet: hoja flotante bajo la pastilla. */
-@media (max-width: 1179.98px) and (scripting: enabled) {
+@media (max-width: 899.98px) and (scripting: enabled) {
   .barra .hamburguesa {
     display: inline-grid;
   }
   .barra .panel {
     position: fixed;
-    top: calc(var(--barra-alto) - 4px);
-    left: var(--m);
-    right: var(--m);
-    max-height: calc(100dvh - var(--barra-alto) - 12px);
+    top: var(--barra-alto);
+    left: 0;
+    right: 0;
+    max-height: calc(100dvh - var(--barra-alto));
     overflow-y: auto;
     overscroll-behavior: contain;
-    border: 1px solid var(--s-line);
-    border-radius: var(--r-lg);
+    border-bottom: 1px solid var(--s-line);
     background: var(--s-paper);
     box-shadow: var(--sh-3);
-    padding: 8px 22px 16px;
-    animation: bajar 220ms var(--ease);
+    padding: 4px var(--m) 20px;
+    animation: bajar 200ms var(--ease);
   }
   .barra:not([data-abierto="true"]) .panel {
     display: none;
@@ -158,10 +157,10 @@
     display: block;
   }
   .barra .panelEnlace {
-    min-height: 56px;
-    font-size: 20px;
+    min-height: 52px;
+    font-size: 17px;
     font-weight: 600;
-    letter-spacing: -0.02em;
+    letter-spacing: -0.01em;
     border-bottom: 1px solid var(--s-line);
   }
   .barra .panelPie {
@@ -181,23 +180,17 @@
 @keyframes bajar {
   from {
     opacity: 0;
-    transform: translateY(-8px) scale(0.985);
+    transform: translateY(-6px);
   }
 }
 
 @media (max-width: 480px) {
   .fila {
-    padding-left: 18px;
     gap: 8px;
   }
 }
-@media (max-width: 380px) {
-  .derecha :global(.s-boton) {
-    padding: 0 12px;
-  }
-}
 
-@media (min-width: 1180px) {
+@media (min-width: 900px) {
   .centro {
     display: block;
   }
@@ -206,7 +199,7 @@
     gap: 2px;
   }
   .marca {
-    margin-right: 10px;
+    margin-right: 16px;
   }
   .derecha {
     margin-left: auto;
@@ -218,14 +211,14 @@
 }
 
 /* "Para cooperativas" solo cuando sobra ancho: sigue en el menú móvil y en el pie. */
-@media (min-width: 1320px) {
+@media (min-width: 1100px) {
   .coop {
     display: inline-flex;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .fila,
+  .barra,
   .enlace {
     transition: none;
   }

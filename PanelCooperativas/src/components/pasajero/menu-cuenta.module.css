@@ -18,11 +18,11 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  min-height: 44px;
-  padding: 0 14px 0 8px;
-  border: 1px solid transparent;
-  border-radius: var(--r-full);
-  background: rgb(12 23 48 / 0.06);
+  min-height: 40px;
+  padding: 0 12px 0 6px;
+  border: 1px solid var(--s-line-2);
+  border-radius: 10px;
+  background: var(--s-paper);
   color: var(--s-ink);
   font: inherit;
   font-size: 15px;
@@ -36,20 +36,20 @@
   padding-left: 14px;
 }
 .ingresar svg {
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
 }
 .ingresar:hover,
 .boton:hover,
 .boton[aria-expanded="true"] {
-  border-color: var(--s-ink);
+  border-color: var(--s-ink-3);
 }
 
 .inicial {
   display: inline-grid;
   place-items: center;
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   background: var(--s-sol);
   color: var(--s-ink);
@@ -129,14 +129,14 @@
   display: flex;
   align-items: center;
   width: 100%;
-  min-height: 56px;
+  min-height: 52px;
   padding: 0;
   border: 0;
   border-bottom: 1px solid var(--s-line);
   background: transparent;
   color: var(--s-ink);
   font: inherit;
-  font-size: 20px;
+  font-size: 17px;
   font-weight: 600;
   letter-spacing: -0.015em;
   text-align: left;

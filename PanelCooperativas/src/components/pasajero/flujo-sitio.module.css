@@ -2,9 +2,9 @@
 .armazon {
   --alto-pestanas: 0px; /* el sitio no tiene barra de pestañas inferior */
   flex: 1;
-  /* Ocupa al menos la ventana bajo la barra del sitio (80 px): así la BarraFlujo queda
+  /* Ocupa al menos la ventana bajo la barra del sitio: así la BarraFlujo queda
      pegada al fondo de la pantalla y no flotando a media página cuando el paso es corto. */
-  min-height: calc(100dvh - 80px);
+  min-height: calc(100dvh - var(--barra-alto, 64px));
   display: flex;
   flex-direction: column;
   padding: 20px;

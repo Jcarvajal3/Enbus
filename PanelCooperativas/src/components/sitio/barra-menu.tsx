@@ -16,7 +16,7 @@ interface Props {
   login: string;
 }
 
-const ESCRITORIO = "(min-width: 1180px)";
+const ESCRITORIO = "(min-width: 900px)";
 
 /**
  * Barra del sitio. Sin JS los enlaces quedan visibles en una fila bajo la marca. Con JS
@@ -98,7 +98,7 @@ export function BarraMenu({ marca, secciones, cooperativas, login }: Props) {
         </nav>
 
         <div className={estilos.derecha}>
-          {/* En /cooperativas la acción de la barra es la de esa página (registrarse), no la app. */}
+          {/* En /cooperativas la acción de la barra es registrarse; en el resto, solo la cuenta. */}
           {enCooperativas ? (
             <>
               <Link href="/" className={`${estilos.enlace} ${estilos.coop}`}>
@@ -109,14 +109,9 @@ export function BarraMenu({ marca, secciones, cooperativas, login }: Props) {
               </Link>
             </>
           ) : (
-            <>
-              <Link href={cooperativas} className={`${estilos.enlace} ${estilos.coop}`}>
-                Para cooperativas
-              </Link>
-              <Link href="/#descargar" className="s-boton s-boton--sol s-boton--sm" onClick={() => cerrar(false)}>
-                Descargar app
-              </Link>
-            </>
+            <Link href={cooperativas} className={`${estilos.enlace} ${estilos.coop}`}>
+              Para cooperativas
+            </Link>
           )}
           <MenuCuenta />
           <button

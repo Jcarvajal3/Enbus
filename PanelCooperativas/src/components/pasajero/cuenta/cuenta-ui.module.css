@@ -32,11 +32,11 @@
 .pestanas ul {
   display: inline-flex;
   max-width: 100%;
-  gap: 4px;
+  gap: 2px;
   margin: 0;
-  padding: 4px;
+  padding: 3px;
   list-style: none;
-  border-radius: var(--r-full);
+  border-radius: 10px;
   background: var(--s-canvas-2);
   overflow-x: auto;
   scrollbar-width: none;
@@ -48,12 +48,12 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  min-height: 44px;
-  padding: 0 18px;
-  border-radius: var(--r-full);
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: 7px;
   color: var(--s-muted);
-  font-size: 15px;
-  font-weight: 600;
+  font-size: 14px;
+  font-weight: 500;
   white-space: nowrap;
   text-decoration: none;
   transition:
@@ -66,7 +66,8 @@
 .pestana[aria-current="page"] {
   background: var(--s-paper);
   color: var(--s-ink);
-  box-shadow: var(--sh-1);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgb(12 23 48 / 0.08);
 }
 .cuenta {
   min-width: 22px;
@@ -86,12 +87,12 @@
 .chip {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  min-height: 28px;
-  padding: 0 12px;
-  border-radius: var(--r-full);
-  font-size: var(--t-xs);
-  font-weight: 700;
+  gap: 5px;
+  min-height: 24px;
+  padding: 0 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
   line-height: 1;
   white-space: nowrap;
   background: var(--s-canvas-2);

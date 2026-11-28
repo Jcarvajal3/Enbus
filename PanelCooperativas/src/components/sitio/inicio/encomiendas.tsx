@@ -1,34 +1,7 @@
-import { IdentificationCard, ShieldCheck, UsersThree, MapPinLine } from "@phosphor-icons/react/dist/ssr";
-
 import type { TasaRef } from "@/lib/dinero.generated";
 import { EncabezadoSeccion } from "../ui/encabezado";
-import { Telefono } from "../ui/telefono";
 import { Rastreador } from "./rastreo";
 import estilos from "./encomiendas.module.css";
-
-
-const BENEFICIOS = [
-  {
-    icono: ShieldCheck,
-    titulo: "Seguro gratuito",
-    texto: "Cubre la pérdida hasta 3 veces el valor declarado.",
-  },
-  {
-    icono: MapPinLine,
-    titulo: "Rastreo etapa por etapa",
-    texto: "Lo sigues en la web con el código de la guía, sin crear cuenta.",
-  },
-  {
-    icono: IdentificationCard,
-    titulo: "Retiro seguro",
-    texto: "Se entrega con cédula y un PIN de 4 dígitos.",
-  },
-  {
-    icono: UsersThree,
-    titulo: "Paga quien quiera",
-    texto: "Paga quien envía o quien recibe, según prefieran.",
-  },
-] as const;
 
 /** El costo se muestra en la app; se conserva la firma que usa la portada. */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -60,30 +33,16 @@ export function Encomiendas(_props: { tasa: TasaRef | null }) {
           tono="coral"
           etiqueta="Encomiendas"
           titulo="Envía paquetes en el bus, con seguimiento de verdad"
-          bajada="Más fácil que llevar la caja al terminal y esperar una llamada: tu envío tiene guía, código y aviso en cada etapa."
+          bajada="Tu envío viaja con guía, seguro gratuito y aviso en cada etapa. Se retira con cédula y PIN."
         />
 
-        <ul className={estilos.beneficios}>
-          {BENEFICIOS.map(({ icono: Icono, titulo, texto }, i) => (
-            <li key={titulo} className={estilos.beneficio} data-revelar style={{ ["--d" as string]: i }}>
-              <span className="s-icono s-icono--coral" aria-hidden>
-                <Icono />
-              </span>
-              <div>
-                <h3>{titulo}</h3>
-                <p>{texto}</p>
-              </div>
-            </li>
-          ))}
-        </ul>
-
         <div className={estilos.recorrido} data-revelar>
-        <h3 className={estilos.subtitulo}>Así funciona un envío</h3>
+        <h3 className="sr-only">Así funciona un envío</h3>
         <ol className={estilos.pasos}>
           {pasos.map((p, i) => (
             <li key={p.titulo} className={estilos.paso}>
               <span className={`${estilos.numero} s-num`} aria-hidden>
-                0{i + 1}
+                {i + 1}
               </span>
               <h4>{p.titulo}</h4>
               <p>{p.texto}</p>
@@ -103,21 +62,6 @@ export function Encomiendas(_props: { tasa: TasaRef | null }) {
               </p>
             </div>
             <Rastreador />
-          </div>
-          <div className={estilos.panelMaqueta}>
-            <Telefono ancho={236}>
-              <div className={estilos.pantalla}>
-                <p className={estilos.pantallaTitulo}>PIN de retiro</p>
-                <div className={`${estilos.pin} s-num`}>
-                  <span>4</span>
-                  <span>8</span>
-                  <span>2</span>
-                  <span>7</span>
-                </div>
-                <p className={`${estilos.pantallaCodigo} s-num`}>EB-261113-04821</p>
-                <span className="s-chip s-chip--ok">Lista para retirar</span>
-              </div>
-            </Telefono>
           </div>
         </div>
       </div>

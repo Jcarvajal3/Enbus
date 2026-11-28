@@ -110,7 +110,7 @@ export function FiltrosViajes(props: Props) {
   return (
     <>
       <aside className={s.lateral} aria-label="Filtros">
-        <h2 className={s.cabecera}>Filtrar</h2>
+        <h2 className={s.cabecera}>Filtros</h2>
         <Contenido {...props} alCambiar={navegar} />
       </aside>
 

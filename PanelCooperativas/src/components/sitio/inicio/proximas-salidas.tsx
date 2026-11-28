@@ -9,7 +9,7 @@ import { formatCiudad } from "@/lib/ve.generated";
 import { EncabezadoSeccion } from "../ui/encabezado";
 import s from "./proximas-salidas.module.css";
 
-const VISIBLES = 6;
+const VISIBLES = 4;
 const MAX_CHIPS = 7;
 
 /** Las salidas más cercanas de cualquier ruta, con chips para filtrar por ciudad de origen. */

@@ -37,35 +37,30 @@
 
 .cabeza {
   display: grid;
-  gap: clamp(14px, 1.8vw, 22px);
+  gap: clamp(12px, 1.4vw, 18px);
   justify-items: start;
 }
 .tasa {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  min-height: 34px;
-  padding: 0 14px 0 10px;
-  border: 1px solid rgb(255 255 255 / 0.22);
-  border-radius: var(--r-full);
-  background: rgb(12 23 48 / 0.35);
-  -webkit-backdrop-filter: blur(10px);
-  backdrop-filter: blur(10px);
+  gap: 6px;
   font-size: var(--t-xs);
   font-weight: 500;
+  color: rgb(255 255 255 / 0.85);
+  text-shadow: 0 1px 12px rgb(12 23 48 / 0.5);
 }
 .tasa svg {
   flex: none;
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   color: var(--s-sol);
 }
 .titulo {
-  max-width: 12ch;
-  font-size: clamp(40px, 7.4vw, 104px);
-  font-weight: 800;
-  letter-spacing: -0.05em;
-  line-height: 0.94;
+  max-width: 13ch;
+  font-size: clamp(36px, 5.6vw, 76px);
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  line-height: 1;
   text-shadow: 0 2px 28px rgb(12 23 48 / 0.35);
 }
 .titulo em {
@@ -94,22 +89,21 @@
   flex-wrap: wrap;
   gap: 8px 28px;
   margin: 0;
-  padding: 0 clamp(4px, 2vw, 24px);
+  padding: 0 clamp(4px, 1.6vw, 20px);
   list-style: none;
   font-size: var(--t-small);
-  font-weight: 500;
-  color: var(--s-ink);
+  color: var(--s-muted);
 }
 .garantias li {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 .garantias svg {
   flex: none;
-  width: 20px;
-  height: 20px;
-  color: var(--s-cielo-deep);
+  width: 16px;
+  height: 16px;
+  color: var(--s-ok);
 }
 
 @media (max-width: 599px) {

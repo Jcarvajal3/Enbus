@@ -1,0 +1,43 @@
+.editor {
+  display: grid;
+  gap: 16px;
+}
+.cabeza {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.titulo {
+  min-width: 0;
+}
+.alternar {
+  display: none;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--s-line-2);
+  border-radius: var(--r-sm);
+  background: var(--s-paper);
+  color: var(--s-ink);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.alternar svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* Móvil: plegado por defecto. Sin JS el botón no sirve, así que solo se pliega con JS. */
+@media (max-width: 899.98px) and (scripting: enabled) {
+  .alternar {
+    display: inline-flex;
+  }
+  .editor:not([data-abierto]) .formulario {
+    display: none;
+  }
+}
