@@ -7,7 +7,6 @@ import { EditorBusqueda } from "@/components/pasajero/busqueda/editor-busqueda";
 import { FiltrosViajes, type OpcionCooperativa } from "@/components/pasajero/busqueda/filtros-viajes";
 import { TarjetaRuta } from "@/components/pasajero/busqueda/tarjeta-ruta";
 import { TarjetaViaje } from "@/components/pasajero/busqueda/tarjeta-viaje";
-import { inicioTira, TiraFechas } from "@/components/pasajero/busqueda/tira-fechas";
 import {
   aplicarFiltros,
   franjaDe,
@@ -22,10 +21,16 @@ import { fechaTasaCorta, formatNumeroVE } from "@/lib/dinero.generated";
 import { buscarViajes, ciudadesConSalidas, diasConSalidas, tasaVigente } from "@/lib/pasajero/viajes";
 import { rutasPopulares } from "@/lib/sitio/consultas";
 import { sitioUrl } from "@/lib/sitio/urls";
-import { formatCiudad, formatDiaVE, hoyVE } from "@/lib/ve.generated";
+import { formatCiudad, formatDiaVE, hoyVE, sumarDiasVE } from "@/lib/ve.generated";
 import s from "./viajes.module.css";
 
 type Params = Promise<Record<string, string | string[] | undefined>>;
+
+/** Primer día para buscar fechas cercanas (estados vacíos): una semana antes, sin bajar de hoy. */
+function desdeCercanas(fecha: string): string {
+  const desde = sumarDiasVE(fecha, -7);
+  return desde < hoyVE() ? hoyVE() : desde;
+}
 
 function hayRuta(p: { origen: string; destino: string }) {
   return Boolean(p.origen && p.destino && p.origen !== p.destino);
@@ -112,7 +117,7 @@ export default async function Viajes({ searchParams }: { searchParams: Params })
   const destinoTxt = formatCiudad(p.destino);
   const [delDia, dias] = await Promise.all([
     buscarViajes({ origen: p.origen, destino: p.destino, fecha: p.fecha }),
-    diasConSalidas({ origen: p.origen, destino: p.destino, desde: inicioTira(p.fecha), dias: 40 }),
+    diasConSalidas({ origen: p.origen, destino: p.destino, desde: desdeCercanas(p.fecha), dias: 40 }),
   ]);
 
   const visibles = ordenarViajes(aplicarFiltros(delDia, p), p.orden);
@@ -145,11 +150,11 @@ export default async function Viajes({ searchParams }: { searchParams: Params })
                   {origenTxt} <span aria-hidden>→</span>
                   <span className="sr-only"> a </span> {destinoTxt}
                 </h1>
-                <p className={`${s.sub} s-num`}>{formatDiaVE(p.fecha)}</p>
               </>
             }
           >
             <Buscador
+              key={`${p.origen}|${p.destino}|${p.fecha}`}
               ciudades={ciudades}
               modo="compacto"
               inicial={{ origen: p.origen, destino: p.destino, fecha: p.fecha }}
@@ -159,33 +164,33 @@ export default async function Viajes({ searchParams }: { searchParams: Params })
       </section>
 
       <div className={`s-marco ${s.cuerpo}`}>
-        <TiraFechas busqueda={p} dias={dias} tasa={tasa} />
-
         {delDia.length > 0 ? (
-          <div className={s.rejilla}>
-            <FiltrosViajes busqueda={p} cooperativas={cooperativas} porFranja={porFranja} />
+          <>
+            <div className={s.herramientas}>
+              <FiltrosViajes busqueda={p} cooperativas={cooperativas} porFranja={porFranja} />
+              <nav aria-label="Ordenar salidas" className={s.orden}>
+                <span className="sr-only">Ordenar por:</span>
+                {ORDENES.map((o) => (
+                  <Link
+                    key={o.id}
+                    href={urlBusqueda({ ...p, orden: o.id })}
+                    className={s.pildora}
+                    aria-current={p.orden === o.id ? "true" : undefined}
+                    replace
+                    scroll={false}
+                  >
+                    {o.etiqueta}
+                  </Link>
+                ))}
+              </nav>
+            </div>
+
             <div className={s.principal}>
-              <div className={s.barra}>
-                <p className={s.conteo} role="status" aria-live="polite">
-                  <strong className="s-num">{textoSalidas(visibles.length)}</strong>
-                  {hayFiltros && <span className="s-num"> de {delDia.length}</span>}
-                </p>
-                <nav aria-label="Ordenar salidas" className={s.orden}>
-                  <span className="sr-only">Ordenar por:</span>
-                  {ORDENES.map((o) => (
-                    <Link
-                      key={o.id}
-                      href={urlBusqueda({ ...p, orden: o.id })}
-                      className={s.pildora}
-                      aria-current={p.orden === o.id ? "true" : undefined}
-                      replace
-                      scroll={false}
-                    >
-                      {o.etiqueta}
-                    </Link>
-                  ))}
-                </nav>
-              </div>
+              <p className={s.conteo} role="status" aria-live="polite">
+                <strong className="s-num">{textoSalidas(visibles.length)}</strong>
+                {hayFiltros && <span className="s-num"> de {delDia.length}</span>}
+                <span> · {formatDiaVE(p.fecha)}</span>
+              </p>
 
               {visibles.length > 0 ? (
                 <ol className={s.lista}>
@@ -220,7 +225,7 @@ export default async function Viajes({ searchParams }: { searchParams: Params })
                 Ves el monto exacto antes de confirmar. Horarios de Venezuela.
               </p>
             </div>
-          </div>
+          </>
         ) : (
           <div className={s.vacio}>
             <span className="s-icono s-icono--sol" aria-hidden>

@@ -18,20 +18,22 @@
   opacity: 0.2;
 }
 .tira {
-  display: grid;
-  grid-template-columns: repeat(7, minmax(88px, 1fr));
+  display: flex;
   gap: 8px;
   overflow: hidden;
 }
 .dia {
-  height: 92px;
+  flex: none;
+  width: 104px;
+  height: 38px;
+  border-radius: var(--r-full);
 }
 .lista {
   display: grid;
   gap: 12px;
 }
 .tarjeta {
-  height: 132px;
+  height: 120px;
 }
 @keyframes brillo {
   to {

@@ -14,7 +14,7 @@ export default function CargandoViajes() {
       <div className={`s-marco ${s.cuerpo}`} role="status" aria-live="polite">
         <span className="sr-only">Buscando salidas…</span>
         <div className={c.tira} aria-hidden>
-          {Array.from({ length: 7 }, (_, i) => (
+          {Array.from({ length: 4 }, (_, i) => (
             <div key={i} className={c.dia} />
           ))}
         </div>

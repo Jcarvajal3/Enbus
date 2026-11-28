@@ -521,9 +521,14 @@
   background: var(--s-paper);
   box-shadow: var(--sh-3);
 }
-/* En /viajes la cabecera ya es papel: el buscador va sin caja propia. */
+/* En /viajes: tarjeta blanca sobre la banda de noche. */
 .compacto {
   --campo: 48px;
+  padding: 14px 16px 16px;
+  border-radius: var(--r-lg);
+  background: var(--s-paper);
+  color: var(--s-ink);
+  box-shadow: var(--sh-3);
 }
 @media (max-width: 599px) {
   .buscador {
