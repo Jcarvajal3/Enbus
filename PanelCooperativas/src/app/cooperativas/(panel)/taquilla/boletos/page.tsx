@@ -230,13 +230,16 @@ function TaquillaBoletos() {
       <PageHeader
         title="Taquilla de boletos"
         principal={
-          <Link href={rutaVender()} className={buttonVariants({ size: "lg", className: "max-md:w-full" })}>
-            <ICONO_SECCION.taquillaBoletos aria-hidden />
+          <Link href={rutaVender()} className={buttonVariants({ size: "lg" })}>
+            <Plus aria-hidden />
             Vender boletos
           </Link>
         }
         // El embarque se mudó a su propia sección: enlace discreto para quien lo buscaba aquí.
-        secundarias={[{ etiqueta: "Ir a Embarque", icono: ICONO_SECCION.embarque, href: "/cooperativas/embarque" }]}
+        // El enlace a Embarque solo sale en escritorio (en móvil no hay botón ni menú "Más").
+        secundarias={[
+          { etiqueta: "Ir a Embarque", icono: ICONO_SECCION.embarque, href: "/cooperativas/embarque", soloEscritorio: true },
+        ]}
       />
 
       <div className="flex flex-col gap-4">

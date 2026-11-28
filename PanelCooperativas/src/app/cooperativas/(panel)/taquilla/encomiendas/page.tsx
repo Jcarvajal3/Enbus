@@ -22,7 +22,6 @@ import { EmptyState } from "@/components/empty-state";
 import { EntityCard } from "@/components/entity-card";
 import { IconTile } from "@/components/icon-tile";
 import { ListaResponsive } from "@/components/lista-responsive";
-import { BarraAccionFija } from "@/components/barra-accion-fija";
 import { TablaSkeleton } from "@/components/tabla-skeleton";
 import { TabsUrl } from "@/components/barra-filtros";
 import { PaginacionTabla, usePaginacion } from "@/components/paginacion-tabla";
@@ -288,12 +287,15 @@ function TaquillaEncomiendas() {
 
   return (
     <div className="flex flex-col gap-8">
-      <PageHeader title="Taquilla de encomiendas">
-        <Link href={URL_NUEVA} className={buttonVariants({ size: "lg", className: "max-md:hidden" })}>
-          <Plus aria-hidden />
-          Nueva encomienda
-        </Link>
-      </PageHeader>
+      <PageHeader
+        title="Taquilla de encomiendas"
+        principal={
+          <Link href={URL_NUEVA} className={buttonVariants({ size: "lg" })}>
+            <Plus aria-hidden />
+            Nueva encomienda
+          </Link>
+        }
+      />
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
         <ScanInput
@@ -441,13 +443,6 @@ function TaquillaEncomiendas() {
           </Card>
         )}
       </section>
-
-      <BarraAccionFija escritorio="oculta">
-        <Link href={URL_NUEVA} className={buttonVariants({ size: "xl" })}>
-          <Plus aria-hidden />
-          Nueva encomienda
-        </Link>
-      </BarraAccionFija>
 
       {modalState.type === "recepcion" && (
         <RecepcionModal

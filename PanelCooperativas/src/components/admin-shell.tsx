@@ -61,7 +61,7 @@ export function AdminShell({
             <ConnectivityBanner />
             {movil ? <CabeceraMovilAdmin headerExtra={headerExtra} /> : <BarraSuperior seccion={seccionAdminDe(pathname)} extra={headerExtra} />}
             {/* SidebarInset ya es el <main>: el destino de "Saltar al contenido" es este bloque. */}
-            <div id="contenido" tabIndex={-1} className="flex min-w-0 flex-1 flex-col p-5 outline-none lg:p-8">
+            <div id="contenido" tabIndex={-1} className="flex min-w-0 flex-1 flex-col p-5 outline-none lg:p-8 max-md:has-[[data-slot=principal-pagina]]:pb-[calc(7rem+env(safe-area-inset-bottom))]">
               {children}
             </div>
           </SidebarInset>

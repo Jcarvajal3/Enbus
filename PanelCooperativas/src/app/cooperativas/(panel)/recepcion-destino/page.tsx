@@ -14,7 +14,6 @@ import { EmptyState } from "@/components/empty-state";
 import { EntityCard } from "@/components/entity-card";
 import { IconTile } from "@/components/icon-tile";
 import { ListaResponsive } from "@/components/lista-responsive";
-import { BarraAccionFija } from "@/components/barra-accion-fija";
 import { TablaSkeleton } from "@/components/tabla-skeleton";
 import { PaginacionTabla, usePaginacion } from "@/components/paginacion-tabla";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -267,12 +266,15 @@ function RecepcionDestino() {
 
   return (
     <div className="flex flex-col gap-8">
-      <PageHeader title="Recepción en destino">
-        <Button variant="outline" size="lg" className="max-md:hidden" onClick={() => setIsLoteModalOpen(true)} disabled={!alcanceCargado}>
-          <ICONO_SECCION.recepcion aria-hidden />
-          Recibir lote del viaje
-        </Button>
-      </PageHeader>
+      <PageHeader
+        title="Recepción en destino"
+        principal={
+          <Button size="lg" onClick={() => setIsLoteModalOpen(true)} disabled={!alcanceCargado}>
+            <ICONO_SECCION.recepcion aria-hidden />
+            Recibir lote del viaje
+          </Button>
+        }
+      />
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
         <ScanInput
@@ -373,13 +375,6 @@ function RecepcionDestino() {
         </Card>
       )}
       </section>
-
-      <BarraAccionFija escritorio="oculta">
-        <Button size="xl" onClick={() => setIsLoteModalOpen(true)} disabled={!alcanceCargado}>
-          <ICONO_SECCION.recepcion aria-hidden />
-          Recibir lote del viaje
-        </Button>
-      </BarraAccionFija>
 
       <RecepcionLoteModal
         isOpen={isLoteModalOpen}

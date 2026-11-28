@@ -54,7 +54,7 @@ const TONO_VIAJE: Record<string, IconTileTone> = {
   CANCELADO: "neutral",
 };
 
-export type VistaViajes = "hoy" | "proximos" | "historial";
+export type VistaViajes = "hoy" | "manana" | "proximos" | "historial";
 
 function plural(n: number, uno: string, varios: string) {
   return n === 1 ? uno : varios.replace("{n}", String(n));
@@ -623,6 +623,7 @@ function FormularioEditar({
 
 const VISTAS: { valor: VistaViajes; etiqueta: string }[] = [
   { valor: "hoy", etiqueta: "Hoy" },
+  { valor: "manana", etiqueta: "Mañana" },
   { valor: "proximos", etiqueta: "Próximos 7 días" },
   { valor: "historial", etiqueta: "Historial" },
 ];
@@ -852,7 +853,9 @@ export function ViajesClient({
     ) : undefined;
     const titulo = fecha
       ? `No hay salidas el ${formatDiaVE(fecha)}`
-      : vista === "proximos"
+      : vista === "manana"
+        ? "No hay salidas mañana"
+        : vista === "proximos"
         ? "No hay salidas en los próximos 7 días"
         : vista === "historial"
           ? "Todavía no hay viajes anteriores"

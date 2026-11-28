@@ -19,10 +19,11 @@ function primero(v: string | string[] | undefined) {
 }
 
 /**
- * Viajes por pestaña (PC-43), en la URL: `?vista=hoy|proximos|historial` y, para
+ * Viajes por pestaña (PC-43), en la URL: `?vista=hoy|manana|proximos|historial` y, para
  * buscar un día concreto, `?fecha=YYYY-MM-DD` (hora de Venezuela).
  *   hoy        salidas de hoy y los viajes en curso, de la más temprana a la más tarde
- *   proximos   de mañana a 7 días, en orden ascendente
+ *   manana     salidas de mañana (día siguiente, hora de Venezuela)
+ *   proximos   de mañana a 7 días
  *   historial  antes de hoy, de la más reciente a la más antigua (máx. 100)
  */
 export default async function ViajesPage({
@@ -38,7 +39,7 @@ export default async function ViajesPage({
   const fecha = FECHA_RE.test(fechaParam) ? fechaParam : null;
   const vistaParam = primero(sp.vista);
   const vista: VistaViajes =
-    vistaParam === "proximos" || vistaParam === "historial" ? vistaParam : "hoy";
+    vistaParam === "manana" || vistaParam === "proximos" || vistaParam === "historial" ? vistaParam : "hoy";
 
   const supabase = await createClient();
   const hoy = hoyVE();
@@ -52,6 +53,14 @@ export default async function ViajesPage({
   const consultaLista = () => {
     if (fecha) {
       const r = rangoDiaVE(fecha);
+      return base()
+        .gte("fecha_hora_salida", r.desde)
+        .lte("fecha_hora_salida", r.hasta)
+        .order("fecha_hora_salida", { ascending: false })
+        .limit(LIMITE_LISTA);
+    }
+    if (vista === "manana") {
+      const r = rangoDiaVE(sumarDiasVE(hoy, 1));
       return base()
         .gte("fecha_hora_salida", r.desde)
         .lte("fecha_hora_salida", r.hasta)
