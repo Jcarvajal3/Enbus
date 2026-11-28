@@ -5,5 +5,5 @@ export {
   validarArchivoComprobante,
   COMPROBANTE_MAX_BYTES,
   type ResultadoSubida,
-} from "./subir-comprobante";
+} from "@/components/pagos/subir-comprobante";
 export type { DatosPagoPasajero, MetodoPagoPasajero, TipoMetodoPagoPasajero } from "@/lib/pasajero/pagos-comun";

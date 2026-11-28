@@ -52,6 +52,7 @@ export function CobrarReservaPagina({ compraId, volver }: { compraId: string; vo
   const [errorCobro, setErrorCobro] = useState<ErrorCampoCobro | null>(null);
   const [operacion, setOperacion] = useState<OperacionTaquilla | null>(null);
   const [etiquetaCobro, setEtiquetaCobro] = useState("Cobrar");
+  const [subiendoComprobante, setSubiendoComprobante] = useState(false);
   const { dialogo, confirmarSalida } = useSalidaProtegida({ activo: false, bloqueado: enviando });
 
   const destino = destinoVolver(volver, reserva?.viajeId);
@@ -185,8 +186,8 @@ export function CobrarReservaPagina({ compraId, volver }: { compraId: string; vo
                 etiqueta: etiquetaCobro,
                 type: "submit",
                 form: ID_FORM_COBRO,
-                cargando: enviando,
-                etiquetaCargando: "Cobrando…",
+                cargando: enviando || subiendoComprobante,
+                etiquetaCargando: subiendoComprobante ? "Subiendo comprobante…" : "Cobrando…",
                 deshabilitado: !tasa,
               }}
             />
@@ -217,6 +218,7 @@ export function CobrarReservaPagina({ compraId, volver }: { compraId: string; vo
             errorCampo={errorCobro}
             onCobrar={(d) => void cobrar(d)}
             onEtiqueta={setEtiquetaCobro}
+            onSubiendo={setSubiendoComprobante}
           />
         ) : null}
       </FlujoPagina>

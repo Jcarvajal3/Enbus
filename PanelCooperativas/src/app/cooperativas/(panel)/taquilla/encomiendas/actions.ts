@@ -132,6 +132,8 @@ export type CobrarEncomiendaInput = {
   /** 'YYYY-MM-DD' (hora de Venezuela). */
   fecha?: string | null;
   banco?: string | null;
+  /** Ruta del comprobante subido a `comprobantes-pago` (opcional; no en efectivo). */
+  comprobantePath?: string | null;
   /** Clave de idempotencia: la misma en los reintentos de un mismo cobro. */
   idemKey: string;
 };
@@ -157,6 +159,7 @@ export async function cobrarEncomienda(input: CobrarEncomiendaInput): Promise<Re
     efectivo && typeof input.montoRecibido === "number" && Number.isFinite(input.montoRecibido)
       ? input.montoRecibido
       : null;
+  const comprobante = efectivo ? null : (input.comprobantePath ?? "").trim() || null;
 
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("fn_cobrar_encomienda_taquilla", {
@@ -169,6 +172,8 @@ export async function cobrarEncomienda(input: CobrarEncomiendaInput): Promise<Re
     p_fecha_transaccion: efectivo ? null : fecha,
     p_banco_emisor: efectivo || puntoVenta ? null : (input.banco ?? "").trim() || null,
     p_idempotency_key: input.idemKey,
+    // Solo se envía con foto: sin ella la llamada no depende del parámetro nuevo.
+    ...(comprobante ? { p_comprobante_path: comprobante } : {}),
   });
   if (error) {
     console.error("Error al cobrar la encomienda:", error);

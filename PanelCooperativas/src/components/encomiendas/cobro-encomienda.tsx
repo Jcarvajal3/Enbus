@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { BancoField, Campo, FechaField, MontoField } from "@/components/campos";
 import { Monto } from "@/components/monto";
+import { ComprobanteCobro, useComprobanteCobro } from "@/components/pagos/comprobante-cobro";
 import { AvisoError } from "@/components/aviso-error";
 import { ConfirmDialog, type ResultadoConfirmacion } from "@/components/confirm-dialog";
 import { GrupoOpciones, OpcionTile } from "@/components/opcion-tile";
@@ -114,6 +115,7 @@ export function CobroEncomiendaForm({ encomienda, onCobrado, onCambioExterno, di
   const [fecha, setFecha] = useState(() => hoyVE());
   const [errores, setErrores] = useState<Partial<Record<CampoCobro, string>>>({});
   const [confirmarOpen, setConfirmarOpen] = useState(false);
+  const comprobante = useComprobanteCobro();
   const [enviando, setEnviando] = useState(false);
   // Misma clave en todos los reintentos de este cobro: un doble clic no cobra dos veces.
   const [idemKey] = useState(() => nuevaClave());
@@ -166,6 +168,8 @@ export function CobroEncomiendaForm({ encomienda, onCobrado, onCambioExterno, di
     setOpcion(valor);
     setErrores({});
     setRecibido("");
+    // El efectivo no lleva comprobante.
+    if (valor === "EFECTIVO_VES" || valor === "EFECTIVO_USD") comprobante.descartar();
   };
 
   /** Validación local antes de pedir confirmación (el servidor valida de nuevo). */
@@ -214,6 +218,9 @@ export function CobroEncomiendaForm({ encomienda, onCobrado, onCambioExterno, di
     if (!opcionActual) return { ok: false, error: "Elige cómo pagó el cliente." };
     setEnviando(true);
     try {
+      // El comprobante (opcional) se sube al cobrar; el cobro espera a que termine.
+      const subida = efectivo ? ({ ok: true, path: null } as const) : await comprobante.subir();
+      if (!subida.ok) return { ok: false, error: subida.error };
       const res = await requireOnline(() =>
         procesarPago({
           encomiendaId: encomienda.id,
@@ -225,6 +232,7 @@ export function CobroEncomiendaForm({ encomienda, onCobrado, onCambioExterno, di
             referencia: efectivo ? null : referencia,
             fecha: efectivo ? null : fecha,
             banco: efectivo || puntoVenta || opcionActual.tipo === "ZELLE" ? null : banco,
+            comprobantePath: subida.path,
             idemKey,
           },
         })
@@ -423,6 +431,14 @@ export function CobroEncomiendaForm({ encomienda, onCobrado, onCambioExterno, di
                   />
                 )}
               </div>
+              <ComprobanteCobro
+                archivo={comprobante.archivo}
+                onArchivo={comprobante.elegir}
+                error={comprobante.error}
+                subiendo={comprobante.subiendo}
+                disabled={disabled || enviando}
+                etiqueta={puntoVenta ? "Voucher del punto (opcional)" : "Comprobante de pago (opcional)"}
+              />
               <p className="text-[13px] text-muted-foreground">
                 {puntoVenta ? "Regístralo cuando el punto apruebe el pago." : "Regístralo cuando ya lo veas en la cuenta."}
               </p>

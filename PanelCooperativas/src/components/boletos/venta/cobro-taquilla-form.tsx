@@ -23,6 +23,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AvisoError } from "@/components/aviso-error";
 import { Monto } from "@/components/monto";
+import { ComprobanteCobro, useComprobanteCobro } from "@/components/pagos/comprobante-cobro";
 import { GrupoOpciones, OpcionTile } from "@/components/opcion-tile";
 import { useTasaBCV } from "@/components/tasa-bcv-provider";
 import { useUser } from "@/hooks/use-user";
@@ -91,7 +92,7 @@ export function errorDeCobro(res: Extract<ResultadoTaquilla<unknown>, { success:
   if (campo === "monto" || campo === "referencia" || campo === "banco" || campo === "fecha") {
     return { campo, mensaje: res.error };
   }
-  if (res.codigo === "EB_DATOS_PAGO_INVALIDOS" || res.codigo === "EB_METODO_INVALIDO") {
+  if (res.codigo === "EB_DATOS_PAGO_INVALIDOS" || res.codigo === "EB_METODO_INVALIDO" || res.codigo === "EB_COMPROBANTE_INVALIDO") {
     return { campo: null, mensaje: res.error };
   }
   return null;
@@ -105,9 +106,11 @@ type CobroFormProps = {
   onCobrar: (datos: DatosPagoTaquilla) => void;
   /** Texto del botón de la página ("Cobrar Bs 2.500,00"), que depende del método elegido. */
   onEtiqueta?: (texto: string) => void;
+  /** Se está subiendo el comprobante antes de cobrar (la página lo muestra en su botón). */
+  onSubiendo?: (subiendo: boolean) => void;
 };
 
-export function CobroTaquillaForm({ totalUsd, enviando, errorCampo, onCobrar, onEtiqueta }: CobroFormProps) {
+export function CobroTaquillaForm({ totalUsd, enviando, errorCampo, onCobrar, onEtiqueta, onSubiendo }: CobroFormProps) {
   const { user } = useUser();
   const cooperativaId = user?.cooperativa_id;
   const supabase = useMemo(() => createClient(), []);
@@ -123,6 +126,8 @@ export function CobroTaquillaForm({ totalUsd, enviando, errorCampo, onCobrar, on
   const [fecha, setFecha] = useState(hoyVE());
   const [banco, setBanco] = useState("");
   const [intentado, setIntentado] = useState(false);
+  const comprobante = useComprobanteCobro();
+  const cobrandoRef = useRef(false);
 
   useEffect(() => {
     if (!cooperativaId) return;
@@ -212,16 +217,18 @@ export function CobroTaquillaForm({ totalUsd, enviando, errorCampo, onCobrar, on
 
   const cambiarMetodo = (m: MetodoCobro) => {
     setMetodo(m);
+    // El efectivo no lleva comprobante.
+    if (m === "EFECTIVO_VES" || m === "EFECTIVO_USD") comprobante.descartar();
     setRecibidoTexto("");
     setCuentaId("");
     setIntentado(false);
     setErrorActivo(null);
   };
 
-  const enviar = (e: React.FormEvent) => {
+  const enviar = async (e: React.FormEvent) => {
     e.preventDefault();
     setIntentado(true);
-    if (!tasa || enviando) return;
+    if (!tasa || enviando || cobrandoRef.current) return;
     if (hayErrores) {
       // Al primer campo con error (el orden de la pantalla).
       const primero = errores.monto
@@ -238,6 +245,15 @@ export function CobroTaquillaForm({ totalUsd, enviando, errorCampo, onCobrar, on
       if (primero) document.getElementById(`${ids}-${primero}`)?.focus();
       return;
     }
+    // El comprobante (opcional) se sube al cobrar; el cobro espera a que termine.
+    let comprobantePath: string | null = null;
+    if (!efectivo && comprobante.archivo) {
+      cobrandoRef.current = true;
+      const subida = await comprobante.subir();
+      cobrandoRef.current = false;
+      if (!subida.ok) return;
+      comprobantePath = subida.path;
+    }
     onCobrar({
       metodoTipo: tipo,
       metodoPagoId: efectivo || puntoVenta ? null : (cuentaElegida?.id ?? null),
@@ -246,6 +262,7 @@ export function CobroTaquillaForm({ totalUsd, enviando, errorCampo, onCobrar, on
       referencia: efectivo ? null : refLimpia,
       fecha: efectivo ? null : fecha,
       banco: efectivo || puntoVenta || metodo === "ZELLE" ? null : banco.trim(),
+      comprobantePath,
     });
   };
 
@@ -257,6 +274,13 @@ export function CobroTaquillaForm({ totalUsd, enviando, errorCampo, onCobrar, on
   useEffect(() => {
     onEtiquetaRef.current?.(textoCobrar);
   }, [textoCobrar]);
+  const onSubiendoRef = useRef(onSubiendo);
+  useEffect(() => {
+    onSubiendoRef.current = onSubiendo;
+  });
+  useEffect(() => {
+    onSubiendoRef.current?.(comprobante.subiendo);
+  }, [comprobante.subiendo]);
 
   const errorMonto = mostrar("monto", "monto");
   const errorReferencia = mostrar("referencia", "referencia");
@@ -428,6 +452,15 @@ export function CobroTaquillaForm({ totalUsd, enviando, errorCampo, onCobrar, on
               error={errorBanco}
             />
           )}
+
+          <ComprobanteCobro
+            archivo={comprobante.archivo}
+            onArchivo={comprobante.elegir}
+            error={comprobante.error}
+            subiendo={comprobante.subiendo}
+            disabled={enviando}
+            etiqueta={puntoVenta ? "Voucher del punto (opcional)" : "Comprobante de pago (opcional)"}
+          />
         </div>
       )}
 

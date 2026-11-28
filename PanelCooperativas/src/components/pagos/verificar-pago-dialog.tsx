@@ -417,21 +417,21 @@ export function VerificarPagoDialog({
 
         {/* Capture del pago */}
         {pago.comprobante_path ? (
-          <section aria-label="Capture del pago" className="flex flex-col gap-2">
-            <p className="text-[13px] font-medium text-foreground">Capture del pago</p>
+          <section aria-label="Comprobante del pago" className="flex flex-col gap-2">
+            <p className="text-[13px] font-medium text-foreground">Comprobante del pago</p>
             {pago.comprobante_url ? (
               <a
                 href={pago.comprobante_url}
                 target="_blank"
                 rel="noopener noreferrer"
-                aria-label="Abrir el capture en otra pestaña"
+                aria-label="Abrir el comprobante en otra pestaña"
                 className="block overflow-hidden rounded-md bg-surface outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={pago.comprobante_url} alt="Capture del pago que envió el cliente" className="max-h-72 w-full object-contain" />
+                <img src={pago.comprobante_url} alt="Comprobante del pago" className="max-h-72 w-full object-contain" />
               </a>
             ) : (
-              <p className="text-[13px] text-muted-foreground">No pudimos cargar el capture. Vuelve a abrir este pago.</p>
+              <p className="text-[13px] text-muted-foreground">No pudimos cargar el comprobante. Vuelve a abrir este pago.</p>
             )}
           </section>
         ) : (

@@ -73,6 +73,7 @@ export function VentaPagina({
   /** La salida pedida por `?viaje=` aún se está resolviendo: los pasos 2+ de la URL siguen siendo válidos. */
   const [inicialPendiente, setInicialPendiente] = useState(Boolean(viajeIdInicial));
   const [etiquetaCobro, setEtiquetaCobro] = useState("Cobrar");
+  const [subiendoComprobante, setSubiendoComprobante] = useState(false);
   const enviandoRef = useRef(false);
 
   const url = usePasoEnUrl<PasoVenta>(PASOS_VENTA, {
@@ -266,8 +267,8 @@ export function VentaPagina({
           etiqueta: etiquetaCobro,
           type: "submit",
           form: ID_FORM_COBRO,
-          cargando: enviando,
-          etiquetaCargando: "Cobrando…",
+          cargando: enviando || subiendoComprobante,
+          etiquetaCargando: subiendoComprobante ? "Subiendo comprobante…" : "Cobrando…",
           deshabilitado: !tasa,
         }}
       />
@@ -345,6 +346,7 @@ export function VentaPagina({
             errorCampo={errorCobro}
             onCobrar={(datos) => void cobrar(datos)}
             onEtiqueta={setEtiquetaCobro}
+            onSubiendo={setSubiendoComprobante}
           />
         )}
       </FlujoPagina>

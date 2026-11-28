@@ -33,7 +33,7 @@ import {
 } from "@/lib/pasajero/pagos-comun";
 import { formatCedula, formatTelefono } from "@/lib/ve";
 import { cn } from "@/lib/utils";
-import { subirComprobante, validarArchivoComprobante } from "./subir-comprobante";
+import { subirComprobante, validarArchivoComprobante } from "@/components/pagos/subir-comprobante";
 
 export interface PagoPasajeroProps {
   metodos: MetodoPagoPasajero[];

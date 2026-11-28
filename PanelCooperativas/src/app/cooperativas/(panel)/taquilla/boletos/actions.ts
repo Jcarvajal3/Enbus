@@ -45,6 +45,8 @@ export type DatosPagoTaquilla = {
   /** 'YYYY-MM-DD' */
   fecha?: string | null;
   banco?: string | null;
+  /** Ruta del comprobante subido a `comprobantes-pago` (opcional; no en efectivo). */
+  comprobantePath?: string | null;
 };
 
 export type PasajeroVenta = {
@@ -82,6 +84,7 @@ function parametrosPago(p: DatosPagoTaquilla) {
   // Punto de venta: solo referencia del comprobante y fecha (sin cuenta ni banco).
   const puntoVenta = p.metodoTipo === "PUNTO_DE_VENTA";
   const fecha = texto(p.fecha);
+  const comprobante = efectivo ? null : texto(p.comprobantePath);
   return {
     p_metodo_tipo: p.metodoTipo,
     p_metodo_pago_id: !efectivo && !puntoVenta && p.metodoPagoId && UUID_RE.test(p.metodoPagoId) ? p.metodoPagoId : null,
@@ -91,6 +94,8 @@ function parametrosPago(p: DatosPagoTaquilla) {
     p_numero_referencia: efectivo ? null : texto(p.referencia),
     p_fecha_transaccion: efectivo ? null : fecha && FECHA_RE.test(fecha) ? fecha : null,
     p_banco_emisor: efectivo || puntoVenta || p.metodoTipo === "ZELLE" ? null : texto(p.banco),
+    // Solo se envía con foto: sin ella la llamada no depende del parámetro nuevo.
+    ...(comprobante ? { p_comprobante_path: comprobante } : {}),
   };
 }
 
