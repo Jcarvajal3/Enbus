@@ -22,9 +22,12 @@ export default async function BusesPage() {
   // Si falla, la pantalla muestra el error con "Reintentar" (no "no tienes buses").
   if (error) console.error("[BusesPage] Error:", error);
 
-  // Activos primero; dentro de cada grupo, por número de unidad.
+  // Activos primero; dentro de cada grupo, los más recientes arriba (desempate por unidad).
   const buses = ((data ?? []) as Bus[]).sort(
-    (a, b) => Number(b.activo) - Number(a.activo) || ORDEN_UNIDAD.compare(a.numero_unidad, b.numero_unidad)
+    (a, b) =>
+      Number(b.activo) - Number(a.activo) ||
+      String(b.created_at ?? "").localeCompare(String(a.created_at ?? "")) ||
+      ORDEN_UNIDAD.compare(a.numero_unidad, b.numero_unidad)
   );
 
   return <BusesClient buses={buses} errorCarga={error ? humanizeError(error, "cargar los buses") : null} />;

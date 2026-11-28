@@ -116,7 +116,7 @@ export function RecepcionLoteModal({ isOpen, onClose, cooperativaId, sucursal, o
           `)
           .eq("cooperativa_id", cooperativaId)
           .eq("estado", "EN_TRANSITO")
-          .order("created_at", { ascending: true });
+          .order("created_at", { ascending: false });
 
         if (!isMounted) return;
         if (error) throw error;

@@ -180,7 +180,12 @@ export function ViajeSheet({
         const [v, b, e] = await Promise.all([
           supabase.from("viajes").select(SELECT_VIAJE).eq("id", id).maybeSingle(),
           supabase.from("boletos").select(SELECT_BOLETOS).eq("viaje_id", id),
-          supabase.from("encomiendas").select(SELECT_ENCOMIENDAS).eq("viaje_id", id),
+          supabase
+            .from("encomiendas")
+            .select(SELECT_ENCOMIENDAS)
+            .eq("viaje_id", id)
+            .order("created_at", { ascending: false })
+            .order("id", { ascending: false }),
         ]);
         if (!vigente()) return;
         const fallo = v.error ?? b.error ?? e.error;

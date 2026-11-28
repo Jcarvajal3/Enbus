@@ -253,7 +253,7 @@ export function SucursalesTab({ sucursales: initialSucursales, miSucursalId: miS
         setSucursales((prev) => prev.map((s) => (s.id === editingId ? res.data : s)));
         avisarExito("Sucursal actualizada.");
       } else {
-        setSucursales((prev) => [...prev, res.data].sort((a, b) => a.nombre.localeCompare(b.nombre)));
+        setSucursales((prev) => [res.data, ...prev]);
         avisarExito("Sucursal creada.");
       }
       closeForm();

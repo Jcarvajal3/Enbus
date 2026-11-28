@@ -32,7 +32,8 @@ export default async function ConfiguracionPage() {
       .from("sucursales")
       .select("*")
       .eq("cooperativa_id", user.cooperativa_id)
-      .order("nombre", { ascending: true }),
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false }),
     supabase.from("profiles").select("sucursal_id").eq("id", user.id).maybeSingle(),
     supabase
       .from("dias_no_laborables")

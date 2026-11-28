@@ -33,7 +33,7 @@ function fallo(error: unknown, accion: string): { success: false; error: string;
   return { success: false, error: humanizeError(error, accion), codigo: codigoEB(error) ?? undefined };
 }
 
-/** Bandeja: pagos digitales pendientes de la cooperativa (más antiguos primero). */
+/** Bandeja: pagos digitales pendientes de la cooperativa (los más recientes primero). */
 export async function listarPagosPorVerificar(
   tipo?: "boleto" | "encomienda"
 ): Promise<ResultadoAccion<PagoPorVerificar[]>> {
@@ -41,7 +41,11 @@ export async function listarPagosPorVerificar(
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("fn_pagos_por_verificar", { p_tipo: pTipo });
   if (error) return fallo(error, "cargar los pagos por verificar");
-  return { success: true, data: (data ?? []) as PagoPorVerificar[] };
+  // La RPC los entrega del más antiguo al más reciente: se invierte aquí (antes de paginar).
+  const pagos = [...((data ?? []) as PagoPorVerificar[])].sort((a, b) =>
+    String(b.creado_at ?? "").localeCompare(String(a.creado_at ?? ""))
+  );
+  return { success: true, data: pagos };
 }
 
 /** Detalle de un pago (cualquier estado) para el diálogo de verificación. */

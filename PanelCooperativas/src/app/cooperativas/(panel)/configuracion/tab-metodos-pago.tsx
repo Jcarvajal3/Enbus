@@ -255,7 +255,7 @@ export function MetodosPagoTab({ metodos: initialMetodos, errorCarga = null }: M
           else setErrorGeneral(res.error);
           return;
         }
-        setMetodos((prev) => [...prev, res.data]);
+        setMetodos((prev) => [res.data, ...prev]);
         avisarExito("Método de pago agregado. Los pasajeros ya lo ven.");
       }
       closeForm();

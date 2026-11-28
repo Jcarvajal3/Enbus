@@ -68,6 +68,7 @@ export async function fetchHistorialTarifasCooperativa(cooperativaId: string): P
       .select("*, profiles:creada_por(nombre_completo)")
       .eq("cooperativa_id", cooperativaId)
       .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
       .limit(MAX_HISTORIAL_TARIFAS);
 
     if (error) {
